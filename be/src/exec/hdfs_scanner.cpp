@@ -344,6 +344,15 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
+
+        if (_runtime_state->query_options().__isset.query_type &&
+            _runtime_state->query_options().query_type == TQueryType::LOAD) {
+            // For load query type, we will update load datacache metrics, these metrics are retrived by cache select
+            _runtime_state->update_num_datacache_read_bytes(stats.read_cache_bytes);
+            _runtime_state->update_num_datacache_read_time_ns(stats.read_cache_ns);
+            _runtime_state->update_num_datacache_write_bytes(stats.write_cache_bytes);
+            _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
+        }
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());
