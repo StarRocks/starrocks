@@ -91,16 +91,20 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
             if (toLeftPredicate == null && toRightPredicate == null) {
                 return Lists.newArrayList();
             } else if (toLeftPredicate == null) {
+                toRightPredicate.setIsPushdown(true);
                 LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
                 result = OptExpression.create(joinOperator,
                         Lists.newArrayList(input.inputAt(0), OptExpression.create(filter, input.inputAt(1)))
                 );
             } else if (toRightPredicate == null) {
+                toLeftPredicate.setIsPushdown(true);
                 LogicalFilterOperator filter = new LogicalFilterOperator(toLeftPredicate);
                 result = OptExpression.create(joinOperator,
                         Lists.newArrayList(OptExpression.create(filter, input.inputAt(0)), input.inputAt(1))
                 );
             } else {
+                toLeftPredicate.setIsPushdown(true);
+                toRightPredicate.setIsPushdown(true);
                 LogicalFilterOperator toLeftFilter = new LogicalFilterOperator(toLeftPredicate);
                 LogicalFilterOperator toRightFilter = new LogicalFilterOperator(toRightPredicate);
                 result = OptExpression.create(joinOperator,
@@ -113,6 +117,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                     .map(e -> derivePredicate(e, leftValueProperty, rightValueProperty, false))
                     .collect(Collectors.toList()));
             if (toRightPredicate != null) {
+                toRightPredicate.setIsPushdown(true);
                 LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
                 result = OptExpression.create(joinOperator,
                         Lists.newArrayList(input.inputAt(0), OptExpression.create(filter, input.inputAt(1)))
@@ -123,6 +128,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                     .map(e -> derivePredicate(e, rightValueProperty, leftValueProperty, true))
                     .collect(Collectors.toList()));
             if (toLeftPredicate != null) {
+                toLeftPredicate.setIsPushdown(true);
                 LogicalFilterOperator filter = new LogicalFilterOperator(toLeftPredicate);
                 result = OptExpression.create(joinOperator,
                         Lists.newArrayList(OptExpression.create(filter, input.inputAt(0)), input.inputAt(1))

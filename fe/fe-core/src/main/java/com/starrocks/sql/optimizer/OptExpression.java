@@ -247,11 +247,11 @@ public class OptExpression {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
+        sb.append('\n');
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
 
-        sb.append('\n');
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {

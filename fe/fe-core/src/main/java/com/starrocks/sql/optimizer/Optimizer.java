@@ -430,7 +430,6 @@ public class Optimizer {
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
-        ruleRewriteDownTop(tree, rootTaskContext, OnPredicateMoveAroundRule.INSTANCE);
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
@@ -508,6 +507,7 @@ public class Optimizer {
             deriveLogicalProperty(tree);
         }
 
+        ruleRewriteDownTop(tree, rootTaskContext, OnPredicateMoveAroundRule.INSTANCE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
         // No heavy metadata operation before external table partition prune
