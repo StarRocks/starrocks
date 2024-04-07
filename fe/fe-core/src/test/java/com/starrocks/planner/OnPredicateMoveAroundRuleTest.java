@@ -52,6 +52,14 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
         Assert.assertEquals(plan, expect, numOfPredicate);
     }
 
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("redundantPredicateCases")
+    void testRedundantPredicate(String sql, String expect) throws Exception {
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, expect);
+    }
+
     private static Stream<Arguments> complexPredicateCases() {
         List<Arguments> argumentsList = Lists.newArrayList();
 
@@ -148,4 +156,52 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
 
         return argumentsList.stream();
     }
+
+    private static Stream<Arguments> redundantPredicateCases() {
+        List<Arguments> argumentsList = Lists.newArrayList();
+
+        // scene 1
+        String templateSql = "select * from \n" +
+                "(select * from t0 where v1 = 1) t0\n" +
+                "%s join\n" +
+                "(select * from t1 where v4 = 1) t1\n" +
+                "on t0.v1 = t1.v4;";
+        String expectPredicate = "PREDICATES: 1: v1 IS NOT NULL, 1: v1 = 1";
+        argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
+
+        expectPredicate = "PREDICATES: 1: v1 = 1";
+        argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
+
+        // scene 2
+        templateSql = "select * from \n" +
+                "(select * from t0 where v1 = 1) t0\n" +
+                "%s join\n" +
+                "(select * from t1 where v4 = 1) t1\n" +
+                "on t0.v1 > t1.v4;";
+        argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
+        argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
+
+        // scene 3
+        templateSql = "select * from \n" +
+                "(select * from t0 where v1 > 4 and v2 = 3) t0\n" +
+                "%s join\n" +
+                "(select * from t1 where v4 = 1) t1\n" +
+                "on t0.v1 > t1.v4;";
+        expectPredicate = "PREDICATES: 1: v1 > 4, 2: v2 = 3";
+        argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
+        argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
+
+        // scene 4
+        templateSql = "select * from \n" +
+                "(select * from t0 where v1 > 1 and v1 < 4) t0\n" +
+                "%s join\n" +
+                "(select * from t1 where v4 = 2) t1\n" +
+                "on t0.v1 > t1.v4;";
+        expectPredicate = "PREDICATES: 1: v1 >= 2, 1: v1 < 4";
+        argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
+        argumentsList.add(Arguments.of(String.format(templateSql, "right"), expectPredicate));
+
+        return argumentsList.stream();
+    }
+
 }
