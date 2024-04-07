@@ -49,7 +49,29 @@ private:
         return ConstColumn::create(column, num_rows);
     }
 
+<<<<<<< HEAD
     void extend_and_update_columns(vectorized::ChunkPtr* curr_chunk);
+=======
+    /**
+     * @brief Generate const null column with the input column's type.
+     * @param cur_column : input associated column.
+     * @param num_rows : const column's rows number.
+     * @return ColumnPtr : a constant column with the input column's type.
+     */
+    static ColumnPtr generate_null_column(ColumnPtr& cur_column, int64_t num_rows) {
+        auto clone_column = cur_column->clone_empty();
+        if (clone_column->is_nullable()) {
+            clone_column->append_nulls(1);
+            return ConstColumn::create(ColumnPtr(clone_column.release()), num_rows);
+        } else {
+            auto nullable_column = NullableColumn::create(ColumnPtr(clone_column.release()), NullColumn::create());
+            nullable_column->append_nulls(1);
+            return ConstColumn::create(nullable_column, num_rows);
+        }
+    }
+
+    void extend_and_update_columns(ChunkPtr* curr_chunk);
+>>>>>>> 608e00f4bd ([BugFix] Unpack const column when in local exchange source operator (#43403))
 
     /*
      * _curr_chunk

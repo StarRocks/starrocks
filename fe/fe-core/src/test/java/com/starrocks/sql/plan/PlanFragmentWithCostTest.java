@@ -1387,6 +1387,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRepeatNodeWithUnionAllRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
         String sql = "select v1, v2, SUM(v3) from t0 group by rollup(v1, v2)";
@@ -1429,6 +1430,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+=======
+>>>>>>> 608e00f4bd ([BugFix] Unpack const column when in local exchange source operator (#43403))
     public void testLimitSemiJoin() throws Exception {
         String sql = "select * from t0 " +
                 "        left semi join t2 on t0.v1 = t2.v7 " +
