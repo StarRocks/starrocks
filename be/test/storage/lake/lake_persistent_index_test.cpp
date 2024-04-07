@@ -225,6 +225,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
     }
 
+    index->minor_compact();
     vector<IndexValue> get_values(config::lake_pk_index_sst_max_compaction_versions * N);
     ASSERT_OK(index->get(config::lake_pk_index_sst_max_compaction_versions * N, total_key_slices.data(),
                          get_values.data()));

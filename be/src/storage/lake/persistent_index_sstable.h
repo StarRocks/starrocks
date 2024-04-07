@@ -55,7 +55,7 @@ public:
 
     sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
 
-    const PersistentIndexSstablePB sstable_pb() const { return _sstable_pb; }
+    const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
 
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};

@@ -289,19 +289,6 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         return Status::OK();
     }
 
-    std::unordered_set<std::string> filenames;
-    for (const auto& input_sstable : op_compaction.input_sstables()) {
-        filenames.insert(input_sstable.filename());
-    }
-    for (auto it = _sstables.begin(); it != _sstables.end();) {
-        auto sstable_pb = (*it)->sstable_pb();
-        if (filenames.contains(sstable_pb.filename())) {
-            _sstables.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.CopyFrom(op_compaction.output_sstable());
     sstable_pb.set_version(op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).version());
@@ -310,6 +297,20 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     ASSIGN_OR_RETURN(auto rf,
                      fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+
+    std::unordered_set<std::string> filenames;
+    for (const auto& input_sstable : op_compaction.input_sstables()) {
+        filenames.insert(input_sstable.filename());
+    }
+    auto it = _sstables.begin();
+    while (it != _sstables.end()) {
+        auto sstable_pb = (*it)->sstable_pb();
+        if (filenames.contains(sstable_pb.filename())) {
+            it = _sstables.erase(it);
+        } else {
+            ++it;
+        }
+    }
     _sstables.insert(_sstables.begin(), std::move(sstable));
     return Status::OK();
 }

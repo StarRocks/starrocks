@@ -845,14 +845,14 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
 Status UpdateManager::execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata,
                                                      std::shared_ptr<TxnLogPB>& txn_log) {
     auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return Status::OK();
+    }
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        return index.major_compact(metadata, txn_log);
-    }
-    return Status::OK();
+    auto& index = index_entry->value();
+    return index.major_compact(metadata, txn_log);
 }
 
 } // namespace starrocks::lake

@@ -114,7 +114,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             return Status::OK();
         }
         default:
-            return Status::InternalError("Unsupported lake_persistent_index_type");
+            return Status::InternalError("Unsupported lake_persistent_index_type" +
+                                         PersistentIndexTypePB_Name(metadata->persistent_index_type()));
         }
     }
 
@@ -200,8 +201,8 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
         RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, _tablet_id, &index_meta));
         RETURN_IF_ERROR(PrimaryIndex::commit(&index_meta));
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, _tablet_id, index_meta));
-        // Call `on_commited` here, which will remove old files is safe.
-        // Because if publish version fail after `on_commited`, index will be rebuild.
+        // Call `on_commited` here, which will be safe to remove old files.
+        // Because if version publishing fails after `on_commited`, index will be rebuild.
         return on_commited();
     }
     case PersistentIndexTypePB::CLOUD_NATIVE: {
@@ -209,7 +210,8 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
         return Status::OK();
     }
     default:
-        return Status::InternalError("Unsupported lake_persistent_index_type");
+        return Status::InternalError("Unsupported lake_persistent_index_type" +
+                                     PersistentIndexTypePB_Name(metadata->persistent_index_type()));
     }
 
     return Status::OK();
