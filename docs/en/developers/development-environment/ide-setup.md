@@ -198,8 +198,3 @@ Then use the command:  `CC=clang-15 CXX=clang++-15 ./build.sh` to compile be. Bu
 ## Last
 
 Feel free to contribute codes to StarRocks. 🫵
-
-## Reference
-
-* [https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env-en](https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env-en)
-* Chinese version: [https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env](https://www.inlighting.org/archives/setup-perfect-starrocks-dev-env)
