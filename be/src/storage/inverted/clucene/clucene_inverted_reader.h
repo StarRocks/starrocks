@@ -68,7 +68,9 @@ class FullTextCLuceneInvertedReader : public CLuceneInvertedReader {
 public:
     explicit FullTextCLuceneInvertedReader(std::string path, const uint32_t index_id,
                                            InvertedIndexParserType parser_type)
-            : CLuceneInvertedReader(std::move(path), index_id), _parser_type(parser_type) {}
+            : CLuceneInvertedReader(std::move(path), index_id), _parser_type(parser_type) {
+        lucene::search::BooleanQuery::setMaxClauseCount(INT_MAX);
+    }
 
     Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
                  InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;

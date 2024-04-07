@@ -148,19 +148,15 @@ select count(*) from t_test_gin_index_query where query_none_analyzer = 'starroc
 -- result:
 2
 -- !result
-select count(*) from t_test_gin_index_query where query_english = 'hello';
+select count(*) from t_test_gin_index_query where query_english match 'hello';
 -- result:
 3
 -- !result
-select count(*) from t_test_gin_index_query where query_english in ('world', 'lakehouse', 'view');
--- result:
-3
--- !result
-select count(*) from t_test_gin_index_query where query_english != 'hello' and id1 > 4;
+select count(*) from t_test_gin_index_query where query_english not match 'hello' and id1 > 4;
 -- result:
 1
 -- !result
-select count(*) from t_test_gin_index_query where query_english = 'hello' and query_none_analyzer = 'lakehouse';
+select count(*) from t_test_gin_index_query where query_english match 'hello' and query_none_analyzer = 'lakehouse';
 -- result:
 1
 -- !result
@@ -168,11 +164,11 @@ select count(*) from t_test_gin_index_query where query_none_analyzer like '%ed 
 -- result:
 1
 -- !result
-select count(*) from t_test_gin_index_query where query_english like '%ed vi%';
+select count(*) from t_test_gin_index_query where query_english match '%ed vi%';
 -- result:
 0
 -- !result
-select count(*) from t_test_gin_index_query where query_english like '%teria%';
+select count(*) from t_test_gin_index_query where query_english match '%teria%';
 -- result:
 1
 -- !result
@@ -275,6 +271,11 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "AB%";
 1	ABC
 3	ABD
 -- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match "AB%";
+-- result:
+1	ABC
+3	ABD
+-- !result
 DROP TABLE t_gin_index_single_predicate_none;
 -- result:
 -- !result
@@ -304,31 +305,25 @@ INSERT INTO t_gin_index_single_predicate_english VALUES
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "This is Gin Index";
 -- result:
+4	This is Gin Index
 -- !result
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "This";
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column match "This";
 -- result:
 -- !result
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "this";
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column match "this";
 -- result:
 4	This is Gin Index
 -- !result
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column != "this";
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column match "thi%";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column not match "this";
 -- result:
 1	ABC
 2	abc
 3	ABD
 5	None
--- !result
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IS NULL;
--- result:
-5	None
--- !result
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IS NOT NULL;
--- result:
-1	ABC
-2	abc
-3	ABD
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column <= "this";
 -- result:
@@ -339,45 +334,38 @@ SELECT * FROM t_gin_index_single_predicate_english WHERE text_column <= "this";
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column >= "this";
 -- result:
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IN ("this");
 -- result:
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IN ("this", "is");
 -- result:
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column NOT IN ("this");
 -- result:
 1	ABC
 2	abc
 3	ABD
-5	None
+4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column NOT IN ("this", "is");
 -- result:
 1	ABC
 2	abc
 3	ABD
-5	None
+4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "this";
 -- result:
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "%this%";
 -- result:
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "%his";
 -- result:
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "thi%";
 -- result:
-4	This is Gin Index
 -- !result
 DROP TABLE t_gin_index_single_predicate_english;
 -- result:
@@ -415,7 +403,6 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column != "ABC" AND
 -- result:
 2	abc
 4	This is Gin Index
-5	None
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column IS NOT NULL AND text_column != "ABC";
 -- result:
@@ -463,6 +450,14 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" A
 -- result:
 1	ABC
 -- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
+-- result:
+1	ABC
+-- !result
 DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
@@ -490,48 +485,21 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 (5, NULL);
 -- result:
 -- !result
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column = "this" OR text_column = "abc";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
 -- result:
-1	ABC
-2	abc
-4	This is Gin Index
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
 -- !result
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column != "this" AND text_column != "abc";
--- result:
-3	ABD
-5	None
--- !result
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IS NOT NULL AND text_column = "this";
--- result:
-4	This is Gin Index
--- !result
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column <= "this" AND text_column >= "abc";
--- result:
-1	ABC
-2	abc
-3	ABD
-4	This is Gin Index
--- !result
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IN ("this") OR text_column IN ("abc");
--- result:
-1	ABC
-2	abc
-4	This is Gin Index
--- !result
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column NOT IN ("this") AND text_column NOT IN ("abc");
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
 -- result:
 3	ABD
 5	None
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
 -- result:
-1	ABC
 2	abc
-4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
 -- result:
-4	This is Gin Index
 -- !result
 DROP TABLE t_gin_index_multiple_predicate_english;
 -- result:
@@ -900,6 +868,29 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column LIKE CONCAT("ab
 -- result:
 1	abc cbd
 -- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "c");
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "%");
+-- result:
+1	abc cbd
+-- !result
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 -- result:
 -- !result
@@ -924,9 +915,32 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) LIKE
 -- !result
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "c");
 -- result:
-1	abc cbd
 -- !result
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "%");
+-- result:
+1	abc cbd
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "c");
+-- result:
+1	abc cbd
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "%");
 -- result:
 1	abc cbd
 -- !result

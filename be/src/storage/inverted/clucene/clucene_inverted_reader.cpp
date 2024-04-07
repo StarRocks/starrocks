@@ -37,7 +37,7 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
                                      LogicalType field_type, std::unique_ptr<InvertedReader>* res) {
     if (is_string_type(field_type)) {
         InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(
-                get_parser_string_from_properties(tablet_index->common_properties()));
+                get_parser_string_from_properties(tablet_index->index_properties()));
         // Only support full text search for now
         *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index->index_id(), parser_type);
         return Status::OK();
@@ -97,7 +97,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
         match_operator = std::make_unique<MatchGreatThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
                                                                   search_wstr, true);
         break;
-    case InvertedIndexQueryType::MATCH_ANY_QUERY:
+    case InvertedIndexQueryType::MATCH_WILDCARD_QUERY:
         match_operator =
                 std::make_unique<MatchWildcardOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
         break;
