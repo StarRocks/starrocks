@@ -16,7 +16,11 @@ Apache Superset 支持对 StarRocks 的内部数据和外部数据进行查询�
    pip install starrocks
    ```
 
+<<<<<<< HEAD
 2. 安装最新版本的 Apache Superset。具体参见[从零开始安装 Superset](https://superset.apache.org/docs/installation/installing-superset-from-scratch/)。
+=======
+2. 安装最新版本的 Apache Superset。具体参见[安装 Superset](https://superset.apache.org/docs/intro).
+>>>>>>> a72ce31306 ([Doc] fix broken external links (#43601))
 
 ## 集成
 
