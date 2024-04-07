@@ -5,7 +5,7 @@ displayed_sidebar: "English"
 # SSB Flat-table Benchmarking
 
 Star schema benchmark (SSB) is designed to test basic performance metrics of OLAP database products. SSB uses a star schema test set that is widely applied in academia and industry. For more information, see the paper [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF).
-ClickHouse flattens the star schema into a wide flat table and rewrites the SSB into a single-table benchmark. For more information, see [Star schema benchmark of ClickHouse](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/).
+ClickHouse flattens the star schema into a wide flat table and rewrites the SSB into a single-table benchmark. For more information, see [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema)
 This test compares the performance of StarRocks, Apache Druid, and ClickHouse against SSB single-table datasets.
 
 ## Test conclusion
@@ -76,7 +76,7 @@ The following table shows the performance test results on thirteen queries. The 
 
 ## Test procedure
 
-For more information about how to create a ClickHouse table and load data to the table, see [ClickHouse official doc](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/). The following sections describe data generation and data loading of StarRocks.
+For more information about how to create a ClickHouse table and load data to the table, see [ClickHouse official doc](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema). The following sections describe data generation and data loading of StarRocks.
 
 ### Generate data
 
