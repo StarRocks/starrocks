@@ -144,14 +144,14 @@ public class ValueProperty {
             if (res.size() != 1) {
                 return new RangeExtractor.RangeDescriptor(ConstantOperator.FALSE);
             } else {
-                RangeExtractor.ValueDescriptor valueDesc = res.values().stream().findFirst().get();
-                if (valueDesc instanceof RangeExtractor.MultiValuesDescriptor) {
-                    RangeExtractor.MultiValuesDescriptor multiValues = (RangeExtractor.MultiValuesDescriptor) valueDesc;
+                RangeExtractor.ValueDescriptor desc = res.values().stream().findFirst().get();
+                if (desc instanceof RangeExtractor.MultiValuesDescriptor) {
+                    RangeExtractor.MultiValuesDescriptor multiValues = (RangeExtractor.MultiValuesDescriptor) desc;
                     RangeExtractor.RangeDescriptor rangeDesc = new RangeExtractor.RangeDescriptor(multiValues.columnRef);
                     rangeDesc = (RangeExtractor.RangeDescriptor) rangeDesc.union(multiValues);
                     return rangeDesc;
                 } else {
-                    return (RangeExtractor.RangeDescriptor) valueDesc;
+                    return (RangeExtractor.RangeDescriptor) desc;
                 }
             }
         }
