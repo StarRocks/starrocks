@@ -212,6 +212,8 @@ void LocalPkIndexManager::schedule(const std::function<std::vector<TabletAndScor
         }
         auto* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
         if (data_dir == nullptr) {
+            // remove this tablet because its data dir is nullptr
+            it = _ready_tablets_queue.erase(it);
             continue;
         }
         if (disk_limit(data_dir)) {

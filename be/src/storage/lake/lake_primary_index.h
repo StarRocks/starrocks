@@ -84,7 +84,6 @@ private:
     // make sure at most 1 thread is read or write primary index
     std::timed_mutex _mutex;
     bool _enable_persistent_index = false;
-    std::atomic<double> _pk_index_write_amp_score{0.0};
 };
 
 } // namespace lake
