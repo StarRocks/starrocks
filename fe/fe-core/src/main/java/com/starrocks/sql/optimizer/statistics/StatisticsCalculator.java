@@ -1430,5 +1430,4 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         return false;
     }
-
 }
