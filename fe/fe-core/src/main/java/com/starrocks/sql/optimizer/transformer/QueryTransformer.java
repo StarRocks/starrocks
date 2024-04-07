@@ -66,13 +66,9 @@ public class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
-<<<<<<< HEAD
-=======
-    private final boolean inlineView;
-    private final Map<Operator, ParseNode> optToAstMap;
+
     public static final String GROUPING_ID = "GROUPING_ID";
     public static final String GROUPING = "GROUPING";
->>>>>>> 608e00f4bd ([BugFix] Unpack const column when in local exchange source operator (#43403))
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
                             CTETransformerContext cteContext) {
