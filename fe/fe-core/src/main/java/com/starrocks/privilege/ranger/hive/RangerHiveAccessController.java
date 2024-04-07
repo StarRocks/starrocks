@@ -106,6 +106,14 @@ public class RangerHiveAccessController extends RangerAccessController {
         HiveAccessType hiveAccessType;
         if (privilegeType == PrivilegeType.SELECT) {
             hiveAccessType = HiveAccessType.SELECT;
+        } else if (privilegeType == PrivilegeType.INSERT) {
+            hiveAccessType = HiveAccessType.UPDATE;
+        } else if (privilegeType == PrivilegeType.CREATE_DATABASE
+                || privilegeType == PrivilegeType.CREATE_TABLE
+                || privilegeType == PrivilegeType.CREATE_VIEW) {
+            hiveAccessType = HiveAccessType.CREATE;
+        } else if (privilegeType == PrivilegeType.DROP) {
+            hiveAccessType = HiveAccessType.DROP;
         } else {
             hiveAccessType = HiveAccessType.NONE;
         }
@@ -113,3 +121,4 @@ public class RangerHiveAccessController extends RangerAccessController {
         return hiveAccessType.name().toLowerCase(Locale.ENGLISH);
     }
 }
+
