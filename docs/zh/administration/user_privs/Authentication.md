@@ -108,24 +108,43 @@ StarRocks 提供自定义方式认证。
 
 1. 实现自定义认证抽象类
 
-自定义方式需要用户自己实现相关认证逻辑。用户需实现`CustomAuthenticationProvider`中的`authenticate`方法完成认证。
+自定义方式需要用户自己实现相关认证逻辑。用户需实现`AuthenticationProvider`以完成认证。
 
 代码示例：
 
 ```java
-import com.starrocks.authentication.*;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserIdentity;
 
-public class LoginSample extends CustomAuthenticationProvider {
-  @Override
-  public void authenticate(
-      String name,
-      String host,
-      byte[] password,
-      byte[] randomString,
-      UserAuthenticationInfo authenticationInfo)
-      throws AuthenticationException {
-      // user code
-  }
+public class Test implements AuthenticationProvider {
+
+    /** used when Create or Alter User through SQL, to check the new password valid. */
+    @Override
+    public UserAuthenticationInfo validAuthenticationInfo(
+            UserIdentity userIdentity, String password, String textForAuthPlugin)
+            throws AuthenticationException {
+        return null;
+    }
+
+    /** used when login. */
+    @Override
+    public void authenticate(
+            String name,
+            String host,
+            byte[] password,
+            byte[] randomString,
+            UserAuthenticationInfo authenticationInfo)
+            throws AuthenticationException {}
+
+    /** used to upgrade from 2.x. */
+    @Override
+    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
+            throws AuthenticationException {
+        return null;
+    }
 }
 
 ```

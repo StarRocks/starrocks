@@ -82,24 +82,43 @@ There are 3 steps to use Custom Authentication.
 1. Implement Custom abstract class
 
 Custom Authentication require users to implement relevant authentication logic themselves. 
-The user needs to implement the `authenticate` method in the `CustomiAuthenticationProvider` to complete authentication.
+The user needs to implement `AuthenticationProvider` to complete authentication.
 
 example:
 
 ```java
-import com.starrocks.authentication.*;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserIdentity;
 
-public class LoginSample extends CustomAuthenticationProvider {
-  @Override
-  public void authenticate(
-      String name,
-      String host,
-      byte[] password,
-      byte[] randomString,
-      UserAuthenticationInfo authenticationInfo)
-      throws AuthenticationException {
-      // user code
-  }
+public class Test implements AuthenticationProvider {
+
+    /** used when Create or Alter User through SQL, to check the new password valid. */
+    @Override
+    public UserAuthenticationInfo validAuthenticationInfo(
+            UserIdentity userIdentity, String password, String textForAuthPlugin)
+            throws AuthenticationException {
+        return null;
+    }
+
+    /** used when login. */
+    @Override
+    public void authenticate(
+            String name,
+            String host,
+            byte[] password,
+            byte[] randomString,
+            UserAuthenticationInfo authenticationInfo)
+            throws AuthenticationException {}
+
+    /** used to upgrade from 2.x. */
+    @Override
+    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
+            throws AuthenticationException {
+        return null;
+    }
 }
 
 ```
