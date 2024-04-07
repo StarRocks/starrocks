@@ -265,7 +265,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static String profile_log_delete_age = "7d";
     @ConfField
-    public static int profile_log_roll_size_mb = 1024; // 1 GB
+    public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
