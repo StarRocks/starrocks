@@ -25,7 +25,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
-import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -58,7 +57,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getPartitionNamesToRefreshForMv;
 import static com.starrocks.sql.optimizer.MvRewritePreprocessor.isMVValidToRewriteQuery;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
@@ -214,13 +212,12 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
                     return null;
                 }
-                MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
-                if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
+                Set<String> partitionNamesToRefresh = Sets.newHashSet();
+                if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
-                            "stale partitions {}", mv.getName(), mvUpdateInfo);
+                            "stale partitions {}", mv.getName(), partitionNamesToRefresh);
                     continue;
                 }
-                Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
                 if (!partitionNamesToRefresh.isEmpty()) {
                     logMVRewrite(context, this, "Partitioned MV {} is outdated which " +
                                     "contains some partitions to be refreshed: {}, and cannot compensate it to predicate",
