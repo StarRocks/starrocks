@@ -14,6 +14,9 @@
 
 package com.starrocks.connector.jdbc;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DateLiteral;
@@ -33,9 +36,10 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -67,22 +71,16 @@ public class JDBCMetadata implements ConnectorMetadata {
     public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
         this.catalogName = catalogName;
-        try {
-            String driverName = getDriverName();
-            Class.forName(driverName);
-        } catch (ClassNotFoundException e) {
-            LOG.warn(e.getMessage());
-            throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
-        }
         if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
             schemaResolver = new MysqlSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
             schemaResolver = new PostgresSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
             schemaResolver = new MysqlSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
+            schemaResolver = new OracleSchemaResolver();
         } else {
-            LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
-            throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
+            schemaResolver = new DefaultJDBCSchemaResolver();
         }
         if (dataSource == null) {
             dataSource = createHikariDataSource();
@@ -127,15 +125,27 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     private HikariDataSource createHikariDataSource() {
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(getJdbcUrl());
-        config.setUsername(properties.get(JDBCResource.USER));
-        config.setPassword(properties.get(JDBCResource.PASSWORD));
-        config.setDriverClassName(getDriverName());
-        config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
-        config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
-        config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
-        return new HikariDataSource(config);
+        ClassLoader oldClassLoader = Thread.currentThread().getContextClassLoader();
+        String driverUrl = properties.get(JDBCResource.DRIVER_URL);
+        try {
+            URL[] urls = {new URL(driverUrl)};
+            ClassLoader parent = getClass().getClassLoader();
+            ClassLoader classLoader = URLClassLoader.newInstance(urls, parent);
+            Thread.currentThread().setContextClassLoader(classLoader);
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl(getJdbcUrl());
+            config.setUsername(properties.get(JDBCResource.USER));
+            config.setPassword(properties.get(JDBCResource.PASSWORD));
+            config.setDriverClassName(getDriverName());
+            config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
+            config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
+            config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+            return new HikariDataSource(config);
+        } catch (MalformedURLException e) {
+            throw new StarRocksConnectorException(String.format("invalid driverUrl %s", driverUrl), e);
+        } finally {
+            Thread.currentThread().setContextClassLoader(oldClassLoader);
+        }
     }
 
     public Connection getConnection() throws SQLException {
