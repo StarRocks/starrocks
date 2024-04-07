@@ -14,7 +14,6 @@
 
 package com.starrocks.http;
 
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.ImmutableMap;
@@ -131,6 +130,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
 
         };
+
     }
 
     /**

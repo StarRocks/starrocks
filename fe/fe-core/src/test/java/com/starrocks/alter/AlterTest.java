@@ -68,6 +68,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -99,6 +100,8 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.AfterClass;
@@ -2455,6 +2458,18 @@ public class AlterTest {
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt3);
         Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(1L, "w1");
+            }
+        };
+        sql = "ALTER MATERIALIZED VIEW mv2 set (\"warehouse\" = \"w1\")";
+        AlterMaterializedViewStmt alterTableStmt4 =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt4);
+        Assert.assertEquals(1L, mv.getWarehouseId());
     }
 
     @Test(expected = DdlException.class)

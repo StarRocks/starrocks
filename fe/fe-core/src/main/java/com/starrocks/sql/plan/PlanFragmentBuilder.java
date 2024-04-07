@@ -266,7 +266,7 @@ public class PlanFragmentBuilder {
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds,
-                view.writeQuorum(), view.enableReplicatedStorage(), false, false, 
+                view.writeQuorum(), view.enableReplicatedStorage(), false, false,
                 connectContext.getCurrentWarehouseId());
         execPlan.getTopFragment().setSink(tableSink);
 
@@ -918,10 +918,9 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(scan.getTable());
 
-            MetaScanNode scanNode =
-                    new MetaScanNode(context.getNextNodeId(),
-                            tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
-                            context.getConnectContext().getCurrentWarehouseId());
+            MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
+                    tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+                    context.getConnectContext().getCurrentWarehouseId());
             scanNode.computeRangeLocations();
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);

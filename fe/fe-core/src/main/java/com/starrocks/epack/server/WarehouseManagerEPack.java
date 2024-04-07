@@ -3,10 +3,14 @@
 package com.starrocks.epack.server;
 
 import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.staros.client.StarClientException;
+import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.UserException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.EditLogEPack;
@@ -17,6 +21,7 @@ import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.warehouse.Cluster;
 import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -24,12 +29,17 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class WarehouseManagerEPack extends WarehouseManager {
     private static final Logger LOG = LogManager.getLogger(WarehouseManagerEPack.class);
@@ -52,6 +62,129 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 idToWh.put(wh.getId(), wh);
             }
         }
+    }
+
+    @Override
+    public List<Long> getAllComputeNodeIds(long warehouseId) {
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
+        }
+
+        try {
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getWorkersByWorkerGroup(localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+        } catch (UserException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public List<Long> getAllComputeNodeIds(String warehouseName) {
+        Warehouse warehouse = nameToWh.get(warehouseName);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+        }
+
+        try {
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getWorkersByWorkerGroup(localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+        } catch (UserException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
+        }
+
+        try {
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+
+            Long nodeId;
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllBackendIdsByShard(shardInfo, true);
+            if (!ids.isEmpty()) {
+                nodeId = ids.iterator().next();
+                return nodeId;
+            } else {
+                return null;
+            }
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+        Warehouse warehouse = nameToWh.get(warehouseName);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+        }
+
+        try {
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+
+            Long nodeId;
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllBackendIdsByShard(shardInfo, true);
+            if (!ids.isEmpty()) {
+                nodeId = ids.iterator().next();
+                return nodeId;
+            } else {
+                return null;
+            }
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
+        }
+
+        try {
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllBackendIdsByShard(shardInfo, true);
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+        Warehouse warehouse = getWarehouse(warehouseName);
+        return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
+    }
+
+    @Override
+    public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+        Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
+    }
+
+    @Override
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+        LocalWarehouse localWarehouse = (LocalWarehouse) getWarehouse(warehouseId);
+        return localWarehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
