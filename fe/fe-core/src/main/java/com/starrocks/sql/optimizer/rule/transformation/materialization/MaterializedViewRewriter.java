@@ -153,8 +153,7 @@ public class MaterializedViewRewriter {
         return MvUtils.isLogicalSPJ(expression);
     }
 
-    private boolean isMVApplicable(OptExpression mvExpression, List<Table> queryTables, List<Table> mvTables,
-                                   MatchMode matchMode, OptExpression queryExpression) {
+    private boolean isMVApplicable(OptExpression mvExpression, MatchMode matchMode, OptExpression queryExpression) {
         // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.
@@ -569,8 +568,12 @@ public class MaterializedViewRewriter {
         MatchMode matchMode = getMatchMode(queryTables, mvTables);
 
         // Check whether mv can be applicable for the query.
+<<<<<<< HEAD
         if (!isMVApplicable(mvExpression, queryTables, mvTables, matchMode, queryExpression)) {
             logMVRewrite(mvRewriteContext, "mv {} applicable check failed", materializationContext.getMv().getName());
+=======
+        if (!isMVApplicable(mvExpression, matchMode, queryExpression)) {
+>>>>>>> e81e62e727 ([BugFix] fix view delta mv rewrite (#43092))
             return null;
         }
 
@@ -638,6 +641,13 @@ public class MaterializedViewRewriter {
                                            ReplaceColumnRefRewriter mvColumnRefRewriter,
                                            OptExpression queryExpression,
                                            OptExpression mvExpression) {
+        // short circuit for tables without foreign-key/primary-key
+        if (mvTables.stream().allMatch(table -> !table.hasForeignKeyConstraints())
+                     && !materializationContext.getMv().hasForeignKeyConstraints()) {
+            logMVRewrite(mvRewriteContext, String.format("query table size:%d, mv table size:%d, " +
+                    "can not try view delta rewrite because no FK constraints", queryTables.size(), mvTables.size()));
+            return null;
+        }
         List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
         List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
 
@@ -667,7 +677,11 @@ public class MaterializedViewRewriter {
         // [B1, B1], [B1, B2], [B2, B1], [B2, B1].
         // In the next step, remove some redundant permutations below.
         PermutationGenerator generator = new PermutationGenerator(mvExtraTableScanDescLists);
+        int retries = 0;
         while (generator.hasNext()) {
+            if (retries++ >= optimizerContext.getSessionVariable().getMaterializedViewMaxRelationMappingSize()) {
+                break;
+            }
             List<TableScanDesc> mvExtraTableScanDescs = generator.next();
             if (mvExtraTableScanDescs.stream().distinct().count() != mvExtraTableScanDescs.size()) {
                 continue;
@@ -758,7 +772,11 @@ public class MaterializedViewRewriter {
         logMVRewrite(mvRewriteContext, "MV predicate split:{}", mvPredicateSplit);
         logMVRewrite(mvRewriteContext, "Query predicate split:{}", queryPredicateSplit);
         logMVRewrite(mvRewriteContext, "Construct {} relation id mappings from query to mv", relationIdMappings.size());
+        int retries = 0;
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
+            if (retries++ >= optimizerContext.getSessionVariable().getMaterializedViewMaxRelationMappingSize()) {
+                break;
+            }
             mvRewriteContext.setMvPruneConjunct(mvPrunePredicate);
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
 

@@ -608,12 +608,17 @@ public class Optimizer {
             context.getRuleSet().addRealtimeMVRules();
         }
 
+<<<<<<< HEAD
         if (isEnableMultiTableRewrite(connectContext, tree)) {
             if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
                     rootTaskContext.getOptimizerContext().getCandidateMvs()
                             .stream().anyMatch(MaterializationContext::hasMultiTables)) {
                 context.getRuleSet().addSingleTableMvRewriteRule();
             }
+=======
+        if (mvRewriteStrategy.enableCBORewrite) {
+            context.getRuleSet().addSingleTableMvRewriteRule();
+>>>>>>> e81e62e727 ([BugFix] fix view delta mv rewrite (#43092))
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
