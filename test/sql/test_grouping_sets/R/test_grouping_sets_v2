@@ -1,0 +1,218 @@
+-- name: test_grouping_sets_v2
+set enable_rewrite_groupingsets_to_union_all=true;
+-- result:
+-- !result
+drop table if exists tbl_with_null1;
+-- result:
+-- !result
+CREATE TABLE `tbl_with_null1` ( 
+    `k1`  date, 
+    `k2`  datetime, 
+    `k3`  varchar(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `K9`  bigint, 
+    `K10` largeint, 
+    `K11` float, 
+    `K12` double, 
+    `K13` decimal(27,9) 
+) DUPLICATE KEY(`k1`) 
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
+PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO tbl_with_null1 VALUES
+ ('2020-10-22','2020-10-23 12:12:12','k1','k4',0,1,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-23','2020-10-23 12:12:12','k2','k4',0,0,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-24','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-25','2020-10-23 12:12:12','k4','k4',0,1,2,3,4,NULL,NULL,NULL,2.889)
+,('2020-10-26',NULL, NULL, NULL,NULL,NULL,NULL,NULl,NULL,NULL,NULL,NULL,NULL);
+-- result:
+-- !result
+CREATE TABLE `tbl_with_null2` ( 
+    `k1`  date, 
+    `k2`  datetime, 
+    `k3`  varchar(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `K9`  bigint, 
+    `K10` largeint, 
+    `K11` float, 
+    `K12` double, 
+    `K13` decimal(27,9) 
+) DUPLICATE KEY(`k1`) 
+DISTRIBUTED BY HASH(`k1`) BUCKETS 9
+PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO tbl_with_null2 VALUES
+ ('2020-10-22','2020-10-23 12:12:12','k1','k4',0,1,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-23','2020-10-23 12:12:12','k2','k4',0,0,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-24','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-25','2020-10-23 12:12:12','k4','k4',0,1,2,3,4,NULL,NULL,NULL,2.889)
+,('2020-10-26',NULL, NULL, NULL,NULL,NULL,NULL,NULl,NULL,NULL,NULL,NULL,NULL);
+-- result:
+-- !result
+select k1, sum(k8) as v1
+from tbl_with_null1 group by grouping sets((), (k1)) order by k1, v1;
+-- result:
+None	12
+2020-10-22	3
+2020-10-23	3
+2020-10-24	3
+2020-10-25	3
+2020-10-26	None
+-- !result
+select k1, k2, sum(k8) as v1
+from tbl_with_null1 group by grouping sets((), (k1, k2)) order by k1, k2, v1;
+-- result:
+None	None	12
+2020-10-22	2020-10-23 12:12:12	3
+2020-10-23	2020-10-23 12:12:12	3
+2020-10-24	2020-10-23 12:12:12	3
+2020-10-25	2020-10-23 12:12:12	3
+2020-10-26	None	None
+-- !result
+select k1, k2, sum(k8) as v1
+from tbl_with_null1 group by rollup(k1, k2) order by k1, k2, v1;
+-- result:
+None	None	12
+2020-10-22	None	3
+2020-10-22	2020-10-23 12:12:12	3
+2020-10-23	None	3
+2020-10-23	2020-10-23 12:12:12	3
+2020-10-24	None	3
+2020-10-24	2020-10-23 12:12:12	3
+2020-10-25	None	3
+2020-10-25	2020-10-23 12:12:12	3
+2020-10-26	None	None
+2020-10-26	None	None
+-- !result
+select k1, k2, sum(k8) as v1
+from tbl_with_null1 group by cube (k1, k2) order by k1, k2, v1;
+-- result:
+None	None	None
+None	None	12
+None	2020-10-23 12:12:12	12
+2020-10-22	None	3
+2020-10-22	2020-10-23 12:12:12	3
+2020-10-23	None	3
+2020-10-23	2020-10-23 12:12:12	3
+2020-10-24	None	3
+2020-10-24	2020-10-23 12:12:12	3
+2020-10-25	None	3
+2020-10-25	2020-10-23 12:12:12	3
+2020-10-26	None	None
+2020-10-26	None	None
+-- !result
+select k1, grouping_id(k1) as f1, grouping(k1) as f2, sum(k8) as v1
+from tbl_with_null1 group by grouping sets((), (k1)) order by k1, f1, f2, v1;
+-- result:
+None	1	1	12
+2020-10-22	0	0	3
+2020-10-23	0	0	3
+2020-10-24	0	0	3
+2020-10-25	0	0	3
+2020-10-26	0	0	None
+-- !result
+select k1, k2, grouping_id(k1, k2) as f1, grouping(k1, k2) as f2, sum(k8) as v1
+from tbl_with_null1 group by grouping sets((), (k1, k2)) order by f1, f2, k1, k2, v1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	0	0	3
+2020-10-23	2020-10-23 12:12:12	0	0	3
+2020-10-24	2020-10-23 12:12:12	0	0	3
+2020-10-25	2020-10-23 12:12:12	0	0	3
+2020-10-26	None	0	0	None
+None	None	3	3	12
+-- !result
+select k1, k2, grouping_id(k1, k2) as f1, grouping(k1, k2) as f2, sum(k8) as v1
+from tbl_with_null1 group by cube(k1, k2) order by f1, f2, k1, k2, v1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	0	0	3
+2020-10-23	2020-10-23 12:12:12	0	0	3
+2020-10-24	2020-10-23 12:12:12	0	0	3
+2020-10-25	2020-10-23 12:12:12	0	0	3
+2020-10-26	None	0	0	None
+2020-10-22	None	1	1	3
+2020-10-23	None	1	1	3
+2020-10-24	None	1	1	3
+2020-10-25	None	1	1	3
+2020-10-26	None	1	1	None
+None	None	2	2	None
+None	2020-10-23 12:12:12	2	2	12
+None	None	3	3	12
+-- !result
+select k1, k2, grouping_id(k1, k2) as f1, grouping(k1, k2) as f2, sum(k8) as v1
+from tbl_with_null1 group by rollup(k1, k2) order by f1, f2, k1, k2, v1;
+-- result:
+2020-10-22	2020-10-23 12:12:12	0	0	3
+2020-10-23	2020-10-23 12:12:12	0	0	3
+2020-10-24	2020-10-23 12:12:12	0	0	3
+2020-10-25	2020-10-23 12:12:12	0	0	3
+2020-10-26	None	0	0	None
+2020-10-22	None	1	1	3
+2020-10-23	None	1	1	3
+2020-10-24	None	1	1	3
+2020-10-25	None	1	1	3
+2020-10-26	None	1	1	None
+None	None	3	3	12
+-- !result
+with cte1 as (select * from tbl_with_null1 order by k1)
+select multi_distinct_count(k4) as v1,  k1, grouping(k1) as f_k1, k2, grouping(k2) as f_k2
+from cte1 group by grouping sets ((), (k1), (k1, k2))
+order by f_k1 desc, k1 asc, f_k2 desc, k2 asc, v1 limit 10 offset 0;
+-- result:
+1	None	1	None	1
+1	2020-10-22	0	None	1
+1	2020-10-22	0	2020-10-23 12:12:12	0
+1	2020-10-23	0	None	1
+1	2020-10-23	0	2020-10-23 12:12:12	0
+1	2020-10-24	0	None	1
+1	2020-10-24	0	2020-10-23 12:12:12	0
+1	2020-10-25	0	None	1
+1	2020-10-25	0	2020-10-23 12:12:12	0
+0	2020-10-26	0	None	1
+-- !result
+with cte1 as (select t1.k1, t2.k2, t1.k3, t2.k4, t2.k5 from tbl_with_null1 t1 join tbl_with_null2 t2 on t1.k1=t2.k1 order by t1.k1)
+select count(distinct k3) as v1, count(distinct k4) as v2,  count(distinct k5) as v3, k1, grouping(k1) as f_k1, k2, grouping(k2) as f_k2
+from cte1 group by grouping sets ((), (k1), (k1, k2))
+order by f_k1 desc, k1 asc, f_k2 desc, k2 asc, v1, v2, v3 limit 10 offset 0;
+-- result:
+4	1	1	None	1	None	1
+1	1	1	2020-10-22	0	None	1
+1	1	1	2020-10-22	0	2020-10-23 12:12:12	0
+1	1	1	2020-10-23	0	None	1
+1	1	1	2020-10-23	0	2020-10-23 12:12:12	0
+1	1	1	2020-10-24	0	None	1
+1	1	1	2020-10-24	0	2020-10-23 12:12:12	0
+1	1	1	2020-10-25	0	None	1
+1	1	1	2020-10-25	0	2020-10-23 12:12:12	0
+0	0	0	2020-10-26	0	None	1
+-- !result
+with cte1 as (select t1.k1, t2.k2, t1.k3, t2.k4, t2.k5 from tbl_with_null1 t1 join tbl_with_null2 t2 on t1.k6=t2.k6 order by t1.k6)
+select count(distinct k3) as v1, count(distinct k4) as v2,  count(distinct k5) as v3, k1, grouping(k1) as f_k1, k2, grouping(k2) as f_k2
+from cte1 group by grouping sets ((), (k1), (k1, k2))
+order by f_k1 desc, k1 asc, f_k2 desc, k2 asc, v1, v2, v3 limit 10 offset 0;
+-- result:
+4	1	1	None	1	None	1
+1	1	1	2020-10-22	0	None	1
+1	1	1	2020-10-22	0	2020-10-23 12:12:12	0
+1	1	1	2020-10-23	0	None	1
+1	1	1	2020-10-23	0	2020-10-23 12:12:12	0
+1	1	1	2020-10-24	0	None	1
+1	1	1	2020-10-24	0	2020-10-23 12:12:12	0
+1	1	1	2020-10-25	0	None	1
+1	1	1	2020-10-25	0	2020-10-23 12:12:12	0
+-- !result
+drop table if exists tbl_with_null1;
+-- result:
+-- !result
+drop table if exists tbl_with_null2;
+-- result:
+-- !result

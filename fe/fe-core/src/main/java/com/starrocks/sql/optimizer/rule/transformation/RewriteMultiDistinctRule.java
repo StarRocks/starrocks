@@ -132,6 +132,10 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         Utils.calculateStatistics(input, context);
 
         Statistics inputStatistics = input.inputAt(0).getStatistics();
+        // inputStatistics may be null if it's a cte consumer operator
+        if (inputStatistics == null) {
+            return false;
+        }
         List<ColumnRefOperator> neededCols = Lists.newArrayList(aggOp.getGroupingKeys());
         distinctAggOperatorList.stream().forEach(e -> neededCols.addAll(e.getColumnRefs()));
 

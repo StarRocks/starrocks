@@ -446,4 +446,15 @@ bool Chunk::has_const_column() const {
     return false;
 }
 
+void Chunk::unpack_and_duplicate_const_columns() {
+    size_t num_rows = this->num_rows();
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto column = _columns[i];
+        if (column->is_constant()) {
+            auto unpack_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, column);
+            update_column_by_index(std::move(unpack_column), i);
+        }
+    }
+}
+
 } // namespace starrocks
