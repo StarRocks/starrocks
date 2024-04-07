@@ -701,7 +701,9 @@ public class TaskManager implements MemoryTrackable {
                 }
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                taskRunManager.arrangeTaskRun(taskRun);
+                if (!taskRunManager.arrangeTaskRun(taskRun)) {
+                    LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
+                }
                 break;
             // this will happen in build image
             case RUNNING:
@@ -738,6 +740,7 @@ public class TaskManager implements MemoryTrackable {
             List<TaskRun> tempQueue = Lists.newArrayList();
             while (!taskRunQueue.isEmpty()) {
                 TaskRun taskRun = taskRunQueue.poll();
+                // use queryId to find the taskRun
                 if (taskRun.getStatus().getQueryId().equals(statusChange.getQueryId())) {
                     pendingTaskRun = taskRun;
                     break;
@@ -764,6 +767,16 @@ public class TaskManager implements MemoryTrackable {
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
                 status.setState(Constants.TaskRunState.FAILED);
+                taskRunManager.getTaskRunHistory().addHistory(status);
+            } else if (toStatus == Constants.TaskRunState.SUCCESS) {
+                // This only happened when the task run is merged by others and no run ever.
+                LOG.info("Replay update pendingTaskRun which is merged by others, query_id:{}, taskId:{}",
+                        statusChange.getQueryId(), taskId);
+                status.setErrorMessage(statusChange.getErrorMessage());
+                status.setErrorCode(statusChange.getErrorCode());
+                status.setState(Constants.TaskRunState.SUCCESS);
+                status.setProgress(100);
+                status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
             }
             if (taskRunQueue.size() == 0) {
