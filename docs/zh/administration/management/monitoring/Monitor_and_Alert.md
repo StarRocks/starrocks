@@ -489,7 +489,7 @@ systemctl restart grafana-server.service
 
    ![MA-22](../../../assets/monitor/monitor22.png)
 
-每个报警渠道都允许通过 **Add contact point integration** 来配置多种通知方式的，以下不再展开。关于 Contact points 的更多细节，可参考 [Grafana 官方文档](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/contact-points/)。
+每个报警渠道都允许通过 **Add contact point integration** 来配置多种通知方式的，以下不再展开。关于 Contact points 的更多细节，可参考 [Grafana 官方文档](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/notifications/contact-points/)
 
 为了便于后续演示，假设您在这一步使用不同的邮箱创建了 “**StarRocksDev**” 和 “**StarRocksOp**” 两个报警渠道。
 
