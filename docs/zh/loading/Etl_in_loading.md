@@ -162,7 +162,7 @@ LOAD LABEL test_db.label1
     COLUMNS TERMINATED BY ","
     (user_id, user_gender, event_date, event_type)
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
@@ -259,7 +259,7 @@ LOAD LABEL test_db.label2
     (user_id, user_gender, event_date, event_type)
     WHERE event_type = 1
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
@@ -352,7 +352,7 @@ LOAD LABEL test_db.label3
     (date)
     SET(year=year(date), month=month(date), day=day(date))
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
@@ -432,7 +432,7 @@ LOAD LABEL test_db.label4
     COLUMNS FROM PATH AS (date)
     SET(event_date = date)
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
