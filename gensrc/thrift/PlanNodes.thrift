@@ -749,6 +749,9 @@ struct TAggregationNode {
   27: optional bool use_sort_agg
 
   28: optional bool use_per_bucket_optimize
+
+  // enable runtime limit, pipelines share one limit
+  29: optional bool enable_pipeline_share_limit = false
 }
 
 struct TRepeatNode {
