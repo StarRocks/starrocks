@@ -274,6 +274,137 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
     >
     > You do not need to specify the `COLUMNS` parameter if the names and number of the keys in the JSON object completely match those of fields in the StarRocks table.
 
+<<<<<<< HEAD
+=======
+### Load Avro-format data
+
+Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
+
+#### Prepare a dataset
+
+##### Avro schema
+
+1. Create the following  Avro schema file `avro_schema.avsc`:
+
+      ```JSON
+      {
+          "type": "record",
+          "name": "sensor_log",
+          "fields" : [
+              {"name": "id", "type": "long"},
+              {"name": "name", "type": "string"},
+              {"name": "checked", "type" : "boolean"},
+              {"name": "data", "type": "double"},
+              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
+          ]
+      }
+      ```
+
+2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
+
+##### Avro data
+
+Prepare the Avro data and send it to the Kafka topic `topic_0`.
+
+#### Create a table
+
+According to the fields of Avro data, create a table `sensor_log` in the target database `example_db` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the data type mapping between the table columns and the Avro data fields, see [Data types mapping](#Data types mapping).
+
+```SQL
+CREATE TABLE example_db.sensor_log ( 
+    `id` bigint NOT NULL COMMENT "sensor id",
+    `name` varchar(26) NOT NULL COMMENT "sensor name", 
+    `checked` boolean NOT NULL COMMENT "checked", 
+    `data` double NULL COMMENT "sensor data", 
+    `sensor_type` varchar(26) NOT NULL COMMENT "sensor type"
+) 
+ENGINE=OLAP 
+DUPLICATE KEY (id) 
+DISTRIBUTED BY HASH(`id`); 
+```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+
+#### Submit a Routine Load job
+
+Execute the following statement to submit a Routine Load job named `sensor_log_load_job` to consume the Avro messages in the Kafka topic `topic_0` and load the data into the table `sensor_log` in the database `sensor`. The load job consumes the messages from the initial offset in the specified partitions of the topic.
+
+```SQL
+CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log  
+PROPERTIES  
+(  
+    "format" = "avro"  
+)  
+FROM KAFKA  
+(  
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+    "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+    "kafka_topic" = "topic_0",  
+    "kafka_partitions" = "0,1,2,3,4,5",  
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
+);
+```
+
+- Data Format
+
+  You need to specify `"format = "avro"` in the clause `PROPERTIES` to define that the data format is Avro.
+
+- Schema Registry
+
+  You need to configure `confluent.schema.registry.url` to specify the URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:
+
+  ```Plaintext
+  confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname|ip address>[:<port>]
+  ```
+
+- Data mapping and transformation
+
+  To specify the mapping and transformation relationship between the Avro-format data and the StarRocks table, you need to specify the parameter `COLUMNS` and property `jsonpaths`. The order of fields specified in the `COLUMNS` parameter must match that of the fields in the property `jsonpaths`, and the names of fields must match these of the StarRocks table. The property `jsonpaths` is used to extract the required fields from the Avro data. These fields are then named by the property `COLUMNS`.
+
+  For more information about data transformation, see [Transform data at loading](./Etl_in_loading.md).
+
+  > NOTE
+  >
+  > You do not need to specify the `COLUMNS` parameter if the names and number of the fields in the Avro record completely match those of columns in the StarRocks table.
+
+After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) statement to check the status of the load job.
+
+#### Data types mapping
+
+The data type mapping between the Avro data fields you want to load and the StarRocks table columns is as follows:
+
+##### Primitive types
+
+| Avro    | StarRocks |
+| ------- | --------- |
+| nul     | NULL      |
+| boolean | BOOLEAN   |
+| int     | INT       |
+| long    | BIGINT    |
+| float   | FLOAT     |
+| double  | DOUBLE    |
+| bytes   | STRING    |
+| string  | STRING    |
+
+##### Complex types
+
+| Avro           | StarRocks                                                    |
+| -------------- | ------------------------------------------------------------ |
+| record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
+| enums          | STRING                                                       |
+| arrays         | ARRAY                                                        |
+| maps           | JSON                                                         |
+| union(T, null) | NULLABLE(T)                                                  |
+| fixed          | STRING                                                       |
+
+#### Limits
+
+- Currently, StarRocks does not support schema evolution.
+- Each Kafka message must only contain a single Avro data record.
+
+>>>>>>> a72ce31306 ([Doc] fix broken external links (#43601))
 ## Check a load job and task
 
 ### Check a load job
