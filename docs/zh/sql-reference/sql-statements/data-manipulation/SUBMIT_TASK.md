@@ -6,38 +6,39 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-SUBMIT TASK 用于创建长时间运行的后台任务，以及定期执行的任务。
+为 ETL 语句创建异步任务。
 
-相关操作：
-- [SUBMIT TASK](./SUBMIT_TASK.md): 创建任务
-- [DROP TASK](./DROP_TASK.md): 删除任务
-- `INFORMATION_SCHEMA.tasks`: 查询任务列表
-- `INFORMATION_SCHEMA.task_runs`: 查询任务执行历史
+您可将该语句用于以下场景：
 
+- 创建长时间运行的后台任务（从 v2.5 开始支持）
+- 创建定期执行的任务（从 v3.3 开始支持）
 
-版本及功能支持情况：
-1. 2.5 版本开始支持此功能
-2. 3.0 起支持 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务
-3. 3.3 起支持定时任务
+支持的语句包括：
 
+- [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md)（从 v3.0 开始支持）
+- [INSERT](./INSERT.md)（从 v3.0 开始支持）
+
+您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
+
+您可以使用 [DROP TASK](./DROP_TASK.md) 删除异步任务。
 
 ## 语法
 
 ```SQL
 SUBMIT TASK <task_name> 
 [SCHEDULE [START(<schedule_start>)] EVERY(INTERVAL <schedule_interval>) ]
-[PROPERTIES(<properties>)]
+[PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
 ```
 
 ## 参数说明
 
-| **参数**      | **可选** | **说明**                                                     |
-| ------------- | --- | ------------------------------------------------------------ |
-| task_name    | 是 | 任务名称                                                   |
-| schedule_start | 是 | 定时任务的开始时间 | 
-| schedule_interval | 是 | 定时任务的执行间隔，最小间隔为 10s | 
-| etl_statement | 否 | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。 |
+| **参数**      | **是否必须** | **描述**                                                                                     |
+| ------------- | ------------ | ----------------------------------------------------------------------------------------- |
+| task_name          | 是      | 任务名称。                                                                                   |
+| schedule_start     | 否      | 定时任务的开始时间。                                                                           |
+| schedule_interval  | 否      | 定时任务的执行间隔，最小间隔为 10 秒。                                                           |
+| etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。 |
 
 ## 使用说明
 
@@ -74,7 +75,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | task_runs_concurrency        | 4          | 最多可同时运行的 TaskRun 的数量。                            |
 | task_runs_queue_length       | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
 | task_runs_max_history_number | 10000      | 保留的最多历史 TaskRun 任务数量。 |
-| task_min_schedule_interval_s | 10 |  Task 最小执行间隔，默认10s |
+| task_min_schedule_interval_s | 10         | Task 最小执行间隔。单位：秒。 |
 
 ## 示例
 
@@ -104,7 +105,8 @@ INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
-示例五：创建定时任务，将 SQL 执行结果写入到表中
+示例五：为 INSERT OVERWRITE 语句创建异步任务。任务将以一分钟为间隔定期执行。
+
 ```SQL
 SUBMIT TASK
 SCHEDULE EVERY(INTERVAL 1 MINUTE)
