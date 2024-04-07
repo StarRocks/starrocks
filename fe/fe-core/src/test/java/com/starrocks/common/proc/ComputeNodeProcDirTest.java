@@ -127,12 +127,21 @@ public class ComputeNodeProcDirTest {
     }
 
     @Test
-    public void testFetchResultSharedData() throws AnalysisException {
+    public void testFetchResultSharedData(@Mocked WarehouseManager warehouseManager) throws AnalysisException {
         new Expectations() {
             {
                 RunMode.isSharedDataMode();
                 minTimes = 1;
                 result = true;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
 

@@ -21,7 +21,9 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -73,7 +75,8 @@ public class MVRefreshTestBase {
 
     public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
-        new StmtExecutor(connectContext, sql).execute();
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {

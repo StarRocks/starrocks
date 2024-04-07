@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
@@ -573,26 +574,30 @@ public class PrivilegeCheckerTest {
     public void testSelectCatalogTable() throws Exception {
         ctxToTestUser();
         try {
-            StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                    "select * from hive0.tpch.region", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
             stmtExecutor.execute();
         } catch (AccessDeniedException e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
 
         ctxToRoot();
-        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog hive0");
+        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                "set catalog hive0", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
         stmtExecutor.execute();
         grantRevokeSqlAsRoot("grant SELECT on tpch.region to test");
         ctxToTestUser();
         try {
-            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                    "select * from hive0.tpch.region", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
             stmtExecutor.execute();
         } catch (AccessDeniedException e) {
             Assert.assertFalse(e.getMessage().contains("Access denied;"));
         }
         ctxToRoot();
         grantRevokeSqlAsRoot("revoke SELECT on tpch.region from test");
-        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                "set catalog default_catalog", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
         stmtExecutor.execute();
     }
 
@@ -748,13 +753,13 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
-            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
-        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
@@ -774,12 +779,12 @@ public class PrivilegeCheckerTest {
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         try {
-            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
-        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
 
@@ -796,12 +801,12 @@ public class PrivilegeCheckerTest {
         nativeAnalyzeJob.setId(4);
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         try {
-            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
-        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         Database db2 = globalStateMgr.getDb("db2");
@@ -844,11 +849,11 @@ public class PrivilegeCheckerTest {
 
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         analyzeManager.addAnalyzeStatus(analyzeStatus);
-        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         try {
-            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
