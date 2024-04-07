@@ -236,6 +236,38 @@ public class Config extends ConfigBase {
     public static String big_query_log_delete_age = "7d";
 
     /**
+     * profile_log_dir:
+     * This specifies FE profile log dir.
+     * <p>
+     * profile_log_roll_num:
+     * Maximal FE log files to be kept within a profile_log_roll_interval.
+     * <p>
+     * profile_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * profile_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 minutes
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static boolean enable_profile_log = true;
+    @ConfField
+    public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int profile_log_roll_num = 10;
+    @ConfField
+    public static String profile_log_roll_interval = "DAY";
+    @ConfField
+    public static String profile_log_delete_age = "7d";
+    @ConfField
+    public static int profile_log_roll_size_mb = 1024; // 1 GB
+
+    /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
      * in the query detail when enable_collect_query_detail_info is true.
