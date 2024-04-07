@@ -36,16 +36,15 @@ import ast
 import time
 import unittest
 import uuid
+from typing import List, Dict
 
 from fuzzywuzzy import fuzz
 import pymysql as _mysql
-<<<<<<< HEAD
-=======
 import requests
 from cup import shell
->>>>>>> 2d488606aa ([Tool] SQL-Tester support keep_alive mode (#43341))
 from nose import tools
 from cup import log
+from requests.auth import HTTPBasicAuth
 
 from lib import skip
 from lib import data_delete_lib
@@ -380,7 +379,7 @@ class StarrocksSQLApiLib(object):
                 env_value = os.environ.get(env_key, "")
             else:
                 # save secrets info
-                if 'aws' in env_key:
+                if 'aws' in env_key or 'oss_' in env_key:
                     SECRET_INFOS[env_key] = env_value
 
             self.__setattr__(env_key, env_value)
@@ -1167,15 +1166,15 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_async_materialized_view_finish(self, mv_name, min_success_num = 1, check_count=60):
+    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
         """
         wait async materialized view job finish and return status
         """
         status = ""
         show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
         count = 0
-        success_num = 0
-        while count < check_count and success_num < min_success_num:
+        num = 0
+        while count < check_count:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][12]
             if status != "SUCCESS":
@@ -1183,7 +1182,7 @@ class StarrocksSQLApiLib(object):
             else:
                 # sleep another 5s to avoid FE's async action.
                 time.sleep(1)
-                success_num += 1
+                break
             count += 1
         tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 
@@ -1191,23 +1190,21 @@ class StarrocksSQLApiLib(object):
         """
         wait pipe load finish
         """
-        status = ""
-        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        state = ""
+        show_sql = "select state, load_status, last_error  from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
         count = 0
         print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
         while count < check_count:
             res = self.execute_sql(show_sql, True)
             print(res)
-            status = res["result"][0][0]
-            if status != "FINISHED":
-                print("pipe status is " + status)
+            state = res["result"][0][0]
+            if state == 'RUNNING':
+                print("pipe state is " + state)
                 time.sleep(1)
             else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+        tools.assert_equal("FINISHED", state, "didn't wait for the pipe to finish")
 
 
     def check_hit_materialized_view_plan(self, res, mv_name):
@@ -1295,25 +1292,6 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(0.5)
         tools.assert_equal(expect_status, status, "wait alter table finish error")
-
-    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
-        """
-        wait alter table job finish and return status
-        """
-        status = ""
-        while True:
-            res = self.execute_sql(
-                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
-                True,
-            )
-            if (not res["status"]) or len(res["result"]) <= 0:
-                return ""
-
-            status = res["result"][0][6]
-            if status == "FINISHED" or status == "CANCELLED" or status == "":
-                break
-            time.sleep(0.5)
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_global_dict_ready(self, column_name, table_name):
         """
@@ -1543,6 +1521,16 @@ class StarrocksSQLApiLib(object):
         )
         return str(res)
 
+    def post_http_request(self, exec_url) -> str:
+        """Sends a POST request.
+
+        Returns:
+            the response content.
+        """
+        res = requests.post(exec_url, auth=HTTPBasicAuth(self.mysql_user, self.mysql_password))
+        tools.assert_equal(200, res.status_code, f"failed to post http request [res={res}] [url={exec_url}]")
+        return res.content.decode("utf-8")
+
     def manual_compact(self, database_name, table_name):
         sql = "show tablet from " + database_name + "." + table_name
         res = self.execute_sql(sql, "dml")
@@ -1601,6 +1589,38 @@ class StarrocksSQLApiLib(object):
             counter = counter + 1
 
         tools.assert_true(finished, "analyze timeout")
+
+    def _get_backend_http_endpoints(self) -> List[Dict]:
+        """Get the http host and port of all the backends.
+
+        Returns:
+            a dict list, each of which contains the key "host" and "host" of a backend.
+        """
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+
+        backends = []
+        for row in res["result"]:
+            backends.append({
+                "host": row[1],
+                "port": row[4],
+            })
+
+        return backends
+
+    def update_be_config(self, key, value):
+        """Update the config to all the backends.
+        """
+        backends = self._get_backend_http_endpoints()
+        for backend in backends:
+            exec_url = f"http://{backend['host']}:{backend['port']}/api/update_config?{key}={value}"
+            print(f"post {exec_url}")
+            res = self.post_http_request(exec_url)
+
+            res_json = json.loads(res)
+            tools.assert_dict_contains_subset({"status": "OK"}, res_json,
+                                              f"failed to update be config [response={res}] [url={exec_url}]")
+
     def assert_table_cardinality(self, sql, rows):
         """
         assert table with an expected row counts
@@ -1610,8 +1630,6 @@ class StarrocksSQLApiLib(object):
         match = re.search(expect, str(res["result"]))
         print(expect)
         tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
-<<<<<<< HEAD
-=======
 
     def wait_refresh_dictionary_finish(self, name, check_status):
         """
@@ -1659,4 +1677,3 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
->>>>>>> 2d488606aa ([Tool] SQL-Tester support keep_alive mode (#43341))
