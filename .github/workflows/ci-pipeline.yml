@@ -159,7 +159,7 @@ jobs:
         run: |
           cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-pr-update-image.sh
-          
+
       - name: Upload Thirdparty Result
         uses: actions/upload-artifact@v4
         with:
@@ -530,7 +530,7 @@ jobs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
-    if: > 
+    if: >
       always() && 
       (needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || 
       (needs.be-checker.outputs.src_filter != 'true' && needs.fe-checker.outputs.src_filter == 'true' && needs.fe-ut.result == 'success') || 
@@ -555,7 +555,12 @@ jobs:
           fe_change: ${{ needs.fe-checker.outputs.src_filter }}
           build_type: Release
         run: |
-          echo "package=oss://starrocks-ci-release/main/ASAN/pr/StarRocks-b4fae627a0afab2157428e7257009c97e0d085ee.tar.gz" >> "$GITHUB_ENV"
+          echo "package=${package}" >> "$GITHUB_ENV"
+          if [[ "${be_change}" != "true" && "${fe_change}" != "true" ]]; then
+            oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/${build_type}/inspection/pr/StarRocks-
+            package=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "tar.gz" | sort -n -r | head -n 1 | awk '{print $NF}')
+            echo "package=${package}" >> $GITHUB_ENV
+          fi
 
       - name: UPDATE ECI & RUN BUILD
         id: run_build
@@ -571,7 +576,7 @@ jobs:
           fi
           
           if [[ ${package} == "" ]]; then
-            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --build ASAN
+            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --with-gcov
             echo "is_self_build=true" >> $GITHUB_OUTPUT
           else
             echo "Use latest tar: ${package}" 
@@ -681,6 +686,7 @@ jobs:
     name: SQL-Tester
     needs: [ build, deploy ]
     if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
@@ -733,8 +739,8 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/ASAN/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/ASAN/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --disable-dir-object -r -f --tagging="type=ci"
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
+          ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
 
       - name: Upload log
         uses: actions/upload-artifact@v4
@@ -753,10 +759,114 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }}/*
 
+  restart-fe:
+    runs-on: [ self-hosted, normal ]
+    name: Restart FE
+    needs: [ deploy, SQL-Tester ]
+    if: always() && needs.SQL-Tester.result == 'success'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart FE (${{needs.deploy.outputs.fe}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/restart-fe.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  restart-be:
+    runs-on: [ self-hosted, normal ]
+    name: Restart BE
+    needs: [ deploy, SQL-Tester ]
+    if: always() && needs.SQL-Tester.result == 'success'
+    timeout-minutes: 20
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart BE (${{needs.deploy.outputs.be_list}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && skip_gcov="--skip-gcov"
+          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }} ${skip_gcov}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  admit:
+    runs-on: [ self-hosted, normal ]
+    name: ADMIT TEST
+    needs: [ deploy, restart-fe, restart-be ]
+    if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
+    timeout-minutes: 40
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: Run Case
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+
+          cd ${{ github.workspace }}
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull >/dev/null
+
+          cd ${{ github.workspace }}/ci-tool
+          if [[ "${{ needs.deploy.outputs.shared_data }}" == "true" ]]; then
+              cluster_type=cloud
+          else
+              cluster_type=native
+          fi
+          ./bin/run-admit-single.sh --pr ${PR_NUMBER} --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --cluster ${cluster_type}
+
+      - name: Upload Admit XML
+        if: success() || failure()
+        run: |
+          branch=${{ steps.branch.outputs.branch }}
+          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ -rf
+          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
   Teardown:
     runs-on: [ self-hosted, quick ]
     name: Teardown
-    needs: [ deploy, SQL-Tester ]
+    needs: [ deploy, SQL-Tester, admit ]
     if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -780,7 +890,7 @@ jobs:
         id: backup
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build ASAN --conf $CONF_FILE --repository ${{ github.repository }}
+          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
 
       - name: Clean ECS
         if: steps.backup.outcome == 'success'
