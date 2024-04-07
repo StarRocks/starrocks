@@ -74,6 +74,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
 
+<<<<<<< HEAD
         Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : aggregationOperator.getAggregations()
                 .entrySet()) {
@@ -90,6 +91,28 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 newAggMap.put(aggregation.getKey(), newAggOperator);
             } else {
                 newAggMap.put(aggregation.getKey(), aggregation.getValue());
+=======
+        Statistics inputStatistics = input.inputAt(0).getStatistics();
+        // inputStatistics may be null if it's a cte consumer operator
+        if (inputStatistics == null) {
+            return false;
+        }
+        List<ColumnRefOperator> neededCols = Lists.newArrayList(aggOp.getGroupingKeys());
+        distinctAggOperatorList.stream().forEach(e -> neededCols.addAll(e.getColumnRefs()));
+
+        // no statistics available, use cte for no group by or group by only one col scenes to avoid bad case of multiple_func
+        if (neededCols.stream().anyMatch(e -> inputStatistics.getColumnStatistics().get(e).isUnknown())) {
+            return aggOp.getGroupingKeys().size() < 2;
+        }
+
+        double inputRowCount = inputStatistics.getOutputRowCount();
+        List<Double> deduplicateOutputRows = Lists.newArrayList();
+        List<Double> distinctValueCounts = Lists.newArrayList();
+        for (CallOperator callOperator : distinctAggOperatorList) {
+            List<ColumnRefOperator> distinctColumns = callOperator.getColumnRefs();
+            if (distinctColumns.isEmpty()) {
+                continue;
+>>>>>>> 608e00f4bd ([BugFix] Unpack const column when in local exchange source operator (#43403))
             }
         }
 
