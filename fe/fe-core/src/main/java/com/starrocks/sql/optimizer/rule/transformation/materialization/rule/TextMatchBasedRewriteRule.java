@@ -25,6 +25,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -33,7 +34,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getPartitionNamesToRefreshForMv;
 import static com.starrocks.sql.optimizer.MvRewritePreprocessor.isMVValidToRewriteQuery;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
@@ -213,12 +214,13 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
                     return null;
                 }
-                Set<String> partitionNamesToRefresh = Sets.newHashSet();
-                if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
+                MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
+                if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
-                            "stale partitions {}", mv.getName(), partitionNamesToRefresh);
+                            "stale partitions {}", mv.getName(), mvUpdateInfo);
                     continue;
                 }
+                Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
                 if (!partitionNamesToRefresh.isEmpty()) {
                     logMVRewrite(context, this, "Partitioned MV {} is outdated which " +
                                     "contains some partitions to be refreshed: {}, and cannot compensate it to predicate",
@@ -228,7 +230,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: text matched with {}",
                         mv.getName());
 
-                MvPlanContext mvPlanContext = getMvPlanContext(mv);
+                MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);
                 if (mvPlanContext == null) {
                     logMVRewrite(context, this, "MV {} plan context is invalid", mv.getName());
                     continue;
@@ -252,18 +254,6 @@ public class TextMatchBasedRewriteRule extends Rule {
             return null;
         }
         return null;
-    }
-
-    private MvPlanContext getMvPlanContext(MaterializedView mv) {
-        // step1: get from mv plan cache
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContextFromCacheIfPresent(mv);
-        if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
-            // TODO: distinguish normal mv plan and view rewrite plan
-            return mvPlanContexts.get(0);
-        }
-        // step2: get from optimize
-        return new MaterializedViewOptimizer().optimize(mv, connectContext, true, false);
     }
 
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
