@@ -49,9 +49,8 @@ private:
         return ConstColumn::create(column, num_rows);
     }
 
-<<<<<<< HEAD
     void extend_and_update_columns(vectorized::ChunkPtr* curr_chunk);
-=======
+
     /**
      * @brief Generate const null column with the input column's type.
      * @param cur_column : input associated column.
@@ -69,9 +68,6 @@ private:
             return ConstColumn::create(nullable_column, num_rows);
         }
     }
-
-    void extend_and_update_columns(ChunkPtr* curr_chunk);
->>>>>>> 608e00f4bd ([BugFix] Unpack const column when in local exchange source operator (#43403))
 
     /*
      * _curr_chunk

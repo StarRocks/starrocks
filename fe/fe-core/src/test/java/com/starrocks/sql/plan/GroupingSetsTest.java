@@ -14,7 +14,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
@@ -28,7 +27,6 @@ public class GroupingSetsTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        Config.alter_scheduler_interval_millisecond = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, NUM_TABLE0_ROWS);

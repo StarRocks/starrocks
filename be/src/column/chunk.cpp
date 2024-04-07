@@ -420,9 +420,6 @@ bool Chunk::has_const_column() const {
     return false;
 }
 
-<<<<<<< HEAD
-} // namespace starrocks::vectorized
-=======
 void Chunk::unpack_and_duplicate_const_columns() {
     size_t num_rows = this->num_rows();
     for (size_t i = 0; i < _columns.size(); i++) {
@@ -434,5 +431,4 @@ void Chunk::unpack_and_duplicate_const_columns() {
     }
 }
 
-} // namespace starrocks
->>>>>>> 608e00f4bd ([BugFix] Unpack const column when in local exchange source operator (#43403))
+} // namespace starrocks::vectorized
