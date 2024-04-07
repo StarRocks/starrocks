@@ -61,6 +61,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
@@ -505,7 +507,7 @@ public class FileScanNode extends LoadScanNode {
         if (isLoad() && filesAdded == 0) {
             List<String> filePaths =
                     fileGroups.stream().map(BrokerFileGroup::getFilePaths).flatMap(List::stream).collect(Collectors.toList());
-            throw new UserException(String.format("No source file in the path: [%s]", String.join(", ", filePaths)));
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_FILES_FOUND, String.join(", ", filePaths));
         }
 
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {

@@ -279,6 +279,12 @@ public enum ErrorCode {
     ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
 
     /**
+     * 5600 - 5699: DML operation failure
+     */
+    ERR_NO_FILES_FOUND(5600, new byte[] {'4', '2', '0', '0', '0'},
+            "No files were found matching the pattern(s) or path(s): '%s'"),
+
+    /**
      * 10000 - 10099: warehouse
      */
     ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist."),
