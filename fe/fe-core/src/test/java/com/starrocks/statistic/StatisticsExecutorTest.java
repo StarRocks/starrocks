@@ -196,7 +196,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         };
         String sql = "analyze table hive0.partitioned_db.t1 update histogram on c1";
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
-        StmtExecutor executor = new StmtExecutor(connectContext, sql);
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
         AnalyzeStatus pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
@@ -210,7 +210,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         sql = "analyze table hive0.partitioned_db.t1";
         stmt = (AnalyzeStmt) analyzeSuccess(sql);
-        executor = new StmtExecutor(connectContext, sql);
+        executor = new StmtExecutor(connectContext, stmt);
         pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);

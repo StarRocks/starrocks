@@ -12,6 +12,7 @@ select state,type from information_schema.loads where database_name='db_${uuid1}
 select TRACKING_SQL from information_schema.loads where database_name='db_${uuid1}';
 id=select job_id from information_schema.loads where database_name='db_${uuid1}';
 select tracking_log from information_schema.load_tracking_logs where job_id=${id};
+select /*+ SET_VAR(cbo_eq_base_type = "varchar") */ tracking_log from information_schema.load_tracking_logs where job_id='${id}';
 label=select label from information_schema.loads where database_name='db_${uuid1}';
 select tracking_log from information_schema.load_tracking_logs where label='${label}';
 select * from information_schema.loads where database_name='db_${uuid1}';

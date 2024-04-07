@@ -56,6 +56,8 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -328,7 +330,8 @@ public class LakeMaterializedViewTest {
 
         // alter interval
         String alterMvSql = "ALTER MATERIALIZED VIEW mv3 REFRESH ASYNC EVERY(INTERVAL 2 DAY);";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterMvSql);
+        StatementBase statement = SqlParser.parseSingleStatement(alterMvSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
         Assert.assertEquals(2, asyncRefreshContext.getStep());

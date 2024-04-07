@@ -484,6 +484,7 @@ public class StatementPlanner {
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
+            long warehouseId = session.getCurrentWarehouseId();
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
                     dbId,
@@ -492,7 +493,8 @@ public class StatementPlanner {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    session.getSessionVariable().getQueryTimeoutS());
+                    session.getSessionVariable().getQueryTimeoutS(),
+                    warehouseId);
 
             // add table indexes to transaction state
             if (targetTable instanceof OlapTable) {

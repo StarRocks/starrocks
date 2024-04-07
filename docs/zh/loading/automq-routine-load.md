@@ -2,10 +2,10 @@
 
 import Replicanum from '../assets/commonMarkdown/replicanum.md'
 
-[AutoMQ for Kafka](https://docs.automq.com/zh/docs/automq-s3kafka/YUzOwI7AgiNIgDk1GJAcu6Uanog)(简称 AutoMQ Kafka ) 是一款基于云重新设计的云原生 Kafka。
+[AutoMQ for Kafka](https://www.automq.com/docs) AutoMQ Kafka ) 是一款基于云重新设计的云原生 Kafka。
 AutoMQ Kafka [内核开源](https://github.com/AutoMQ/automq-for-kafka)并且100% 兼容 Kafka 协议，可以充分兑现云的红利。
 相比自建 Apache Kafka，AutoMQ Kafka 在其云原生架构基础上实现的自动弹性、流量自平衡、秒级分区移动等特性可以为用户带来更低的总体拥有成本（TCO）。
-本文将介绍如何通过 StarRocks Routine Load 将数据导入 AutoMQ Kafka。关于Routine Load的基本原理可以参考 [Routine Load 基本原理](https://docs.starrocks.io/zh/docs/loading/load_concept/strict_mode/#routine-load)。
+本文将介绍如何通过 StarRocks Routine Load 将数据导入 AutoMQ Kafka。关于Routine Load的基本原理可以参考 Routine Load 基本原理。
 
 ## 环境准备
 
@@ -122,7 +122,7 @@ COLUMNS 中的列名对应**目标表**的列名，列的顺序对应**源数据
 首先我们查看 Routine Load 导入作业的情况，确认 Routine Load 导入任务状态为 RUNNING：
 
 ```sql
-show routine load\G;
+show routine load\G
 ```
 
 然后查询 StarRocks 数据库中对应的表，我们可以看到数据已经被成功导入：
