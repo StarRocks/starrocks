@@ -249,7 +249,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
-    for (const auto column : _scanner_ctx.materialized_columns) {
+    for (const auto& column : _scanner_ctx.materialized_columns) {
         // We don't care about _invalid_field_as_null here, if get converter failed,
         // we use DefaultValueConverter instead.
         auto converter = csv::get_hive_converter(column.slot_type(), true);
