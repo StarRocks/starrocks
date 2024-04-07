@@ -177,6 +177,7 @@ public class MetaService {
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
         private static final String IS_FAILOVER_IMAGE = "is_failover_image";
+        private static final String FOR_GLOBAL_STATE = "for_global_state";
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -270,7 +271,8 @@ public class MetaService {
                 return;
             }
 
-            if (!isFailoverImage) {
+            String forGlobalState = request.getSingleParameter(FOR_GLOBAL_STATE);
+            if (!isFailoverImage && (Strings.isNullOrEmpty(forGlobalState) || "true".equals(forGlobalState))) {
                 GlobalStateMgr.getCurrentState().setImageJournalId(version);
             }
 
