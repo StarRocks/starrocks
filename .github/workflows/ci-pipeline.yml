@@ -742,8 +742,8 @@ jobs:
         with:
           name: SQL-Tester Log
           path: ｜
-            test/log
-            test/crash_logs
+            test/log/
+            test/crash_logs/
           retention-days: 1
           overwrite: true
           if-no-files-found: ignore
