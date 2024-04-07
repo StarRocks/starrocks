@@ -720,7 +720,7 @@ public:
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) override {
         faststring fixed_buf;
         fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue)));
         put_fixed32_le(&fixed_buf, KeySize);
@@ -732,6 +732,8 @@ public:
         }
         RETURN_IF_ERROR(index_file->append(fixed_buf));
         *page_size += fixed_buf.size();
+        // incremental calc crc32
+        *checksum = crc32c::Extend(*checksum, (const char*)fixed_buf.data(), fixed_buf.size());
         return Status::OK();
     }
 
@@ -1043,7 +1045,7 @@ public:
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) override {
         faststring fixed_buf;
         size_t keys_size = 0;
         auto n = idxes.size();
@@ -1063,6 +1065,8 @@ public:
         }
         RETURN_IF_ERROR(index_file->append(fixed_buf));
         *page_size += fixed_buf.size();
+        // incremental calc crc32
+        *checksum = crc32c::Extend(*checksum, (const char*)fixed_buf.data(), fixed_buf.size());
         return Status::OK();
     }
 
@@ -1653,8 +1657,8 @@ Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const 
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
         for (size_t i = 0; i < shard_size; ++i) {
-            RETURN_IF_ERROR(
-                    _shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file, &_page_size));
+            RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
+                                                                  &_page_size, &_checksum));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1672,7 +1676,7 @@ Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const 
             const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, idxes);
             for (size_t i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
-                                                                      &_page_size));
+                                                                      &_page_size, &_checksum));
             }
         }
     }
@@ -1686,8 +1690,8 @@ Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, idxes);
         for (size_t i = 0; i < shard_size; ++i) {
-            RETURN_IF_ERROR(
-                    _shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file, &_page_size));
+            RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
+                                                                  &_page_size, &_checksum));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1705,7 +1709,7 @@ Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue
             const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, idxes);
             for (size_t i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
-                                                                      &_page_size));
+                                                                      &_page_size, &_checksum));
             }
         }
     }
@@ -1741,6 +1745,14 @@ bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::se
     return true;
 }
 
+static Status checksum_of_file(RandomAccessFile* file, uint64_t offset, uint32_t size, uint32* checksum) {
+    std::string buff;
+    raw::stl_string_resize_uninitialized(&buff, size);
+    RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
+    *checksum = crc32c::Value(buff.data(), buff.size());
+    return Status::OK();
+}
+
 Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) {
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
@@ -1767,6 +1779,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset = 0;
         _page_size = 0;
+        _checksum = 0;
         break;
     }
     case kSnapshot: {
@@ -1790,6 +1803,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
+        // open l0 to calc checksum
+        std::unique_ptr<RandomAccessFile> l0_rfile;
+        ASSIGN_OR_RETURN(l0_rfile, fs->new_random_access_file(file_name));
         size_t snapshot_size = _index_file->size();
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add write stats manually
@@ -1802,9 +1818,12 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         data->set_size(snapshot_size);
         snapshot->clear_dumped_shard_idxes();
         snapshot->mutable_dumped_shard_idxes()->Add(dumped_shard_idxes.begin(), dumped_shard_idxes.end());
+        RETURN_IF_ERROR(checksum_of_file(l0_rfile.get(), 0, snapshot_size, &_checksum));
+        snapshot->set_checksum(_checksum);
         meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset = snapshot_size;
         _page_size = 0;
+        _checksum = 0;
         break;
     }
     case kAppendWAL: {
@@ -1813,9 +1832,11 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         PagePointerPB* data = wal_pb->mutable_data();
         data->set_offset(_offset);
         data->set_size(_page_size);
+        wal_pb->set_checksum(_checksum);
         meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset += _page_size;
         _page_size = 0;
+        _checksum = 0;
         break;
     }
     default: {
@@ -1849,8 +1870,25 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     std::string index_file_name = get_l0_index_file_name(_path, start_version);
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     phmap::BinaryInputArchive ar(index_file_name.data());
     if (snapshot_size > 0) {
+        // check snapshot's crc32 checksum
+        const uint32_t expected_checksum = snapshot_meta.checksum();
+        // If expected crc32 is 0, which means no crc32 here, skip check.
+        // This may happen when upgrade from old version.
+        if (expected_checksum > 0) {
+            uint32_t current_checksum = 0;
+            RETURN_IF_ERROR(checksum_of_file(read_file.get(), snapshot_off, snapshot_size, &current_checksum));
+            if (current_checksum != expected_checksum) {
+                std::string error_msg = fmt::format(
+                        "persistent index l0 crc checksum fail. filename: {} offset: {} cur_crc: {} expect_crc: {}",
+                        index_file_name, snapshot_off, current_checksum, expected_checksum);
+                LOG(ERROR) << error_msg;
+                return Status::Corruption(error_msg);
+            }
+        }
+        // do load snapshot
         if (!load_snapshot(ar, dumped_shard_idxes)) {
             std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
             LOG(WARNING) << err_msg;
@@ -1860,7 +1898,6 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         // so add read stats manually
         IOProfiler::add_read(snapshot_size);
     }
-    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
     const int n = meta.wals_size();
@@ -1871,6 +1908,19 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         const auto end = offset + page_pointer_pb.size();
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, 4);
+        // check crc32
+        const uint32_t expected_checksum = meta.wals(i).checksum();
+        if (expected_checksum > 0) {
+            uint32_t current_checksum = 0;
+            RETURN_IF_ERROR(checksum_of_file(read_file.get(), offset, page_pointer_pb.size(), &current_checksum));
+            if (current_checksum != expected_checksum) {
+                std::string error_msg = fmt::format(
+                        "persistent index l0 crc checksum fail. filename: {} offset: {} cur_crc: {} expect_crc: {}",
+                        index_file_name, page_pointer_pb.offset(), current_checksum, expected_checksum);
+                LOG(ERROR) << error_msg;
+                return Status::Corruption(error_msg);
+            }
+        }
         while (offset < end) {
             RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
             const auto key_size = UNALIGNED_LOAD32(buff.data());

@@ -2759,5 +2759,102 @@ PARALLEL_TEST(PersistentIndexTest, pindex_major_compact_meta) {
         }
     }
 }
+  
+PARALLEL_TEST(PersistentIndexTest, test_l0_append_load_small_data) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_append_load_small_data";
+    const std::string kIndexFile = "./PersistentIndexTest_test_l0_append_load_small_data/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 10;
+    const int DEL_N = 6;
+    int64_t cur_version = 0;
+    // insert
+    vector<Key> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values.emplace_back(i);
+        key_slices.emplace_back(keys[i]);
+    }
+    // erase
+    vector<Key> erase_keys(DEL_N);
+    vector<Slice> erase_key_slices;
+    erase_key_slices.reserve(DEL_N);
+    for (int i = 0; i < DEL_N; i++) {
+        erase_keys[i] = "test_varlen_" + std::to_string(i);
+        erase_key_slices.emplace_back(erase_keys[i]);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    {
+        EditVersion version(cur_version++, 0);
+        index_meta.set_key_size(0);
+        index_meta.set_size(0);
+        version.to_pb(index_meta.mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+        version.to_pb(snapshot_meta->mutable_version());
+
+        PersistentIndex index(kPersistentIndexDir);
+
+        // insert
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
+        ASSERT_OK(index.insert(N, key_slices.data(), values.data(), false));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+
+        // delete
+        vector<IndexValue> erase_old_values(erase_keys.size());
+        ASSERT_TRUE(index.prepare(EditVersion(cur_version++, 0), erase_keys.size()).ok());
+        ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_TRUE(index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < DEL_N; i++) {
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
+        }
+        for (int i = DEL_N; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+
+    {
+        // rebuild mutableindex according PersistentIndexMetaPB
+        PersistentIndex new_index(kPersistentIndexDir);
+        ASSERT_TRUE(new_index.load(index_meta).ok());
+
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_TRUE(new_index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < DEL_N; i++) {
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
+        }
+        for (int i = DEL_N; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+    {
+        // try to break up checksum
+        index_meta.mutable_l0_meta()->mutable_snapshot()->set_checksum(111);
+        PersistentIndex new_index(kPersistentIndexDir);
+        ASSERT_FALSE(new_index.load(index_meta).ok());
+    }
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
 
 } // namespace starrocks

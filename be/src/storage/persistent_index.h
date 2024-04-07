@@ -157,7 +157,7 @@ public:
     virtual Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
 
     virtual Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                              std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) = 0;
+                              std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) = 0;
 
     // load wals
     // |n|: size of key/value array
@@ -337,6 +337,7 @@ private:
     uint32_t _fixed_key_size = -1;
     uint64_t _offset = 0;
     uint64_t _page_size = 0;
+    uint32_t _checksum = 0;
     std::string _path;
     std::unique_ptr<WritableFile> _index_file;
     std::shared_ptr<FileSystem> _fs;
