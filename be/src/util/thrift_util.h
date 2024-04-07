@@ -34,8 +34,8 @@
 
 #pragma once
 
-#include <thrift/TBase.h>
 #include <thrift/TApplicationException.h>
+#include <thrift/TBase.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/protocol/TDebugProtocol.h>
 #include <thrift/protocol/TJSONProtocol.h>
