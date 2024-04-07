@@ -28,6 +28,7 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -57,7 +58,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.MvRewritePreprocessor.isMVValidToRewriteQuery;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
 
@@ -108,18 +108,23 @@ public class TextMatchBasedRewriteRule extends Rule {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         if (!sessionVariable.isEnableMaterializedViewRewrite() ||
                 !sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
+            logMVRewrite(context, this, "Materialized view text based rewrite is disabled");
             return null;
         }
         if (stmt == null || stmt.getOrigStmt() == null || stmt.getOrigStmt().originStmt == null) {
+            logMVRewrite(context, this, "Materialized view text based rewrite is disabled: stmt is null");
             return null;
         }
 
         OptExpression rewritten = rewriteByTextMatch(input, context, parseNode);
         if (rewritten != null) {
+            logMVRewrite(context, this, "Materialized view text based rewrite failed, " +
+                    "try to rewrite sub-query again");
             return rewritten;
         }
         // try to rewrite sub-query again if exact-match failed.
         if (optToAstMap == null || optToAstMap.isEmpty()) {
+            logMVRewrite(context, this, "OptToAstMap is empty, no try to rewrite sub-query again");
             return null;
         }
         return input.getOp().accept(new TextBasedRewriteVisitor(context, optToAstMap), input, connectContext);
@@ -190,21 +195,21 @@ public class TextMatchBasedRewriteRule extends Rule {
                                              OptimizerContext context,
                                              ParseNode queryAst) {
         if (!isSupportForTextBasedRewrite(input)) {
+            logMVRewrite(context, this, "TEXT_BASED_REWRITE is not supported for this input");
             return null;
         }
 
         try {
             ParseNode normalizedAst = normalizeAst(queryAst);
             Set<MaterializedView> candidateMvs = getMaterializedViewsByAst(input, normalizedAst);
-            logMVRewrite(context, this, "matched mvs: {}",
+            logMVRewrite(context, this, "TEXT_BASED_REWRITE matched mvs: {}",
                     candidateMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList()));
             if (candidateMvs.isEmpty()) {
                 return null;
             }
             int mvRelatedCount = 0;
-            Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
             for (MaterializedView mv : candidateMvs) {
-                Pair<Boolean, String> status = isMVValidToRewriteQuery(connectContext, mv, false, queryTables);
+                Pair<Boolean, String> status = isValidForTextBasedRewrite(context, mv);
                 if (!status.first) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, {}", mv.getName(), status.second);
                     continue;
@@ -251,6 +256,22 @@ public class TextMatchBasedRewriteRule extends Rule {
             return null;
         }
         return null;
+    }
+
+    public Pair<Boolean, String> isValidForTextBasedRewrite(OptimizerContext context,
+                                                            MaterializedView mv) {
+        if (!mv.isActive()) {
+            logMVRewrite(context, this, "MV is not active: {}", mv.getName());
+            return Pair.create(false, "MV is not active");
+        }
+
+        if (!mv.isEnableRewrite()) {
+            String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
+                    mv.getTableProperty().getMvQueryRewriteSwitch();
+            logMVRewrite(context, this, message);
+            return Pair.create(false, message);
+        }
+        return Pair.create(true, "");
     }
 
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
