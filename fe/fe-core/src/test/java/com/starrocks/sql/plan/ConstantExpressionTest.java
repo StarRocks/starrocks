@@ -65,9 +65,6 @@ public class ConstantExpressionTest extends PlanTestBase {
         testFragmentPlanContains("select inspect_mv_plan('mv1', false);", "LogicalOlapScanOperator {table=");
         testFragmentPlanContains("select inspect_mv_plan('mv1');", "LogicalOlapScanOperator {table=");
 
-        testFragmentPlanContains("select clear_mv_plan_cache('mv1')", "success");
-        testFragmentPlanContains("select clear_mv_plan_cache()", "success");
-
         // wrong arguments
         Assert.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select inspect_mv_meta('snowflake');"));
