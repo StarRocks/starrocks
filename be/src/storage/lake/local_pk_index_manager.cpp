@@ -245,10 +245,10 @@ std::vector<TabletAndScore> LocalPkIndexManager::pick_tablets_to_do_pk_index_maj
     // 1. pick valid tablet, which score is larger than 0
     for (auto& tablet_id : tablet_ids) {
         auto index_entry = update_manager->index_cache().get(tablet_id);
-        DeferOp index_defer([&]() { update_manager->index_cache().release(index_entry); });
         if (index_entry == nullptr) {
             continue;
         }
+        DeferOp index_defer([&]() { update_manager->index_cache().release(index_entry); });
         auto& index = index_entry->value();
         double score = index.get_local_pk_index_write_amp_score();
         TEST_SYNC_POINT_CALLBACK("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1", &score);
