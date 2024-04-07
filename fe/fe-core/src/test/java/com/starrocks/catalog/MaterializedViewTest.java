@@ -43,6 +43,8 @@ import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -454,7 +456,9 @@ public class MaterializedViewTest {
                         "refresh async\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
         String alterSql = "alter materialized view mv_to_rename rename mv_new_name;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterSql);
+        StatementBase statement = SqlParser.parseSingleStatement(alterSql, connectContext.getSessionVariable().getSqlMode());
+
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_new_name"));
@@ -468,7 +472,8 @@ public class MaterializedViewTest {
         Assert.assertEquals("mv_new_name", slotRef.getTblNameWithoutAnalyzed().getTbl());
 
         String alterSql2 = "alter materialized view mv_to_rename2 rename mv_new_name2;";
-        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, alterSql2);
+        statement = SqlParser.parseSingleStatement(alterSql2, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         stmtExecutor2.execute();
         MaterializedView mv2 = ((MaterializedView) testDb.getTable("mv_new_name2"));
         Assert.assertNotNull(mv2);
@@ -506,7 +511,8 @@ public class MaterializedViewTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
         String dropSql = "drop table tbl_drop;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, dropSql);
+        StatementBase statement = SqlParser.parseSingleStatement(dropSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertNotNull(mv);
         Assert.assertFalse(mv.isActive());
@@ -534,7 +540,8 @@ public class MaterializedViewTest {
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         String alterSql = "alter table tbl_to_rename rename new_tbl_name;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterSql);
+        StatementBase statement = SqlParser.parseSingleStatement(alterSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
         Assert.assertNotNull(mv);
@@ -595,7 +602,8 @@ public class MaterializedViewTest {
                         "\"replication_num\" = \"1\");");
         String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) as v1 " +
                 "from part_with_mv;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
+        StatementBase statement = SqlParser.parseSingleStatement(createMvSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertTrue(Strings.isNullOrEmpty(connectContext.getState().getErrorMessage()));
     }
@@ -702,7 +710,8 @@ public class MaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "as select k2, sum(v1) as total from tbl_sync_mv group by k2;");
         String showSql = "show create materialized view sync_mv_to_check;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, showSql);
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
     }
