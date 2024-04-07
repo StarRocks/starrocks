@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.scheduler.ExecuteOption;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
@@ -47,6 +48,9 @@ public class MVTaskRunExtraMessage implements Writable {
     // refreshed partitions of all the base tables which are optimized by optimizer and the real partitions in executing.
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
+
+    @SerializedName("executeOption")
+    private ExecuteOption executeOption = new ExecuteOption();
 
     public MVTaskRunExtraMessage() {
     }
@@ -117,6 +121,14 @@ public class MVTaskRunExtraMessage implements Writable {
     public void setBasePartitionsToRefreshMap(
             Map<String, Set<String>> basePartitionsToRefreshMap) {
         this.basePartitionsToRefreshMap = basePartitionsToRefreshMap;
+    }
+
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
     }
 
     public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
