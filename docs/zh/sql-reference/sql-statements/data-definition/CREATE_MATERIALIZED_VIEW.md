@@ -128,11 +128,8 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 [COMMENT ""]
 -- distribution_desc
 DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
--- refresh_desc
-[REFRESH 
--- refresh_moment
-    [IMMEDIATE | DEFERRED]
 -- refresh_scheme
+[REFRESH 
     [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
@@ -179,13 +176,6 @@ DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>
 > **说明**
 >
 > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
-
-**refresh_moment**（选填）
-
-物化视图的刷新时刻。默认值：`IMMEDIATE`。有效值：
-
-- `IMMEDIATE`：异步物化视图创建成功后立即刷新。
-- `DEFERRED`：异步物化视图创建成功后不进行刷新。您可以通过手动调用或创建定时任务触发刷新。
 
 **refresh_scheme**（选填）
 

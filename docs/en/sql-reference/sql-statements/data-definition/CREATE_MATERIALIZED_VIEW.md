@@ -114,11 +114,8 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 [COMMENT ""]
 -- distribution_desc
 DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
--- refresh_desc
-[REFRESH 
--- refresh_moment
-    [IMMEDIATE | DEFERRED]
 -- refresh_scheme
+[REFRESH
     [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
@@ -167,13 +164,6 @@ For more information, see [Data distribution](../../../table_design/Data_distrib
 > **NOTE**
 >
 > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
-
-**refresh_moment** (optional)
-
-The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid values:
-
-- `IMMEDIATE`: Refresh the asynchronous materialized view immediately after it is created.
-- `DEFERRED`: The asynchronous materialized view is not refreshed after it is created. You can manually refresh the materialized view or schedule regular refresh tasks.
 
 **refresh_scheme** (optional)
 
