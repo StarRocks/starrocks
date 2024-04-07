@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['CTAS']
 ---
 
 # CREATE TABLE AS SELECT
@@ -114,7 +115,7 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-Example 4: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key](../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key. 
+Example 4: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key](../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key.
 
 ```SQL
 CREATE TABLE employee_new

@@ -272,9 +272,7 @@ group by tiny_column;
       , ... |
       GROUPING SETS [, ...] (  groupSet [ , groupSet [ , ... ] ] ) |
       ROLLUP(expr  [ , expr [ , ... ] ]) |
-      expr  [ , expr [ , ... ] ] WITH ROLLUP |
-      CUBE(expr  [ , expr [ , ... ] ]) |
-      expr  [ , expr [ , ... ] ] WITH CUBE
+      CUBE(expr  [ , expr [ , ... ] ])
       ]
   [ ... ]
   ```
@@ -306,7 +304,7 @@ StarRocks 支持类似 PostgreSQL 语法，语法实例如下：
   )
   ```
 
-`CUBE ( a, b, c )` 等价于如下 `GROUPING SETS` 语句。
+`CUBE (a, b, c)` 等价于如下 `GROUPING SETS` 语句。
 
   ```sql
   GROUPING SETS (

@@ -135,6 +135,10 @@ SELECT /*+ SET_VAR
 
 是否开启低基数全局字典优化。开启后，查询 STRING 列时查询速度会有 3 倍左右提升。默认值：true。
 
+### cbo_eq_base_type （2.5.14 及以后）
+
+用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
@@ -163,6 +167,14 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于兼容 MySQL 客户端，无实际作用。
 
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+解决升级中的兼容问题，用户不可见。
+
+默认值：`true`。
+-->
+
 ### enable_connector_adaptive_io_tasks（2.5 及以后）
 
 外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
@@ -179,6 +191,12 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
+### enable_materialized_view_for_insert
+
+* 含义：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
+
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
 是否开启物化视图 Union 改写。默认值：`true`。
@@ -186,6 +204,12 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 ### enable_rule_based_materialized_view_rewrite（2.5 及以后）
 
 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
+
+### enable_strict_order_by
+
+是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
+
+该变量从 2.5.18，3.1.7 版本开始支持。
 
 ### enable_profile
 
@@ -424,7 +448,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_mem_limit
 
-用于设置每个 BE 节点上查询的内存限制。默认值为 `0`，表示没有限制。支持 `B`、`K`、`KB`、`M`、`MB`、`G`、`GB`、`T`、`TB`、`P`、`PB` 等单位。
+用于设置每个 BE 节点上单个查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
 
 ### query_queue_concurrency_limit (global)
 
@@ -474,7 +498,27 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 
 ### sql_mode
 
-用于指定 SQL 模式，以适应某些 SQL 方言。
+用于指定 SQL 模式，以适应某些 SQL 方言。有效值包括：
+
+* `PIPES_AS_CONCAT`：管道符号 `|` 用于连接字符串。例如：`select 'hello ' || 'world'`。
+* `ONLY_FULL_GROUP_BY` (默认值)：SELECT LIST 中只能包含 GROUP BY 列或者聚合函数。
+* `ALLOW_THROW_EXCEPTION`：类型转换报错而不是返回 NULL。
+* `FORBID_INVALID_DATE`：禁止非法的日期。
+* `MODE_DOUBLE_LITERAL`：将浮点类型解释为 DOUBLE 而非 DECIMAL。
+* `SORT_NULLS_LAST`：排序后，将 NULL 值放到最后。
+* `ERROR_IF_OVERFLOW`：运算溢出时，报错而不是返回 NULL，目前仅 DECIMAL 支持这一行为。
+
+不同模式之间可以独立设置，您可以单独开启某一个模式，例如：
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT';
+```
+
+或者，您也可以同时设置多个模式，例如：
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
+```
 
 ### sql_safe_updates
 
@@ -541,4 +585,6 @@ MySQL 服务器的版本。
 
 ### wait_timeout
 
-用于设置空闲连接的连接时长，单位为秒。当一个空闲连接在该时长内与 StarRocks 没有任何交互，则 StarRocks 会主动断开这个链接。默认为 8 小时。
+用于设置客户端与 StarRocks 数据库交互时的最大空闲时长。如果一个空闲连接在该时长内与 StarRocks 数据库没有任何交互，StarRocks 会主动断开这个连接。
+
+单位：秒。默认值：28800（即 8 小时）。

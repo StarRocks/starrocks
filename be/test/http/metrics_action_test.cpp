@@ -41,7 +41,10 @@ class MetricsActionTest : public testing::Test {
 public:
     MetricsActionTest() = default;
     ~MetricsActionTest() override = default;
-    void SetUp() override { _evhttp_req = evhttp_request_new(nullptr, nullptr); }
+    void SetUp() override {
+        config::dump_metrics_with_bvar = false;
+        _evhttp_req = evhttp_request_new(nullptr, nullptr);
+    }
     void TearDown() override {
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);

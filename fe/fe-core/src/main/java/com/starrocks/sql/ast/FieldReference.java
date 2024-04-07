@@ -35,6 +35,10 @@ public class FieldReference extends Expr {
         return fieldIndex;
     }
 
+    public TableName getTblName() {
+        return tblName;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

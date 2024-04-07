@@ -9,7 +9,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 您可以按照以下分类来查找目标函数。
 
 - [函数列表](#函数列表)
-  - [日期函数](#日期函数)
+  - [时间日期函数](#时间日期函数)
   - [字符串函数](#字符串函数)
   - [聚合函数](#聚合函数)
   - [数学函数](#数学函数)
@@ -27,7 +27,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
   - [地理位置函数](#地理位置函数)
   - [Hash 函数](#hash-函数)
 
-## 日期函数
+## 时间日期函数
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
@@ -281,6 +281,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)| 计算 TINYINT，SMALLINT 和 INT 类型的列中不重复值的个数。|
 |  [bitmap_xor](./bitmap-functions/bitmap_xor.md)| 计算两个 Bitmap 中不重复元素所构成的集合。|
 |  [intersect_count](./bitmap-functions/intersect_count.md)| 求 bitmap 交集大小。|
+|  [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 |  [sub_bitmap](./bitmap-functions/sub_bitmap.md)| 计算两个 bitmap 之间相同元素的个数。|
 |  [to_bitmap](./bitmap-functions/to_bitmap.md)| 将输入值转换为 bitmap。 |
 
@@ -295,7 +296,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [cast](./json-functions/json-query-and-processing-functions/cast.md)| 实现 JSON 类型数据与 SQL 类型间的相互转换。|
 |  [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 JSON 字符串内指定路径中的浮点型内容。|
 |  [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 JSON 字符串内指定路径中的整型内容。|
-|  [get_json_string](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
+|  [get_json_string,get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
 |  [json_each](./json-functions/json-query-and-processing-functions/json_each.md)| 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。|
 |  [json_exists](./json-functions/json-query-and-processing-functions/json_exists.md)| 查询 JSON 对象中指定路径是否存在满足特定条件的值。|
 |  [json_keys](./json-functions/json-query-and-processing-functions/json_keys.md)| 返回 JSON 对象中所有最上层成员 (key) 组成的数组。|
@@ -310,6 +311,14 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [map_keys](./map-functions/map_keys.md)| 返回 Map 中所有 key 组成的数组。 |
 |  [map_size](./map-functions/map_size.md)| 计算 Map 中元素的个数。 |
 |  [map_values](./map-functions/map_values.md)| 返回 Map 中所有 Value 组成的数组。 |
+
+## 表函数
+
+| 函数                |                 功能      |
+|  :-:                |                :-:       |
+| [json_each](./json-functions/json-query-and-processing-functions/json_each.md) | 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。 |
+| [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
+| [unnest](./array-functions/unnest.md) | 用于将一个数组展开成多行。|
 
 ## Bit 函数
 
@@ -340,10 +349,11 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [like](./like_predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
-|  [regexp](./like_predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
-|  [regexp_extract](./like_predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
-|  [regexp_replace](./like_predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
+|  [like](./like-predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
+|  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
+|  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
+|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) | 从 `str` 中提取与正则表达式 `pattern` 相匹配的子字符串并返回一个字符串数组。|
+|  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
 
 ## 条件函数
 

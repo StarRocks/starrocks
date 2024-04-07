@@ -82,6 +82,11 @@ public:
 
     size_t byte_size(size_t idx __attribute__((unused))) const override { return sizeof(ValueType); }
 
+    size_t byte_size(size_t from, size_t size) const override {
+        DCHECK_LE(from + size, this->size()) << "Range error";
+        return sizeof(ValueType) * size;
+    }
+
     void reserve(size_t n) override { _data.reserve(n); }
 
     void resize(size_t n) override { _data.resize(n); }
@@ -199,7 +204,7 @@ public:
     std::string debug_string() const override;
 
     size_t container_memory_usage() const override { return _data.capacity() * sizeof(ValueType); }
-    size_t element_memory_usage(size_t from, size_t size) const override { return sizeof(ValueType) * size; }
+    size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<FixedLengthColumnBase&>(rhs);

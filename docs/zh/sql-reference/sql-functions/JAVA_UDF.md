@@ -140,7 +140,6 @@ public class UDFJsonGet {
 
 用户自定义类必须实现如下方法：
 
-
 > **说明**
 >
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
@@ -351,7 +350,7 @@ mvn package
 mvn deploy 
 ```
 
-您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。详细步骤参考 [通过 Python 搭建简易 http 服务器](https://blog.csdn.net/whatday/article/details/106550650)。
+您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。
 
 > 说明
 > 步骤六中， FE 会对 UDF 所在 Jar 包进行校验并计算校验值，BE 会下载 UDF 所在 Jar 包并执行。
@@ -516,7 +515,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 SHOW FUNCTIONS;
 ```
 
-更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md)。
+更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md)。
 
 ## 删除 UDF
 
@@ -526,7 +525,7 @@ SHOW FUNCTIONS;
 DROP FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/drop-function.md)。
+更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md)。
 
 ## 类型映射关系
 
@@ -543,10 +542,12 @@ DROP FUNCTION <function_name>(arg_type [, ...]);
 
 ## 参数配置
 
-JVM 参数配置：在 **be/conf/hadoop_env.sh** 中配置如下环境变量，可以控制内存使用。
+JVM 参数配置：在 **be/conf/be.conf** 中配置如下参数，可以控制 JVM 的内存使用。如果使用 JDK 8，请配置 `JAVA_OPTS`。如果 JDK 版本高于 JDK 8，则配置 `JAVA_OPTS_FOR_JDK_9_AND_LATER`
 
 ```Bash
-export LIBHDFS_OPTS="-Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
+JAVA_OPTS="-Xmx12G"
+
+JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
 ## FAQ

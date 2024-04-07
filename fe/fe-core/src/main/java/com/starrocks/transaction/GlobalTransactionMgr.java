@@ -32,6 +32,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
@@ -64,10 +65,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-import static java.lang.Math.min;
 
 /**
  * Transaction Manager
@@ -421,6 +420,7 @@ public class GlobalTransactionMgr implements Writable {
             db.writeUnlock();
         }
 
+        MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         stopWatch.stop();
         long publishTimeoutMillis = timeoutMillis - stopWatch.getTime();
         if (publishTimeoutMillis < 0) {
@@ -602,16 +602,17 @@ public class GlobalTransactionMgr implements Writable {
     /**
      * Get the min txn id of running transactions.
      *
-     * @return the min txn id of running transactions, null if no running transaction.
+     * @return the min txn id of running transactions. If there are no running transactions, return the next transaction id
+     * that will be assigned.
+     *
      */
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public long getMinActiveTxnId() {
+        long minId = idGenerator.peekNextTransactionId();
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
-            result = min(result, dbTransactionMgr.getMinActiveTxnId());
+            minId = Math.min(minId, dbTransactionMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? null : result;
+        return minId;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {

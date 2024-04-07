@@ -183,11 +183,11 @@ public:
 
     size_t container_memory_usage() const override { return _data->container_memory_usage(); }
 
-    size_t element_memory_usage() const override { return _data->element_memory_usage(); }
+    size_t reference_memory_usage() const override { return _data->reference_memory_usage(); }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
+    size_t reference_memory_usage(size_t from, size_t size) const override {
         // const column has only one element
-        return size == 0 ? 0 : element_memory_usage();
+        return size == 0 ? 0 : reference_memory_usage();
     }
 
     void swap_column(Column& rhs) override {

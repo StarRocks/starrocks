@@ -25,15 +25,15 @@ import com.google.common.base.Strings;
 import com.starrocks.common.FeConstants;
 
 public class BDBToolOptions {
-    private boolean isListDbs;
-    private String dbName;
-    private boolean isDbStat;
-    private boolean hasFromKey;
-    private String fromKey;
-    private boolean hasEndKey;
-    private String endKey;
-    private int metaVersion;
-    private int starrocksMetaVersion;
+    private final boolean isListDbs;
+    private final String dbName;
+    private final boolean isDbStat;
+    private final boolean hasFromKey;
+    private final String fromKey;
+    private final boolean hasEndKey;
+    private final String endKey;
+    private final int metaVersion;
+    private final int starrocksMetaVersion;
 
     public BDBToolOptions(boolean isListDbs, String dbName, boolean isDbStat,
                           String fromKey, String endKey, int metaVersion, int starrocksMetaVersion) {
@@ -88,12 +88,12 @@ public class BDBToolOptions {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("list bdb database: " + isListDbs).append("\n");
-        sb.append("bdb database name: " + dbName).append("\n");
-        sb.append("get bdb database stat: " + isDbStat).append("\n");
-        sb.append("from key" + fromKey).append("\n");
-        sb.append("end key: " + endKey).append("\n");
-        sb.append("meta version: " + metaVersion + "," + starrocksMetaVersion).append("\n");
+        sb.append("list bdb database: ").append(isListDbs).append("\n");
+        sb.append("bdb database name: ").append(dbName).append("\n");
+        sb.append("get bdb database stat: ").append(isDbStat).append("\n");
+        sb.append("from key").append(fromKey).append("\n");
+        sb.append("end key: ").append(endKey).append("\n");
+        sb.append("meta version: ").append(metaVersion).append(",").append(starrocksMetaVersion).append("\n");
         return sb.toString();
     }
 }

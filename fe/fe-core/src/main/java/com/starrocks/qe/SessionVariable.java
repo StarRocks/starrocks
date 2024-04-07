@@ -21,6 +21,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -46,6 +47,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Optional;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -101,7 +103,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
+    public static final String TX_READ_ONLY = "tx_read_only";
     public static final String TRANSACTION_ISOLATION = "transaction_isolation";
+    public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -307,6 +311,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
 
+    public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
+
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
@@ -336,6 +342,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
+    // Flag to control whether to proxy follower's query statement to leader/follower.
+    public enum FollowerQueryForwardMode {
+        DEFAULT,    // proxy queries by the follower's replay progress (default)
+        FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
+        LEADER      // proxy queries to leader no matter the follower's replay progress
+    }
+    public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -355,6 +369,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
     }
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
+
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT = "enable_materialized_view_for_insert";
 
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
@@ -417,6 +433,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
+
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -551,6 +569,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // this is used to compatible mysql 5.8
     @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
     private String transactionIsolation = "REPEATABLE-READ";
+    @VariableMgr.VarAttr(name = TRANSACTION_READ_ONLY, alias = TX_READ_ONLY)
+    private String transactionReadOnly = "OFF";
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
@@ -951,6 +971,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
 
+    /**
+     * Whether enable materialized-view rewrite for INSERT statement
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT)
+    private boolean enableMaterializedViewRewriteForInsert = false;
+
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
     private boolean enableMaterializedViewUnionRewrite = true;
 
@@ -1039,12 +1065,42 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
     private String cboEqBaseType = "varchar";
 
+
+    @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryQueue = true;
+
+    public boolean isEnableQueryQueue() {
+        return enableQueryQueue;
+    }
+
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
     }
 
     public String getCboEqBaseType() {
         return cboEqBaseType;
+    }
+
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
+    }
+
+    @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
+    private String followerForwardMode = "";
+
+    @VarAttr(name = ENABLE_STRICT_ORDER_BY)
+    private boolean enableStrictOrderBy = true;
+
+    public void setFollowerQueryForwardMode(String mode) {
+        this.followerForwardMode = mode;
+    }
+
+    public Optional<Boolean> isFollowerForwardToLeaderOpt() {
+        if (Strings.isNullOrEmpty(this.followerForwardMode) ||
+                followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.DEFAULT.toString())) {
+            return Optional.empty();
+        }
+        return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
     }
 
     public int getExprChildrenLimit() {
@@ -1133,6 +1189,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
+    }
+
+    public void setCboUseDBLock(boolean cboUseDBLock) {
+        this.cboUseDBLock = cboUseDBLock;
     }
 
     public int getStatisticCollectParallelism() {
@@ -1826,6 +1886,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
     }
 
+    public boolean isEnableMaterializedViewRewriteForInsert() {
+        return enableMaterializedViewRewriteForInsert;
+    }
+
+    public void setEnableMaterializedViewRewriteForInsert(boolean value) {
+        this.enableMaterializedViewRewriteForInsert = value;
+    }
+
     public boolean isEnableMaterializedViewUnionRewrite() {
         return enableMaterializedViewUnionRewrite;
     }
@@ -1949,6 +2017,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
+    }
+
+    public boolean isEnableStrictOrderBy() {
+        return enableStrictOrderBy;
+    }
+
+    public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
+        this.enableStrictOrderBy = enableStrictOrderBy;
     }
 
     // Serialize to thrift object
@@ -2182,7 +2258,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @Override
-    public Object clone() throws CloneNotSupportedException {
-        return super.clone();
+    public Object clone() {
+        try {
+            return super.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

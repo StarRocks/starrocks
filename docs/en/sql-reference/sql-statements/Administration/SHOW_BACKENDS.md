@@ -29,7 +29,7 @@ SHOW BACKENDS
 | HeartbeatPort         | The heartbeat port of the BE node. It is used to receive heartbeats from the FE node. |
 | BePort                | Thrift server port of the BE node. It is used to receive requests from the FE node. |
 | HttpPort              | HTTP server port of the BE node. It is used to access the BE node via web page. |
-| BrpcPort              | BRPC port of the BE node. It is used for communication across BE nodes. |
+| BrpcPort              | bRPC port of the BE node. It is used for communication across BE nodes. |
 | LastStartTime         | The last time when the BE node is started.                   |
 | LastHeartbeat         | The last time when the FE node sends a heartbeat and the BE responds.|
 | Alive                 | Whether the BE node is alive or not.<ul><li>`true`: the BE node is alive.</li><li>`false`: the BE node is not alive. </li></ul> |

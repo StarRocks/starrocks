@@ -8,7 +8,6 @@
 namespace starrocks {
 
 Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "register_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     if (_non_pipeline_report_tasks.find(fragment_instance_id) != _non_pipeline_report_tasks.end()) {
         std::stringstream msg;
@@ -16,20 +15,20 @@ Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment
         LOG(WARNING) << msg.str();
         return Status::InternalError(msg.str());
     }
+
+    VLOG(3) << "register_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     _non_pipeline_report_tasks.emplace(fragment_instance_id, NonPipelineReportTask(UnixMillis(), TQueryType::LOAD));
     return Status::OK();
 }
 
 Status ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+    VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     _non_pipeline_report_tasks.erase(fragment_instance_id);
     return Status::OK();
 }
 
 Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "register_pipeline_load query_id=" << print_id(query_id)
-              << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     PipeLineReportTaskKey key(query_id, fragment_instance_id);
     if (_pipeline_report_tasks.find(key) != _pipeline_report_tasks.end()) {
@@ -39,13 +38,15 @@ Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, co
         LOG(WARNING) << msg.str();
         return Status::InternalError(msg.str());
     }
+    VLOG(3) << "register_pipeline_load query_id=" << print_id(query_id)
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
     _pipeline_report_tasks.emplace(std::move(key), PipelineReportTask(UnixMillis(), TQueryType::LOAD));
     return Status::OK();
 }
 
 Status ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_pipeline_load query_id=" << print_id(query_id)
-              << ", fragment_instance_id=" << print_id(fragment_instance_id);
+    VLOG(3) << "unregister_pipeline_load query_id=" << print_id(query_id)
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
     return Status::OK();

@@ -37,8 +37,9 @@ public class JDBCScanNode extends ScanNode {
 
     public JDBCScanNode(PlanNodeId id, TupleDescriptor desc, JDBCTable tbl) {
         super(id, desc, "SCAN JDBC");
-        tableName = "`" + tbl.getJdbcTable() + "`";
         table = tbl;
+        String objectIdentifier = getIdentifierSymbol();
+        tableName = objectIdentifier + tbl.getJdbcTable() + objectIdentifier;
     }
 
     @Override
@@ -81,17 +82,31 @@ public class JDBCScanNode extends ScanNode {
     }
 
     private void createJDBCTableColumns() {
+        String objectIdentifier = getIdentifierSymbol();
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
             }
             Column col = slot.getColumn();
-            columns.add(col.getName());
+            columns.add(objectIdentifier + col.getName() + objectIdentifier);
         }
         // this happends when count(*)
         if (0 == columns.size()) {
             columns.add("*");
         }
+    }
+
+    private boolean isMysql() {
+        JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
+                .getResource(table.getResourceName());
+        // Compatible with jdbc catalog
+        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getProperty(JDBCResource.URI);
+        return jdbcURI.startsWith("jdbc:mysql");
+    }
+
+    private String getIdentifierSymbol() {
+        //TODO: for other jdbc table we need different objectIdentifier to support reserved key words
+        return isMysql() ? "`" : "";
     }
 
     private void createJDBCTableFilters() {
@@ -101,19 +116,17 @@ public class JDBCScanNode extends ScanNode {
         List<SlotRef> slotRefs = Lists.newArrayList();
         Expr.collectList(conjuncts, SlotRef.class, slotRefs);
         ExprSubstitutionMap sMap = new ExprSubstitutionMap();
+        String identifier = getIdentifierSymbol();
         for (SlotRef slotRef : slotRefs) {
             SlotRef tmpRef = (SlotRef) slotRef.clone();
             tmpRef.setTblName(null);
-
+            tmpRef.setLabel(identifier + tmpRef.getLabel() + identifier);
             sMap.put(slotRef, tmpRef);
         }
-        JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
-                .getResource(table.getResourceName());
-        String jdbcURI = resource.getProperty(JDBCResource.URI);
-        boolean isMySQL = jdbcURI.startsWith("jdbc:mysql");
-        ArrayList<Expr> mysqlConjuncts = Expr.cloneList(conjuncts, sMap);
-        for (Expr p : mysqlConjuncts) {
-            filters.add(p.toJDBCSQL(isMySQL));
+
+        ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
+        for (Expr p : jdbcConjuncts) {
+            filters.add(p.toJDBCSQL());
         }
     }
 

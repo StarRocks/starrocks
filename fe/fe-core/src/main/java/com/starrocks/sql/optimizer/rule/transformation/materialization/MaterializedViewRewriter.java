@@ -70,6 +70,7 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -892,7 +893,7 @@ public class MaterializedViewRewriter {
                     if (foreignKeyConstraint.getChildTableInfo() == null) {
                         return false;
                     }
-                    Table table = foreignKeyConstraint.getChildTableInfo().getTable();
+                    Table table = foreignKeyConstraint.getChildTableInfo().getTableChecked();
                     return table.equals(mvChildTable);
                 }).forEach(mvForeignKeyConstraints::add);
             }
@@ -918,7 +919,7 @@ public class MaterializedViewRewriter {
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
                         .map(String::toLowerCase).collect(Collectors.toList());
 
-                Table foreignKeyParentTable = foreignKeyConstraint.getParentTableInfo().getTable();
+                Table foreignKeyParentTable = foreignKeyConstraint.getParentTableInfo().getTableChecked();
                 for (TableScanDesc mvParentTableScanDesc : mvParentTableScanDescs) {
                     Table parentTable = mvParentTableScanDesc.getTable();
                     // check the parent table is the same table in the foreign key constraint
@@ -981,7 +982,7 @@ public class MaterializedViewRewriter {
 
         for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
             if (foreignKeyConstraint.getChildTableInfo() != null &&
-                    foreignKeyConstraint.getChildTableInfo().getTable().equals(childTable)) {
+                    foreignKeyConstraint.getChildTableInfo().getTableChecked().equals(childTable)) {
                 List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
                 Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toSet());
@@ -1123,12 +1124,9 @@ public class MaterializedViewRewriter {
             }
         }
         if (tableKeyType == KeysType.DUP_KEYS) {
-            List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
-            if (uniqueConstraints == null) {
-                uniqueConstraints = mvUniqueConstraints;
-            } else {
-                uniqueConstraints.addAll(mvUniqueConstraints);
-            }
+            List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+            uniqueConstraints.addAll(ListUtils.emptyIfNull(table.getUniqueConstraints()));
+            uniqueConstraints.addAll(ListUtils.emptyIfNull(mvUniqueConstraints));
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
                 if (uniqueConstraint.isMatch(table, keySet)) {
                     return true;
@@ -1606,10 +1604,7 @@ public class MaterializedViewRewriter {
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
-        ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
-                Utils.compoundAnd(
-                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
-                        CompoundPredicateOperator.not(compensationPredicates)));
+        ScalarOperator queryCompensationPredicate = CompoundPredicateOperator.not(compensationPredicates);
         List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
         predicates.removeAll(mvRewriteContext.getOnPredicates());
         queryCompensationPredicate = Utils.compoundAnd(predicates);
@@ -1681,7 +1676,6 @@ public class MaterializedViewRewriter {
                 // predicate can not be pushdown, we should add it it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
-                // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
                 builder.setPredicate(MvUtils.canonizePredicateForRewrite(
                         Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
                 Operator newQueryOp = builder.build();
@@ -1705,8 +1699,9 @@ public class MaterializedViewRewriter {
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
+        optimizerContext.clearNotNullPredicates();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
-                false, true, materializationContext.getQueryRefFactory());
+                false, true, materializationContext.getQueryRefFactory(), optimizerContext);
         return joinPredicatePushdown.pushdown(predicate);
     }
 

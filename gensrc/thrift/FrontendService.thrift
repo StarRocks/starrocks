@@ -525,6 +525,7 @@ struct TMasterOpRequest {
     30: optional Types.TUniqueId queryId
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
+    34: optional i32 forward_times
 }
 
 struct TColumnDefinition {
@@ -649,6 +650,7 @@ struct TStreamLoadPutResult {
 
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
+    2: optional map<i32,i64> partitionCmtOffsetTimestamp
 }
 
 struct TPulsarRLTaskProgress {

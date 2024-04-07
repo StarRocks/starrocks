@@ -50,6 +50,7 @@ import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TCancelPlanFragmentParams;
 import com.starrocks.thrift.TCancelPlanFragmentResult;
 import com.starrocks.thrift.TCloneReq;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDeleteEtlFilesRequest;
@@ -415,11 +416,19 @@ public class PseudoBackend {
     private void reportTablets() {
         // report tablets
         TReportRequest request = new TReportRequest();
+        // Report_version must be set before setting the tablets to
+        // ensure that the tablet in FE will not be accidentally deleted in the following case:
+        // t1: tablet1, tablet2, tablet3 are created on BE and current reportVersion is 3.
+        // t2: tablet1, tablet2, tablet3 are set into request.tables.
+        // t3: tablet4 is created and reportVersion changed to 4.
+        // t4: 4 is set into request.report_version.
+        // t5: The request is sent to the FE node and it is found that tablet4 is not in request.tablets
+        // and request.report_version is equal to the latest report_version recorded by FE,
+        // tablet4 metadata will be deleted from FE. Code: ReportHandler.deleteFromMeta
+        request.setReport_version(reportVersion.get());
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
-        reportVersion.incrementAndGet();
-        request.setReport_version(reportVersion.get());
         try {
             if (!shutdown) {
                 TMasterResult result = frontendService.report(request);
@@ -519,7 +528,15 @@ public class PseudoBackend {
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
         } else {
-            tabletManager.createTablet(request.create_tablet_req);
+            TCreateTabletReq createTabletReq = request.create_tablet_req;
+            tabletManager.createTablet(createTabletReq);
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setPath_hash(PATH_HASH);
+            tabletInfo.setData_size(0);
+            tabletInfo.setTablet_id(createTabletReq.tablet_id);
+            tabletInfo.setSchema_hash(createTabletReq.tablet_schema.schema_hash);
+            tabletInfo.setVersion(createTabletReq.version);
+            finish.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
         }
     }
 
@@ -601,8 +618,6 @@ public class PseudoBackend {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
                 request.getTask_type(), request.getSignature(),
                 new TStatus(TStatusCode.OK));
-        long v = reportVersion.incrementAndGet();
-        finishTaskRequest.setReport_version(v);
         try {
             switch (finishTaskRequest.task_type) {
                 case CREATE:
@@ -631,6 +646,8 @@ public class PseudoBackend {
             finishTaskRequest.setTask_status(toStatus(e));
         }
         try {
+            long v = reportVersion.incrementAndGet();
+            finishTaskRequest.setReport_version(v);
             frontendService.finishTask(finishTaskRequest);
         } catch (TException e) {
             LOG.warn("error call finishTask", e);

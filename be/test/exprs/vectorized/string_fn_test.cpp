@@ -1663,7 +1663,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtract) {
                           "(i)(.*?)(s)"};
     int indexs[] = {1, 2, 1, 2};
 
-    std::string res[] = {"b", "drrry", "i", "tdecisiondli"};
+    std::string res[] = {"b", "drrry", "i", "tdeci"};
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         str->append(strs[i]);

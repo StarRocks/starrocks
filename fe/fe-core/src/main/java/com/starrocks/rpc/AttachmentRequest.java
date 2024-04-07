@@ -17,6 +17,7 @@
 
 package com.starrocks.rpc;
 
+import com.baidu.bjf.remoting.protobuf.annotation.Ignore;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
@@ -24,7 +25,9 @@ import org.apache.thrift.TSerializer;
 
 // used to compatible with our older thrift protocol
 public class AttachmentRequest {
+    @Ignore
     protected byte[] serializedRequest;
+    @Ignore
     protected byte[] serializedResult;
 
     public void setRequest(TBase request) throws TException {

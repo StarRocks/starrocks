@@ -24,6 +24,7 @@ add_library(Formats STATIC
         orc/orc_chunk_reader.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp
+        orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
         orc/fill_function.cpp
         orc/utils.cpp

@@ -94,7 +94,7 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
     size_t remain_chunk_size = chunk_size;
     std::vector<vectorized::ColumnPtr> output_columns;
 
-    _process_table_function();
+    RETURN_IF_ERROR(_process_table_function());
 
     output_columns.reserve(_outer_slots.size());
     for (int _outer_slot : _outer_slots) {
@@ -191,12 +191,14 @@ vectorized::ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<vecto
     return chunk;
 }
 
-void TableFunctionOperator::_process_table_function() {
+Status TableFunctionOperator::_process_table_function() {
     if (!_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
         COUNTER_UPDATE(_table_function_exec_counter, 1);
         _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
         DCHECK_EQ(_input_chunk->num_rows() + 1, _table_function_result.second->size());
+        return _table_function_state->status();
     }
+    return Status::OK();
 }
 } // namespace starrocks::pipeline

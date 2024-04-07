@@ -176,9 +176,14 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
                     msg = String.format("there is no new data in kafka/pulsar, wait for %d seconds to schedule again",
                             routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
                 }
+                // The job keeps up with source.
+                routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstateStable();
                 delayPutToQueue(routineLoadTaskInfo, msg);
                 return;
             }
+            // Update the job state is the job is too slow.
+            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
+
         } catch (RoutineLoadPauseException e) {
             String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(

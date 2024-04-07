@@ -397,6 +397,7 @@ public class SparkLoadJobTest {
 
         // check update etl finished
         Assert.assertEquals(JobState.LOADING, job.getState());
+        Assert.assertNotEquals(-1, job.getLoadStartTimestamp());
         Assert.assertEquals(0, job.progress);
         Map<String, Pair<String, Long>> tabletMetaToFileInfo = Deencapsulation.getField(job, "tabletMetaToFileInfo");
         Assert.assertEquals(1, tabletMetaToFileInfo.size());

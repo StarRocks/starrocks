@@ -19,13 +19,19 @@ import com.starrocks.analysis.TaskName;
 public class DropTaskStmt extends DdlStmt {
 
     private final TaskName taskName;
+    private final boolean force;
 
-    public DropTaskStmt(TaskName taskName) {
+    public DropTaskStmt(TaskName taskName, boolean force) {
         this.taskName = taskName;
+        this.force = force;
     }
 
     public TaskName getTaskName() {
         return taskName;
+    }
+
+    public boolean isForce() {
+        return force;
     }
 
     @Override

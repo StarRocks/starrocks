@@ -43,7 +43,7 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
             EXCHANGE SHUFFLE[29]
                 AGGREGATE ([LOCAL] aggregate [{30: count=count(), 31: sum=sum(6: c_acctbal)}] group by [[29: substring]] having [null]
                     LEFT ANTI JOIN (join-predicate [1: c_custkey = 21: o_custkey] post-join-predicate [null])
-                        INNER JOIN (join-predicate [cast(6: c_acctbal as decimal128(38, 8)) > 17: avg] post-join-predicate [null])
+                        INNER JOIN (join-predicate [cast(6: c_acctbal as DECIMAL128(38,8)) > 17: avg] post-join-predicate [null])
                             SCAN (table[customer] columns[1: c_custkey, 5: c_phone, 6: c_acctbal] predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                             EXCHANGE BROADCAST
                                 ASSERT LE 1

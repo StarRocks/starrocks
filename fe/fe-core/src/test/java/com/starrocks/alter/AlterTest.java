@@ -44,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -2258,6 +2259,14 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         ColumnRenameClause clause = (ColumnRenameClause) alterTableStmt.getOps().get(0);
         Assert.assertEquals(clause.getNewColName(), "k3_new");
+    }
+
+    @Test
+    public void testCatalogRenameColumnReserved() throws Exception {
+        String stmt = "alter table test.tbl1 rename column __op TO __op";
+        Assert.assertThrows(UserException.class, () -> {
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        });
     }
 
     @Test

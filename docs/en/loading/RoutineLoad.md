@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Continuously load data from Apache Kafka®
+# Load data using Routine Load
 
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
@@ -62,7 +62,7 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 
          > **NOTE**
          >
-         > StarRocks supports access to Kafka via a security authentication mechanism SASL_SSL, SASL or SSL, or without authentication. This topic takes connection to Kafka without authentication as an example. If you need to connect to Kafka via a security authentication mechanism, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
+         > StarRocks supports access to Kafka via security protocols including SASL_SSL, SAS_PLAINTEXT, SSL, and PLAINTEXT. This topic uses connecting to Kafka via PLAINTEXT as an example. If you need to connect to Kafka via other security protocols, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
 
 4. **The FE generates new load tasks to load data continuously.**
    After the Executor BEs has written the data to disks, the Coordinator BE reports the result of the load task to the FE. Based on the result, the FE then generates new load tasks to load the data continuously. Or the FE retries the failed tasks to make sure the data loaded into StarRocks is neither lost nor duplicated.
@@ -377,7 +377,7 @@ RESUME ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 ## Alter a load job
 
-Before altering a load job, you must pause it with the [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD.md) statement. Then you can execute the [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/alter-routine-load.md). After altering it, you can execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md) statement to resume it, and check its status with the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) statement.
+Before altering a load job, you must pause it with the [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD.md) statement. Then you can execute the [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md). After altering it, you can execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md) statement to resume it, and check its status with the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) statement.
 
 Suppose the number of the BE nodes that are alive increases to `6` and the Kafka topic partitions to be consumed is `"0,1,2,3,4,5,6,7"`. If you want to increase the actual load task concurrency, you can execute the following statement to increase the number of desired task concurrency `desired_concurrent_number` to `6` (greater than or equal to the number of BE nodes that are alive), and specify the Kafka topic partitions and initial offsets.
 

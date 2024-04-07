@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -34,6 +35,9 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -51,6 +55,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -299,6 +304,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "active")
     private boolean active;
 
+    @SerializedName(value = "inactiveReason")
+    private String inactiveReason;
+
     // TODO: now it is original definition sql
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
@@ -358,7 +366,20 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setActive(boolean active) {
         this.active = active;
+        if (active) {
+            this.inactiveReason = null;
+        }
         CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+    }
+
+    public void setInactiveAndReason(String reason) {
+        this.active = false;
+        this.inactiveReason = reason;
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+    }
+
+    public String getInactiveReason() {
+        return inactiveReason;
     }
 
     public String getViewDefineSql() {
@@ -615,6 +636,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         mv.active = this.active;
         mv.refreshScheme = this.refreshScheme.copy();
         mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
+        mv.viewDefineSql = this.viewDefineSql;
         if (this.baseTableIds != null) {
             mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
         }
@@ -658,7 +680,55 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             setActive(desiredActive && reloadActive);
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
-            setActive(false);
+            setInactiveAndReason("reload mv failed: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
+
+        // 1. Remove from plan cache
+        MvId mvId = new MvId(db.getId(), getId());
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+
+        // 2. Remove from base tables
+        List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
+        for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
+            Table baseTable = baseTableInfo.getTable();
+            if (baseTable != null) {
+                baseTable.removeRelatedMaterializedView(mvId);
+                if (!baseTable.isNativeTableOrMaterializedView()) {
+                    // remove relatedMaterializedViews for connector table
+                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                    baseTableInfo.getDbName(),
+                                    baseTableInfo.getTableIdentifier(),
+                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                            Sets.newHashSet(mvId)).build());
+                }
+            }
+        }
+
+        // 3. Remove relevant tasks
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(getId()));
+        if (refreshTask != null) {
+            taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), replay);
+        }
+    }
+
+    public void onReload() {
+        try {
+            boolean desiredActive = active;
+            active = false;
+            boolean reloadActive = onReloadImpl();
+            if (desiredActive && reloadActive) {
+                setActive(true);
+            }
+        } catch (Throwable e) {
+            LOG.error("reload mv failed: {}", this, e);
+            setInactiveAndReason("reload failed: " + e.getMessage());
         }
     }
 
@@ -669,7 +739,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            setActive(false);
+            setInactiveAndReason("db not exists: " + dbId);
             return false;
         }
         if (baseTableInfos == null) {
@@ -677,7 +747,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (baseTableIds != null) {
                 // for compatibility
                 for (long tableId : baseTableIds) {
-                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
+                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId, null));
                 }
             } else {
                 active = false;
@@ -687,27 +757,39 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         boolean res = true;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            // Do not set the active when table is null, it would be checked in MVActiveChecker
-            Table table = baseTableInfo.getTable();
-            if (table != null) {
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+            Table table = null;
+            try {
+                table = baseTableInfo.getTable();
+            } catch (Exception e) {
+                LOG.warn("failed to get base table {} of MV {}", baseTableInfo, this, e);
+            }
+            if (table == null) {
+                res = false;
+                setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+                continue;
+            } else if (table.isMaterializedView()) {
+                MaterializedView baseMV = (MaterializedView) table;
+                // recursive reload MV, to guarantee the order of hierarchical MV
+                baseMV.onReload();
+                if (!baseMV.isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
-                    active = false;
+                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
                     res = false;
-                    continue;
                 }
-                MvId mvId = new MvId(db.getId(), id);
-                table.addRelatedMaterializedView(mvId);
+            }
 
-                if (!table.isLocalTable()) {
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
-                            baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
-                            baseTableInfo.getTableIdentifier(),
-                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                    Sets.newHashSet(mvId)).build()
-                    );
-                }
+            // Build the relationship
+            MvId mvId = getMvId();
+            table.addRelatedMaterializedView(mvId);
+            if (!table.isNativeTableOrMaterializedView() && !table.isView()) {
+                GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                        baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
+                        baseTableInfo.getTableIdentifier(),
+                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                Sets.newHashSet(mvId)).build()
+                );
             }
         }
         analyzePartitionInfo();
@@ -928,6 +1010,21 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     .append("\"");
         }
 
+        // colocate_with
+        String colocateGroup = getColocateGroup();
+        if (colocateGroup != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                    .append("\" = \"");
+            sb.append(colocateGroup).append("\"");
+        }
+
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
+                        .append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
@@ -1006,7 +1103,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             for (BaseTableInfo tableInfo : baseTableInfos) {
-                Table table = tableInfo.getTable();
+                Table table = tableInfo.getTableChecked();
 
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
@@ -1063,7 +1160,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // if non-partition-by table has changed, should refresh all mv partitions
         if (partitionInfo == null) {
             // mark it inactive
-            setActive(false);
+            setInactiveAndReason("partition method changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", name);
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
         }
@@ -1071,7 +1168,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
         TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTable();
+            Table table = tableInfo.getTableChecked();
             if (!table.isNativeTableOrMaterializedView()) {
                 switch (externalTableRewriteMode) {
                     case DISABLE:
@@ -1178,13 +1275,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef partitionSlotRef = slotRefs.get(0);
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table = baseTableInfo.getTable();
+            Table table = baseTableInfo.getTableChecked();
             if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(baseTableInfo.getTableName())) {
                 return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
             }
         }
         String baseTableNames = baseTableInfos.stream()
-                .map(tableInfo -> tableInfo.getTable().getName()).collect(Collectors.joining(","));
+                .map(tableInfo -> tableInfo.getTableChecked().getName()).collect(Collectors.joining(","));
         throw new RuntimeException(
                 String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }
@@ -1199,5 +1296,21 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = super.getProperties();
+        // For materialized view, add into session variables into properties.
+        if (super.getTableProperty() != null && super.getTableProperty().getProperties() != null) {
+            for (Map.Entry<String, String> entry : super.getTableProperty().getProperties().entrySet()) {
+                if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    properties.put(varKey, entry.getValue());
+                }
+            }
+        }
+        return properties;
     }
 }

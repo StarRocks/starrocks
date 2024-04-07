@@ -12,7 +12,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * this class guarantee that when bdb database is closing, there will be neither read or write operations on that db
+ * this class guarantee that when bdb database is closing, there will be neither read nor write operations on that db
  */
 public class CloseSafeDatabase {
     private final Database db;

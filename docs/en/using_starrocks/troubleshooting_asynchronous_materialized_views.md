@@ -55,7 +55,7 @@ text                                 | CREATE MATERIALIZED VIEW `mv_pred_2` (`lo
 DISTRIBUTED BY HASH(`lo_quantity`, `lo_revenue`) BUCKETS 2
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_medium" = "HDD"
 )
 AS SELECT `lineorder`.`lo_quantity`, `lineorder`.`lo_revenue`, sum(`lineorder`.`lo_tax`) AS `sum`
@@ -172,7 +172,7 @@ Create Materialized View | CREATE MATERIALIZED VIEW `mv_agg` (`c_custkey`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "replicated_storage" = "true",
 "storage_medium" = "HDD"
 )

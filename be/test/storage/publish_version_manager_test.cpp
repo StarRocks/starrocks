@@ -259,4 +259,4 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     ASSERT_EQ(0, _publish_version_manager->waitting_finish_task_requests_size());
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

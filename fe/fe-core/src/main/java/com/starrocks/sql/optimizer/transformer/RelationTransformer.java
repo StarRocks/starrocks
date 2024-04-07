@@ -149,6 +149,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return plan;
     }
 
+    // transform relation without considering the sql_select_limit
     public LogicalPlan transform(Relation relation) {
         OptExprBuilder optExprBuilder;
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
@@ -819,9 +820,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             return true;
         }
 
-        Subquery subquery = subqueries.get(0);
-        QueryStatement subqueryStmt = subquery.getQueryStatement();
-        SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
+        SelectRelation selectRelation = extractSubqueryRelation(subqueries);
         RelationId subqueryRelationId = selectRelation.getRelation().getScope().getRelationId();
         List<FieldId> correlatedFieldIds = selectRelation.getColumnReferences().values().stream()
                 .filter(field -> !Objects.equals(subqueryRelationId, field.getRelationId()))
@@ -877,5 +876,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         return usingLeftRelation;
+    }
+
+    private static SelectRelation extractSubqueryRelation(List<Subquery> subqueries) {
+        Subquery subquery = subqueries.get(0);
+        QueryStatement subqueryStmt = subquery.getQueryStatement();
+        while ((subqueryStmt.getQueryRelation() instanceof SubqueryRelation) &&
+                ((SubqueryRelation) subqueryStmt.getQueryRelation()).isAnonymous()) {
+            // Eliminate anonymous subqueries, like a in (((( select... ))))
+            subqueryStmt = ((SubqueryRelation) subqueryStmt.getQueryRelation()).getQueryStatement();
+        }
+        return (SelectRelation) subqueryStmt.getQueryRelation();
     }
 }

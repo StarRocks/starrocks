@@ -105,7 +105,7 @@ DISTRIBUTED BY HASH(user) BUCKETS 3;
 
 ## 通过 INSERT INTO VALUES 语句导入数据
 
-您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -129,7 +129,7 @@ VALUES
 
 ## 通过 INSERT INTO SELECT 语句导入数据
 
-您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 > 说明
 >
@@ -192,7 +192,7 @@ SELECT event_time, channel FROM source_wiki_edit;
 
 ## 通过 INSERT OVERWRITE VALUES 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -232,7 +232,7 @@ VALUES
 
 ## 通过 INSERT OVERWRITE SELECT 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 > 说明
 >
@@ -246,7 +246,7 @@ WITH LABEL insert_load_wikipedia_ow_1
 SELECT * FROM source_wiki_edit;
 ```
 
-- 以下示例以 `insert_load_wikipedia_2` 为 Label 将源表中的数据覆盖写入至目标表的 `p06` 和 `p12` 分区中。如果不指定目标分区，数据将会覆盖写入入全表；如果指定目标分区，数据只会覆盖写入指定的分区。
+- 以下示例以 `insert_load_wikipedia_2` 为 Label 将源表中的数据覆盖写入至目标表的 `p06` 和 `p12` 分区中。如果不指定目标分区，数据将会覆盖写入全表；如果指定目标分区，数据只会覆盖写入指定的分区。
 
 ```SQL
 INSERT OVERWRITE insert_wiki_edit PARTITION(p06, p12)

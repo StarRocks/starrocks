@@ -28,7 +28,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -39,7 +38,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -69,7 +67,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -115,13 +112,13 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.ha.FrontendNodeType;
@@ -198,6 +195,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -356,6 +354,9 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
+    // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
+    private volatile boolean isInTransferringToLeader = false;
+
     private FrontendNodeType feType;
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
@@ -417,6 +418,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
 
@@ -467,6 +469,8 @@ public class GlobalStateMgr {
     private CompactionManager compactionManager;
 
     private ConfigRefreshDaemon configRefreshDaemon;
+
+    private MVActiveChecker mvActiveChecker;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -552,7 +556,8 @@ public class GlobalStateMgr {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
 
-    private GlobalStateMgr() {
+    @VisibleForTesting
+    protected GlobalStateMgr() {
         this(false);
     }
 
@@ -625,6 +630,7 @@ public class GlobalStateMgr {
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
         this.loadEtlChecker = new LoadEtlChecker(loadManager);
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
 
@@ -654,12 +660,18 @@ public class GlobalStateMgr {
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
+        this.mvActiveChecker = new MVActiveChecker();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
             public void transferToLeader() {
-                gsm.transferToLeader();
+                isInTransferringToLeader = true;
+                try {
+                    gsm.transferToLeader();
+                } finally {
+                    isInTransferringToLeader = false;
+                }
             }
 
             @Override
@@ -872,6 +884,10 @@ public class GlobalStateMgr {
         return insertOverwriteJobManager;
     }
 
+    public MVActiveChecker getMvActiveChecker() {
+        return mvActiveChecker;
+    }
+
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
         return connectorTblMetaInfoMgr;
     }
@@ -930,47 +946,62 @@ public class GlobalStateMgr {
         // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
         // set them here again to make sure these variables use values in fe.conf.
-
         setMetaDir();
 
-        // 0. get local node and helper node info
-        nodeMgr.initialize(args);
+        // must judge whether it is first time start here before initializing GlobalStateMgr.
+        // Possibly remove clusterId and role to ensure that the system is not left in a half-initialized state.
+        boolean isFirstTimeStart = nodeMgr.isVersionAndRoleFilesNotExist();
+        try {
+            // 0. get local node and helper node info
+            nodeMgr.initialize(args);
 
-        // 1. create dirs and files
-        if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-            File imageDir = new File(this.imageDir);
-            if (!imageDir.exists()) {
-                imageDir.mkdirs();
+            // 1. create dirs and files
+            if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
+                File imageDir = new File(this.imageDir);
+                if (!imageDir.exists()) {
+                    imageDir.mkdirs();
+                }
+            } else {
+                LOG.error("Invalid edit log type: {}", Config.edit_log_type);
+                System.exit(-1);
             }
-        } else {
-            LOG.error("Invalid edit log type: {}", Config.edit_log_type);
-            System.exit(-1);
-        }
 
-        // init plugin manager
-        pluginMgr.init();
-        auditEventProcessor.start();
+            // init plugin manager
+            pluginMgr.init();
+            auditEventProcessor.start();
 
-        // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRoleOnStartup();
+            // 2. get cluster id and role (Observer or Follower)
+            nodeMgr.getClusterIdAndRoleOnStartup();
 
-        // 3. Load image first and replay edits
-        initJournal();
-        loadImage(this.imageDir); // load image file
+            // 3. Load image first and replay edits
+            initJournal();
+            loadImage(this.imageDir); // load image file
 
-        // 4. create load and export job label cleaner thread
-        createLabelCleaner();
+            // 4. create load and export job label cleaner thread
+            createLabelCleaner();
 
-        // 5. create txn timeout checker thread
-        createTxnTimeoutChecker();
+            // 5. create txn timeout checker thread
+            createTxnTimeoutChecker();
 
-        // 6. start task cleaner thread
-        createTaskCleaner();
+            // 6. start task cleaner thread
+            createTaskCleaner();
 
-        // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init()) {
-            LOG.error("init starOSAgent failed");
-            System.exit(-1);
+            // 7. init starosAgent
+            if (Config.use_staros && !starOSAgent.init()) {
+                LOG.error("init starOSAgent failed");
+                System.exit(-1);
+            }
+        } catch (Exception e) {
+            try {
+                if (isFirstTimeStart) {
+                    // If it is the first time we start, we remove the cluster ID and role
+                    // to prevent leaving the system in an inconsistent state.
+                    nodeMgr.removeClusterIdAndRole();
+                }
+            } catch (Throwable t) {
+                e.addSuppressed(t);
+            }
+            throw e;
         }
     }
 
@@ -1016,6 +1047,7 @@ public class GlobalStateMgr {
 
     // wait until FE is ready.
     public void waitForReady() throws InterruptedException {
+        long lastLoggingTimeMs = System.currentTimeMillis();
         while (true) {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
@@ -1025,6 +1057,22 @@ public class GlobalStateMgr {
 
             Thread.sleep(2000);
             LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
+
+            if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
+                lastLoggingTimeMs = System.currentTimeMillis();
+                LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
+            }
         }
     }
 
@@ -1222,6 +1270,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
@@ -1253,6 +1302,8 @@ public class GlobalStateMgr {
             compactionManager.start();
         }
         configRefreshDaemon.start();
+
+        lockChecker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1388,47 +1439,12 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-                updateBaseTableRelatedMv(db.getId(), mv, baseTableInfos);
+                mv.onReload();
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
-    }
-
-    public void updateBaseTableRelatedMv(Long dbId, MaterializedView mv, List<BaseTableInfo> baseTableInfos) {
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table;
-            try {
-                table = baseTableInfo.getTable();
-            } catch (Exception e) {
-                LOG.warn("there is an exception during get table from mv base table. exception:", e);
-                continue;
-            }
-            if (table == null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                mv.setActive(false);
-                continue;
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                MaterializedView baseMv = (MaterializedView) table;
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
-                        baseMv.getName(), baseMv.getId());
-                mv.setActive(false);
-                continue;
-            }
-            MvId mvId = new MvId(dbId, mv.getId());
-            table.addRelatedMaterializedView(mvId);
-            if (!table.isMaterializedView()) {
-                connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
-                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                Sets.newHashSet(mvId)).build());
-            }
-        }
     }
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
@@ -1807,7 +1823,7 @@ public class GlobalStateMgr {
                     if (cursor == null) {
                         // 1. set replay to the end
                         LOG.info("start to replay from {}", replayedJournalId.get());
-                        cursor = journal.read(replayedJournalId.get() + 1, JournalCursor.CUROSR_END_KEY);
+                        cursor = journal.read(replayedJournalId.get() + 1, JournalCursor.CURSOR_END_KEY);
                     } else {
                         cursor.refresh();
                     }
@@ -1981,7 +1997,7 @@ public class GlobalStateMgr {
             if (feType != FrontendNodeType.LEADER) {
                 journalObservable.notifyObservers(replayedJournalId.get());
             }
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 // Metric repo may not init after this replay thread start
                 MetricRepo.COUNTER_EDIT_LOG_READ.increase(1L);
             }
@@ -3644,5 +3660,9 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public boolean isInTransferringToLeader() {
+        return isInTransferringToLeader;
     }
 }

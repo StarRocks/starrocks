@@ -34,7 +34,7 @@ The session variables can be set by 'key' = 'value', which can limit the concurr
 
 - exec_mem_limit
 
-  Memory limit of query, can be adjusted when a query reports insufficient memory.
+  Memory limit of a query on each BE node, can be adjusted when a query reports insufficient memory.
 
 - load_mem_limit
 
@@ -49,7 +49,7 @@ set exec_mem_limit  = 137438953472;
 
 ## capacity quota of database storage
 
-The default capacity limit of each DB is 1TB. The quota value can be changed by `alter database`.
+The capacity quota of database storage is unlimited by default. And you can change quota value by using `alter database`.
 
 ```sql
 ALTER DATABASE db_name SET DATA QUOTA quota;

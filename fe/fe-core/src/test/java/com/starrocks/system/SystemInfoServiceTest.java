@@ -21,6 +21,8 @@ import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SystemInfoServiceTest {
 
@@ -222,5 +224,26 @@ public class SystemInfoServiceTest {
         service.addBackend(be);
         long backendId = service.getBackendIdWithStarletPort("newHost", 10001);
         Assert.assertEquals(be.getId(), backendId);
+    }
+
+    @Test
+    public void testUpdateReportVersionIncreasing() throws Exception {
+        long[] versions = new long[] {10, 5, 3, 2, 4, 1, 9, 7, 8, 6};
+        AtomicLong version = new AtomicLong();
+        version.set(0);
+
+        CountDownLatch latch = new CountDownLatch(10);
+        for (int i = 0; i < 10; i++) {
+            final int index = i;
+            new Thread(() -> {
+                service.updateReportVersionIncrementally(version, versions[index]);
+                System.out.println("updated version: " + versions[index]);
+                latch.countDown();
+            }).start();
+        }
+
+        latch.await();
+
+        Assert.assertEquals(10L, version.get());
     }
 }

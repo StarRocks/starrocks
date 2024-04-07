@@ -27,6 +27,7 @@ public class MvTaskRunContext extends TaskRunContext {
         this.remoteIp = context.remoteIp;
         this.properties = context.properties;
         this.type = context.type;
+        this.taskRun = context.taskRun;
     }
 
     public Map<String, Set<String>> getBaseToMvNameRef() {

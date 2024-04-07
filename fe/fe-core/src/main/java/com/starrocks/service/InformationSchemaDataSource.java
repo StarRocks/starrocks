@@ -21,7 +21,6 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
@@ -230,18 +229,13 @@ public class InformationSchemaDataSource {
         StringBuilder partitionKeySb = new StringBuilder();
         if (partitionInfo.getType().equals(PartitionType.RANGE)) {
             int idx = 0;
-            try {
-                for (Column column : partitionInfo.getPartitionColumns()) {
-                    if (idx != 0) {
-                        partitionKeySb.append(", ");
-                    }
-                    partitionKeySb.append("`").append(column.getName()).append("`");
-                    idx++;
+            for (Column column : partitionInfo.getPartitionColumns()) {
+                if (idx != 0) {
+                    partitionKeySb.append(", ");
                 }
-            } catch (NotImplementedException e) {
-                partitionKeySb.append(DEFAULT_EMPTY_STRING);
-                LOG.warn("The partition of type range seems not implement getPartitionColumns");
-            }            
+                partitionKeySb.append("`").append(column.getName()).append("`");
+                idx++;
+            }
         } else {
             partitionKeySb.append(DEFAULT_EMPTY_STRING);
         }

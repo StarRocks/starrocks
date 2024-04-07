@@ -196,7 +196,10 @@ public class PlanFragmentBuilder {
         // Single tablet direct output
         // Note: If the fragment has right or full join and the join is local bucket shuffle join,
         // We shouldn't set result sink directly to top fragment, because we will hash multi result sink.
-        if (!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
+        // Note: If enable compute node and the top fragment not GATHER node, the parallelism of top fragment can't
+        // be 1, it's error
+        if (!enableComputeNode(execPlan)
+                && !inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
                 .reduce(Integer::sum).orElse(2) <= 1) {
@@ -216,8 +219,16 @@ public class PlanFragmentBuilder {
         execPlan.getFragments().add(exchangeFragment);
     }
 
-    static boolean useQueryCache(ExecPlan execPlan) {
-        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
+    private static boolean enableComputeNode(ExecPlan execPlan) {
+        boolean preferComputeNode = execPlan.getConnectContext().getSessionVariable().isPreferComputeNode();
+        if (preferComputeNode) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean useQueryCache(ExecPlan execPlan) {
+        if (!execPlan.getConnectContext().getSessionVariable().isEnableQueryCache()) {
             return false;
         }
         boolean hasJoinNode = execPlan.getFragments().stream().anyMatch(PlanFragment::hasJoinNode);
@@ -1417,7 +1428,7 @@ public class PlanFragmentBuilder {
             PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
 
             PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
-            boolean withLocalShuffle = inputFragment != originalInputFragment;
+            boolean withLocalShuffle = inputFragment != originalInputFragment || inputFragment.isWithLocalShuffle();
 
             /*
              * Create aggregate TupleDescriptor
@@ -1615,6 +1626,7 @@ public class PlanFragmentBuilder {
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
@@ -2375,6 +2387,7 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr()
                         .put(analyticCall.getKey(), new SlotRef(analyticCall.getKey().toString(), slotDesc));
             }
+            outputTupleDesc.computeMemLayout();
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
@@ -2505,9 +2518,16 @@ public class PlanFragmentBuilder {
 
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
-            for (ColumnRefOperator columnRefOperator : setOperation.getOutputColumnRefOp()) {
+            for (int index = 0; index < setOperation.getOutputColumnRefOp().size(); index++) {
+                ColumnRefOperator columnRefOperator = setOperation.getOutputColumnRefOp().get(index);
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
-                slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
+                boolean isNullable = slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild();
+                for (List<ColumnRefOperator> childOutputColumn : setOperation.getChildOutputColumns()) {
+                    ColumnRefOperator childRef = childOutputColumn.get(index);
+                    Expr childExpr = ScalarOperatorToExpr.buildExecExpression(childRef, formatterContext);
+                    isNullable |= childExpr.isNullable();
+                }
+                slotDesc.setIsNullable(isNullable);
             }
             setOperationTuple.computeMemLayout();
 

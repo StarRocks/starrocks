@@ -8,9 +8,11 @@ displayed_sidebar: "Chinese"
 
 **使用文档：** [使用 Kafka connector 导入数据](../loading/Kafka-connector-starrocks.md)
 
+**源码下载地址：**[starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
+
 **压缩包命名规则：**`starrocks-kafka-connector-${connector_version}.tar.gz`
 
-**压缩包下载地址：**[starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz)
+**压缩包下载地址：**[starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)
 
 **版本要求：**
 

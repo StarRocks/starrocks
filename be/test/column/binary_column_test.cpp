@@ -21,7 +21,7 @@ PARALLEL_TEST(BinaryColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
+GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
     // small column
     auto column = BinaryColumn::create();
     for (size_t i = 0; i < 10; i++) {
@@ -31,7 +31,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
 
-#ifdef NDEBUG
     // offset overflow
     column = BinaryColumn::create();
     size_t count = 1 << 30;
@@ -47,7 +46,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
         ASSERT_EQ(ret.value()->get(i).get_slice().to_string(), std::to_string(i));
     }
 
-    /*
     // row size overflow
     // the case will allocate a lot of memory, so temp remove it
     count = Column::MAX_CAPACITY_LIMIT + 5;
@@ -58,12 +56,10 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
     }
     ret = column->upgrade_if_overflow();
     ASSERT_TRUE(!ret.ok());
-    */
-#endif
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
+GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
     auto column = BinaryColumn::create();
     column->append_string("test");
     ASSERT_FALSE(column->has_large_column());
@@ -84,7 +80,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
         ASSERT_EQ(ret.value()->get(i).get_slice(), Slice(std::to_string(i)));
     }
 
-#ifdef NDEBUG
     large_column = LargeBinaryColumn::create();
     size_t count = 1 << 29;
     for (size_t i = 0; i < count; i++) {
@@ -92,7 +87,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
     }
     ret = large_column->downgrade();
     ASSERT_FALSE(ret.ok());
-#endif
 }
 
 // NOLINTNEXTLINE
@@ -642,25 +636,14 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     ASSERT_EQ("def", slices[4]);
 }
 
-PARALLEL_TEST(BinaryColumnTest, test_element_memory_usage) {
+PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
     auto column = BinaryColumn::create();
     column->append("");
     column->append("1");
     column->append("23");
     column->append("456");
 
-    ASSERT_EQ(22, column->Column::element_memory_usage());
-
-    std::vector<size_t> element_mem_usages = {4, 5, 6, 7};
-    size_t element_num = element_mem_usages.size();
-    for (size_t start = 0; start < element_num; start++) {
-        size_t expected_usage = 0;
-        ASSERT_EQ(0, column->element_memory_usage(start, 0));
-        for (size_t size = 1; start + size <= element_num; size++) {
-            expected_usage += element_mem_usages[start + size - 1];
-            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
-        }
-    }
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 
 } // namespace starrocks::vectorized

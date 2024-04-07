@@ -205,7 +205,7 @@ public:
     size_t byte_size(size_t from, size_t size) const override {
         materialized_nullable();
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->byte_size(from, size) + _null_column->Column::byte_size(from, size);
+        return _data_column->byte_size(from, size) + _null_column->byte_size(from, size);
     }
 
     size_t byte_size(size_t idx) const override {
@@ -541,9 +541,9 @@ public:
         return _data_column->container_memory_usage() + _null_column->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
+    size_t reference_memory_usage(size_t from, size_t size) const override {
         materialized_nullable();
-        return NullableColumn::element_memory_usage(from, size);
+        return NullableColumn::reference_memory_usage(from, size);
     }
 
     std::string debug_item(uint32_t idx) const override {

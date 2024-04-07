@@ -56,7 +56,7 @@ static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 namespace starrocks::stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
-    // restrict the chunk memory usage of send queue
+    // restrict the chunk memory usage of send queue & brpc write buffer
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
@@ -210,13 +210,16 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // This ref is for RPC's reference
     open_closure->ref();
+
     open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
+    open_closure->cntl.ignore_eovercrowded();
+
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
         brpc_addr.port = _node_info->brpc_port;
         open_closure->cntl.http_request().set_content_type("application/proto");
-        auto res = BrpcStubCache::create_http_stub(brpc_addr);
+        auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
         if (!res.ok()) {
             LOG(ERROR) << res.status().get_error_msg();
             return;
@@ -529,6 +532,10 @@ Status NodeChannel::_send_request(bool eos) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+    _add_batch_closures[_current_request_index]->cntl.ignore_eovercrowded();
+    _add_batch_closures[_current_request_index]->request_size = request.ByteSizeLong();
+
+    _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
 
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
@@ -537,7 +544,7 @@ Status NodeChannel::_send_request(bool eos) {
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
             _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
-            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
             if (!res.ok()) {
                 return res.status();
             }
@@ -557,7 +564,7 @@ Status NodeChannel::_send_request(bool eos) {
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
             _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
-            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
             if (!res.ok()) {
                 return res.status();
             }
@@ -580,6 +587,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (!closure->join()) {
         return Status::OK();
     }
+    _mem_tracker->release(closure->request_size);
 
     _parent->_client_rpc_timer->update(closure->latency());
 
@@ -759,6 +767,7 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 }
 
 void NodeChannel::cancel(const Status& err_st) {
+    if (_cancel_finished) return;
     // cancel rpc request, accelerate the release of related resources
     for (auto closure : _add_batch_closures) {
         closure->cancel();
@@ -767,6 +776,11 @@ void NodeChannel::cancel(const Status& err_st) {
     for (int i = 0; i < _rpc_request.requests_size(); i++) {
         _cancel(_rpc_request.requests(i).index_id(), err_st);
     }
+    _cancel_finished = true;
+}
+
+void NodeChannel::cancel() {
+    cancel(_err_st);
 }
 
 void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
@@ -783,6 +797,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
 
     closure->ref();
     closure->cntl.set_timeout_ms(_rpc_timeout_ms);
+    closure->cntl.ignore_eovercrowded();
     _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
     request.release_id();
 }
@@ -798,7 +813,9 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
         }
         std::vector<NodeChannel*> channels;
         std::vector<int64_t> bes;
-        for (auto& node_id : location->node_ids) {
+        auto node_ids_size = location->node_ids.size();
+        for (size_t i = 0; i < node_ids_size; ++i) {
+            auto& node_id = location->node_ids[i];
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
@@ -809,6 +826,9 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
                 channel = it->second.get();
             }
             channel->add_tablet(_index_id, tablet);
+            if (_parent->_enable_replicated_storage && i == 0) {
+                channel->set_has_primary_replica(true);
+            }
             channels.push_back(channel);
             bes.emplace_back(node_id);
         }
@@ -821,7 +841,19 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     return Status::OK();
 }
 
+void IndexChannel::mark_as_failed(const NodeChannel* ch) {
+    // primary replica use for replicated storage
+    // if primary replica failed, we should mark this index as failed
+    if (ch->has_primary_replica()) {
+        _has_intolerable_failure = true;
+    }
+    _failed_channels.insert(ch->node_id());
+}
+
 bool IndexChannel::has_intolerable_failure() {
+    if (_has_intolerable_failure) {
+        return _has_intolerable_failure;
+    }
     if (_write_quorum_type == TWriteQuorumType::ALL) {
         return _failed_channels.size() > 0;
     } else if (_write_quorum_type == TWriteQuorumType::ONE) {
@@ -1015,6 +1047,9 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                             node_channel = it->second.get();
                         }
                         node_channel->add_tablet(index->index_id, tablet_info);
+                        if (_enable_replicated_storage && i == 0) {
+                            node_channel->set_has_primary_replica(true);
+                        }
                     }
                 }
 
@@ -1090,7 +1125,7 @@ Status OlapTableSink::open_wait() {
         });
 
         // when enable replicated storage, we only send to primary replica, one node channel fail lead to indicate whole load fail
-        if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+        if (has_intolerable_failure()) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -1107,7 +1142,7 @@ Status OlapTableSink::open_wait() {
                 }
             });
 
-            if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+            if (index_channel->has_intolerable_failure()) {
                 LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
                 return err_st;
             }
@@ -1357,6 +1392,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                     err_st = st;
                     this->mark_as_failed(ch);
                 }
+            } else {
+                ch->cancel();
             }
             if (this->has_intolerable_failure()) {
                 intolerable_failure = true;
@@ -1373,6 +1410,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -1381,7 +1420,7 @@ Status OlapTableSink::try_close(RuntimeState* state) {
         }
     }
 
-    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+    if (intolerable_failure) {
         return err_st;
     } else {
         return Status::OK();
@@ -1445,7 +1484,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
-                if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                if (has_intolerable_failure()) {
                     status = err_st;
                     for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }
@@ -1464,7 +1503,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                         }
                         ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                     });
-                    if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                    if (index_channel->has_intolerable_failure()) {
                         status = err_st;
                         index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                     }

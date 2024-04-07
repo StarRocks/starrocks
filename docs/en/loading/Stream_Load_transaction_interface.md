@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['Stream Load']
 ---
 
 # Load data using Stream Load transaction interface
@@ -11,6 +12,10 @@ This topic describes the Stream Load transaction interface and how to load data 
 ## Description
 
 The Stream Load transaction interface supports using an HTTP protocol-compatible tool or language to call API operations. This topic uses curl as an example to explain how to use this interface. This interface provides various features, such as transaction management, data write, transaction pre-commit, transaction deduplication, and transaction timeout management.
+
+:::note
+Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB. Stream Load does not support Parquet file format. If you need to load data from Parquet files, use [INSERT+files()](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
+:::
 
 ### Transaction management
 
@@ -481,6 +486,6 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ## References
 
-For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md).
+For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Loading from a local file system via Stream Load](../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
 
 For information about the syntax and parameters for creating Stream Load jobs, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).

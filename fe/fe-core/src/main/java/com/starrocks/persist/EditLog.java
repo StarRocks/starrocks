@@ -95,7 +95,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 /**
  * EditLog maintains a log of the memory modifications.
@@ -105,7 +104,7 @@ public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-    private BlockingQueue<JournalTask> journalQueue;
+    private final BlockingQueue<JournalTask> journalQueue;
 
     public EditLog(BlockingQueue<JournalTask> journalQueue) {
         this.journalQueue = journalQueue;
@@ -723,7 +722,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
-                case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
+                case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -974,15 +973,15 @@ public class EditLog {
      * submit log to queue, wait for JournalWriter
      */
     protected void logEdit(short op, Writable writable) {
-        long start = System.nanoTime();
-        Future<Boolean> task = submitLog(op, writable, -1);
-        waitInfinity(start, task);
+        JournalTask task = submitLog(op, writable, -1);
+        waitInfinity(task);
     }
 
     /**
      * submit log in queue and return immediately
      */
-    private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+    private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        long startTimeNano = System.nanoTime();
         Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader(),
                 "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
@@ -995,9 +994,9 @@ public class EditLog {
             entity.write(buffer);
         } catch (IOException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialized: {}", e);
+            LOG.info("failed to serialize, ", e);
         }
-        JournalTask task = new JournalTask(buffer, maxWaitIntervalMs);
+        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
         /*
          * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.
@@ -1025,7 +1024,8 @@ public class EditLog {
     /**
      * wait for JournalWriter commit all logs
      */
-    public void waitInfinity(long startTime, Future<Boolean> task) {
+    public static void waitInfinity(JournalTask task) {
+        long startTimeNano = task.getStartTimeNano();
         boolean result;
         int cnt = 0;
         while (true) {
@@ -1046,8 +1046,8 @@ public class EditLog {
 
         // for now if journal writer fails, it will exit directly, so this property should always be true.
         assert (result);
-        if (MetricRepo.isInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
+        if (MetricRepo.hasInit) {
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
         }
     }
 
@@ -1170,6 +1170,10 @@ public class EditLog {
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
         logEdit(OperationType.OP_FINISH_CONSISTENCY_CHECK, info);
+    }
+
+    public JournalTask logFinishConsistencyCheckNoWait(ConsistencyCheckInfo info) {
+        return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK, info, -1);
     }
 
     public void logAddComputeNode(ComputeNode computeNode) {
@@ -1406,8 +1410,8 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_FUNCTION, function);
     }
 
-    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
+    public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
@@ -1462,7 +1466,7 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_JOB_V2, alterJob);
     }
 
-    public Future<Boolean> logAlterJobNoWait(AlterJobV2 alterJob) {
+    public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {
         return submitLog(OperationType.OP_ALTER_JOB_V2, alterJob, -1);
     }
 

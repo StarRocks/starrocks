@@ -6,9 +6,9 @@ displayed_sidebar: "Chinese"
 
 Delta Lake Catalog 是一种 External Catalog。通过 Delta Lake Catalog，您不需要执行数据导入就可以直接查询 Delta Lake 里的数据。
 
-此外，您还可以基于 Delta Lake Catalog，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。StarRocks 从 2.5 版本开始支持 Delta Lake Catalog。
+此外，您还可以基于 Delta Lake Catalog，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。StarRocks 从 2.5 版本开始支持 Delta Lake Catalog。
 
-为保证正常访问 Delta Lake 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Delta Lake 内的数据，StarRocks 集群必须能够访问 Delta Lake 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 对象存储或分布式文件系统，如 AWS S3 或 HDFS
 - 元数据服务，如 Hive Metastore（以下简称 HMS）或 AWS Glue
@@ -259,7 +259,7 @@ PROPERTIES
 (
     "type" = "deltalake",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -275,7 +275,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -306,7 +306,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -340,7 +340,7 @@ PROPERTIES
   (
       "type" = "deltalake",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -377,7 +377,7 @@ PROPERTIES
 (
     "type" = "deltalake",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -495,7 +495,7 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
   PROPERTIES
   (
       "type" = "deltalake",
-      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
        ....
       "enable_hms_events_incremental_sync" = "true"
   );

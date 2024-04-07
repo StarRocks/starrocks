@@ -82,7 +82,7 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
             }
         }
     } else {
-        DCHECK(false) << "Unreachable!";
+        return Status::InternalError("Unreachable");
     }
     return Status::OK();
 }
@@ -116,19 +116,29 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
 Status OrcMappingFactory::_check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
                                                                       const TypeDescriptor& slot_target_type) {
     bool can_convert = true;
+    // check orc type -> slot type desc
     if (orc_source_type.getKind() == orc::TypeKind::LIST) {
-        can_convert = slot_target_type.is_array_type();
+        can_convert &= slot_target_type.is_array_type();
     } else if (orc_source_type.getKind() == orc::TypeKind::MAP) {
-        can_convert = slot_target_type.is_map_type();
+        can_convert &= slot_target_type.is_map_type();
     } else if (orc_source_type.getKind() == orc::TypeKind::STRUCT) {
-        can_convert = slot_target_type.is_struct_type();
+        can_convert &= slot_target_type.is_struct_type();
     }
 
-    //TODO Other primitive type not check now!
+    // check slot type desc -> orc type
+    if (slot_target_type.is_array_type()) {
+        can_convert &= orc_source_type.getKind() == orc::TypeKind::LIST;
+    } else if (slot_target_type.is_map_type()) {
+        can_convert &= orc_source_type.getKind() == orc::TypeKind::MAP;
+    } else if (slot_target_type.is_struct_type()) {
+        can_convert &= orc_source_type.getKind() == orc::TypeKind::STRUCT;
+    }
+
+    //TODO Other logical type not check now!
 
     if (!can_convert) {
-        return Status::NotSupported("Not support to convert orc's type: " + orc_source_type.toString() +
-                                    " to: " + slot_target_type.debug_string());
+        return Status::NotSupported(strings::Substitute("Orc's type $0 and Slot's type $1 can't convert to each other",
+                                                        orc_source_type.toString(), slot_target_type.debug_string()));
     }
     return Status::OK();
 }
@@ -315,7 +325,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         }
         mapping->add_mapping(1, need_add_value_column_id, need_add_vaule_child_mapping);
     } else {
-        DCHECK(false) << "Unreachable";
+        return Status::InternalError("Unreachable");
     }
     return Status::OK();
 }

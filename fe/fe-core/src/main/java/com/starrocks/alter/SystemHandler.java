@@ -61,7 +61,9 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -212,6 +214,7 @@ public class SystemHandler extends AlterHandler {
             throws DdlException {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Backend> decommissionBackends = Lists.newArrayList();
+        Set<Long> decommissionIds = new HashSet<>();
 
         long needCapacity = 0L;
         long releaseCapacity = 0L;
@@ -229,6 +232,7 @@ public class SystemHandler extends AlterHandler {
             needCapacity += backend.getDataUsedCapacityB();
             releaseCapacity += backend.getAvailableCapacityB();
             decommissionBackends.add(backend);
+            decommissionIds.add(backend.getId());
         }
 
         if (decommissionBackends.isEmpty()) {
@@ -241,6 +245,10 @@ public class SystemHandler extends AlterHandler {
             throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");
         }
 
+        long availableBackendCnt = infoService.getAvailableBackendIds()
+                .stream()
+                .filter(beId -> !decommissionIds.contains(beId))
+                .count();
         short maxReplicationNum = 0;
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (long dbId : localMetastore.getDbIds()) {
@@ -258,8 +266,7 @@ public class SystemHandler extends AlterHandler {
                             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
                             if (replicationNum > maxReplicationNum) {
                                 maxReplicationNum = replicationNum;
-                                if (infoService.getAvailableBackendIds().size() - decommissionBackends.size() <
-                                        maxReplicationNum) {
+                                if (availableBackendCnt < maxReplicationNum) {
                                     decommissionBackends.clear();
                                     throw new DdlException(
                                             "It will cause insufficient BE number if these BEs are decommissioned " +

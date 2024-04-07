@@ -54,6 +54,10 @@ public class TransactionIdGenerator {
         }
     }
 
+    public synchronized long peekNextTransactionId() {
+        return nextId + 1;
+    }
+
     public synchronized void initTransactionId(long id) {
         if (id > batchEndId) {
             batchEndId = id;

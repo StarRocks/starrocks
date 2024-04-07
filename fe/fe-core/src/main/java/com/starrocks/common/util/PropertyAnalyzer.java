@@ -134,6 +134,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_OLAP_TABLE_QUERY_REWRITE = "olap_table_query_rewrite_consistency";
 
+    public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
+
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
@@ -739,7 +741,7 @@ public class PropertyAnalyzer {
 
         BaseTableInfo tableInfo;
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
+            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId(), table.getName());
         } else {
             tableInfo = new BaseTableInfo(catalogName, dbName, table.getTableIdentifier());
         }

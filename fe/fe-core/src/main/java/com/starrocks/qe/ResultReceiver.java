@@ -137,7 +137,7 @@ public class ResultReceiver {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
             status.setStatus(String.format("Query exceeded time limit of %d seconds",
                     ConnectContext.get().getSessionVariable().getQueryTimeoutS()));
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
             }
         } finally {

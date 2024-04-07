@@ -57,7 +57,7 @@ PARTITION BY RANGE(k1)
     PARTITION p2 values less than('2020-03-01')
 )
 DISTRIBUTED BY HASH(k2) BUCKETS 3
-PROPERTIES( "replication_num"  = "1");
+PROPERTIES( "replication_num"  = "3");
 ```
 
 在表 `base` 上创建视图 `example_view`。

@@ -197,7 +197,8 @@ public:
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         vectorized::ChunkChanger* chunk_changer);
 
-    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version);
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        vectorized::ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -292,10 +293,17 @@ public:
 
     Status pk_index_major_compaction();
 
+    void set_error(const string& msg) { _set_error(msg); }
+    void reset_error() {
+        _error = false;
+        _error_msg = "";
+    }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
     friend class PersistentIndex;
+    friend class UpdateManager;
     friend class RowsetUpdateState;
 
     template <typename K, typename V>

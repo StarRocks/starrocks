@@ -51,6 +51,7 @@ public class FunctionSet {
     // Date functions:
     public static final String CONVERT_TZ = "convert_tz";
     public static final String CURDATE = "curdate";
+    public static final String CURRENT_DATE = "current_date";
     public static final String CURRENT_TIMESTAMP = "current_timestamp";
     public static final String CURTIME = "curtime";
     public static final String CURRENT_TIME = "current_time";
@@ -80,6 +81,9 @@ public class FunctionSet {
     public static final String TO_DAYS = "to_days";
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
+    public static final String UTC_TIME = "utc_time";
+    public static final String LOCALTIME = "localtime";
+    public static final String LOCALTIMESTAMP = "localtimestamp";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -269,6 +273,7 @@ public class FunctionSet {
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
+    public static final String BITMAP_FROM_BINARY = "bitmap_from_binary";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
     public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
@@ -538,6 +543,25 @@ public class FunctionSet {
                     .add(SLEEP)
                     .build();
 
+    // Only use query cache if these time function can be reduced into a constant
+    // date/datetime value after applying FoldConstantRule, otherwise BE would yield
+    // non-deterministic result when these function is delivered to BE.
+    public static final Set<String> nonDeterministicTimeFunctions =
+            ImmutableSet.<String>builder()
+                    .add(CURTIME)
+                    .add(CURDATE)
+                    .add(CURRENT_DATE)
+                    .add(CURRENT_TIMESTAMP)
+                    .add(CURRENT_TIME)
+                    .add(NOW)
+                    .add(UNIX_TIMESTAMP)
+                    .add(UTC_TIMESTAMP)
+                    .add(UTC_TIME)
+                    .add(LOCALTIME)
+                    .add(LOCALTIMESTAMP)
+                    .add()
+                    .build();
+
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)
@@ -566,6 +590,15 @@ public class FunctionSet {
             .add(FunctionSet.COVAR_SAMP)
             .add(FunctionSet.CORR)
             .build();
+
+
+    public static final Set<String> IGNORE_NULL_WINDOW_FUNCTION =
+            ImmutableSet.<String>builder().add(FunctionSet.FIRST_VALUE)
+                    .add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.FIRST_VALUE_REWRITE)
+                    .add(FunctionSet.LEAD)
+                    .add(FunctionSet.LAG)
+                    .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();

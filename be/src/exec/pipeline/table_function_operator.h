@@ -36,7 +36,7 @@ public:
 
 private:
     vectorized::ChunkPtr _build_chunk(const std::vector<vectorized::ColumnPtr>& output_columns);
-    void _process_table_function();
+    Status _process_table_function();
 
     const TPlanNode& _tnode;
     const vectorized::TableFunction* _table_function = nullptr;
@@ -55,7 +55,7 @@ private:
     // The current outer line needs to be repeated several times
     size_t _remain_repeat_times = 0;
     // table function result
-    std::pair<vectorized::Columns, vectorized::ColumnPtr> _table_function_result;
+    std::pair<vectorized::Columns, vectorized::UInt32Column::Ptr> _table_function_result;
     // table function return result end ?
     bool _table_function_result_eos = false;
     // table function param and return offset

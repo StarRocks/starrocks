@@ -54,12 +54,14 @@ while true; do
     esac
 done
 
-
 # ================== conf section =======================
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 source $STARROCKS_HOME/bin/common.sh
 
 export_shared_envvars
+
+check_and_update_max_processes
+
 if [ ${RUN_BE} -eq 1 ] ; then
     export_env_from_conf $STARROCKS_HOME/conf/be.conf
     export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
@@ -75,7 +77,7 @@ fi
 
 export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true"
 # enable coredump when BE build with ASAN
-export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
 
@@ -169,7 +171,7 @@ fi
 
 chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
 
-if [[ $(ulimit -n) -lt 60000 ]]; then
+if [ $(ulimit -n) != "unlimited" ] && [ $(ulimit -n) -lt 60000 ]; then
     ulimit -n 65535
 fi
 

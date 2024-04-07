@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# UPPER
+# upper
 
 ## 功能
 

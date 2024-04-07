@@ -805,7 +805,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/build_join_projection"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("22:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("Project\n" +
                 "  |  <slot 425> : 425: row_id\n" +
                 "  |  <slot 426> : 426: enter_time\n" +
                 "  |  <slot 433> : 433: telephone2\n" +
@@ -819,10 +819,42 @@ public class ReplayFromDumpTest {
                 "  |  <slot 608> : 608: create_time\n" +
                 "  |  <slot 620> : 620: ter_user_phone\n" +
                 "  |  \n" +
-                "  21:HASH JOIN\n" +
+                "  20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 590: user_id = 622: ter_user_id\n" +
                 "  |  equal join conjunct: 589: account_id = 623: terminal_id"));
+    }
+
+    @Test
+    public void test() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/top_join_projection"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("57:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1303 <-> [1303: employee_id, BIGINT, true]\n" +
+                "  |  1304 <-> [1304: employee_name, VARCHAR, true]\n" +
+                "  |  1307 <-> [1307: duty_name, VARCHAR, true]\n" +
+                "  |  1322 <-> [1322: arrival_duration, INT, true]\n" +
+                "  |  1347 <-> [1347: responsible_department_name, VARCHAR, true]\n" +
+                "  |  1371 <-> [1371: induction_duration, INT, true]"));
+    }
+
+    @Test
+    public void testNormalizeNonTrivialProject() throws Exception {
+        SessionVariable sv = new SessionVariable();
+        sv.setPipelineDop(1);
+        sv.setEnableQueryCache(true);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            sv.setEnableLowCardinalityOptimize(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/normalize_non_trivial_project"), sv,
+                            TExplainLevel.NORMAL);
+            Assert.assertTrue(replayPair.second,
+                    replayPair.second != null && replayPair.second.contains("TABLE: tbl_mock_017"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 }

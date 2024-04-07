@@ -195,11 +195,11 @@ MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_opera
     return morsel_queue_factory_of_source_operator(source_op->plan_node_id());
 }
 
-SourceOperatorFactory* PipelineBuilderContext::source_operator(OpFactories ops) {
+SourceOperatorFactory* PipelineBuilderContext::source_operator(const OpFactories& ops) {
     return down_cast<SourceOperatorFactory*>(ops[0].get());
 }
 
-bool PipelineBuilderContext::could_local_shuffle(OpFactories ops) const {
+bool PipelineBuilderContext::could_local_shuffle(const OpFactories& ops) const {
     return down_cast<SourceOperatorFactory*>(ops[0].get())->could_local_shuffle();
 }
 

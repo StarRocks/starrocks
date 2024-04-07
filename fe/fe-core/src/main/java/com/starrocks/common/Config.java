@@ -281,6 +281,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
 
+    @ConfField(mutable = true)
+    public static int edit_log_write_slow_log_threshold_ms = 2000;
+
     /**
      * whether ignore unknown log id
      * when fe rolls back to low version, there may be log id that low version fe can not recognise
@@ -493,6 +496,17 @@ public class Config extends ConfigBase {
     public static int http_port = 8030;
 
     /**
+     * Number of worker threads for http server to deal with http requests which may do
+     * some I/O operations. If set with a non-positive value, it will use netty's default
+     * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
+     * default value is 0 which is same as the previous behaviour.
+     * See <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
+     * for details.
+     */
+    @ConfField
+    public static int http_worker_threads_num = 0;
+
+    /**
      * The backlog_num for netty http server
      * When you enlarge this backlog_num, you should ensure it's value larger than
      * the linux /proc/sys/net/core/somaxconn config
@@ -522,6 +536,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean http_web_page_display_hardware = true;
+
+    /**
+     * Whether to enable the detail metrics for http. It may be expensive
+     * to get those metrics, and only enable it for debug in general.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_http_detail_metrics = false;
 
     /**
      * Cluster name will be shown as the title of web page
@@ -698,6 +719,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int load_checker_interval_second = 5;
+
+    @ConfField(mutable = true)
+    public static long lock_checker_interval_second = 30;
+
+    /**
+     * Check of deadlock is time consuming. Open it only when tracking problems.
+     */
+    @ConfField(mutable = true)
+    public static boolean lock_checker_enable_deadlock_check = false;
 
     /**
      * Default broker load timeout
@@ -911,6 +941,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int task_runs_concurrency = 4;
+
+    /**
+     * max num of thread to handle task runs in task runs executor thread-pool.
+     */
+    @ConfField
+    public static int max_task_runs_threads_num = 512;
+
     /**
      * Default timeout of export jobs.
      */
@@ -1861,6 +1898,14 @@ public class Config extends ConfigBase {
     public static boolean enable_collect_query_detail_info = false;
 
     /**
+     *  StarRocks-manager pull queries every 1 second
+     *  metrics calculate query latency every 15 second
+     *  do not set cacheTime lower than these time
+     */
+    @ConfField(mutable = true)
+    public static long query_detail_cache_time_nanosecond = 30000000000L;
+
+    /**
      * Min lag of routine load job to show in metrics
      * Only show the routine load job whose lag is larger than min_routine_load_lag_for_metrics
      */
@@ -2012,7 +2057,7 @@ public class Config extends ConfigBase {
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
      * e.g 495501,495503
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     /**
@@ -2108,6 +2153,12 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
+    public static long mv_active_checker_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "Whether enable the active mv automatically in daemon thread")
+    public static boolean enable_mv_automatic_active_check = false;
+
+    @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 
     /**
@@ -2134,4 +2185,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
 }

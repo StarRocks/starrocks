@@ -354,7 +354,7 @@ public class PartitionBasedMvRefreshProcessorTest {
             taskRun.executeTaskRun();
             Assert.fail("should not be here. executeTaskRun will throw exception");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("is not active, skip sync partition and data with base tables"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("is not active"));
         }
     }
 
@@ -1712,6 +1712,37 @@ public class PartitionBasedMvRefreshProcessorTest {
             e.printStackTrace();
             Assert.fail("refresh failed");
         }
+    }
+
+    @Test
+    public void testCancelRefreshMV() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        taskRun.kill();
+        try {
+            taskRun.executeTaskRun();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("User Cancelled"));
+            starRocksAssert.dropMaterializedView("hive_parttbl_mv1");
+            return;
+        }
+        Assert.fail("should throw exception");
     }
 
     @Test

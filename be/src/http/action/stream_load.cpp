@@ -123,6 +123,13 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter
 
 StreamLoadAction::~StreamLoadAction() = default;
 
+static void _send_reply(HttpRequest* req, const std::string& str) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load response: " << str;
+    }
+    HttpChannel::send_reply(req, str);
+}
+
 void StreamLoadAction::handle(HttpRequest* req) {
     auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr) {
@@ -150,7 +157,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
     }
 
     auto str = ctx->to_json();
-    HttpChannel::send_reply(req, str);
+    _send_reply(req, str);
 
     // update statstics
     streaming_load_requests_total.increment(1);
@@ -214,14 +221,16 @@ int StreamLoadAction::on_header(HttpRequest* req) {
                 Status::ResourceBusy(fmt::format("Stream Load exceed http cuncurrent limit {}, please try again later",
                                                  config::webserver_num_workers - 1));
         auto str = ctx->to_json();
-        HttpChannel::send_reply(req, str);
+        _send_reply(req, str);
         return -1;
     } else {
         LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db
                   << ", tbl=" << ctx->table;
     }
 
-    VLOG(1) << "streaming load request: " << req->debug_string();
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load request: " << req->debug_string();
+    }
 
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
@@ -234,7 +243,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
             ctx->body_sink->cancel(st);
         }
         auto str = ctx->to_json();
-        HttpChannel::send_reply(req, str);
+        _send_reply(req, str);
         streaming_load_current_processing.increment(-1);
         return -1;
     }

@@ -29,6 +29,16 @@ Review the information in this section before downgrading. Perform any recommend
   - StarRocks upgrades the BDB library in v3.0. However, BDBJE cannot be rolled back. You must use BDB library of v3.0 after a downgrade.
   - The new RBAC privilege system is used by default after you upgrade to v3.0. You can only use the RBAC privilege system after a downgrade.
 
+> **CAUTION**
+>
+> Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, perform the following steps after the downgrade:
+>
+> 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
+> 2. Wait for the new image to be synchronized to all Follower FEs.
+>
+> You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.
+
+
 ### Downgrade procedure
 
 StarRocks' downgrade procedure is the reverse order of the [upgrade procedure](../deployment/upgrade.md#upgrade-procedure). Therefore, you need to **downgrade** **FEs** **first and then BEs and CNs**. Downgrading them in the wrong order may lead to incompatibility between FEs and BEs/CNs, and thereby cause the service to crash. For FE nodes, you must first downgrade all Follower FE nodes before downgrading the Leader FE node.
@@ -46,8 +56,8 @@ If you want to downgrade your StarRocks cluster to an earlier minor or major ver
 Before downgrading your StarRocks cluster, you must disable tablet clone.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
@@ -55,8 +65,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 After the downgrade, you can enable tablet clone again if the status of all BE nodes becomes `Alive`.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "10000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "500");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```

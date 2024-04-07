@@ -1148,7 +1148,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropTaskStatement(StarRocksParser.DropTaskStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TaskName taskName = qualifiedNameToTaskName(qualifiedName);
-        return new DropTaskStmt(taskName);
+        boolean force = context.FORCE() != null;
+        return new DropTaskStmt(taskName, force);
     }
 
     private TaskName qualifiedNameToTaskName(QualifiedName qualifiedName) {
@@ -5063,7 +5064,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDereference(StarRocksParser.DereferenceContext ctx) {
         Expr base = (Expr) visit(ctx.base);
-        String fieldName = ((Identifier) visit(ctx.fieldName)).getValue();
+
+        String fieldName;
+        if (ctx.DOT_IDENTIFIER() != null) {
+            fieldName = ctx.DOT_IDENTIFIER().getText().substring(1);
+        } else {
+            fieldName = ((Identifier) visit(ctx.fieldName)).getValue();
+        }
 
         // Trick method
         // If left is SlotRef type, we merge fieldName to SlotRef
@@ -5492,9 +5499,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
-        List<String> parts = visit(context.identifier(), Identifier.class).stream()
-                .map(Identifier::getValue)
-                .collect(Collectors.toList());
+        List<String> parts = new ArrayList<>();
+        for (ParseTree c : context.children) {
+            if (c instanceof TerminalNode) {
+                TerminalNode t = (TerminalNode) c;
+                if (t.getSymbol().getType() == StarRocksParser.DOT_IDENTIFIER) {
+                    parts.add(t.getText().substring(1));
+                }
+            } else if (c instanceof StarRocksParser.IdentifierContext) {
+                StarRocksParser.IdentifierContext identifierContext = (StarRocksParser.IdentifierContext) c;
+                Identifier identifier = (Identifier) visit(identifierContext);
+                parts.add(identifier.getValue());
+            }
+        }
 
         return QualifiedName.of(parts);
     }

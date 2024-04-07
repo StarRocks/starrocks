@@ -13,7 +13,7 @@ The available metrics are:
 |Indicator|Unit|Type|Meaning|
 |---|:---:|:---:|---|
 |be_broker_count|pcs|average|Number of brokers |
-|be_brpc_endpoint_count|pcs|average|Number of StubCache in BRPC|
+|be_brpc_endpoint_count|pcs|average|Number of StubCache in bRPC|
 |be_bytes_read_per_second|bytes/s|average| Read speed of BE |
 |be_bytes_written_per_second|bytes/s|average|Write speed of BE |
 |be_base_compaction_bytes_per_second|bytes/s|average|Base compaction speed of BE|
@@ -324,7 +324,7 @@ Download a dashboard.
 >
 > * [Dashboard template for versions earlier than v1.19.0](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview.json)
 > * [Dashboard template for v1.19.0 to v2.4.0 (exclusive)](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
-> * [Dashboard template for v2.4.0 and later](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24.json)
+> * [Dashboard template for v2.4.0 and later](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24-new.json)
 
 Dashboard templates will be updated from time to time.
 

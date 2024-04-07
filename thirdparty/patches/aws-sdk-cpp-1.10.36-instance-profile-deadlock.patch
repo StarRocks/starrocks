@@ -1,0 +1,12 @@
+diff --git a/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp b/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
+index 084e4bca6e..6c8b059b2d 100644
+--- a/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
++++ b/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
+@@ -259,7 +259,6 @@ AWSCredentials InstanceProfileCredentialsProvider::GetAWSCredentials()
+ 
+ bool InstanceProfileCredentialsProvider::ExpiresSoon() const
+ {
+-    ReaderLockGuard guard(m_reloadLock);
+     auto profileIter = m_ec2MetadataConfigLoader->GetProfiles().find(Aws::Config::INSTANCE_PROFILE_KEY);
+     AWSCredentials credentials;
+ 

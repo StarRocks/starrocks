@@ -29,6 +29,8 @@ public:
         return 1 + _tdigest.serialize_size();
     }
 
+    uint64_t mem_usage() const { return 1 + _tdigest.serialize_size(); }
+
     size_t serialize(uint8_t* writer) const {
         *(writer) = _type;
         return _tdigest.serialize(writer + 1);

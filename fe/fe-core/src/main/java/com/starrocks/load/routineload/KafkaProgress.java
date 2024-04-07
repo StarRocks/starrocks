@@ -29,9 +29,7 @@ import com.google.gson.Gson;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
-import com.starrocks.thrift.TKafkaRLTaskProgress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,9 +63,11 @@ public class KafkaProgress extends RoutineLoadProgress {
         super(LoadDataSourceType.KAFKA);
     }
 
-    public KafkaProgress(TKafkaRLTaskProgress tKafkaRLTaskProgress) {
+    public KafkaProgress(Map<Integer, Long> partitionOffsets) {
         super(LoadDataSourceType.KAFKA);
-        this.partitionIdToOffset = tKafkaRLTaskProgress.getPartitionCmtOffset();
+        if (partitionOffsets != null) {
+            this.partitionIdToOffset = partitionOffsets;
+        }
     }
 
     public Map<Integer, Long> getPartitionIdToOffset(List<Integer> partitionIds) {
@@ -183,13 +183,11 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     @Override
-    public void update(RLTaskTxnCommitAttachment attachment) {
-        KafkaProgress newProgress = (KafkaProgress) attachment.getProgress();
+    public void update(RoutineLoadProgress progress) {
+        KafkaProgress newProgress = (KafkaProgress) progress;
         // + 1 to point to the next msg offset to be consumed
         newProgress.partitionIdToOffset.entrySet().stream()
                 .forEach(entity -> this.partitionIdToOffset.put(entity.getKey(), entity.getValue() + 1));
-        LOG.debug("update kafka progress: {}, task: {}, job: {}",
-                newProgress.toJsonString(), DebugUtil.printId(attachment.getTaskId()), attachment.getJobId());
     }
 
     @Override

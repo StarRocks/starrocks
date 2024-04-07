@@ -108,7 +108,8 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | desired_concurrent_number | No           | The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../administration/Configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.|
 | max_batch_interval        | No           | The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. |
 | max_batch_rows            | No           | This property is only used to define the window of error detection. The window is the number of rows of data consumed by a single Routine Load task. The value is `10 * max_batch_rows`. The default value is `10 * 200000 = 200000`. The Routine Load task detects error data in the error detection window. Error data refers to data that StarRocks cannot parse, such as invalid JSON-formatted data. |
-| max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md)  and view the error logs by using `ErrorLogUrls`.  After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed.<br />**NOTE** <br />Error data rows do not include data rows that are filtered out by the WHERE clause. |
+| max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md)  and view the error logs by using `ErrorLogUrls`. After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed. <br />**NOTE** <br /> <ul><li>Error data rows do not include data rows that are filtered out by the WHERE clause.</li><li>This parameter, along with the next parameter `max_filter_ratio`, controls the maximum number of error data records. When `max_filter_ratio` is not set, the value of this parameter takes effect. When `max_filter_ratio` is set, the load job pauses as soon as the number of error data record reaches either the threshold set by this parameter or the `max_filter_ratio` parameter.</li></ul>|
+|max_filter_ratio|No|The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `0`.<br/>We recommend that you retain the default value `0`. This way, if unqualified data records are detected, the load job pauses, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.  <br/>**NOTE**<br/><ul><li>Unqualified data records do not include data records that are filtered out by the WHERE clause.</li><li>This parameter, along with the last parameter `max_error_number`, controls the maximum number of error data records. When this parameter is not set, the value of the `max_error_number` parameter takes effect. When this parameter is set, the load job pauses as soon as the number of error data records reaches either the threshold set by this parameter or the `max_error_number` parameter.</li></ul>|
 | strict_mode               | No           | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. |
 | timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
 | merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).<br />**NOTE**<br />Only tables that use the Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
@@ -175,32 +176,26 @@ If `property.group.id` is not specified, StarRocks generates a random value base
   - SCRAM-SHA-256 and SCRAM-SHA-512
   - OAUTHBEARER
 
+  **Examples:**
+
   - Access Kafka using the SSL security protocol:
 
     ```SQL
-    -- Specify the security protocol as SSL.
-    "property.security.protocol" = "ssl"
-    -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
+    "property.security.protocol" = "ssl", -- Specify the security protocol as SSL.
+    "property.ssl.ca.location" = "FILE:ca-cert", -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
     -- If the Kafka server enables client authentication, the following three parameters are also required:
-    -- Path to the client's public key used for authentication.
-    "property.ssl.certificate.location" = "FILE:client.pem"
-    -- Path to the client's private key used for authentication.
-    "property.ssl.key.location" = "FILE:client.key"
-    -- Password for the client's private key.
-    "property.ssl.key.password" = "xxxxxx"
+    "property.ssl.certificate.location" = "FILE:client.pem", -- Path to the client's public key used for authentication.
+    "property.ssl.key.location" = "FILE:client.key", -- Path to the client's private key used for authentication.
+    "property.ssl.key.password" = "xxxxxx" -- Password for the client's private key.
     ```
 
   - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/PLAIN authentication mechanism:
 
     ```SQL
-    -- Specify the security protocol as SASL_PLAINTEXT
-    "property.security.protocol" = "SASL_PLAINTEXT"
-    -- specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism
-    "property.sasl.mechanism" = "PLAIN" 
-    -- SASL username
-    "property.sasl.username" = "admin"
-    -- SASL password
-    "property.sasl.password" = "xxxxxx"
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specify the security protocol as SASL_PLAINTEXT.
+    "property.sasl.mechanism" = "PLAIN", -- Specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism.
+    "property.sasl.username" = "admin",  -- SASL username.
+    "property.sasl.password" = "xxxxxx"  -- SASL password.
     ```
 
 ### FE and BE configuration items
@@ -414,6 +409,7 @@ PROPERTIES
 (
 "max_batch_rows" = "100000",-- The value of max_batch_rows multiplied by 10 equals the error detection window.
 "max_error_number" = "100" -- The maximum number of error data rows allowed within an error detection window.
+)
 FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",

@@ -63,7 +63,9 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // TABLE_CATALOG
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
-                fill_data_column_with_null(column.get());
+                const char* str = "def";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }

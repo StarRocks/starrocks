@@ -19,6 +19,7 @@
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
@@ -44,7 +45,6 @@ OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*>
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }
-    _row_reader_options.useWriterTimezone();
 
     // some caller of `OrcChunkReader` may pass nullptr
     // This happens when there are extra fields in broker load specification
@@ -62,6 +62,7 @@ OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*>
 
 Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
+        _reader_options.setMemoryPool(*getOrcMemoryPool());
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
         return init(std::move(reader));
     } catch (std::exception& e) {
@@ -363,7 +364,7 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
     return Status::OK();
 }
 
-static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
+void OrcChunkReader::_try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     auto is_integer_type = [](PrimitiveType t) { return g_starrocks_int_type.count(t) > 0; };
     auto is_decimal_type = [](PrimitiveType t) { return g_starrocks_decimal_type.count(t) > 0; };
 
@@ -396,6 +397,13 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
         } else {
             from->type = PrimitiveType::TYPE_DECIMAL32;
         }
+    } else if (_broker_load_mode && !_strict_mode &&
+               (t1 == PrimitiveType::TYPE_VARCHAR || t1 == PrimitiveType::TYPE_CHAR) &&
+               (t2 == PrimitiveType::TYPE_VARCHAR || t2 == PrimitiveType::TYPE_CHAR)) {
+        // For broker load, the orc field length is larger than the maximum length of the starrocks field
+        // will cause load failure in non-strict mode. Here we keep the maximum length of the orc field
+        // the same as the maximum length of the starrocks field.
+        from->len = to.len;
     } else {
         // nothing to do.
     }
@@ -549,7 +557,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(),
+        _fill_functions[src_index](cvb, col, 0, _batch->numElements, _src_types[src_index],
                                    _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this);
     }
 
@@ -916,9 +924,17 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
     auto* ref = down_cast<ColumnRef*>(slot);
-    SlotId slot_id = ref->slot_id();
-    std::string name = _slot_id_to_desc[slot_id]->col_name();
-    orc::PredicateDataType pred_type = _supported_primitive_types[slot->type().type];
+    const SlotId& slot_id = ref->slot_id();
+    const std::string& name = _slot_id_to_desc[slot_id]->col_name();
+
+    orc::PredicateDataType pred_type = orc::PredicateDataType::LONG;
+    auto type_it = _supported_primitive_types.find(slot->type().type);
+    if (type_it != _supported_primitive_types.end()) {
+        pred_type = type_it->second;
+    } else {
+        return Status::NotSupported(
+                fmt::format("orc chunk reader don't support {}.", std::to_string(slot->type().type)));
+    }
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
         Expr* lit = conjunct->get_child(1);

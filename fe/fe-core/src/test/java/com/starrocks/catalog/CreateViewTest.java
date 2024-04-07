@@ -125,4 +125,31 @@ public class CreateViewTest {
                 view.getInlineViewDef());
         Assert.assertNotNull(view.getColumn("site_id"));
     }
+
+    @Test
+    public void testCreateViewWithWindowFunctionIgnoreNulls() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("create table sample_data (\n" +
+                        "    timestamp DATETIME not null,\n" +
+                        "    username string,\n" +
+                        "    price int null\n" + ")ENGINE=OLAP \n" +
+                        "DISTRIBUTED BY HASH(`timestamp`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\");")
+                .withView("create view test_ignore_nulls as select\n" +
+                        "    timestamp,\n" +
+                        "    username,\n" +
+                        "    last_value(price ignore nulls) over (partition by username) as price\n" +
+                        "from sample_data;");
+
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr()
+                .getDb("test").getTable("test_ignore_nulls");
+        Assert.assertTrue(view instanceof View);
+        String str = ((View) view).getInlineViewDef();
+        Assert.assertEquals(str, "SELECT `test`.`sample_data`.`timestamp`, `test`.`sample_data`.`username`, " +
+                "last_value(`test`.`sample_data`.`price` ignore nulls) OVER " +
+                "(PARTITION BY `test`.`sample_data`.`username` ) AS `price`\n" +
+                "FROM `test`.`sample_data`");
+    }
 }

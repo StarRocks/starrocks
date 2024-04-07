@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-Stream Load 是一种基于 HTTP 协议的同步导入方式，支持将本地文件或数据流导入到 StarRocks 中。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。有关 Stream Load 的应用场景、使用限制、基本原理、以及支持的数据文件格式等信息，请参见[通过 HTTP Push 从本地文件系统或流式数据源导入数据](../../../loading/StreamLoad.md)。
+Stream Load 是一种基于 HTTP 协议的同步导入方式，支持将本地文件或数据流导入到 StarRocks 中。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。有关 Stream Load 的应用场景、使用限制、基本原理、以及支持的数据文件格式等信息，请参见[使用 Stream Load 从本地导入](../../../loading/StreamLoad.md#使用-stream-load-从本地导入)。
 
 需要注意的是，Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
 

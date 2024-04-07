@@ -55,6 +55,8 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
+    size_t byte_size(size_t from, size_t size) const override;
+
     void reserve(size_t n) override;
 
     void resize(size_t n) override;
@@ -134,7 +136,7 @@ public:
 
     size_t container_memory_usage() const override;
 
-    size_t element_memory_usage(size_t from, size_t size) const override;
+    size_t reference_memory_usage(size_t from, size_t size) const override;
 
     void swap_column(Column& rhs) override;
 

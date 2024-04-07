@@ -508,7 +508,7 @@ Run the following command to query UDFs:
 SHOW FUNCTIONS;
 ```
 
-For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md).
+For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md).
 
 ## Drop UDF
 
@@ -518,7 +518,7 @@ Run the following command to drop a UDF:
 DROP FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-For more information, see [DROP FUNCTION](../sql-statements/data-definition/drop-function.md).
+For more information, see [DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md).
 
 ## Mapping between SQL data types and Java data types
 
@@ -535,10 +535,12 @@ For more information, see [DROP FUNCTION](../sql-statements/data-definition/drop
 
 ## Parameter settings
 
-Configure the following environment variable in the **be/conf/hadoop_env.sh** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage. You can also configure other parameters in the file.
+Configure the following environment variable in the **be/conf/be.conf** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage. If you use JDK 8, configure `JAVA_OPTS`. If you use JDK 9 or later, configure `JAVA_OPTS_FOR_JDK_9_AND_LATER`.
 
 ```Bash
-export LIBHDFS_OPTS="-Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
+JAVA_OPTS="-Xmx12G"
+
+JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
 ## FAQ

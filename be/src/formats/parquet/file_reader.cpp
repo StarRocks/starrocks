@@ -192,8 +192,14 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
                 // is partition column
                 auto* const_column =
                         vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(ctx.partition_values[col_idx]);
-                (*min_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
-                (*max_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    (*min_chunk)->columns()[i]->append_nulls(1);
+                    (*max_chunk)->columns()[i]->append_nulls(1);
+                } else {
+                    (*min_chunk)->columns()[i]->append(*data_column, 0, 1);
+                    (*max_chunk)->columns()[i]->append(*data_column, 0, 1);
+                }
             }
         } else if (!column_meta->__isset.statistics) {
             // statistics not exist in parquet file
@@ -425,7 +431,7 @@ Status FileReader::_init_group_readers() {
             StatusOr<bool> st = _filter_group(_file_metadata->t_metadata().row_groups[i]);
             if (!st.ok()) return st.status();
             if (st.value()) {
-                LOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+                DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
                 continue;
             }
 

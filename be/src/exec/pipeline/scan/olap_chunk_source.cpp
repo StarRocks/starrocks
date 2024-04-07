@@ -8,6 +8,7 @@
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/map_util.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -256,6 +257,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+
+    auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
+
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
@@ -291,6 +295,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(),
                                                _runtime_state->use_column_pool()));
+    auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
 

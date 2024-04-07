@@ -33,6 +33,7 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -676,6 +677,11 @@ public class ReportHandler extends Daemon {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Map<Long, DiskInfo> hashToDiskInfo = new HashMap<>();
+        for (DiskInfo diskInfo : GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().getBackend(backendId).getDisks().values()) {
+            hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
+        }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
@@ -751,8 +757,22 @@ public class ReportHandler extends Daemon {
 
                     long currentBackendReportVersion =
                             GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId);
-                    if (backendReportVersion < currentBackendReportVersion) {
-                        continue;
+                    DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
+
+                    // Only check reportVersion when the disk is online,
+                    // as there will be no tablet changes on an unavailable disk
+                    if (diskInfo != null
+                            && diskInfo.getState() == DiskInfo.DiskState.ONLINE
+                            && backendReportVersion < currentBackendReportVersion) {
+                        LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
+                                "latest report version: {}", backendId, backendReportVersion, currentBackendReportVersion);
+                        break DB_TRAVERSE;
+                    } else if (diskInfo == null) {
+                        LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
+                    } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
+                        LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
                     }
 
                     ReplicaState state = replica.getState();
@@ -1356,7 +1376,7 @@ public class ReportHandler extends Daemon {
                 TabletStatus status =
                         tablet.getColocateHealthStatus(visibleVersion, replicationNum, backendsSet);
                 if (status == TabletStatus.HEALTHY) {
-                    throw new MetaNotFoundException("colocate tablet [" + tableId + "] is healthy");
+                    throw new MetaNotFoundException("colocate tablet [" + tabletId + "] is healthy");
                 } else {
                     return;
                 }

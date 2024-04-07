@@ -45,7 +45,7 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 600000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 }
 

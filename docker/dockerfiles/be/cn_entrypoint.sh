@@ -160,11 +160,11 @@ if [[ "x$svc_name" == "x" ]] ; then
     exit 1
 fi
 
+update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
 trap exit_clean SIGTERM
 
-update_conf_from_configmap
 log_stderr "run start_cn.sh"
 
 addition_args=

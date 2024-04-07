@@ -441,6 +441,12 @@ BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
     ;
 
+// Prevent recognize string:         .123somelatin AS ((.123), DECIMAL_LITERAL), ((somelatin), IDENTIFIER)
+// it must recoginze:                .123somelatin AS ((.), DOT), (123somelatin, IDENTIFIER)
+DOT_IDENTIFIER
+    : '.' DIGIT_IDENTIFIER
+    ;
+
 fragment EXPONENT
     : 'E' [+-]? DIGIT+
     ;

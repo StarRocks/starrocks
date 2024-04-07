@@ -84,7 +84,7 @@ public:
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->byte_size(from, size) + _null_column->Column::byte_size(from, size);
+        return _data_column->byte_size(from, size) + _null_column->byte_size(from, size);
     }
 
     size_t byte_size(size_t idx) const override { return _data_column->byte_size(idx) + sizeof(bool); }
@@ -109,10 +109,7 @@ public:
         _null_column->assign(n, idx);
     }
 
-    void remove_first_n_values(size_t count) override {
-        _data_column->remove_first_n_values(count);
-        _null_column->remove_first_n_values(count);
-    }
+    void remove_first_n_values(size_t count) override;
 
     void append_datum(const Datum& datum) override;
 
@@ -238,9 +235,9 @@ public:
         return _data_column->container_memory_usage() + _null_column->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
+    size_t reference_memory_usage(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->element_memory_usage(from, size) + _null_column->element_memory_usage(from, size);
+        return _data_column->reference_memory_usage(from, size) + _null_column->reference_memory_usage(from, size);
     }
 
     void swap_column(Column& rhs) override {

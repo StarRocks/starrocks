@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# BITMAP
+# bitmap
 
 这里通过一个简单的示例来介绍 Bitmap 中的几个聚合函数的用法，具体的函数定义以及更多 Bitmap 函数请参考 [bitmap-functions](../bitmap-functions/bitmap_and.md)。
 
@@ -114,7 +114,7 @@ bitmap_column_to_count 是 bitmap 类型的列，filter_column 是变化的维�
 
 ## 示例
 
-下面的 SQL 以上面的 pv_bitmap table 为例。
+下面的 SQL 以上面的 `pv_bitmap` table 为例。
 
 计算 user_id 的去重值:
 

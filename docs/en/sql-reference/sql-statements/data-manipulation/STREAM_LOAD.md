@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Load data from a local file system or a streaming data source using HTTP PUT](../../../loading/StreamLoad.md).
+StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Loading from a local file system via Stream Load](../../../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
 
 Note that Stream Load operations not only load data into StarRocks tables but also update the data in the materialized views that are created on the tables.
 

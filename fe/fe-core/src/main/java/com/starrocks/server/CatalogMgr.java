@@ -36,7 +36,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,7 +51,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
-    private final Map<String, Catalog> catalogs = new HashMap<>();
+    private final Map<String, Catalog> catalogs = Maps.newConcurrentMap();
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
@@ -292,12 +291,7 @@ public class CatalogMgr {
     }
 
     public long getCatalogCount() {
-        readLock();
-        try {
-            return catalogs.size();
-        } finally {
-            readUnlock();
-        }
+        return catalogs.size();
     }
 
     public class CatalogProcNode implements ProcDirInterface {

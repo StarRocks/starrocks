@@ -1195,7 +1195,7 @@ PARALLEL_TEST(MapColumnTest, test_assign) {
     ASSERT_EQ(0, c0->values_column()->size());
 }
 
-PARALLEL_TEST(MapColumnTest, test_element_memory_usage) {
+PARALLEL_TEST(MapColumnTest, test_reference_memory_usage) {
     auto column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                     NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                     UInt32Column::create());
@@ -1205,17 +1205,6 @@ PARALLEL_TEST(MapColumnTest, test_element_memory_usage) {
     column->append_datum(DatumMap{{1, 2}});
     column->append_datum(DatumMap{{3, 4}, {5, 6}});
 
-    ASSERT_EQ(42, column->Column::element_memory_usage());
-
-    std::vector<size_t> element_mem_usages = {4, 14, 24};
-    size_t element_num = element_mem_usages.size();
-    for (size_t start = 0; start < element_num; start++) {
-        size_t expected_usage = 0;
-        ASSERT_EQ(0, column->element_memory_usage(start, 0));
-        for (size_t size = 1; start + size <= element_num; size++) {
-            expected_usage += element_mem_usages[start + size - 1];
-            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
-        }
-    }
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 } // namespace starrocks::vectorized

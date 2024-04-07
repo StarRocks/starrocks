@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 Deletes data rows from a table based on the specified conditions. The table can be a partitioned or non-partitioned table.
 
-For Duplicate Key, Aggregate Key, and Unique Key tables, you can delete data from specified partitions. However, the Primary Key table does not allow you to do so. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery.
+For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can delete data from specified partitions. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery. 
 
 ## Usage notes
 
@@ -37,7 +37,7 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 | `column_name`    | Yes      | The column you want to use as the DELETE condition. You can specify one or more columns.   |
 | `op`             | Yes      | The operator used in the DELETE condition. The supported operators are `=`, `>`, `<`, `>=`, `<=`, `!=`, `IN`, and `NOT IN`. |
 
-### Limits
+### Limits and usage notes
 
 - For Duplicate Key tables, you can use **any column** as the DELETE condition. For Aggregate tables and Unique Key tables, only **key columns** can be used as the DELETE condition.
 
@@ -166,12 +166,11 @@ DELETE FROM <table_name> WHERE <condition>;
 | `table_name`     | Yes      | The table from which you want to delete data.   |
 | `condition`      | Yes      | The conditions based on which to delete data. You can specify one or more conditions. This parameter is required to prevent misoperations from deleting the entire table. |
 
-### Limits
+### Limits and usage notes
 
+- Primary Key tables do not support deleting data from a specified partition, for example, `DELETE FROM <table_name> PARTITION <partition_id> WHERE <where_condition>`.
 - The following comparison operators are supported: `=`, `>`, `<`, `>=`, `<=`, `!=`, `IN`, `NOT IN`.
-
 - The following logical operators are supported: `AND` and `OR`.
-
 - You cannot use the DELETE statement to run concurrent DELETE operations or to delete data at data loading. If you perform such operations, the atomicity, consistency, isolation, and durability (ACID) of transactions may not be ensured.
 
 ### Examples
@@ -363,3 +362,7 @@ select * from score_board;
 +------+------+-------+
 2 rows in set (0.00 sec)
 ```
+
+## References
+
+[SHOW DELETE](./SHOW_DELETE.md): queries historical DELETE operations that were successfully performed on Duplicate Key tables, Aggregate tables, and Unique Key tables.

@@ -19,6 +19,31 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
+    @Test
+    public void testIsNullPredicatePushdownClear() throws Exception {
+        {
+            String sql = "with cte_tbl as (\n" +
+                    "  select v1, count(distinct v2) as clickcnt from " +
+                    "(select * from t0) t0 join t1 on t0.v1= t1.v4 where 1 = 1 and t0.v2 in (select v7 from t2) group by v1\n" +
+                    ") select t3.* from (select * from t3 left join cte_tbl on v10 = v1 where v11 = 11) t3 where 1 = 1 ";
+            String plan = getFragmentPlan(sql);
+            // should be LEFT OUTER JOIN, not INNER JOIN
+            assertContains(plan, "13:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN");
+        }
+
+        {
+            // remove where 1 = 1
+            String sql = "with cte_tbl as (\n" +
+                    "  select v1, count(distinct v2) as clickcnt from " +
+                    "(select * from t0) t0 join t1 on t0.v1= t1.v4 where 1 = 1 and t0.v2 in (select v7 from t2) group by v1\n" +
+                    ") select t3.* from (select * from t3 left join cte_tbl on v10 = v1 where v11 = 11) t3";
+            String plan = getFragmentPlan(sql);
+            // should be LEFT OUTER JOIN, not INNER JOIN
+            assertContains(plan, "13:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN");
+        }
+    }
 
     @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
@@ -2784,5 +2809,41 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 7: concat = 8: concat");
+    }
+
+    @Test
+    public void testTopFragmentOnComputeNode() throws Exception {
+        String sql = "select t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
+                "\n" +
+                "  RESULT SINK");
+        
+        try {
+            connectContext.getSessionVariable().setPreferComputeNode(true);
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: v1\n" +
+                    "  PARTITION: UNPARTITIONED\n" +
+                    "\n" +
+                    "  RESULT SINK");
+        } finally {
+            connectContext.getSessionVariable().setPreferComputeNode(false);
+        }
+    }
+
+    @Test
+    public void testJoinOnAnonymousSubquery() throws Exception {
+        String query = "select 'a' " +
+                "FROM t0 join t1 on t0.v2 = t1.v5 and t1.v6 in ((((" +
+                "(select v8 from t2)" +
+                "))))";
+        String plan = getFragmentPlan(query);
+        assertContains(plan, "HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 6: v6 = 8: v8");
     }
 }

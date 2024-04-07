@@ -77,6 +77,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -692,6 +693,15 @@ public class AstToStringBuilder {
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
+            }  else if (IGNORE_NULL_WINDOW_FUNCTION.contains(functionName)) {
+                List<String> p = node.getChildren().stream().map(child -> {
+                    String str = visit(child);
+                    if (child instanceof SlotRef && node.getIgnoreNulls()) {
+                        str += " ignore nulls";
+                    }
+                    return str;
+                }).collect(Collectors.toList());
+                sb.append(Joiner.on(", ").join(p)).append(")");
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");

@@ -39,7 +39,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -91,6 +90,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -101,7 +101,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -142,6 +141,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -181,6 +181,7 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -189,7 +190,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
-import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -3655,8 +3655,24 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (!properties.isEmpty()) {
-                // here, all properties should be checked
-                throw new DdlException("Unknown properties: " + properties);
+                // analyze properties
+                List<SetVar> setListItems = Lists.newArrayList();
+                for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                        throw new AnalysisException("Analyze materialized properties failed " +
+                                "because unknown properties: " + properties +
+                                ", please add `session.` prefix if you want add session variables for mv(" +
+                                "eg, \"session.query_timeout\"=\"30000000\").");
+                    }
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    SetVar variable = new SetVar(varKey, new StringLiteral(entry.getValue()));
+                    setListItems.add(variable);
+                }
+                SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+
+                // set properties if there are no exceptions
+                materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage(), e);
@@ -3686,6 +3702,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Leave some clean up work to {@link MaterializedView#onDrop}
+     */
     @Override
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         Database db = getDb(stmt.getDbName());
@@ -3700,33 +3719,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
-            MaterializedView mv = (MaterializedView) table;
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
-            CachingMvPlanContextBuilder.getInstance().invalidateFromCache(mv);
-            List<BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
-            if (baseTableInfos != null) {
-                for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Table baseTable = baseTableInfo.getTable();
-                    if (baseTable != null) {
-                        MvId mvId = new MvId(db.getId(), table.getId());
-                        baseTable.removeRelatedMaterializedView(mvId);
-                        if (!baseTable.isLocalTable()) {
-                            // remove relatedMaterializedViews for connector table
-                            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
-                                    removeConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                            baseTableInfo.getDbName(),
-                                            baseTableInfo.getTableIdentifier(),
-                                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                                    Sets.newHashSet(mvId)).build());
-                        }
-                    }
-                }
-            }
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
-            if (refreshTask != null) {
-                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
-            }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
@@ -3818,7 +3811,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         if (refreshTask != null) {
-            taskManager.killTask(refreshTask.getName(), false);
+            taskManager.killTask(refreshTask.getName(), true);
         }
     }
 
@@ -3861,20 +3854,23 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.dropTable(oldTableName);
         db.createTable(olapTable);
-        disableMaterializedViewForRenameTable(db, olapTable);
+        inactiveRelatedMaterializedView(db, olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(table.getName()));
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         editLog.logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
     }
 
-    private void disableMaterializedViewForRenameTable(Database db, OlapTable olapTable) {
+    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
-                mv.setActive(false);
+                LOG.warn("Setting the materialized view {}({}) to invalid because {}",
+                        mv.getName(), mv.getId(), reason);
+                mv.setInactiveAndReason(reason);
+                inactiveRelatedMaterializedView(db, mv,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
@@ -3894,7 +3890,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.createTable(table);
-            disableMaterializedViewForRenameTable(db, table);
+            inactiveRelatedMaterializedView(db, table, "base-table renamed: " + tableName);
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
@@ -4304,7 +4300,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-                editLog.logSetHasForbitGlobalDict(info);
+                editLog.logSetHasForbiddenGlobalDict(info);
             }
         } finally {
             db.readUnlock();
@@ -4340,7 +4336,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+            if (opCode == OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT) {
                 String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {
@@ -4381,6 +4377,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
                 }
             }
+        } catch (Exception ex) {
+            LOG.warn("The replay log failed and this log was ignored.", ex);
         } finally {
             db.writeUnlock();
         }

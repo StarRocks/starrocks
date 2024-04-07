@@ -105,6 +105,9 @@ public class AuditEvent {
     @AuditField(value = "PendingTimeMs")
     public long pendingTimeMs = -1;
 
+    @AuditField(value = "IsForwardToLeader")
+    public boolean isForwardToLeader = false;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -241,6 +244,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPendingTimeMs(long pendingTimeMs) {
             auditEvent.pendingTimeMs = pendingTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder setIsForwardToLeader(boolean isForwardToLeader) {
+            auditEvent.isForwardToLeader = isForwardToLeader;
             return this;
         }
 

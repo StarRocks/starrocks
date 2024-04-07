@@ -147,21 +147,26 @@ Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<
     }
     std::vector<string> path_vec = strings::Split(config_path, ";", strings::SkipWhitespace());
     for (auto& item : path_vec) {
-        if (item.empty()) {
-            continue;
-        }
-        // Remove last slash if it exists$
-        auto it = item.end() - 1;
-        if (*it == '/') {
-            item.erase(it);
-        }
-        // Check the parent path
-        std::filesystem::path local_path(item);
-        if (local_path.has_parent_path() && !std::filesystem::exists(local_path.parent_path())) {
+        StripWhiteSpace(&item);
+        item.erase(item.find_last_not_of('/') + 1);
+        if (item.empty() || item[0] != '/') {
             LOG(WARNING) << "invalid block cache path. path=" << item;
             continue;
         }
-        paths->emplace_back(std::move(local_path.string()));
+
+        Status status = FileSystem::Default()->create_dir_if_missing(item);
+        if (!status.ok()) {
+            LOG(WARNING) << "block cache path can not be created. path=" << item;
+            continue;
+        }
+
+        string canonicalized_path;
+        status = FileSystem::Default()->canonicalize(item, &canonicalized_path);
+        if (!status.ok()) {
+            LOG(WARNING) << "block cache path can not be canonicalized. may be not exist. path=" << item;
+            continue;
+        }
+        paths->emplace_back(canonicalized_path);
     }
     if ((path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
         LOG(WARNING) << "fail to parse block_cache_disk_path config. value=[" << config_path << "]";

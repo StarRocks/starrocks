@@ -1,4 +1,5 @@
 ---
+keywords: ['xiugai'] 
 displayed_sidebar: "Chinese"
 ---
 
@@ -27,7 +28,7 @@ ALTER DATABASE <db_name> RENAME <new_db_name>
 ### 设置数据库的副本数量配额
 
 ```sql
-ALTER DATABASE db_name SET REPLICA QUOTA <quota>
+ALTER DATABASE <db_name> SET REPLICA QUOTA <quota>
 ```
 
 说明：
@@ -39,23 +40,23 @@ ALTER DATABASE db_name SET REPLICA QUOTA <quota>
 
 ## 示例
 
-1. 设置指定数据库数据量配额
+1. 设置指定数据库数据量配额。
 
     ```SQL
-    ALTER DATABASE example_db SET DATA QUOTA 10995116277760;
+    ALTER DATABASE example_db SET DATA QUOTA 10995116277760B;
     -- 上述单位为字节，等价于下面的语句
     ALTER DATABASE example_db SET DATA QUOTA 10T;
     ALTER DATABASE example_db SET DATA QUOTA 100G;
     ALTER DATABASE example_db SET DATA QUOTA 200M;
     ```
 
-2. 将数据库 example_db 重命名为 example_db2
+2. 将数据库 `example_db` 重命名为 `example_db2`。
 
     ```SQL
     ALTER DATABASE example_db RENAME example_db2;
     ```
 
-3. 设定指定数据库副本数量配额
+3. 设定指定数据库副本数量配额。
 
     ```SQL
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;

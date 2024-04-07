@@ -98,7 +98,17 @@ Parameters:
 
 * **EXTERNAL:** This keyword indicates that the table to be created is an external table.
 * **host:** This parameter specifies the IP address of the leader FE node of the destination StarRocks cluster.
-* **port:**  This parameter specifies the RPC port of the leader FE node of the destination StarRocks cluster. You can set this parameter based on the rpc_port configuration in the **fe/fe.conf** file.
+* **port:**  This parameter specifies the RPC port of the FE node of the destination StarRocks cluster.
+
+  :::note
+
+  To ensure that the source cluster to which the StarRocks external tables belong can access the destination StarRocks cluster, you must configure your network and firewall to allow access to the following ports:
+
+  * The RPC port of the FE node. See `rpc_port` in the FE configuration file **fe/fe.conf**. The default RPC port is `9020`.
+  * The bRPC port of the BE node. See `brpc_port` in the BE configuration file **be/be.conf**. The default bRPC port is `8060`.
+
+  :::
+
 * **user:** This parameter specifies the username used to access the destination StarRocks cluster.
 * **password:** This parameter specifies the password used to access the destination StarRocks cluster.
 * **database:** This parameter specifies the database to which the destination table belongs.
@@ -591,7 +601,7 @@ A Hive resource corresponds to a Hive cluster. You must configure the Hive clust
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 
@@ -743,7 +753,7 @@ select count(*) from profile_wos_p7;
    1. `fs.s3a.access.key`: the AWS access key ID.
    2. `fs.s3a.secret.key`: the AWS secret key.
    3. `fs.s3a.endpoint`: the AWS S3 endpoint to connect to.
-   4. `fs.s3a.connection.maximu``m`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
+   4. `fs.s3a.connection.maximum`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
 
 ## (Deprecated) Iceberg external table
 
@@ -781,7 +791,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES (
    "type" = "iceberg",
    "iceberg.catalog.type" = "HIVE",
-   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083" 
 );
 ~~~
 
@@ -950,7 +960,7 @@ Execute the following statement to create a Hudi resource named `hudi0`:
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 

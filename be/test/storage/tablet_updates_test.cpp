@@ -2315,13 +2315,34 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset_schema_change_sort_key(_tablet, keys)).ok());
 
     tablet_with_sort_key1->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(tablet_with_sort_key1->updates()->reorder_from(_tablet, 4).ok());
+    auto chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_with_sort_key1->tablet_schema());
+    for (int i = 0; i < tablet_with_sort_key1->tablet_schema().num_columns(); ++i) {
+        const auto& new_column = tablet_with_sort_key1->tablet_schema().column(i);
+        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
+        if (column_index >= 0) {
+            column_mapping->ref_column = column_index;
+            column_mapping->ref_base_reader_column_index = i;
+        }
+    }
+
+    ASSERT_TRUE(tablet_with_sort_key1->updates()->reorder_from(_tablet, 4, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key1(tablet_with_sort_key1, 4, keys));
 
     const auto& tablet_with_sort_key2 = create_tablet_with_sort_key(rand(), rand(), {2});
     tablet_with_sort_key2->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4).ok());
+    chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_with_sort_key2->tablet_schema());
+    for (int i = 0; i < tablet_with_sort_key2->tablet_schema().num_columns(); ++i) {
+        const auto& new_column = tablet_with_sort_key2->tablet_schema().column(i);
+        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
+        if (column_index >= 0) {
+            column_mapping->ref_column = column_index;
+            column_mapping->ref_base_reader_column_index = i;
+        }
+    }
+    ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4, chunk_changer.get()).ok());
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key2(tablet_with_sort_key2, 4, keys));
 }
 
@@ -3683,6 +3704,49 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         }
     }
     ASSERT_TRUE(count == keys.size());
+}
+
+TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
+    const int N = 10;
+    _tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<int64_t> keys2(N);
+    for (int i = 0; i < N; i++) {
+        keys2[i] = (i + 1) * 1000;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys2, nullptr, false, false));
+    }
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto version = i + 2;
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+    }
+    ASSERT_EQ(N * 2, read_tablet(_tablet, rowsets.size() + 1));
+
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_TRUE(_tablet->updates()->is_error());
+    config::enable_pindex_rebuild_in_compaction = false;
+    auto index_entry = StorageEngine::instance()->update_manager()->index_cache().get_or_create(_tablet->tablet_id());
+    auto& index = index_entry->value();
+    index.set_status(true, Status::InternalError("ut"));
+    _tablet->updates()->reset_error();
+    ASSERT_FALSE(_tablet->updates()->is_error());
+
+    ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    ASSERT_TRUE(_tablet->updates()->is_error());
 }
 
 } // namespace starrocks

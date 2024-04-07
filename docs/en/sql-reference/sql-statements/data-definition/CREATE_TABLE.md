@@ -36,6 +36,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 
 **col_name**: Column name.
 
+Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/Configuration.md) to `TRUE`.
+
 **col_type**: Column type. Specific column information, such as types and ranges:
 
 - TINYINT (1 byte): Ranges from -2^7 + 1 to 2^7 - 1.
@@ -143,11 +145,11 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
         "database" = "hive_db_name",
         "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
     )
     ```
 
-    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. hive.metastore.uris is the server address.
+    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. `hive.metastore.uris` is the server address.
 
 - For JDBC, specify the following properties:
 

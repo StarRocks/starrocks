@@ -139,6 +139,7 @@ public:
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     bool version_for_delete_predicate(const Version& version);
+    bool version_for_delete_predicate_unlocked(const Version& version);
     bool has_delete_predicates(const Version& version);
 
     // meta lock

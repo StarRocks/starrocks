@@ -145,5 +145,4 @@ public class SetStmtTest {
             Assert.assertEquals("10", var.getResolvedExpression().getStringValue());
         }
     }
-
 }

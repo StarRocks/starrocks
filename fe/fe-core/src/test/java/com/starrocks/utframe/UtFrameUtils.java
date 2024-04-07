@@ -221,7 +221,7 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
@@ -652,6 +652,11 @@ public class UtFrameUtils {
 
     public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
         return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
+    }
+
+    public static String getThriftDescTbl(ConnectContext ctx, String queryStr) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(ctx, queryStr);
+        return pair.second.getDescTbl().toThrift().toString();
     }
 
     // Lock all database before analyze

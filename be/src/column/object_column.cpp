@@ -17,7 +17,7 @@ size_t ObjectColumn<T>::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t byte_size = 0;
     for (size_t i = 0; i < size; ++i) {
-        byte_size += _pool[from + i].serialize_size();
+        byte_size += _pool[from + i].mem_usage();
     }
     return byte_size;
 }

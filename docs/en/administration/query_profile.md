@@ -22,11 +22,7 @@ set enable_profile = true;
 
 ## Access query profiles
 
-> **NOTE**
->
-> If you are using the Enterprise Edition of StarRocks, you can use StarRocks Manager to access and visualize your query profiles.
-
-If you are not, follow these steps to access your query profiles:
+Follow these steps to access your query profiles:
 
 1. Enter `http://<fe_ip>:<fe_http_port>` in your browser.
 2. On the page this is displayed, click **queries** on the top navigation pane.
@@ -183,7 +179,7 @@ A query profile encompasses a mass of metrics that show the details of the query
 ### Time consumed by operators
 
 - For the OlapScan and ConnectorScan operators, their time consumption is equivalent to `OperatorTotalTime + ScanTime`. Because the Scan operators perform I/O operations in the asynchronous I/O thread pool, ScanTime represents asynchronous I/O time.
-- The time consumption of the Exchange operator is equivalent to `OperatorTotalTime + NetworkTime`. Because the Exchange operator sends and receives data packages in the BRPC thread pool, NetworkTime represents the time consumed by network transmission.
+- The time consumption of the Exchange operator is equivalent to `OperatorTotalTime + NetworkTime`. Because the Exchange operator sends and receives data packages in the bRPC thread pool, NetworkTime represents the time consumed by network transmission.
 - For all other operators, their time cost is `OperatorTotalTime`.
 
 ### Metric merging and MIN/MAX
@@ -236,7 +232,7 @@ The **Profile Overview** page displays some summary metrics, including the total
 
 By clicking the card of an operator (a node), you can view its detailed information in the right pane of the page. There are three tabs:
 
-- **Node**:  core metrics of this operator.
+- **Node**: core metrics of this operator.
 - **Node Detail**: all metrics of this operator.
 - **Pipeline**: metrics of the pipeline to which the operator belongs. You do not need to pay much attention to this tab because it is related only to scheduling.
 
@@ -304,8 +300,8 @@ When the right child of Join is building a hash table, it creates a runtime filt
 
 The time cost of an Exchange operator consists of two parts: CPU time and network time. Network time relies on the system clock. Network time is calculated as follows:
 
-1. The sender records a `send_timestamp` before calling the BRPC interface to send the package.
-2. The receiver records a `receive_timestamp` after receiving the package from the BRPC interface (post-receiving processing time excluded).
+1. The sender records a `send_timestamp` before calling the bRPC interface to send the package.
+2. The receiver records a `receive_timestamp` after receiving the package from the bRPC interface (post-receiving processing time excluded).
 3. After the processing is complete, the receiver sends a response and calculates the network latency. The package transmission latency is equivalent to `receive_timestamp` - `send_timestamp`.
 
 If system clocks across machines are inconsistent, the time cost of the Exchange operator hits an exception.

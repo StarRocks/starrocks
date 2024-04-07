@@ -38,7 +38,7 @@ PROPERTIES ("key"="value", ...)
 CREATE EXTERNAL CATALOG hive_metastore_catalog
 PROPERTIES(
    "type"="hive", 
-   "hive.metastore.uris"="thrift://x.x.x.x:9083"
+   "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -62,7 +62,7 @@ CREATE EXTERNAL CATALOG iceberg_metastore_catalog
 PROPERTIES(
     "type"="iceberg",
     "iceberg.catalog.type"="hive",
-    "iceberg.catalog.hive.metastore.uris"="thrift://x.x.x.x:9083"
+    "iceberg.catalog.hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -85,7 +85,7 @@ PROPERTIES(
 CREATE EXTERNAL CATALOG hudi_metastore_catalog
 PROPERTIES(
     "type"="hudi",
-    "hive.metastore.uris"="thrift://x.x.x.x:9083"
+    "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -108,7 +108,7 @@ PROPERTIES(
 CREATE EXTERNAL CATALOG delta_metastore_catalog
 PROPERTIES(
     "type"="deltalake",
-    "hive.metastore.uris"="thrift://x.x.x.x:9083"
+    "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 

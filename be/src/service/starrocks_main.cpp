@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
     } else {
         conffile += "/conf/be.conf";
     }
-    if (!starrocks::config::init(conffile.c_str(), true)) {
+    if (!starrocks::config::init(conffile.c_str())) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
@@ -179,15 +179,17 @@ int main(int argc, char** argv) {
         cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
 
         std::vector<std::string> paths;
-        auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
-        }
-        for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+        if (starrocks::config::block_cache_disk_size > 0) {
+            auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
+            if (!parse_res.ok()) {
+                LOG(FATAL) << "parse config block cache disk path failed, path="
+                           << starrocks::config::block_cache_disk_path;
+                exit(-1);
+            }
+            for (auto& p : paths) {
+                cache_options.disk_spaces.push_back(
+                        {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+            }
         }
         cache_options.meta_path = starrocks::config::block_cache_meta_path;
         cache_options.block_size = starrocks::config::block_cache_block_size;

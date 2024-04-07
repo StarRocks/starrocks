@@ -33,6 +33,10 @@ public class SubqueryRelation extends QueryRelation {
         return alias == null ? "anonymous" : alias.toString();
     }
 
+    public boolean isAnonymous() {
+        return alias == null;
+    }
+
     @Override
     public List<Expr> getOutputExpression() {
         return this.queryStatement.getQueryRelation().getOutputExpression();

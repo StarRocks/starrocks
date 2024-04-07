@@ -2543,7 +2543,7 @@ Status StringFunctions::regexp_extract_prepare(starrocks_udf::FunctionContext* c
 
     state->options = std::make_unique<re2::RE2::Options>();
     state->options->set_log_errors(false);
-    state->options->set_longest_match(true);
+    state->options->set_longest_match(false);
     state->options->set_dot_nl(true);
 
     // go row regex

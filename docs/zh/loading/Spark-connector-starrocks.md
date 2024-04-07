@@ -16,8 +16,9 @@ StarRocks 提供 Apache Spark™ 连接器 (StarRocks Connector for Apache Spark
 
 | Connector | Spark           | StarRocks | Java  | Scala |
 |----------|-----------------|-----------|-------| ---- |
-| 1.1.1 | 3.2, 3.3, 3.4 | 2.5 及以上 | 8 | 2.12 |
-| 1.1.0    | 3.2, 3.3, 3.4   | 2.5 及以上   | 8     | 2.12 |
+| 1.1.2    | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上   | 8    | 2.12  |
+| 1.1.1    | 3.2, 3.3, 3.4   | 2.5 及以上 | 8     | 2.12 |
+| 1.1.0    | 3.2, 3.3, 3.4   | 2.5 及以上 | 8     | 2.12 |
 
 > **注意**
 >
@@ -133,6 +134,7 @@ connector jar包的命名格式如下
   | StringType      | CHAR                                                         |
   | StringType      | VARCHAR                                                      |
   | StringType      | STRING                                                       |
+  | StringType      | JSON                                                       |
   | DateType        | DATE                                                         |
   | TimestampType   | DATETIME                                                     |
   | ArrayType       | ARRAY <br /> **说明:** <br /> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#导入至-array-列). |

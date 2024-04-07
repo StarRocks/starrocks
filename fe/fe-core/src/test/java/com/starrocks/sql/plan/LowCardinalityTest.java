@@ -1837,4 +1837,59 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  output: sum(24: fee_zb)\n" +
                 "  |  group by: 54: c_mr");
     }
+
+    @Test
+    public void testInformationFunc() throws Exception {
+        String sql = "select if(CURRENT_USER = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:SORT\n" +
+                "  |  order by: <slot 9> 9: if ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 9> : if(CURRENT_USER() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
+    }
+
+    @Test
+    public void testJoinWithMinMaxAgg() throws Exception {
+        String sql = "\n" +
+                "\n" +
+                "with agged_supplier as (\n" +
+                "    select S_NAME, max(S_ADDRESS) as mx_addr from supplier_nullable group by S_NAME\n" +
+                "),\n" +
+                "agged_supplier_1 as (\n" +
+                "    select l.S_NAME, l.mx_addr mx_addr from agged_supplier l left join " +
+                "[shuffle] supplier_nullable r on l.S_NAME=r.S_NAME\n" +
+                "),\n" +
+                "agged_supplier_2 as (\n" +
+                "  select S_NAME, if(mx_addr = 'key', 'key2', S_NAME) mx_addr from agged_supplier_1 l\n" +
+                "),\n" +
+                "agged_supplier_4 as (\n" +
+                "  select S_NAME, mx_addr from agged_supplier_2 l group by S_NAME,mx_addr\n" +
+                "),\n" +
+                "agged_supplier_5 as (\n" +
+                "    select l.S_NAME, l.mx_addr from agged_supplier_4 l join supplier_nullable r\n" +
+                ")\n" +
+                "select l.S_NAME,l.mx_addr from agged_supplier_5 l \n" +
+                "left join [shuffle] supplier_nullable z on l.S_NAME = z.S_NAME and l.mx_addr = z.S_ADDRESS\n" +
+                ";";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: max[([91: S_ADDRESS, VARCHAR, true]); args: VARCHAR; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                "  |  group by: [90: S_NAME, CHAR, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * S_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+    }
+
+
+    @Test
+    public void testNestedStringFunc() throws Exception {
+        String sql = "SELECT CASE WHEN S_ADDRESS = '' THEN '' ELSE SUBSTR(MD5(S_ADDRESS), 1, 3) END AS value FROM supplier;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "if(DictExpr(10: S_ADDRESS,[<place-holder> = '']), '', " +
+                "substr(md5(DictExpr(10: S_ADDRESS,[<place-holder>])), 1, 3))");
+    }
 }

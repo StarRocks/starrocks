@@ -1115,42 +1115,71 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
     ASSERT_EQ("[]", res->debug_item(6));
 }
 
-PARALLEL_TEST(ArrayColumnTest, test_element_memory_usage) {
-    auto offsets = UInt32Column::create();
-    auto elements = Int32Column::create();
-    auto column = ArrayColumn::create(elements, offsets);
+PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = Int32Column::create();
+        auto column = ArrayColumn::create(elements, offsets);
 
-    // insert [],[1],[2, 3],[4, 5, 6]
-    offsets->append(0);
+        // insert [],[1],[2, 3],[4, 5, 6]
+        offsets->append(0);
 
-    elements->append(1);
-    offsets->append(1);
+        elements->append(1);
+        offsets->append(1);
 
-    elements->append(2);
-    elements->append(3);
-    offsets->append(3);
+        elements->append(2);
+        elements->append(3);
+        offsets->append(3);
 
-    elements->append(4);
-    elements->append(5);
-    elements->append(6);
-    offsets->append(6);
+        elements->append(4);
+        elements->append(5);
+        elements->append(6);
+        offsets->append(6);
 
-    ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[1]", column->debug_item(1));
-    ASSERT_EQ("[2,3]", column->debug_item(2));
-    ASSERT_EQ("[4,5,6]", column->debug_item(3));
+        ASSERT_EQ("[]", column->debug_item(0));
+        ASSERT_EQ("[1]", column->debug_item(1));
+        ASSERT_EQ("[2,3]", column->debug_item(2));
+        ASSERT_EQ("[4,5,6]", column->debug_item(3));
 
-    ASSERT_EQ(40, column->Column::element_memory_usage());
+        ASSERT_EQ(0, column->Column::reference_memory_usage());
+    }
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+        auto column = ArrayColumn::create(elements, offsets);
 
-    std::vector<size_t> element_mem_usages = {4, 8, 12, 16};
-    size_t element_num = element_mem_usages.size();
-    for (size_t start = 0; start < element_num; start++) {
-        size_t expected_usage = 0;
-        ASSERT_EQ(expected_usage, column->element_memory_usage(start, 0));
-        for (size_t size = 1; start + size <= element_num; size++) {
-            expected_usage += element_mem_usages[start + size - 1];
-            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
-        }
+        auto append_json_value = [&](const std::string& json_str) {
+            auto json_value = JsonValue::parse(json_str).value();
+            elements->append_datum(&json_value);
+        };
+        // insert [],["1"],["2","3"],["4","5","6"]
+        offsets->append(0);
+
+        append_json_value("1");
+        offsets->append(1);
+
+        append_json_value("2");
+        append_json_value("3");
+        offsets->append(3);
+
+        append_json_value("4");
+        append_json_value("5");
+        append_json_value("6");
+        offsets->append(6);
+
+        std::cout << "json size: " << column->Column::reference_memory_usage() << std::endl;
+        ASSERT_EQ(12, column->Column::reference_memory_usage());
+
+        ASSERT_EQ(0, column->reference_memory_usage(0, 1));
+        ASSERT_EQ(2, column->reference_memory_usage(0, 2));
+        ASSERT_EQ(6, column->reference_memory_usage(0, 3));
+        ASSERT_EQ(12, column->reference_memory_usage(0, 4));
+        ASSERT_EQ(2, column->reference_memory_usage(1, 1));
+        ASSERT_EQ(6, column->reference_memory_usage(1, 2));
+        ASSERT_EQ(12, column->reference_memory_usage(1, 3));
+        ASSERT_EQ(4, column->reference_memory_usage(2, 1));
+        ASSERT_EQ(10, column->reference_memory_usage(2, 2));
+        ASSERT_EQ(6, column->reference_memory_usage(3, 1));
     }
 }
 

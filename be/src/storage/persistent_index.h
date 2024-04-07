@@ -323,6 +323,8 @@ public:
 
     void clear();
 
+    Status create_index_file(std::string& path);
+
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -659,6 +661,13 @@ public:
         return res;
     }
 
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
+    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
@@ -676,8 +685,8 @@ private:
     bool _can_dump_directly();
     bool _need_flush_advance();
     bool _need_merge_advance();
-    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
-
+    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
+                                        std::vector<size_t>* replace_idxes);
     Status _delete_major_compaction_tmp_index_file();
     Status _delete_tmp_index_file();
 
@@ -764,6 +773,9 @@ protected:
 
     bool _dump_snapshot = false;
     bool _flushed = false;
+    bool _cancel_major_compaction = false;
+
+private:
     bool _need_bloom_filter = false;
 
     mutable std::mutex _get_lock;
@@ -776,6 +788,8 @@ protected:
     std::atomic<bool> _major_compaction_running{false};
     // write amplification score, 0.0 means this index doesn't need major compaction
     std::atomic<double> _write_amp_score{0.0};
+    // Latest major compaction time. In second.
+    int64_t _latest_compaction_time = 0;
 };
 
 } // namespace starrocks

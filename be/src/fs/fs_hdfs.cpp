@@ -196,16 +196,16 @@ Status HDFSWritableFile::close() {
     FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
+        auto st = Status::OK();
         if (r != 0) {
-            return Status::IOError("sync error, file: {}"_format(_path));
+            st.update(Status::IOError("sync error, file: {}"_format(_path)));
         }
 
         r = hdfsCloseFile(_fs, _file);
-        if (r == 0) {
-            return Status::OK();
-        } else {
-            return Status::IOError("close error, file: {}"_format(_path));
+        if (r != 0) {
+            st.update(Status::IOError("close error, file: {}"_format(_path)));
         }
+        return st;
     });
     Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";

@@ -494,14 +494,9 @@ public class RoutineLoadManager implements Writable {
     }
 
     public List<RoutineLoadJob> getRoutineLoadJobByState(Set<RoutineLoadJob.JobState> desiredStates) {
-        readLock();
-        try {
-            List<RoutineLoadJob> stateJobs = idToRoutineLoadJob.values().stream()
-                    .filter(entity -> desiredStates.contains(entity.getState())).collect(Collectors.toList());
-            return stateJobs;
-        } finally {
-            readUnlock();
-        }
+        return idToRoutineLoadJob.values().stream()
+                .filter(entity -> desiredStates.contains(entity.getState()))
+                .collect(Collectors.toList());
     }
 
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks

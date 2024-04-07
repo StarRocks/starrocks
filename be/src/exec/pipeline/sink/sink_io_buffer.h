@@ -1,10 +1,15 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#pragma once
+
 #include <memory>
 #include <shared_mutex>
 
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -40,7 +45,14 @@ class SinkIOBuffer {
 public:
     SinkIOBuffer(int32_t num_sinkers) : _num_result_sinkers(num_sinkers) {}
 
-    virtual ~SinkIOBuffer() = default;
+    virtual ~SinkIOBuffer() {
+        if (_exec_queue_id != nullptr) {
+            // If `Operator` prepare failed, there is no chance to stop queue, so will should stop queue here.
+            // It is safe to call stop multiple times.
+            bthread::execution_queue_stop(*_exec_queue_id);
+            bthread::execution_queue_join(*_exec_queue_id);
+        }
+    }
 
     virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) = 0;
 
@@ -72,11 +84,14 @@ public:
 
     virtual void cancel_one_sinker() { _is_cancelled = true; }
 
+    bool is_cancelled() const { return _is_cancelled; }
+
     virtual void close(RuntimeState* state) {
-        _is_finished = true;
         if (_exec_queue_id != nullptr) {
-            bthread::execution_queue_stop(*_exec_queue_id);
+            int ok = bthread::execution_queue_stop(*_exec_queue_id);
+            LOG_IF(WARNING, !ok) << fmt::format("Fail to stop execution queue: {}", std::strerror(errno));
         }
+        _is_finished = true;
     }
 
     inline void set_io_status(const Status& status) {
@@ -91,7 +106,10 @@ public:
         return _io_status;
     }
 
-    static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
+    static int execute_io_task(void* meta, bthread::TaskIterator<vectorized::ChunkPtr>& iter) {
+        if (iter.is_queue_stopped()) {
+            return 0;
+        }
         auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
         for (; iter; ++iter) {
@@ -102,9 +120,10 @@ public:
     }
 
 protected:
-    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) = 0;
+    void _process_chunk(bthread::TaskIterator<vectorized::ChunkPtr>& iter);
+    virtual void _add_chunk(const vectorized::ChunkPtr& chunk) = 0;
 
-    std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;
+    std::unique_ptr<bthread::ExecutionQueueId<vectorized::ChunkPtr>> _exec_queue_id;
 
     std::atomic_int32_t _num_result_sinkers = 0;
     std::atomic_int64_t _num_pending_chunks = 0;

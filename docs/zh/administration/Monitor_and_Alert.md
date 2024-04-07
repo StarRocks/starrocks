@@ -208,7 +208,7 @@ Data Source 配置项简介
 
 * [StarRocks-1.19.0 之前版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview.json)
 * [StarRocks-1.19.0 开始到 StarRocks-2.4.0 之前版本 DashBoard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
-* [StarRocks-2.4.0 及其之后版本 DashBoard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24.json)
+* [StarRocks-2.4.0 及其之后版本 DashBoard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24-new.json)
 
 > 说明：Dashboard 模版会不定期更新。同时我们也欢迎您提供更优的 Dashboard 模板。
 
@@ -275,7 +275,7 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |指标|单位|类型|描述|
 |---|:---:|:---:|---|
 |be_broker_count|个|平均值|Broker的数量。|
-|be_brpc_endpoint_count|个|平均值|Brpc 中 StubCache 的数量。|
+|be_brpc_endpoint_count|个|平均值|bRPC 中 StubCache 的数量。|
 |be_bytes_read_per_second|bytes/s|平均值|BE 读取速度。|
 |be_bytes_written_per_second|bytes/s|平均值|BE 写入速度。|
 |be_base_compaction_bytes_per_second|bytes/s|平均值|BE 的基线合并速率。|

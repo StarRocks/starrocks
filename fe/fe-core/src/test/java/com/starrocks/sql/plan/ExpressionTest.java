@@ -54,6 +54,22 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select t1a, t1b from test_all_type where id_datetime > 2000";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 8: id_datetime > CAST(2000 AS DATETIME)");
+
+        sql = "select t1a, t1b from test_all_type where id_date > (datetime '2000-01-01 12:00:00')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 9: id_date >= '2000-01-02'");
+
+        sql = "select t1a, t1b from test_all_type where (datetime '2000-01-01 12:00:00') > id_date";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "9: id_date <= '2000-01-01'");
+
+        sql = "select t1a, t1b from test_all_type where (date '2000-01-01') > id_datetime";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime < '2000-01-01 00:00:00'");
+
+        sql = "select t1a, t1b from test_all_type where id_datetime > (date '2000-01-01')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime > '2000-01-01 00:00:00'");
     }
 
     @Test
@@ -1386,5 +1402,33 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select length(col) from (select cast('12.3567' as decimal(9,1)) * 200 as col) t";
         plan = getVerboseExplain(sql);
         assertContains(plan, "3 <-> length[(cast(2480.0 as VARCHAR)); args: VARCHAR; result: INT;");
+    }
+
+    @Test
+    public void testCastStringDouble() throws Exception {
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "11 <-> [1: t1a, VARCHAR, true] = '1'");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("DECIMAL");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([1: t1a, VARCHAR, true] as DECIMAL128(38,9)) = 1");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+    }
+
+    @Test
+    public void testCastConstantFn() throws Exception {
+        String sql = "select 2011-12-01 = id_date from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " CAST(9: id_date AS DOUBLE) = 1998.0");
     }
 }

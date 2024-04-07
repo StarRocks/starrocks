@@ -170,7 +170,7 @@ public class SparkLoadJob extends BulkLoadJob {
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
         super.setJobProperties(properties);
 
-        if (properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
+        if (properties != null && properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
             try {
                 sparkLoadSubmitTimeoutSecond = Long.parseLong(properties.get(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT));
             } catch (NumberFormatException e) {
@@ -396,6 +396,8 @@ public class SparkLoadJob extends BulkLoadJob {
             loadingStatus = etlStatus;
             progress = 0;
             unprotectedUpdateState(JobState.LOADING);
+            loadStartTimestamp = System.currentTimeMillis();
+            startLoad = true;
             LOG.info("update to {} state success. job id: {}", state, id);
         } catch (Exception e) {
             LOG.warn("update to {} state failed. job id: {}", state, id, e);

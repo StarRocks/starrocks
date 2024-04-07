@@ -17,11 +17,16 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.proc.JvmMonitorProcDir;
+import com.starrocks.monitor.jvm.JvmStatCollector;
+import com.starrocks.monitor.jvm.JvmStats;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class MetricsTest {
@@ -50,6 +55,78 @@ public class MetricsTest {
             } else {
                 Assert.fail();
             }
+        }
+    }
+
+    @Test
+    public void testJsonJvmStats() {
+        JsonMetricVisitor jsonMetricVisitor = new JsonMetricVisitor("sr_fe_jvm_stat_test");
+        JvmStatCollector jvmStatCollector = new JvmStatCollector();
+        JvmStats jvmStats = jvmStatCollector.stats();
+        jsonMetricVisitor.visitJvm(jvmStats);
+        String output = jsonMetricVisitor.build();
+        System.out.println(output);
+        List<String> metricNames = Arrays.asList(
+                "jvm_old_gc",
+                "jvm_young_gc",
+                "jvm_young_size_bytes",
+                "jvm_heap_size_bytes",
+                "jvm_old_size_bytes",
+                "jvm_direct_buffer_pool_size_bytes"
+        );
+        for (String metricName : metricNames) {
+            Assert.assertTrue(output.contains(metricName));
+        }
+    }
+
+    @Test
+    public void testPrometheusJvmStats() {
+        PrometheusMetricVisitor prometheusMetricVisitor = new PrometheusMetricVisitor("sr_fe_jvm_stat_test");
+        JvmStatCollector jvmStatCollector = new JvmStatCollector();
+        System.out.println(jvmStatCollector.toString());
+        JvmStats jvmStats = jvmStatCollector.stats();
+        prometheusMetricVisitor.visitJvm(jvmStats);
+        String output = prometheusMetricVisitor.build();
+        System.out.println(output);
+        List<String> metricNames = Arrays.asList(
+                "jvm_old_gc",
+                "jvm_young_gc",
+                "jvm_young_size_bytes",
+                "jvm_heap_size_bytes",
+                "jvm_old_size_bytes",
+                "jvm_direct_buffer_pool_size_bytes"
+        );
+        for (String metricName : metricNames) {
+            Assert.assertTrue(output.contains(metricName));
+        }
+    }
+
+    private boolean jvmProcDirResultRowsContains(List<List<String>> rows, String metricName) {
+        for (List<String> row : rows) {
+            if (row.contains(metricName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Test
+    public void testProcDirJvmStats() throws AnalysisException {
+        JvmMonitorProcDir jvmMonitorProcDir = new JvmMonitorProcDir();
+        List<List<String>> rows = jvmMonitorProcDir.fetchResult().getRows();
+        System.out.println(rows);
+        List<String> metricNames = Arrays.asList(
+                "gc old collection count",
+                "gc old collection time",
+                "gc young collection time",
+                "gc young collection time",
+                "mem pool old committed",
+                "mem pool old used"
+        );
+        for (String metricName : metricNames) {
+            System.out.println(metricName);
+            Assert.assertTrue(jvmProcDirResultRowsContains(rows, metricName));
         }
     }
 }

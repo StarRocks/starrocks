@@ -21,6 +21,7 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.gson.GsonUtils;
@@ -189,7 +190,7 @@ public class TransactionStateTest {
                 3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.NORMAL));
         TabletCommitInfo info1 = new TabletCommitInfo(10001, 10001);
         TabletCommitInfo info2 = new TabletCommitInfo(10001, 10002);
         TabletCommitInfo info3 = new TabletCommitInfo(10002, 10002);
@@ -198,9 +199,12 @@ public class TransactionStateTest {
         infos.add(info2);
         infos.add(info3);
         transactionState.setTabletCommitInfos(infos);
-        Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10001));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10002));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10002, 10002));
+        Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.NORMAL));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10001, ReplicaState.NORMAL));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10002, ReplicaState.NORMAL));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10002, 10002, ReplicaState.NORMAL));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.ALTER));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.SCHEMA_CHANGE));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.CLONE));
     }
 }

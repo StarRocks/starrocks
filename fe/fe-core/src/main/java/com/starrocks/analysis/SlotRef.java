@@ -295,11 +295,11 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public String toJDBCSQL(boolean isMySQL) {
+    public String toJDBCSQL() {
         if (label == null) {
             throw new IllegalArgumentException("should set label for cols in JDBCScanNode. SlotRef: " + debugString());
         }
-        return isMySQL ? "`" + label + "`" : label;
+        return label;
     }
 
     public TableName getTableName() {

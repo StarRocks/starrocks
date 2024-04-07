@@ -43,21 +43,29 @@ User properties are attached directly to a user, not to a user identity That is,
 
 StarRocks currently supports the following types of  privileges.
 
-* Node\_priv
+* NODE\_PRIV
+
   Privileges for Node changes. This allows you to add, delete, and disable FE, BE, and BROKER nodes. Currently, this privilege can only be granted to Root users.
-* Grant\_priv  
+* GRANT\_PRIV
+
   Privileges for privilege changes. This allows you to grant, revoke, and modify users/roles.
-* Select\_priv  
+* SELECT\_PRIV
+
   Read-only access to databases and tables.
-* Load\_priv  
+* LOAD\_PRIV
+
   Write access to databases and tables. This allows you to  Load, Insert, and Delete databases or tables.
-* Alter\_priv  
+* ALTER\_PRIV
+
   Privileges to change databases and tables. This allows you to  rename, add/remove/change columns, add/remove partitions.
-* Create\_priv  
+* CREATE\_PRIV
+
   Privileges to create databases, tables, and views.
-* Drop\_priv  
+* DROP\_PRIV
+
   Privileges to delete databases, tables, and views.
-* Usage\_priv  
+* USAGE\_PRIV
+
   Privileges to use resources.
 
 ## Privilege Hierarchy
@@ -75,7 +83,7 @@ StarRocks classifies the resource privileges into two levels.
 
 ## Privilege Description
 
-The `ADMIN\PRIV` and `GRANT_PRIV` privileges are special because they both have the privilege to grant privileges.
+The `ADMIN_PRIV` and `GRANT_PRIV` privileges are special because they both have the privilege to grant privileges.
 
 * CREATE USER
 
@@ -105,8 +113,8 @@ The `ADMIN\PRIV` and `GRANT_PRIV` privileges are special because they both have 
 
 * When StarRocks is initialized, the following users and roles are automatically created.
 
-* operator role: This role has `Node_priv` and `Admin_priv`, i.e. all privileges. In a later upgrade, this role may be restricted to `Node_priv` (privileges for node changes). This is to meet certain deployment requirements on the cloud.
-* admin role: This role has `Admin_priv`, i.e., all privileges except for the one for node changes.
+* operator role: This role has `NODE_PRIV` and `ADMIN_PRIV`, i.e. all privileges. In a later upgrade, this role may be restricted to `NODE_PRIV` (privileges for node changes). This is to meet certain deployment requirements on the cloud.
+* admin role: This role has `ADMIN_PRIV`, i.e., all privileges except for the one for node changes.
 * root@'%': Root user, allowed to log in from any node as `operator`.
 * admin@'%': Admin user, allowed to log in from any node as `admin`.
 
@@ -151,13 +159,13 @@ All privileges are granted to `current_user`, and the real user has all the priv
 
 Here are some scenarios for using the StarRocks permission management system.
 
-### Scenario 1 Permissions Assignment
+### Scenario 1: Permissions Assignment
 
 StarRocks users are divided into Administrator (Admin), Development Engineer (RD), and User (Client). The administrators have all the privileges and are mainly responsible for cluster construction, and node management. The development engineers are responsible for business modeling, including building databases and tables, importing and modifying data, and so on. Users access databases and tables to get data.
 
 In this scenario, Admins are granted ADMIN privileges or GRANT privileges. RDs are granted privileges to CREATE, DROP, ALTER, LOAD, and SELECT any or specific database tables. Clients are granted privileges to SELECT any or specific database tables. When there are multiple users, it is also possible to simplify the authorization by creating different roles.
 
-### Scenario 2 Multiple lines of business
+### Scenario 2: Multiple lines of business
 
 There may be multiple use cases within a cluster, each of which may use one or more databases. Each use case needs to manage its own users. In this scenario, an ADMIN can grant one user with DATABASE level GRANT privilege for each database. This user can only authorize users for this specific database.
 

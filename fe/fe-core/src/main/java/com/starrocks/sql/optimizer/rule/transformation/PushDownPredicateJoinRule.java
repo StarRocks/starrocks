@@ -26,7 +26,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression joinOpt = input.getInputs().get(0);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
-                joinOpt, false, false, context.getColumnRefFactory());
+                joinOpt, false, false, context.getColumnRefFactory(), context);
         return Lists.newArrayList(joinPredicatePushdown.pushdown(filter.getPredicate()));
     }
 }

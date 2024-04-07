@@ -14,7 +14,7 @@ StarRocks supports loading data from a rich wealth of data sources, including so
 
 ## Step 1: Load data with INSERT
 
-You can insert additional rows of data using INSERT. See [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) for detailed instruction.
+You can insert additional rows of data using INSERT. See [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) for detailed instruction.
 
 Log in to StarRocks via your MySQL client, and execute the following statements to insert the following rows of data into the `sr_member` table you have created.
 

@@ -134,6 +134,8 @@ private:
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
+    void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);
+
     std::unique_ptr<orc::ColumnVectorBatch> _batch;
     std::unique_ptr<orc::Reader> _reader;
     std::unique_ptr<orc::RowReader> _row_reader;

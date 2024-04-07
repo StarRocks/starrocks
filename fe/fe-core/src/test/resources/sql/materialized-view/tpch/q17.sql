@@ -21,7 +21,7 @@ where
 AGGREGATE ([GLOBAL] aggregate [{45: sum=sum(45: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{45: sum=sum(7: l_extendedprice)}] group by [[]] having [null]
-            PREDICATE cast(6: l_quantity as decimal128(38, 9)) < multiply(0.2, 149: avg)
+            PREDICATE cast(6: l_quantity as DECIMAL128(38,9)) < multiply(0.2, 149: avg)
                 ANALYTIC ({149: avg=avg(6: l_quantity)} [17: p_partkey] [] )
                     TOP-N (order by [[17: p_partkey ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[17]

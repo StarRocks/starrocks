@@ -40,7 +40,7 @@ public:
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                                    bool done) = 0;
 
-    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
+    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) = 0;
 
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
@@ -58,7 +58,7 @@ public:
     void cancel(DriverRawPtr driver) override;
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override;
-    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
+    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) override;
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
@@ -76,6 +76,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+    std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
 
     std::atomic<int> _next_id = 0;
     std::atomic_int64_t _schedule_count = 0;

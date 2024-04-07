@@ -31,7 +31,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     Status _open_file_writer();
 
@@ -71,19 +71,7 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
-    if (_is_finished) {
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 0) {
-            close(_state);
-        }
-        return;
-    }
-
+void ExportSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_file_builder == nullptr) {
         if (Status status = _open_file_writer(); !status.ok()) {
             LOG(WARNING) << "open file write failed, error: " << status.to_string();
@@ -91,13 +79,7 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
             return;
         }
     }
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 0);
-        close(_state);
-        return;
-    }
+
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
@@ -177,14 +159,19 @@ bool ExportSinkOperator::is_finished() const {
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        _is_audit_report_done = false;
         auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
                                                                         : state->exec_env()->driver_executor();
-        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx(), &_is_audit_report_done);
     }
     return _export_sink_buffer->set_finishing();
 }
 
 bool ExportSinkOperator::pending_finish() const {
+    // audit report not finish, we need check until finish
+    if (!_is_audit_report_done) {
+        return true;
+    }
     return !_export_sink_buffer->is_finished();
 }
 

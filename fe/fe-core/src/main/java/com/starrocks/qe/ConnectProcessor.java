@@ -31,7 +31,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
@@ -51,7 +50,6 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -148,16 +146,29 @@ public class ConnectProcessor {
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
 
+        boolean isForwardToLeader = (executor != null) ? executor.getIsForwardToLeaderOrInit(false) : false;
+
+        // ignore recording some failed stmt like kill connection
+        if (ctx.getState().getErrType() == QueryState.ErrType.IGNORE_ERR) {
+            return;
+        }
+
+        // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
+        String errorCode = StringUtils.isNotEmpty(ctx.getErrorCode()) ? ctx.getErrorCode() : ctx.getState().getErrType().name();
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
-                .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
+                .setState(ctx.getState().toString())
+                .setErrorCode(errorCode)
+                .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
+                .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
         if (statistics != null) {
             ctx.getAuditEventBuilder().setScanBytes(statistics.scanBytes);
             ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
             ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            ctx.getAuditEventBuilder().setReturnRows(statistics.returnedRows == null ? 0 : statistics.returnedRows);
         }
 
         if (ctx.getState().isQuery()) {
@@ -238,7 +249,7 @@ public class ConnectProcessor {
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+        QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
     protected void addRunningQueryDetail(StatementBase parsedStmt) {
@@ -266,8 +277,8 @@ public class ConnectProcessor {
                 ctx.getQualifiedUser(),
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""));
         ctx.setQueryDetail(queryDetail);
-        //copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
+        // copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
     }
 
     // process COM_QUERY statement,
@@ -306,7 +317,7 @@ public class ConnectProcessor {
             for (int i = 0; i < stmts.size(); ++i) {
                 ctx.getState().reset();
                 if (i > 0) {
-                    ctx.resetRetureRows();
+                    ctx.resetReturnRows();
                     ctx.setQueryId(UUIDUtil.genUUID());
                 }
                 parsedStmt = stmts.get(i);
@@ -339,24 +350,16 @@ public class ConnectProcessor {
                     finalizeCommand();
                 }
             }
-        } catch (IOException e) {
-            // Client failed.
-            LOG.warn("Process one query failed because IOException: ", e);
-            ctx.getState().setError("StarRocks process failed");
-        } catch (UserException e) {
-            LOG.warn("Process one query failed. SQL: " + originStmt + ", because.", e);
+        } catch (AnalysisException e) {
+            LOG.warn("Failed to parse SQL: " + originStmt + ", because.", e);
             ctx.getState().setError(e.getMessage());
-            // set is as ANALYSIS_ERR so that it won't be treated as a query failure.
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
-            if (parsedStmt instanceof KillStmt) {
-                // ignore kill stmt execute err(not monitor it)
-                ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            }
+            ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         }
         
         // audit after exec
@@ -619,6 +622,10 @@ public class ConnectProcessor {
             ctx.setQueryId(UUIDUtil.fromTUniqueid(request.getQueryId()));
         }
 
+        if (request.isSetForward_times()) {
+            ctx.setForwardTimes(request.getForward_times());
+        }
+
         ctx.setThreadLocalInfo();
 
         if (ctx.getCurrentUserIdentity() == null) {
@@ -654,6 +661,12 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
         }
+
+        // If stmt is also forwarded during execution, just return the forward result.
+        if (executor != null && executor.getIsForwardToLeaderOrInit(false)) {
+            return executor.getLeaderOpExecutor().getResult();
+        }
+
         // no matter the master execute success or fail, the master must transfer the result to follower
         // and tell the follower the current jounalID.
         TMasterOpResult result = new TMasterOpResult();

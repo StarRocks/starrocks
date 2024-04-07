@@ -35,7 +35,11 @@ public class CastOperator extends CallOperator {
 
     @Override
     public String toString() {
-        return "cast(" + getChild(0).toString() + " as " + getType().toSql() + ")";
+        if (getType().isDecimalOfAnyVersion()) {
+            return "cast(" + getChild(0).toString() + " as " + getType() + ")";
+        } else {
+            return "cast(" + getChild(0).toString() + " as " + getType().toSql() + ")";
+        }
     }
 
     @Override

@@ -101,13 +101,7 @@ public:
 
     // Size of column data in memory (may be approximate). Zero, if could not be determined.
     virtual size_t byte_size() const = 0;
-    virtual size_t byte_size(size_t from, size_t size) const {
-        DCHECK_LE(from + size, this->size()) << "Range error";
-        if (empty()) {
-            return 0;
-        }
-        return byte_size() * size / this->size();
-    }
+    virtual size_t byte_size(size_t from, size_t size) const = 0;
 
     // The byte size for serialize, for varchar, we need to add the len byte size
     virtual size_t byte_size(size_t idx) const = 0;
@@ -354,19 +348,20 @@ public:
 
     virtual std::string debug_string() const { return std::string(); }
 
-    // memory usage includes container memory usage and element memory usage.
+    // memory usage includes container memory usage and reference memory usage.
     // 1. container memory usage: container capacity * type size.
-    // 2. element memory usage: element data size that is not in the container,
+    // 2. reference memory usage: element data size that is not in the container,
     //    such as memory referenced by pointer.
     //   2.1 object column: element serialize data size.
     //   2.2 other columns: 0.
-    virtual size_t memory_usage() const { return container_memory_usage() + element_memory_usage(); }
+    virtual size_t memory_usage() const { return container_memory_usage() + reference_memory_usage(); }
     virtual size_t container_memory_usage() const = 0;
-    virtual size_t element_memory_usage() const { return element_memory_usage(0, size()); }
-    virtual size_t element_memory_usage(size_t from, size_t size) const = 0;
+    virtual size_t reference_memory_usage() const { return reference_memory_usage(0, size()); }
+    virtual size_t reference_memory_usage(size_t from, size_t size) const = 0;
 
     virtual void swap_column(Column& rhs) = 0;
 
+    // The interface will not free memory!!!
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
 
     virtual bool capacity_limit_reached(std::string* msg = nullptr) const = 0;

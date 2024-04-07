@@ -44,7 +44,9 @@ public class RewriteTreeTask extends OptimizerTask {
     public void execute() {
         // first node must be RewriteAnchorNode
         rewrite(planTree, 0, planTree.getInputs().get(0));
-
+        // pushdownNotNullPredicates should task-bind, reset it before another RewriteTreeTask
+        // TODO: refactor TaskContext to make it local to support this requirement better?
+        context.getOptimizerContext().clearNotNullPredicates();
         if (change > 0 && !onlyOnce) {
             pushTask(new RewriteTreeTask(context, planTree, rules, onlyOnce));
         }

@@ -153,6 +153,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/shared_buffered_input_stream_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
@@ -238,6 +239,7 @@ set(EXEC_FILES
         ./storage/base_compaction_test.cpp
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
+        ./storage/segment_flush_executor_test.cpp
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
@@ -331,9 +333,6 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         )
 
-if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-endif ()
 if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)

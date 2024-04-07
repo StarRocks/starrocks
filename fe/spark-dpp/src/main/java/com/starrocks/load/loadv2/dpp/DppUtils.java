@@ -37,6 +37,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.zip.CRC32;
 
 public class DppUtils {
@@ -401,5 +402,20 @@ public class DppUtils {
                     "Reason: Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
         }
         return Lists.newArrayList(columns);
+    }
+
+    public static StructType replaceBinaryColumnsInSchema(Set<String> binaryColumns, StructType dstSchema) {
+        List<StructField> fields = new ArrayList<>();
+        for (StructField originField : dstSchema.fields()) {
+            if (binaryColumns.contains(originField.name())) {
+                fields.add(DataTypes.createStructField(originField.name(),
+                        DataTypes.BinaryType, originField.nullable()));
+            } else {
+                fields.add(DataTypes.createStructField(originField.name(),
+                        originField.dataType(), originField.nullable()));
+            }
+        }
+        StructType ret = DataTypes.createStructType(fields);
+        return ret;
     }
 }

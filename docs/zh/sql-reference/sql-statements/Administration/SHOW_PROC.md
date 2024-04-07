@@ -87,7 +87,7 @@ mysql> SHOW PROC '/backends';
 | HeartbeatPort         | BE 节点心跳服务端口。                                        |
 | BePort                | BE 节点 Thrift Server 端口。                                 |
 | HttpPort              | BE 节点 HTTP Server 端口。                                   |
-| BrpcPort              | BE 节点 BRPC 端口。                                          |
+| BrpcPort              | BE 节点 bRPC 端口。                                          |
 | LastStartTime         | BE 节点上一次启动时间。                                      |
 | LastHeartbeat         | BE 节点上一次接受 FE 心跳时间。                              |
 | Alive                 | BE 节点存活状态。                                            |

@@ -18,9 +18,12 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Optional;
 
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
@@ -45,15 +48,16 @@ public class BaseTableInfo {
     @SerializedName(value = "tableName")
     private String tableName;
 
-    public BaseTableInfo(long dbId, String dbName, long tableId) {
+    public BaseTableInfo(long dbId, String dbName, long tableId, String tableName) {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
         this.dbName = dbName;
         this.tableId = tableId;
+        this.tableName = tableName;
     }
 
     public BaseTableInfo(long dbId, long tableId) {
-        this(dbId, null, tableId);
+        this(dbId, null, tableId, null);
     }
 
     public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
@@ -108,6 +112,29 @@ public class BaseTableInfo {
         return this.tableId;
     }
 
+    /**
+     * A checked version of getTable, which enforce checking existence of table
+     *
+     * @return the table if exists
+     */
+    public Optional<Table> mayGetTable() {
+        return Optional.ofNullable(getTable());
+    }
+
+    /**
+     * A checked version of getTable, which enforce checking the existence of table
+     *
+     * @return the table if exists
+     */
+    public Table getTableChecked() {
+        Table table = getTable();
+        if (table != null) {
+            return table;
+        }
+        throw MaterializedViewExceptions.reportBaseTableNotExists(this);
+    }
+
+    @Deprecated
     public Table getTable() {
         if (isInternalCatalog(catalogName)) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);

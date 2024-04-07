@@ -109,9 +109,11 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select distinct v1, v2 as v from t0 order by v");
         analyzeSuccess("select distinct abs(v1) as v from t0 order by v");
         analyzeFail("select distinct v1 from t0 order by v2",
-                "must be an aggregate expression or appear in GROUP BY clause");
+                "'`test`.`t0`.`v2`' must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select distinct v1 as v from t0 order by v2",
-                "must be an aggregate expression or appear in GROUP BY clause");
+                "'`test`.`t0`.`v2`' must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select * from t0 order by max(v2)",
+                "column must appear in the GROUP BY clause or be used in an aggregate function");
 
         analyzeSuccess("select distinct v1 as v from t0 having v = 1");
         analyzeFail("select distinct v1 as v from t0 having v2 = 2",
@@ -131,7 +133,7 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select distinct v1 from t0 having v1 = 1");
         analyzeSuccess("select distinct v1 from t0 where v2 = 1");
         analyzeFail("select distinct v1,v2 from t0 order by v3");
-        analyzeSuccess("select distinct v1 from t0 order by sum(v2)");
+        analyzeFail("select distinct v1 from t0 order by sum(v2)");
 
         analyzeFail("select count(distinct v1), count(distinct v3) from tarray",
                 "No matching function with signature: multi_distinct_count(ARRAY)");

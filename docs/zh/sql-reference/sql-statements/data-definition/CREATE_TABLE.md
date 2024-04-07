@@ -40,6 +40,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 
 **col_name**：列名称
 
+注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/Configuration.md#fe-配置项) 设置为 `TRUE`。
+
 **col_type**：列数据类型
 
 支持的列类型以及取值范围等信息如下：
@@ -180,7 +182,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     PROPERTIES (
         "database" = "hive_db_name",
         "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
     )
     ```
 

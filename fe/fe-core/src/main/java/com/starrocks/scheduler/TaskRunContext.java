@@ -12,6 +12,7 @@ public class TaskRunContext {
     int priority;
     Map<String, String> properties;
     Constants.TaskType type;
+    TaskRun taskRun;
 
     public ConnectContext getCtx() {
         return ctx;
@@ -59,5 +60,13 @@ public class TaskRunContext {
 
     public void setTaskType(Constants.TaskType type) {
         this.type = type;
+    }
+
+    public TaskRun getTaskRun() {
+        return taskRun;
+    }
+
+    public void setTaskRun(TaskRun taskRun) {
+        this.taskRun = taskRun;
     }
 }

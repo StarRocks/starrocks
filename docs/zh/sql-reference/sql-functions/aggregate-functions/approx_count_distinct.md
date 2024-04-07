@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# APPROX_COUNT_DISTINCT
+# approx_count_distinct
 
 ## 功能
 

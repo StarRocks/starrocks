@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName;
 
 public class UserProperty {
     @SerializedName(value = "m")
-    private long maxConn = 100;
+    private long maxConn = 1024;
 
     public long getMaxConn() {
         return maxConn;

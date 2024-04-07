@@ -9,6 +9,7 @@
 #include "fs/fs.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/primary_key_encoder.h"
@@ -1806,6 +1807,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         std::unique_ptr<RandomAccessFile> l0_rfile;
         ASSIGN_OR_RETURN(l0_rfile, fs->new_random_access_file(file_name));
         size_t snapshot_size = _index_file->size();
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add write stats manually
+        IOProfiler::add_write(snapshot_size);
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -1890,6 +1894,9 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add read stats manually
+        IOProfiler::add_read(snapshot_size);
     }
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
@@ -1999,6 +2006,17 @@ void ShardByLengthMutableIndex::clear() {
     for (const auto& shard : _shards) {
         shard->clear();
     }
+}
+
+Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
+    if (_index_file != nullptr) {
+        std::string msg = strings::Substitute("l0 index file already exist: $0", _index_file->filename());
+        return Status::InternalError(msg);
+    }
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, path));
+    return Status::OK();
 }
 
 #ifdef __SSE2__
@@ -2563,6 +2581,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         _l2_vec.clear();
     }
     if (index_meta.l2_versions_size() > 0) {
+        DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
             auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
                                                      index_meta.l2_versions(i).minor(),
@@ -2708,6 +2727,11 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
         // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
         return true;
     }
+    if (index_meta.l2_versions_size() != index_meta.l2_version_merged_size()) {
+        // Make sure l2 version equal to l2 version merged flag
+        return true;
+    }
+
     return false;
 }
 
@@ -2776,6 +2800,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
                 if (index_meta.l2_versions_size() > 0) {
+                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
                     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
                         EditVersion l2_version = index_meta.l2_versions(i);
                         std::string l2_file_name =
@@ -2853,7 +2878,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     index_meta.clear_l0_meta();
     index_meta.clear_l1_version();
     index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
+    index_meta.set_size(0);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     lastest_applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
@@ -3004,7 +3031,10 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
             RETURN_IF_ERROR(_flush_l0());
         }
     }
-    _dump_snapshot |= !_flushed && _l0->file_size() - _l0->memory_usage() > config::l0_max_file_size;
+    // l0_max_file_size: the maximum data size for WAL
+    // l0_max_mem_usage: the maximum data size for snapshot
+    // So the max l0 file size should less than l0_max_file_size + l0_max_mem_usage
+    _dump_snapshot |= !_flushed && _l0->file_size() > config::l0_max_mem_usage + config::l0_max_file_size;
     // for case1 and case2
     if (do_minor_compaction) {
         // clear _l0 and reload l1 and l2s
@@ -3097,16 +3127,18 @@ class GetFromImmutableIndexTask : public Runnable {
 public:
     GetFromImmutableIndexTask(size_t num, ImmutableIndex* immu_index, const Slice* keys, IndexValue* values,
                               std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info,
-                              PersistentIndex* index)
+                              PersistentIndex* index, IOStatEntry* io_stat_entry)
             : _num(num),
               _immu_index(immu_index),
               _keys(keys),
               _values(values),
               _keys_info_by_key_size(keys_info_by_key_size),
               _found_keys_info(found_keys_info),
-              _index(index) {}
+              _index(index),
+              _io_stat_entry(io_stat_entry) {}
 
     void run() override {
+        auto scope = IOProfiler::scope(_io_stat_entry);
         _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                              _found_keys_info);
     }
@@ -3119,6 +3151,7 @@ private:
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
     KeysInfo* _found_keys_info;
     PersistentIndex* _index;
+    IOStatEntry* _io_stat_entry;
 };
 
 Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys,
@@ -3159,9 +3192,9 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     _found_keys_info.resize(_l2_vec.size() + _l1_vec.size());
     for (size_t i = 0; i < _l2_vec.size() + _l1_vec.size(); i++) {
         ImmutableIndex* immu_index = i < _l2_vec.size() ? _l2_vec[i].get() : _l1_vec[i - _l2_vec.size()].get();
-        GetFromImmutableIndexTask task(n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
-                                       &keys_info_by_key_size, &_found_keys_info[i], this);
-        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
+        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(
+                n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()), &keys_info_by_key_size,
+                &_found_keys_info[i], this, IOProfiler::get_context()));
         auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
         if (!st.ok()) {
             error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
@@ -3226,7 +3259,8 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     return _get_from_immutable_index(n, keys, values, not_founds_by_key_size);
 }
 
-Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values) {
+Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
+                                                     std::vector<size_t>* replace_idxes) {
     bool need_flush_advance = _need_flush_advance();
     _flushed |= need_flush_advance;
 
@@ -3239,7 +3273,11 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
     } else if (!_flushed) {
         _dump_snapshot |= _can_dump_directly();
         if (!_dump_snapshot) {
-            RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+            if (replace_idxes == nullptr) {
+                RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+            } else {
+                RETURN_IF_ERROR(_l0->append_wal(keys, values, *replace_idxes));
+            }
         }
     }
 
@@ -3315,7 +3353,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     }
 
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
-    return _flush_advance_or_append_wal(n, keys, values);
+    return _flush_advance_or_append_wal(n, keys, values, nullptr);
 }
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
@@ -3350,7 +3388,7 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, values);
+    return _flush_advance_or_append_wal(n, keys, values, nullptr);
 }
 
 Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
@@ -3376,7 +3414,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, nullptr);
+    return _flush_advance_or_append_wal(n, keys, nullptr, nullptr);
 }
 
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
@@ -3395,11 +3433,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    _dump_snapshot |= _can_dump_directly();
-    if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
-    }
-    return Status::OK();
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
 }
 
 Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
@@ -3417,11 +3451,7 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    _dump_snapshot |= _can_dump_directly();
-    if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
-    }
-    return Status::OK();
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
 }
 
 Status PersistentIndex::flush_advance() {
@@ -3458,8 +3488,8 @@ Status PersistentIndex::flush_advance() {
 }
 
 Status PersistentIndex::_flush_l0() {
-    // when l2 exist, must flush l0 with Delete Flag
-    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty(), nullptr);
+    // when l1 or l2 exist, must flush l0 with Delete Flag
+    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty() || !_l1_vec.empty(), nullptr);
 }
 
 Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
@@ -4039,13 +4069,15 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         // step 1.a
         // move tmp l1 to l1
         std::string tmp_l1_filename = _l1_vec[_has_l1 ? 1 : 0]->filename();
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(new_l1_filename);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(tmp_l1_filename, new_l1_filename));
         if (_l0->size() > 0) {
             // check if need to dump snapshot
             need_snapshot = true;
         }
         LOG(INFO) << "PersistentIndex minor compaction, link from tmp-l1: " << tmp_l1_filename
-                  << " to l1: " << new_l1_filename;
+                  << " to l1: " << new_l1_filename << " snapshot: " << need_snapshot;
     } else if (tmp_l1_cnt > 1) {
         // step 1.b
         auto writer = std::make_unique<ImmutableIndexWriter>();
@@ -4054,8 +4086,10 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         // 1, remove delete key when l2 not exist
         // 2. skip merge l1, only merge tmp-l1 and l0
         RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 1 : 0, _l1_vec.size(), false));
+        // keep delete flag when l2 or older l1 exist
         RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), _has_l1 ? 1 : 0, _l1_vec.size(),
-                                                   _usage_and_size_by_key_length, !_l2_vec.empty(), nullptr));
+                                                   _usage_and_size_by_key_length, !_l2_vec.empty() || _has_l1,
+                                                   nullptr));
         RETURN_IF_ERROR(writer->finish());
         LOG(INFO) << "PersistentIndex minor compaction, merge tmp l1, merge cnt: " << _l1_vec.size()
                   << ", output: " << new_l1_filename;
@@ -4080,6 +4114,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         const std::string old_l1_file_path =
                 strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
         LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(l2_file_path);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
         _l1_version.to_pb(index_meta->add_l2_versions());
         index_meta->add_l2_version_merged(false);
@@ -4111,7 +4147,7 @@ Status PersistentIndex::_merge_compaction() {
     if (_usage != writer->total_kv_size()) {
         _usage = writer->total_kv_size();
     }
-    if (_size != writer->total_kv_num()) {
+    if (_l2_vec.size() == 0 && _size != writer->total_kv_num()) {
         std::string msg =
                 strings::Substitute("inconsistent kv num after merge compaction, actual:$0, expect:$1, index_file:$2",
                                     writer->total_kv_num(), _size, writer->index_file());
@@ -4326,8 +4362,8 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
     return new_l2_version;
 }
 
-static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions, const EditVersion& output_l2_version,
-                               PersistentIndexMetaPB& index_meta) {
+void PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                         const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta) {
     // delete input l2 versions, and add output l2 version
     std::vector<EditVersion> new_l2_versions;
     std::vector<bool> new_l2_version_merged;
@@ -4365,6 +4401,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
@@ -4391,12 +4428,23 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
 Status PersistentIndex::major_compaction(Tablet* tablet) {
+    if (_cancel_major_compaction) {
+        return Status::InternalError("cancel major compaction");
+    }
     bool expect_running_state = false;
     if (!_major_compaction_running.compare_exchange_strong(expect_running_state, true)) {
         // already in compaction
         return Status::OK();
     }
-    DeferOp defer([&]() { _major_compaction_running.store(false); });
+    DeferOp defer([&]() {
+        _major_compaction_running.store(false);
+        _cancel_major_compaction = false;
+    });
+    // re-use config update_compaction_per_tablet_min_interval_seconds here to control pk index major compaction
+    if (UnixSeconds() - _latest_compaction_time <= config::update_compaction_per_tablet_min_interval_seconds) {
+        return Status::OK();
+    }
+    _latest_compaction_time = UnixSeconds();
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
     RETURN_IF_ERROR(
@@ -4407,6 +4455,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major(),
@@ -4421,6 +4470,9 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 3. modify PersistentIndexMetaPB and reload index, protected by index lock
     {
         std::lock_guard lg(*tablet->updates()->get_index_lock());
+        if (_cancel_major_compaction) {
+            return Status::OK();
+        }
         PersistentIndexMetaPB index_meta;
         RETURN_IF_ERROR(
                 TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
@@ -4430,8 +4482,10 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         // reload new l2 versions
         RETURN_IF_ERROR(_reload(index_meta));
         // delete useless files
+        const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+        EditVersion l0_version = l0_meta.snapshot().version();
         RETURN_IF_ERROR(_delete_expired_index_file(
-                _version, _l1_version,
+                l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
     _delete_major_compaction_tmp_index_file();
@@ -4494,6 +4548,60 @@ double PersistentIndex::get_write_amp_score() const {
         return 0.0;
     } else {
         return _write_amp_score.load();
+    }
+}
+
+Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
+    std::unique_lock wrlock(_lock);
+    _cancel_major_compaction = true;
+
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
+    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    if (_l0) {
+        _l0.reset();
+    }
+    RETURN_IF_ERROR(create(fix_size, version));
+
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
+    _l2_versions.clear();
+    _l2_vec.clear();
+    _has_l1 = false;
+    _dump_snapshot = true;
+
+    std::string file_path = get_l0_index_file_name(_path, version);
+    RETURN_IF_ERROR(_l0->create_index_file(file_path));
+    RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(0, 0, false));
+
+    index_meta->clear_l0_meta();
+    index_meta->clear_l1_version();
+    index_meta->clear_l2_versions();
+    index_meta->clear_l2_version_merged();
+    index_meta->set_key_size(_key_size);
+    index_meta->set_size(0);
+    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    version.to_pb(index_meta->mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+    l0_meta->clear_wals();
+    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot->mutable_version());
+    PagePointerPB* data = snapshot->mutable_data();
+    data->set_offset(0);
+    data->set_size(0);
+
+    return Status::OK();
+}
+
+void PersistentIndex::reset_cancel_major_compaction() {
+    if (!_major_compaction_running.load(std::memory_order_relaxed)) {
+        _cancel_major_compaction = false;
     }
 }
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['canshu']
 ---
 
 # 配置参数
@@ -71,6 +72,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_allowed_in_element_num_of_delete|10000|DELETE 语句中 IN 谓词最多允许的元素数量。|
 |enable_materialized_view|TRUE|是否允许创建物化视图。|
 |enable_decimal_v3|TRUE|是否开启 Decimal V3。|
+|expr_children_limit |  10000 |  一个表达式中子表达式的最大数量。|
 |enable_sql_blacklist|FALSE|是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。|
 |dynamic_partition_check_interval_seconds|600|动态分区检查的时间周期。如果有新数据生成，会自动生成分区。|
 |dynamic_partition_enable|TRUE|是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。|
@@ -108,9 +110,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |desired_max_waiting_jobs|1024|最多等待的任务数，适用于所有的任务，建表、导入、schema change。<br />如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。从 2.5 版本开始，该参数默认值从 100 变为 1024。|
 |max_load_timeout_second|259200|导入作业的最大超时时间，适用于所有导入，单位为秒。|
 |min_load_timeout_second|1|导入作业的最小超时时间，适用于所有导入，单位为秒。|
-|max_running_txn_num_per_db|1000|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `1000`。自 3.1 版本起，默认值由 100 变为 1000。<br />当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
-|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。自 3.1 版本起弃用。|
-|disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。|
+|max_running_txn_num_per_db|1000|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `1000`。<br/>当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
+|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。|
+|disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。设置为 TRUE 时，无法进行导入任务，集群仅处于可读状态。|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如 schema change 任务，单位为秒。|
 |label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。|
 |label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。<br />该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
@@ -119,6 +121,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_routine_load_batch_size|4294967296|每个 Routine Load task 导入的最大数据量，单位为 Byte。|
 |routine_load_task_consume_second|15|每个 Routine Load task 消费数据的最大时间，单位为秒。|
 |routine_load_task_timeout_second|60|每个 Routine Load task 超时时间，单位为秒。|
+|routine_load_unstable_threshold_second|3600|outine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。单位为秒。|
 |max_tolerable_backend_down_num|0|允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。|
 |period_of_auto_resume_min|5|自动恢复 Routine Load 的时间间隔，单位为分钟。|
 |spark_load_default_timeout_second|86400|Spark 导入的超时时间，单位为秒。|
@@ -141,8 +144,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |---|---|---|
 |enable_strict_storage_medium_check|FALSE|建表时，是否严格校验存储介质类型。<br />为 true 时表示在建表时，会严格校验 BE 上的存储介质。比如建表时指定 `storage_medium = HDD`，而 BE 上只配置了 SSD，那么建表失败。<br />为 FALSE 时则忽略介质匹配，建表成功。|
 |enable_auto_tablet_distribution| TRUE| 是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>自 2.5.6 版本起，StarRocks 支持设置该参数。  |
-|storage_usage_soft_limit_percent|90|如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。|
-|storage_usage_soft_limit_reserve_bytes|200 \* 1024 \* 1024 \* 1024|默认 200GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。|
+|storage_usage_soft_limit_percent|90|单个 BE 存储目录空间使用率软上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。|
+|storage_usage_soft_limit_reserve_bytes|200 \* 1024 \* 1024 \* 1024|单个 BE 存储目录剩余空间软限制。默认 200GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。|
+|storage_usage_hard_limit_percent|95|单个 BE 存储目录空间使用率硬上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_hard_limit_reserve_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数`storage_flood_stage_usage_percent` 才能使配置生效。|
+|storage_usage_hard_limit_reserve_bytes|100 \* 1024 \* 1024 \* 1024|单个 BE 存储目录剩余空间硬限制。默认 100 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_hard_limit_percent`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数 `storage_flood_stage_left_capacity_bytes` 才能使配置生效。|
 |catalog_trash_expire_second|86400|删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br />这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
@@ -179,6 +184,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |authentication_ldap_simple_user_search_attr| uid     | LDAP 对象中标识用户的属性名称。                              |
 |max_upload_task_per_be                     | 0       | 单次 BACKUP 操作下，系统向单个 BE 节点下发的最大上传任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v2.5.7 起新增。     |
 |max_download_task_per_be                   | 0       | 单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v2.5.7 起新增。     |
+|allow_system_reserved_names                | FALSE   | 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v2.5.15 起新增。|
+|default_mv_refresh_immediate               | TRUE    | 创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。该参数自 v2.5.18 起新增。|
 
 ### 配置 FE 静态参数
 
@@ -213,6 +220,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | frontend_address                     | 0.0.0.0           | FE 节点的 IP 地址。                                          |
 | priority_networks                    | 空字符串          | 为那些有多个 IP 地址的服务器声明一个选择策略。 <br />请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。 |
 | http_port                            | 8030              | FE 节点上 HTTP 服务器的端口。                                |
+| http_worker_threads_num              | 0                 | Http 服务器用于处理 HTTP 请求的线程数。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。引入版本：2.5.18，3.0.10，3.1.7，3.2.2。                              |
 | http_backlog_num                     | 1024              | HTTP 服务器支持的 Backlog 队列长度。                         |
 | cluster_name                         | StarRocks Cluster | FE 所在 StarRocks 集群的名称，显示为网页标题。               |
 | rpc_port                             | 9020              | FE 节点上 Thrift 服务器的端口。                              |
@@ -220,7 +228,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | thrift_server_max_worker_threads     | 4096              | Thrift 服务器支持的最大工作线程数。                          |
 | thrift_client_timeout_ms             | 5000              | Thrift 客户端链接的空闲超时时间，即链接超过该时间无新请求后则将链接断开。单位：ms。|
 | thrift_server_queue_size             | 4096              | Thrift 服务器 pending 队列长度。如果当前处理线程数量超过了配置项 `thrift_server_max_worker_threads` 的值，则将超出的线程加入 pending 队列。|
-| brpc_idle_wait_max_time              | 10000             | BRPC 的空闲等待时间。单位：ms。                              |
+| brpc_idle_wait_max_time              | 10000             | bRPC 的空闲等待时间。单位：ms。                              |
 | query_port                           | 9030              | FE 节点上 MySQL 服务器的端口。                               |
 | mysql_service_nio_enabled            | TRUE              | 是否开启 MySQL 服务器的异步 I/O 选项。                       |
 | mysql_service_io_threads_num         | 4                 | MySQL 服务器中用于处理 I/O 事件的最大线程数。                |
@@ -325,6 +333,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 | 配置项                                                | 默认值      | 单位   | 描述                                                         |
 | ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
+| enable_stream_load_verbose_log                        | false       | N/A    | 是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。该参数自以下版本开始引入：2.5.17、3.0.9、3.1.6、3.2.1。 |
 | report_task_interval_seconds                          | 10          | second | 汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。 |
 | report_disk_state_interval_seconds                    | 60          | second | 汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。   |
 | report_tablet_interval_seconds                        | 60          | second | 汇报 tablet 的间隔。汇报所有的 tablet 的最新版本。           |
@@ -350,9 +359,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | default_num_rows_per_column_file_block                | 1024        | N/A    | 每个 row block 最多存放的行数。                                |
 | pending_data_expire_time_sec                          | 1800        | second | 存储引擎保留的未生效数据的最大时长。                         |
 | inc_rowset_expired_sec                                | 1800        | second | 导入生效的数据，存储引擎保留的时间，用于增量克隆。           |
-| tablet_rowset_stale_sweep_time_sec                    | 1800        | second | 失效 rowset 的清理间隔。                                       |
+| tablet_rowset_stale_sweep_time_sec                    | 1800        | second | 失效 rowset 的清理间隔。缩短该间隔可以降低导入时元数据的占用。                                       |
 | snapshot_expire_time_sec                              | 172800      | second | 快照文件清理的间隔，默认 48 个小时。                         |
-| trash_file_expire_time_sec                            | 259200      | second | 回收站清理的间隔，默认 72 个小时。                           |
+| trash_file_expire_time_sec                            | 86,400      | second | 回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。                           |
 | base_compaction_check_interval_seconds                | 60          | second | BaseCompaction 线程轮询的间隔。                              |
 | min_base_compaction_num_singleton_deltas              | 5           | N/A    | 触发 BaseCompaction 的最小 segment 数。                            |
 | max_base_compaction_num_singleton_deltas              | 100         | N/A    | 单次 BaseCompaction 合并的最大 segment 数。                        |
@@ -361,6 +370,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | update_compaction_check_interval_seconds              | 60          | second | Primary key 模型 Update compaction 的检查间隔。              |
 | min_compaction_failure_interval_sec                   | 120         | second | Tablet Compaction 失败之后，再次被调度的间隔。               |
 | periodic_counter_update_period_ms                     | 500         | ms     | Counter 统计信息的间隔。                                     |
+| pindex_major_compaction_limit_per_disk|1|N/A|每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。引入版本：3.0.9。|
 | load_error_log_reserve_hours                          | 48          | hour   | 导入数据信息保留的时长。                                     |
 | streaming_load_max_mb                                 | 10240       | MB     | 流式导入单个文件大小的上限。                                 |
 | streaming_load_max_batch_size_mb                      | 100         | MB     | 流式导入单个 JSON 文件大小的上限。                             |
@@ -376,8 +386,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | path_gc_check_step                                    | 1000        | N/A    | 单次连续 scan 最大的文件数量。                                   |
 | path_gc_check_step_interval_ms                        | 10          | ms     | 多次连续 scan 文件间隔时间。                                     |
 | path_scan_interval_second                             | 86400       | second | gc 线程清理过期数据的间隔时间。                                 |
-| storage_flood_stage_usage_percent                     | 95          | %      | 如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。        |
-| storage_flood_stage_left_capacity_bytes               | 107374182400| Byte   | 如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。 |
+| storage_flood_stage_usage_percent                     | 95          | %      | BE 存储目录整体磁盘空间使用率的硬上限。如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_percent` 才能使配置生效。        |
+| storage_flood_stage_left_capacity_bytes               | 107374182400| Byte   | BE 存储目录整体磁盘剩余空间的硬限制。如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_reserve_bytes` 才能使配置生效。 |
 | tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
 | tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔。         |
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
@@ -391,8 +401,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | size_tiered_min_level_size                            | 131072      | Byte   | Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。 |
 | storage_page_cache_limit | 20% | N/A | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
 |max_compaction_concurrency|-1| N/A | Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。|
-| internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
-|alter_tablet_worker_count|3|N/A|进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
+|alter_tablet_worker_count|3|N/A | 进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
 
 ### 配置 BE 静态参数
 
@@ -401,8 +410,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |配置项|默认值|描述|
 |---|---|---|
 |be_port|9060|BE 上 thrift server 的端口，用于接收来自 FE 的请求。|
-|brpc_port|8060|BRPC 的端口，可以查看 BRPC 的一些网络统计信息。|
-|brpc_num_threads|-1|BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
+|brpc_port|8060|bRPC 的端口，可以查看 bBRPC 的一些网络统计信息。|
+|brpc_num_threads|-1|bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
 |priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。|
 |heartbeat_service_port|9050|心跳服务端口（thrift），用户接收来自 FE 的心跳。|
 |heartbeat_service_thread_count|1|心跳线程数。|
@@ -456,11 +465,14 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |load_process_max_memory_limit_bytes|107374182400|单节点上所有的导入线程占据的内存上限，100GB。|
 |load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例。|
 |sync_tablet_meta|FALSE|存储引擎是否开 sync 保留到磁盘上。|
-|routine_load_thread_pool_size|10|Routine Load 的线程池数目。|
-|brpc_max_body_size|2147483648|BRPC 最大的包容量，单位为 Byte。|
+|routine_load_thread_pool_size|10|单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。|
+|internal_service_async_thread_num | 10 | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。从 3.1.0 版本起，该参数废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。|
+|max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔。单位：s。|
+|min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔。单位：s。|
+|brpc_max_body_size|2147483648|bRPC 最大的包容量，单位：Byte。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
-|mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。|
+|mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。|
 |flush_thread_num_per_store|2|每个 Store 用以 Flush MemTable 的线程数。|
 | block_cache_enable     | false | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。|
 | block_cache_disk_path  | N/A | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。 |
@@ -473,3 +485,4 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | jdbc_connection_idle_timeout_ms  | 600000 | JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。 |
 | query_cache_capacity  | 536870912 | 指定 Query Cache 的大小。单位：Byte。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br />每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。 |
 | enable_event_based_compaction_framework  | TRUE | 是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。 |
+| update_compaction_size_threshold  | 67108864 | 主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使主键表的 Compaction Score 与其他类型表的相近，便于用户理解。从 v2.5.20 版本起，为了更快执行 compaction，该参数默认值从 `268435456` (256 MB) 改为 `67108864` (64 MB)。|

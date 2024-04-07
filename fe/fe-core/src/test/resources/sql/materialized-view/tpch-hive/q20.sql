@@ -41,7 +41,7 @@ TOP-N (order by [[2: s_name ASC NULLS FIRST]])
     TOP-N (order by [[2: s_name ASC NULLS FIRST]])
         RIGHT SEMI JOIN (join-predicate [13: ps_suppkey = 1: s_suppkey] post-join-predicate [null])
             EXCHANGE SHUFFLE[13]
-                INNER JOIN (join-predicate [12: ps_partkey = 28: l_partkey AND 13: ps_suppkey = 29: l_suppkey AND cast(14: ps_availqty as decimal128(38, 3)) > multiply(0.5, 43: sum)] post-join-predicate [null])
+                INNER JOIN (join-predicate [12: ps_partkey = 28: l_partkey AND 13: ps_suppkey = 29: l_suppkey AND cast(14: ps_availqty as DECIMAL128(38,3)) > multiply(0.5, 43: sum)] post-join-predicate [null])
                     LEFT SEMI JOIN (join-predicate [12: ps_partkey = 17: p_partkey] post-join-predicate [null])
                         EXCHANGE SHUFFLE[12]
                             SCAN (columns{12,13,14} predicate[13: ps_suppkey IS NOT NULL])

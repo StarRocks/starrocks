@@ -6,6 +6,7 @@ namespace starrocks {
 
 // default value of chunk_size, it's a value decided at compile time
 constexpr const int DEFAULT_CHUNK_SIZE = 4096;
+constexpr const int MAX_CHUNK_SIZE = 65535;
 
 // Lock is sharded into 32 shards
 constexpr int NUM_LOCK_SHARD_LOG = 5;

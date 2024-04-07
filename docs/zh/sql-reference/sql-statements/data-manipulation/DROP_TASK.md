@@ -15,14 +15,14 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-DROP TASK '<task_name>'
+DROP TASK `<task_name>`
 ```
 
 ## 参数说明
 
 | **参数**  | **说明**       |
 | --------- | -------------- |
-| task_name | 待删除任务名。 |
+| task_name | 待删除任务名。为避免解析失败，请使用反括号（`）包裹任务名。 |
 
 ## 使用说明
 
@@ -38,7 +38,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 ## 示例
 
 ```Plain
-MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK ctas AS
+MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK `ctas` AS
     -> CREATE TABLE insert_wiki_edit_new
     -> AS SELECT * FROM source_wiki_edit;
 +----------+-----------+
@@ -48,6 +48,6 @@ MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK ctas AS
 +----------+-----------+
 1 row in set (1.19 sec)
 
-MySQL > DROP TASK 'ctas';
+MySQL > DROP TASK `ctas`;
 Query OK, 0 rows affected (0.35 sec)
 ```

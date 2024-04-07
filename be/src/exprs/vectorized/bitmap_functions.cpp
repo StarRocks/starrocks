@@ -583,7 +583,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context,
 
     for (int row = 0; row < size; ++row) {
         BitmapValue* bitmap = viewer.value(row);
-        int byteSize = bitmap->getSizeInBytes();
+        int byteSize = bitmap->get_size_in_bytes();
         std::unique_ptr<char[]> buf;
         buf.reset(new char[byteSize]);
 

@@ -222,8 +222,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
 
-    int connector_num_io_threads =
-            config::pipeline_connector_scan_thread_num_per_cpu * std::thread::hardware_concurrency();
+    int connector_num_io_threads = config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores();
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
@@ -430,18 +429,17 @@ Status ExecEnv::init_mem_tracker() {
 }
 
 int64_t ExecEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (process_mem_tracker()->has_limit()) {
         mem_limit = process_mem_tracker()->limit();
     }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
 }
 
 int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {

@@ -82,6 +82,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -144,6 +146,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
+    public enum JobSubstate {
+        STABLE,
+        UNSTABLE
+    }
+
     protected long id;
     protected String name;
     protected long dbId;
@@ -158,6 +165,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected RowDelimiter rowDelimiter; // optional
     protected int desireTaskConcurrentNum; // optional
     protected JobState state = JobState.NEED_SCHEDULE;
+    protected JobSubstate substate = JobSubstate.STABLE;
     protected LoadDataSourceType dataSourceType;
     protected double maxFilterRatio = 1;
     // max number of error data in max batch rows * 10
@@ -197,6 +205,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected int currentTaskConcurrentNum;
     protected RoutineLoadProgress progress;
 
+    protected RoutineLoadProgress timestampProgress;
+
     protected long firstResumeTimestamp; // the first resume time
     protected long autoResumeCount;
     protected boolean autoResumeLock = false; //it can't auto resume iff true
@@ -204,6 +214,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected String otherMsg = "";
     protected ErrorReason pauseReason;
     protected ErrorReason cancelReason;
+
+    protected ErrorReason stateChangedReason;
 
     protected long createTimestamp = System.currentTimeMillis();
     protected long pauseTimestamp = -1;
@@ -376,7 +388,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public void setOtherMsg(String otherMsg) {
-        this.otherMsg = Strings.nullToEmpty(otherMsg);
+        this.otherMsg = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + ": " + Strings.nullToEmpty(otherMsg);
     }
 
     public String getDbFullName() throws MetaNotFoundException {
@@ -384,12 +397,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        database.readLock();
-        try {
-            return database.getFullName();
-        } finally {
-            database.readUnlock();
-        }
+        return database.getFullName();
     }
 
     public long getTableId() {
@@ -486,6 +494,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public RoutineLoadProgress getProgress() {
         return progress;
+    }
+
+    public RoutineLoadProgress getTimestampProgress() {
+        return timestampProgress;
     }
 
     public double getMaxFilterRatio() {
@@ -616,7 +628,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         this.receivedBytes += receivedBytes;
         this.totalTaskExcutionTimeMs += taskExecutionTime;
 
-        if (MetricRepo.isInit && !isReplay) {
+        if (MetricRepo.hasInit && !isReplay) {
             MetricRepo.COUNTER_ROUTINE_LOAD_ROWS.increase(numOfTotalRows);
             MetricRepo.COUNTER_ROUTINE_LOAD_ERROR_ROWS.increase(numOfErrorRows);
             MetricRepo.COUNTER_ROUTINE_LOAD_RECEIVED_BYTES.increase(receivedBytes);
@@ -929,6 +941,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             .build());
                 }
                 ++abortedTaskNum;
+                setOtherMsg(txnStatusChangeReasonString);
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
                     txnStatusChangeReason =
@@ -1128,7 +1141,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             GlobalStateMgr.getCurrentState().getEditLog().logOpRoutineLoadJob(new RoutineLoadOperation(id, jobState));
         }
 
-        if (!isReplay && MetricRepo.isInit && JobState.PAUSED == jobState) {
+        if (!isReplay && MetricRepo.hasInit && JobState.PAUSED == jobState) {
             MetricRepo.COUNTER_ROUTINE_LOAD_PAUSED.increase(1L);
         }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
@@ -1281,7 +1294,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             row.add(TimeUtils.longToTimeString(endTimestamp));
             row.add(db == null ? String.valueOf(dbId) : db.getFullName());
             row.add(tbl == null ? String.valueOf(tableId) : tbl.getName());
-            row.add(getState().name());
+            if (state == JobState.RUNNING) {
+                row.add(substate == JobSubstate.STABLE ? state.name() : substate.name());
+            } else {
+                row.add(state.name());
+            }
             row.add(dataSourceType.name());
             row.add(String.valueOf(getSizeOfRoutineLoadTaskInfoList()));
             row.add(jobPropertiesToJsonString());
@@ -1289,12 +1306,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
             row.add(getProgress().toJsonString());
+            row.add(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
                     row.add(pauseReason == null ? "" : pauseReason.toString());
                     break;
                 case CANCELLED:
                     row.add(cancelReason == null ? "" : cancelReason.toString());
+                    break;
+                case RUNNING:
+                    if (substate == JobSubstate.UNSTABLE) {
+                        row.add(stateChangedReason == null ? "" : stateChangedReason.toString());
+                    } else {
+                        row.add("");
+                    }
                     break;
                 default:
                     row.add("");
@@ -1476,6 +1501,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         switch (dataSourceType) {
             case KAFKA: {
                 progress = new KafkaProgress();
+                timestampProgress = new KafkaProgress();
                 progress.readFields(in);
                 break;
             }
@@ -1633,5 +1659,26 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
         }
         this.jobProperties.putAll(copiedJobProperties);
+    }
+    protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
+        writeLock();
+        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                .add("current_job_substate", this.substate)
+                .add("desire_job_substate", substate)
+                .add("msg", reason)
+                .build());
+        try {
+            this.substate = substate;
+            this.stateChangedReason = reason;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void updateSubstateStable() throws UserException {
+        updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    public void updateSubstate() throws UserException {
     }
 }

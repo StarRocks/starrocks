@@ -623,7 +623,8 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         String msg = "BITMAP column must use bitmap function, like " + columnName + "=to_bitmap(xxx) or "
-                + columnName + "=bitmap_hash() or " + columnName + "=bitmap_dict()";
+                + columnName + "=bitmap_hash() or " + columnName + "=bitmap_dict() or "
+                + columnName + "=bitmap_from_binary()";
         if (!(expr instanceof FunctionCallExpr)) {
             throw new LoadException(msg);
         }
@@ -631,7 +632,8 @@ public class SparkLoadPendingTask extends LoadTask {
         String functionName = fn.getFnName().getFunction();
         if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
-                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_DICT)) {
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_DICT)
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_FROM_BINARY)) {
             throw new LoadException(msg);
         }
 

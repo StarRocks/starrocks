@@ -1,4 +1,5 @@
 ---
+keywords: ['xiugai'] 
 displayed_sidebar: "Chinese"
 ---
 
@@ -6,7 +7,11 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-管理 StarRocks 集群中的 FE、BE 和 Broker。仅 root 用户有权限使用该语句。
+管理 StarRocks 集群中的 FE、BE、CN 和 Broker。
+
+> **注意**
+>
+> 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关操作。
 
 ## 语法和参数说明
 
@@ -40,7 +45,7 @@ displayed_sidebar: "Chinese"
 
     | **参数**           | **必选** | **说明**                                                     |
     | ------------------ | -------- | ------------------------------------------------------------ |
-    | host:edit_log_port | 是       | <ul><li>`host`：FE 机器的主机名或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`edit_log_port`：FE 上的 BDBJE 通信端口，默认为 `9010`。</li></ul> |
+    | host:edit_log_port | 是       | <ul><li>`host`：FE 机器的 FQDN 或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`edit_log_port`：FE 上的 BDBJE 通信端口，默认为 `9010`。</li></ul> |
 
 - 创建 image。
 
@@ -76,7 +81,31 @@ displayed_sidebar: "Chinese"
 
     | **参数**                    | **必选** | **说明**                                                     |
     | --------------------------- | -------- | ------------------------------------------------------------ |
-    | host:heartbeat_service_port | 是       |<ul><li> `host`：BE 机器的主机名或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`heartbeat_service_port`：BE 的心跳端口，用于接收来自 FE 的心跳，默认为 `9050`。</li></ul> |
+    | host:heartbeat_service_port | 是       |<ul><li> `host`：BE 机器的 FQDN 或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`heartbeat_service_port`：BE 的心跳端口，用于接收来自 FE 的心跳，默认为 `9050`。</li></ul> |
+
+### CN
+
+- 添加 CN。 添加后，可通过 `SHOW PROC '/compute_nodes'\G` 查看新增 CN 的状态。
+
+    ```SQL
+    ALTER SYSTEM ADD COMPUTE NODE "host:heartbeat_service_port"[, ...]
+    ```
+
+- 删除 CN。
+
+    ```SQL
+    ALTER SYSTEM DROP COMPUTE NODE "host:heartbeat_service_port"[, ...]
+    ```
+
+> **说明**
+>
+> CN 暂不支持通过 `ALTER SYSTEM DECOMMISSION` 命令下线。
+
+    参数说明如下：
+
+    | **参数**                    | **必选** | **说明**                                                     |
+    | --------------------------- | -------- | ------------------------------------------------------------ |
+    | host:heartbeat_service_port | 是       |<ul><li> `host`：CN 机器的 FQDN 或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`heartbeat_service_port`：CN 的心跳端口，用于接收来自 FE 的心跳，默认为 `9050`。</li></ul> |
 
 ### Broker
 
@@ -107,7 +136,7 @@ displayed_sidebar: "Chinese"
     | **参数**             | **必选** | **说明**                                                     |
     | -------------------- | -------- | ------------------------------------------------------------ |
     | broker_name          | 是       | 一个 Broker 的名称或多个 Broker 共用的名称。                 |
-    | host:broker_ipc_port | 是       | <ul><li>`host`：Broker 机器的主机名或 IP 地址。</li><li>`broker_ipc_port`：Broker 上的 thrift server 端口，用于接受 FE 或 BE 的请求，默认为 `8000`。</li></ul> |
+    | host:broker_ipc_port | 是       | <ul><li>`host`：Broker 机器的 FQDN 或 IP 地址。</li><li>`broker_ipc_port`：Broker 上的 thrift server 端口，用于接受 FE 或 BE 的请求，默认为 `8000`。</li></ul> |
 
 ## 使用说明
 

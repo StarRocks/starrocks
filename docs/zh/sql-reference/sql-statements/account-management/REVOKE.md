@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
 - 撤销某用户或某角色对数据库和表的指定权限。当撤销某角色的指定权限时，该角色必须存在。
 
     ```SQL
-    REVOKE privilege_list ON db_name[.tbl_name] FROM {user_identity | ROLE 'role_name'}
+    REVOKE privilege_list ON db_name.tbl_name FROM {user_identity | ROLE 'role_name'}
     ```
 
 - 撤销某用户或某角色对资源的指定权限。当撤销某角色的指定权限时，该角色必须存在。
@@ -54,7 +54,7 @@ displayed_sidebar: "Chinese"
 - `DROP_PRIV`：数据库和表的删除权限。
 - `USAGE_PRIV`：资源的使用权限。
 
-### db_name [.tbl_name]
+### db_name.tbl_name
 
 指定的数据库和表。支持以下格式：
 

@@ -193,6 +193,10 @@ void LRUCache::set_capacity(size_t capacity) {
     }
 }
 
+void LRUCache::set_charge_mode(ChargeMode charge_mode) {
+    _charge_mode = charge_mode;
+}
+
 uint64_t LRUCache::get_lookup_count() {
     std::lock_guard l(_mutex);
     return _lookup_count;
@@ -295,7 +299,8 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
 }
 
 Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t charge,
-                                void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+                                void (*deleter)(const CacheKey& key, void* value), CachePriority priority,
+                                size_t value_size) {
     auto* e = reinterpret_cast<LRUHandle*>(malloc(sizeof(LRUHandle) - 1 + key.size()));
     e->value = value;
     e->deleter = deleter;
@@ -306,6 +311,7 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     e->next = e->prev = nullptr;
     e->in_cache = true;
     e->priority = priority;
+    e->value_size = value_size;
     memcpy(e->key_data, key.data(), key.size());
     std::vector<LRUHandle*> last_ref_list;
     {
@@ -395,10 +401,12 @@ uint32_t ShardedLRUCache::_shard(uint32_t hash) {
     return hash >> (32 - kNumShardBits);
 }
 
-ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capacity) {
+ShardedLRUCache::ShardedLRUCache(size_t capacity, ChargeMode charge_mode)
+        : _last_id(0), _capacity(capacity), _charge_mode(charge_mode) {
     const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
+        _shard.set_charge_mode(_charge_mode);
     }
 }
 
@@ -427,9 +435,10 @@ bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
 }
 
 Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t charge,
-                                       void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+                                       void (*deleter)(const CacheKey& key, void* value), CachePriority priority,
+                                       size_t value_size) {
     const uint32_t hash = _hash_slice(key);
-    return _shards[_shard(hash)].insert(key, hash, value, charge, deleter, priority);
+    return _shards[_shard(hash)].insert(key, hash, value, charge, deleter, priority, value_size);
 }
 
 Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
@@ -453,7 +462,8 @@ void* ShardedLRUCache::value(Handle* handle) {
 
 Slice ShardedLRUCache::value_slice(Handle* handle) {
     auto lru_handle = reinterpret_cast<LRUHandle*>(handle);
-    return {(char*)lru_handle->value, lru_handle->charge};
+    size_t record_size = _charge_mode == ChargeMode::VALUESIZE ? lru_handle->charge : lru_handle->value_size;
+    return {(char*)lru_handle->value, record_size};
 }
 
 uint64_t ShardedLRUCache::new_id() {
@@ -526,8 +536,8 @@ void ShardedLRUCache::get_cache_status(rapidjson::Document* document) {
     }
 }
 
-Cache* new_lru_cache(size_t capacity) {
-    return new ShardedLRUCache(capacity);
+Cache* new_lru_cache(size_t capacity, ChargeMode charge_mode) {
+    return new ShardedLRUCache(capacity, charge_mode);
 }
 
 } // namespace starrocks

@@ -69,3 +69,95 @@ select bitmap_to_string(bitmap_subset_in_range(v1, 3, 2)) from test_bitmap_table
 select bitmap_to_string(bitmap_subset_in_range(v1, 2, 3)) from test_bitmap_table1 order by k1;
 select bitmap_to_string(bitmap_subset_in_range(v1, -2, 3)) from test_bitmap_table1 order by k1;
 
+-- name: test_subdivide_bitmap
+
+CREATE TABLE `t1` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE `t2` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT "",
+  `c3` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`, `c2`)
+DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE `t3` (
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` bitmap BITMAP_UNION NOT NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE `t4` (
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` int(11) NOT NULL COMMENT "",
+  `c3` bitmap BITMAP_UNION NOT NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`, `c2`)
+DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- nullable column (const split size)
+truncate table t1;
+insert into t1 select 1, null;
+insert into t1 select 2, bitmap_empty();
+insert into t1 select 3, to_bitmap(1);
+insert into t1 select 4, bitmap_agg(generate_series) from table(generate_series(1, 10));
+insert into t1 select 5, bitmap_agg(generate_series) from table(generate_series(1, 60));
+insert into t1 select 5, bitmap_agg(generate_series) from table(generate_series(8589934592, 8589934610));
+
+select c1, bitmap_count(subdivide_bitmap) from t1, subdivide_bitmap(t1.c2, 0) order by c1;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t1, subdivide_bitmap(t1.c2, 1) order by c1, min_value;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t1, subdivide_bitmap(t1.c2, 3) order by c1, min_value;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t1, subdivide_bitmap(t1.c2, 13) order by c1, min_value;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t1, subdivide_bitmap(t1.c2, 90) order by c1, min_value;
+
+-- nullable column (non-const split size)
+truncate table t2;
+insert into t2 select 1, 0, bitmap_empty();
+insert into t2 select 2, 1, bitmap_empty();
+insert into t2 select 3, 1, to_bitmap(1);
+insert into t2 select 4, 2, to_bitmap(1);
+insert into t2 select 5, 3, bitmap_agg(generate_series) from table(generate_series(1, 10));
+insert into t2 select 6, 10, bitmap_agg(generate_series) from table(generate_series(1, 60));
+insert into t2 select 6, 10, bitmap_agg(generate_series) from table(generate_series(8589934592, 8589934610));
+insert into t2 select 7, null, bitmap_agg(generate_series) from table(generate_series(8589934592, 8589934610));
+insert into t2 select 8, 10, null;
+
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t2, subdivide_bitmap(t2.c3, c2) order by c1, min_value;
+
+-- non-nullable column (const split size)
+
+truncate table t3;
+insert into t3 select 1, bitmap_empty();
+insert into t3 select 2, to_bitmap(1);
+insert into t3 select 3, bitmap_agg(generate_series) from table(generate_series(1, 10));
+insert into t3 select 4, bitmap_agg(generate_series) from table(generate_series(1, 60));
+insert into t3 select 4, bitmap_agg(generate_series) from table(generate_series(8589934592, 8589934610));
+
+select c1, bitmap_count(subdivide_bitmap) from t3, subdivide_bitmap(t3.c2, 0) order by c1;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t3, subdivide_bitmap(t3.c2, 1) order by c1, min_value;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t3, subdivide_bitmap(t3.c2, 3) order by c1, min_value;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t3, subdivide_bitmap(t3.c2, 13) order by c1, min_value;
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t3, subdivide_bitmap(t3.c2, 90) order by c1, min_value;
+
+-- non-nullable column (non-const split size)
+
+truncate table t4;
+insert into t4 select 1, 0, bitmap_empty();
+insert into t4 select 2, 1, bitmap_empty();
+insert into t4 select 3, 1, to_bitmap(1);
+insert into t4 select 4, 2, to_bitmap(1);
+insert into t4 select 5, 3, bitmap_agg(generate_series) from table(generate_series(1, 10));
+insert into t4 select 6, 10, bitmap_agg(generate_series) from table(generate_series(1, 60));
+insert into t4 select 6, 10, bitmap_agg(generate_series) from table(generate_series(8589934592, 8589934610));
+
+select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t4, subdivide_bitmap(t4.c3, c2) order by c1, min_value;

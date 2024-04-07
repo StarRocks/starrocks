@@ -14,13 +14,13 @@ You can use the GRANT statement to perform the following operations:
 
 ## Syntax
 
-- Grant specific privileges on a database and a table to a user or a role. If the role that is granted these privileges does not exist, the system automatically creates the role when you execute this statement.
+- Grant specific privileges on a database and a table to a user or a role. The role or user must exist.
 
     ```SQL
-    GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}
+    GRANT privilege_list ON db_name.tbl_name TO {user_identity | ROLE 'role_name'}
     ```
 
-- Grant specific privileges on a resource to a user or a role. If the role that is granted these privileges does not exist, the system automatically creates the role when you execute this statement.
+- Grant specific privileges on a resource to a user or a role.  The role or user must exist.
 
     ```SQL
     GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
@@ -42,7 +42,7 @@ You can use the GRANT statement to perform the following operations:
 
 ### privilege_list
 
-The privileges that can be granted to a user or a role. If you want to grant multiple privileges at a time, separate the privileges with commas (`,`). The following privileges are supported:
+The privileges that can be granted to a user or a role. If you want to grant multiple privileges at a time, separate the privileges with commas (`,`). See Example 3. The following privileges are supported:
 
 - `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes.
 - `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
@@ -60,11 +60,11 @@ The preceding privileges can be classified into the following three categories:
 - Database and table privilege: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, and `DROP_PRIV`
 - Resource privilege: `USAGE_PRIV`
 
-### db_name[.tbl_name]
+### db_name.tbl_name
 
 The database and table. This parameter supports the following three formats:
 
-- `*.*`: indicates all databases and tables. If this format is specified, the global privilege is granted.
+- `*.*`: indicates all databases and tables in the cluster. If this format is specified, the global privilege is granted.
 - `db.*`: indicates a specific database and all tables in this database.
 - `db.tbl`: indicates a specific table in a specific database.
 
@@ -101,7 +101,7 @@ Example 2: Grant the data loading privilege on `db1` and all tables in this data
 GRANT LOAD_PRIV ON db1.* TO ROLE 'my_role';
 ```
 
-Example 3: Grant the read privilege, schema change privilege, and data loading privilege on `db1` and `tbl1` to user `jack`.
+Example 3: Grant the read privilege, schema change privilege, and data loading privilege on `tbl1` in `db1` to user `jack`.
 
 ```SQL
 GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
@@ -113,13 +113,13 @@ Example 4: Grant the privilege to use all the resources to user `jack`.
 GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
 ```
 
-Example 5: Grant the privilege to use spark_resource to user `jack`.
+Example 5: Grant the privilege to use `spark_resource` to user `jack`.
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
 ```
 
-Example 6: Grant the privilege to use spark_resource to the `my_role`.
+Example 6: Grant the privilege to use `spark_resource` to role `my_role`.
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
@@ -273,4 +273,4 @@ You can only write data into Iceberg tables (since v3.1).
      GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
      ```
 
-For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).
+For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#scenario-2-multiple-lines-of-business).

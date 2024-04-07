@@ -31,6 +31,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.TraceManager;
@@ -324,13 +325,25 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
-    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            // if tabletCommitInfos is null, skip this check and return true
-            LOG.warn("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
-                    tabletId, backend != null ? backend.toString() : "", transactionId);
+            if (LOG.isDebugEnabled()) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                // if tabletCommitInfos is null, skip this check and return true
+                LOG.debug("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
+                        tabletId, backend != null ? backend.toString() : "", transactionId);
+            }
+            return true;
+        }
+        if (state != ReplicaState.NORMAL) {
+            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
+            // We handle version missing in finishTask when change state to NORMAL
+            if (LOG.isDebugEnabled()) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
+                        tabletId, backend != null ? backend.toString() : "", state);
+            }
             return true;
         }
         return this.tabletCommitInfos.contains(info);
@@ -424,13 +437,13 @@ public class TransactionState implements Writable {
 
         // after status changed
         if (transactionStatus == TransactionStatus.VISIBLE) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_SUCCESS.increase(1L);
             }
             txnSpan.addEvent("set_visible");
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.ABORTED) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_FAILED.increase(1L);
             }
             txnSpan.setAttribute("state", "aborted");

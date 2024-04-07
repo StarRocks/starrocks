@@ -36,7 +36,7 @@ import java.util.Map;
 
 public class JvmInfo {
 
-    private static JvmInfo INSTANCE;
+    private static final JvmInfo INSTANCE;
 
     static {
         RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();

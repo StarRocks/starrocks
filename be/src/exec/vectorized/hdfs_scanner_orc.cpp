@@ -8,8 +8,10 @@
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/orc_min_max_decoder.h"
 #include "gen_cpp/orc_proto.pb.h"
+#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
@@ -135,8 +137,14 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             } else {
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(
                         _scanner_ctx.partition_values[part_idx]);
-                min_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
-                max_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    min_chunk->columns()[i]->append_nulls(1);
+                    max_chunk->columns()[i]->append_nulls(1);
+                } else {
+                    min_chunk->columns()[i]->append(*data_column, 0, 1);
+                    max_chunk->columns()[i]->append(*data_column, 0, 1);
+                }
             }
         }
     }
@@ -291,6 +299,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
+        options.setMemoryPool(*getOrcMemoryPool());
         reader = orc::createReader(std::move(input_stream), options);
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());

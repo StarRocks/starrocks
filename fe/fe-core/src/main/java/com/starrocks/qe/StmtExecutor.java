@@ -79,7 +79,6 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
@@ -156,6 +155,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -189,6 +189,7 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
+    private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -286,15 +287,60 @@ public class StmtExecutor {
         profile.computeTimeInChildProfile();
     }
 
+    /**
+     * Whether to forward to leader from follower which should be the same in the StmtExecutor's lifecycle.
+     */
     public boolean isForwardToLeader() {
+        return getIsForwardToLeaderOrInit(true);
+    }
+
+    public boolean getIsForwardToLeaderOrInit(boolean isInitIfNoPresent) {
+        if (!isForwardToLeaderOpt.isPresent()) {
+            if (!isInitIfNoPresent) {
+                return false;
+            }
+            isForwardToLeaderOpt = Optional.of(initForwardToLeaderState());
+        }
+        return isForwardToLeaderOpt.get();
+    }
+
+    private boolean initForwardToLeaderState() {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
 
+        // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its own node.
+        if (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
+            long lastPrintTime = -1L;
+            while (true) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+
+                if (System.currentTimeMillis() - lastPrintTime > 1000L) {
+                    lastPrintTime = System.currentTimeMillis();
+                    LOG.info("waiting for current FE node transferring to LEADER state");
+                }
+
+                if (GlobalStateMgr.getCurrentState().isLeader()) {
+                    return false;
+                }
+            }
+        }
+
         // this is a query stmt, but this non-master FE can not read, forward it to master
-        if (parsedStmt instanceof QueryStatement && !GlobalStateMgr.getCurrentState().isLeader()
-                && !GlobalStateMgr.getCurrentState().canRead()) {
-            return true;
+        if (parsedStmt instanceof QueryStatement) {
+            // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
+            if (context != null && context.getSessionVariable() != null &&
+                    context.getSessionVariable().isFollowerForwardToLeaderOpt().isPresent()) {
+                return context.getSessionVariable().isFollowerForwardToLeaderOpt().get();
+            }
+
+            if (!GlobalStateMgr.getCurrentState().canRead()) {
+                return true;
+            }
         }
 
         if (redirectStatus == null) {
@@ -302,6 +348,10 @@ public class StmtExecutor {
         } else {
             return redirectStatus.isForwardToLeader();
         }
+    }
+
+    public LeaderOpExecutor getLeaderOpExecutor() {
+        return leaderOpExecutor;
     }
 
     public ByteBuffer getOutputPacket() {
@@ -355,7 +405,11 @@ public class StmtExecutor {
             // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
             if (parsedStmt != null) {
                 Map<String, String> optHints = null;
-                if (parsedStmt instanceof QueryStatement &&
+                boolean isQuery = parsedStmt instanceof QueryStatement;
+                // set isQuery before `forwardToLeader` to make it right for audit log.
+                context.getState().setIsQuery(isQuery);
+
+                if (isQuery &&
                         ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
                     SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
                     optHints = selectRelation.getSelectList().getOptHints();
@@ -432,8 +486,6 @@ public class StmtExecutor {
             }
 
             if (parsedStmt instanceof QueryStatement) {
-                context.getState().setIsQuery(true);
-
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
                     OriginStatement origStmt = parsedStmt.getOrigStmt();
@@ -449,8 +501,11 @@ public class StmtExecutor {
                 Preconditions.checkNotNull(execPlan, "query must has a plan");
 
                 int retryTime = Config.max_query_retry_time;
+                ExecuteExceptionHandler.RetryContext retryContext =
+                        new ExecuteExceptionHandler.RetryContext(0, execPlan, context, parsedStmt);
                 for (int i = 0; i < retryTime; i++) {
                     boolean needRetry = false;
+                    retryContext.setRetryTime(i);
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -463,12 +518,13 @@ public class StmtExecutor {
 
                         Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
 
-                        handleQueryStmt(execPlan);
+                        handleQueryStmt(retryContext.getExecPlan());
                         break;
-                    } catch (RpcException e) {
+                    } catch (Exception e) {
                         if (i == retryTime - 1) {
                             throw e;
                         }
+                        ExecuteExceptionHandler.handle(e, retryContext);
                         if (!context.getMysqlChannel().isSend()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
@@ -540,21 +596,22 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
-            throw e;
         } catch (UserException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
             context.getState().setError(e.getMessage());
-            context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            if (parsedStmt instanceof KillStmt) {
+                // ignore kill stmt execute err(not monitor it)
+                context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else {
+                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql " + sql, e);
             context.getState().setError(e.getMessage());
-            if (parsedStmt instanceof KillStmt) {
-                // ignore kill stmt execute err(not monitor it)
-                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            }
+            context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {

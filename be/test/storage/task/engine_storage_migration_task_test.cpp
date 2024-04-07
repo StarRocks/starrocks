@@ -310,7 +310,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
     std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be.conf";
-    if (!starrocks::config::init(conffile.c_str(), false)) {
+    if (!starrocks::config::init(conffile.c_str())) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }

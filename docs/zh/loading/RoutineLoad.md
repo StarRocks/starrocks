@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# 从 Apache Kafka® 持续导入
+# 使用 Routine Load 导入数据
 
 本文介绍 Routine Load 的基本原理、以及如何通过 Routine Load 持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。
 
@@ -64,7 +64,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
       > **说明**
       >
-      > StarRocks 可以通过安全认证机制，包括 SASL_SSL 认证、SASL 认证和 SSL 认证，以及无认证的方式连接 Kafka。本文以无认证的方式连接 Kafka 为例进行说明，如果您需要通过安全认证机制连接 Kafka，请参见[CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+      > StarRocks 支持通过安全协议，包括 SASL_SSL、SAS_PLAINTEXT、SSL，或者 PLAINTEXT 来连接 Kafka。本文以 PLAINTEXT 方式连接 Kafka 为例进行演示，如果您需要通过其他安全协议连接 Kafka，请参见[CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
 
 4. **持续生成新的导入任务，不间断地导入数据**
 
@@ -366,7 +366,7 @@ RESUME ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 ## 修改导入作业
 
-修改前，您需要先执行 PAUSE ROUTINE LOAD 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/alter-routine-load.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
+修改前，您需要先执行 PAUSE ROUTINE LOAD 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
 
 例如，当存活 BE 节点数增至 6 个，待消费分区为`"0,1,2,3,4,5,6,7"`时，如果您希望提高实际的导入并行度，则可以通过以下语句，将期望任务并行度`desired_concurrent_number` 增加至 `6`（大于等于存活 BE 节点数），并且调整待消费分区和起始消费位点。
 

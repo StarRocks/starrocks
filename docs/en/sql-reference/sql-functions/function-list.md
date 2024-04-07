@@ -15,7 +15,7 @@ You can find a function based on the following categories:
   - [Bitmap functions](#bitmap-functions)
   - [Conditional functions](#conditional-functions)
   - [Cryptographic functions](#cryptographic-functions)
-  - [Date functions](#date-functions)
+  - [Date and time functions](#date-and-time-functions)
   - [Geographic functions](#geographic-functions)
   - [Hash functions](#hash-functions)
   - [JSON functions](#json-functions)
@@ -130,6 +130,9 @@ You can find a function based on the following categories:
 - [intersect_count](../sql-functions/bitmap-functions/intersect_count.md)
 - [sub_bitmap](../sql-functions/bitmap-functions/sub_bitmap.md)
 - [to_bitmap](../sql-functions/bitmap-functions/to_bitmap.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
+- [sub_bitmap](./bitmap-functions/sub_bitmap.md)
+- [to_bitmap](./bitmap-functions/to_bitmap.md)
 
 ## Conditional functions
 
@@ -151,7 +154,7 @@ You can find a function based on the following categories:
 - [sm3](../sql-functions/crytographic-functions/sm3.md)
 - [to_base64](../sql-functions/crytographic-functions/from_base64.md)
 
-## Date functions
+## Date and time functions
 
 - [add_months](../sql-functions/date-time-functions/add_months.md)
 - [adddate, days_ad](../sql-functions/date-time-functions/adddate.md)
@@ -246,7 +249,7 @@ You can find a function based on the following categories:
 - [cast](../sql-functions/json-functions/json-query-and-processing-functions/cast.md)
 - [get_json_double](../sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
 - [get_json_int](../sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
-- [get_json_string](../sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
+- [get_json_strin,get_json_object](../sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
 - [json_each](../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
 - [json_exists](../sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
 - [json_length](../sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
@@ -347,10 +350,11 @@ You can find a function based on the following categories:
 
 ## Pattern matching functions
 
-- [like](../sql-functions/like_predicate-functions/like.md)
-- [regexp](../sql-functions/like_predicate-functions/regexp.md)
-- [regexp_extract](../sql-functions/like_predicate-functions/regexp_extract.md)
-- [regexp_replace](../sql-functions/like_predicate-functions/regexp_replace.md)
+- [like](./like-predicate-functions/like.md)
+- [regexp](./like-predicate-functions/regexp.md)
+- [regexp_extract](./like-predicate-functions/regexp_extract.md)
+- [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md)
+- [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
 
@@ -361,7 +365,13 @@ You can find a function based on the following categories:
 
 ## Scalar functions
 
-- [hll_cardinality](../sql-functions/scalar-functions/hll_cardinality.md)
+- [hll_cardinality](./scalar-functions/hll_cardinality.md)
+
+## Table functions
+
+- [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
+- [unnest](./array-functions/unnest.md)
 
 ## Utility functions
 

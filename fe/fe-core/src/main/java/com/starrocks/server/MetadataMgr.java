@@ -87,6 +87,8 @@ public class MetadataMgr {
             String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
                     ConnectContext.get().getQueryId().toString() : null;
             if (queryId != null) {
+                LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]",
+                        catalogName, queryId);
                 QueryMetadatas queryMetadatas = metadataCacheByQueryId.getUnchecked(queryId);
                 return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId));
             } else {
@@ -95,6 +97,8 @@ public class MetadataMgr {
                     LOG.error("Failed to get {} catalog", catalogName);
                     return Optional.empty();
                 } else {
+                    LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]",
+                            catalogName, queryId);
                     return Optional.of(connector.getMetadata());
                 }
             }
@@ -106,6 +110,7 @@ public class MetadataMgr {
                 ConnectContext.get().getQueryId().toString() : null;
         if (queryId != null) {
             metadataCacheByQueryId.invalidate(queryId);
+            LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
         }
     }
 

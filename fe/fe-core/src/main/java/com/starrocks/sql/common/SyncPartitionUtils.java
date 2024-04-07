@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.common;
 
-import com.clearspring.analytics.util.Preconditions;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -26,6 +26,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
@@ -447,6 +448,9 @@ public class SyncPartitionUtils {
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
                 refreshContext.getBaseTableInfoVisibleVersionMap();
         if (versionMap == null) {
+            return;
+        }
+        if (StringUtils.isEmpty(tableName.getCatalog()) || CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             return;
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);

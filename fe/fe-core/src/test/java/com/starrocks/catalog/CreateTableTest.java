@@ -309,6 +309,35 @@ public class CreateTableTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
                         "PROPERTIES ( \"replication_num\" = \"1\", \"abc\" = \"def\");"));
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Date type partition does not support dynamic partitioning granularity of hour",
+                () -> createTable("CREATE TABLE test.test_hour_partition2 (\n" +
+                        "  `event_day` date NULL COMMENT \"\",\n" +
+                        "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
+                        "PARTITION BY RANGE(`event_day`)\n" +
+                        "()\n" +
+                        "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"dynamic_partition.enable\" = \"true\",\n" +
+                        "\"dynamic_partition.time_unit\" = \"HOUR\",\n" +
+                        "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                        "\"dynamic_partition.start\" = \"-1\",\n" +
+                        "\"dynamic_partition.end\" = \"10\",\n" +
+                        "\"dynamic_partition.prefix\" = \"p\",\n" +
+                        "\"dynamic_partition.buckets\" = \"3\",\n" +
+                        "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");"));
     }
 
     @Test
@@ -453,7 +482,7 @@ public class CreateTableTest {
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
         System.out.println("columns = " + columns);
-        Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
+        Assert.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
@@ -868,5 +897,17 @@ public class CreateTableTest {
                                 "\"storage_format\" = \"DEFAULT\"\n" +
                                 ");"
                 ));
+    }
+
+    @Test
+    public void testReservedColumnName() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
+                " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Column name [__op] is a system reserved name." +
+                " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
+                () -> starRocksAssert.withTable(sql1));
     }
 }

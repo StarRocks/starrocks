@@ -141,7 +141,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
     // Not transmit delta if it's the final sink
     if (_is_final_sink) {
-        return query_statistic;
+        return nullptr;
     }
 
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));

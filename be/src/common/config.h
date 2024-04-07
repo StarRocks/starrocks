@@ -256,7 +256,7 @@ CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 CONF_Int32(max_garbage_sweep_interval, "3600");
 CONF_Int32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
-CONF_mInt32(trash_file_expire_time_sec, "259200");
+CONF_mInt32(trash_file_expire_time_sec, "86400");
 // check row nums for BE/CE and schema change. true is open, false is closed.
 CONF_mBool(row_nums_check, "true");
 //file descriptors cache, by default, cache 16384 descriptors
@@ -266,6 +266,9 @@ CONF_Int32(file_descriptor_cache_capacity, "16384");
 CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
+
+// data and index page size, default is 64k
+CONF_Int32(data_page_size, "65536");
 
 // Cache for storage page size
 CONF_mString(storage_page_cache_limit, "20%");
@@ -297,11 +300,11 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // when candidate num reach this value, the condidate with lowest score will be dropped.
 CONF_mInt64(max_compaction_candidate_num, "40960");
 
-CONF_mInt32(update_compaction_check_interval_seconds, "60");
+CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
-CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
-CONF_mInt64(update_compaction_size_threshold, "268435456");
+CONF_mInt64(update_compaction_size_threshold, "67108864");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
@@ -847,6 +850,8 @@ CONF_Bool(enable_schema_change_v2, "true");
 // default: true
 CONF_Bool(enable_segment_overflow_read_chunk, "true");
 
+CONF_Int64(rpc_connect_timeout_ms, "30000");
+
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
@@ -876,6 +881,9 @@ CONF_mBool(dependency_librdkafka_debug_enable, "false");
 // Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
 // admin, eos, mock, assigner, conf
 CONF_String(dependency_librdkafka_debug, "all");
+
+// DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, WARN by default
+CONF_mInt16(pulsar_client_log_level, "2");
 
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
@@ -935,6 +943,7 @@ CONF_Bool(block_cache_report_stats, "false");
 CONF_Int64(block_cache_lru_insertion_point, "1");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
+// max wal file size in l0
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
 CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
@@ -947,13 +956,24 @@ CONF_Bool(enable_pindex_minor_compaction, "false");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
-// control the background compaction threads
-CONF_mInt64(pindex_major_compaction_num_threads, "0");
+// Number of max major compaction threads
+CONF_mInt32(pindex_major_compaction_num_threads, "0");
+// Limit of major compaction per disk.
+CONF_mInt32(pindex_major_compaction_limit_per_disk, "1");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 
+// If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
+CONF_mBool(enable_pindex_rebuild_in_compaction, "false");
+
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// When query cache enabled, the operators in the drivers contains cache operator are multilane
+// operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
+// operators since the number of operators scale up with the number of lanes.
+// ranges in [1,16], default value is 4.
+CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
@@ -992,6 +1012,11 @@ CONF_mInt32(primary_key_limit_size, "128");
 CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
 
+CONF_mBool(enable_stream_load_verbose_log, "false");
+
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
+CONF_mBool(dump_metrics_with_bvar, "true");
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
 } // namespace starrocks::config

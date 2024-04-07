@@ -81,6 +81,7 @@ bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
 }
 
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    SCOPED_RAW_TIMER(&_total_running_time);
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
     Status status = do_init(runtime_state, scanner_params);
@@ -161,6 +162,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_opened) {
         return Status::OK();
     }
+    SCOPED_RAW_TIMER(&_total_running_time);
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
