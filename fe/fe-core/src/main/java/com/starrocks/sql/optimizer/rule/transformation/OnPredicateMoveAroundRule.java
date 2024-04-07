@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.RangeExtractor;
 import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -81,10 +82,10 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         OptExpression result = null;
         if (joinOperator.getJoinType().isInnerJoin()) {
             ScalarOperator toLeftPredicate = Utils.compoundAnd(binaryPredicates.stream()
-                    .map(e -> derivePredicate(e, rightValueProperty, true))
+                    .map(e -> derivePredicate(e, rightValueProperty, leftValueProperty, true))
                     .collect(Collectors.toList()));
             ScalarOperator toRightPredicate = Utils.compoundAnd(binaryPredicates.stream()
-                    .map(e -> derivePredicate(e, leftValueProperty, false))
+                    .map(e -> derivePredicate(e, leftValueProperty, rightValueProperty, false))
                     .collect(Collectors.toList()));
 
             if (toLeftPredicate == null && toRightPredicate == null) {
@@ -109,7 +110,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
             }
         } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
             ScalarOperator toRightPredicate = Utils.compoundAnd(binaryPredicates.stream()
-                    .map(e -> derivePredicate(e, leftValueProperty, false))
+                    .map(e -> derivePredicate(e, leftValueProperty, rightValueProperty, false))
                     .collect(Collectors.toList()));
             if (toRightPredicate != null) {
                 LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
@@ -119,7 +120,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
             }
         } else if (joinOperator.getJoinType().isRightOuterJoin()) {
             ScalarOperator toLeftPredicate = Utils.compoundAnd(binaryPredicates.stream()
-                    .map(e -> derivePredicate(e, rightValueProperty, true))
+                    .map(e -> derivePredicate(e, rightValueProperty, leftValueProperty, true))
                     .collect(Collectors.toList()));
             if (toLeftPredicate != null) {
                 LogicalFilterOperator filter = new LogicalFilterOperator(toLeftPredicate);
@@ -155,28 +156,55 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
     }
 
     private ScalarOperator derivePredicate(BinaryPredicateOperator binaryPredicate, ValueProperty valueProperty,
-                                           boolean toLeft) {
+                                           ValueProperty existValueProperty, boolean toLeft) {
         int idx = toLeft ? 1 : 0;
         ScalarOperator seed = binaryPredicate.getChild(idx);
         ScalarOperator offspring = binaryPredicate.getChild(1 - idx);
         BinaryType binaryType = binaryPredicate.getBinaryType();
+        ScalarOperator rewriteResult = null;
         if (binaryType.isEqual()) {
             if (valueProperty.contains(seed)) {
                 ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(seed, offspring));
-                return shuttle.rewrite(valueProperty.getPredicateDesc(seed));
+                rewriteResult = shuttle.rewrite(valueProperty.getPredicateDesc(seed));
             }
         } else if (binaryType == BinaryType.LT || binaryType == BinaryType.LE) {
             if (valueProperty.contains(seed)) {
                 RangeExtractor.RangeDescriptor desc = valueProperty.getValueWrapper(seed).getValueDesc();
-                return deriveLessPredicate(offspring, desc.getRange(), toLeft);
+                rewriteResult = deriveLessPredicate(offspring, desc.getRange(), toLeft);
             }
         } else if (binaryType == BinaryType.GT || binaryType == BinaryType.GT) {
             if (valueProperty.contains(seed)) {
                 RangeExtractor.RangeDescriptor desc = valueProperty.getValueWrapper(seed).getValueDesc();
-                return deriveGreaterPredicate(offspring, desc.getRange(), toLeft);
+                rewriteResult = deriveGreaterPredicate(offspring, desc.getRange(), toLeft);
             }
         }
-        return null;
+        if (rewriteResult == null) {
+            return null;
+        }
+
+        return removeRedundantPredicate(offspring, rewriteResult, existValueProperty);
+    }
+
+    private ScalarOperator removeRedundantPredicate(ScalarOperator offspring, ScalarOperator rewriteResult,
+                                                    ValueProperty existValueProperty) {
+        if (!existValueProperty.contains(offspring)) {
+            return rewriteResult;
+        }
+
+        ValuePropertyDeriver deriver = new ValuePropertyDeriver();
+        ValueProperty newValueProperty = deriver.derive(rewriteResult);
+
+        Range<ConstantOperator> existRange = existValueProperty.getValueWrapper(offspring).getValueDesc().getRange();
+        Range<ConstantOperator> newRange = newValueProperty.getValueWrapper(offspring).getValueDesc().getRange();
+        if (existRange == null) {
+            return newRange == null ? null : rewriteResult;
+        } else if (newRange == null) {
+            return null;
+        } else if (newRange.encloses(existRange)) {
+            return null;
+        } else {
+            return rewriteResult;
+        }
     }
 
     // join on predicate left_tbl_col < right_tbl_col
@@ -201,6 +229,9 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
     // if we want to derive predicate to right, we need obtain the upper bound value of left_tbl_col
     private ScalarOperator deriveGreaterPredicate(ScalarOperator offspring,
                                                   Range<ConstantOperator> range, boolean toLeft) {
+        if (range == null) {
+            return null;
+        }
         if (toLeft) {
             if (range.hasLowerBound()) {
                 return new BinaryPredicateOperator(BinaryType.GE, offspring, range.lowerEndpoint());
@@ -212,6 +243,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         }
         return null;
     }
+
 
     private static class ReplaceShuttle extends BaseScalarOperatorShuttle {
         private Map<ScalarOperator, ScalarOperator> replaceMap;

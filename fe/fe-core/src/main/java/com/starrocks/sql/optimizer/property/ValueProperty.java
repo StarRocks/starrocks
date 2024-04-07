@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
@@ -139,7 +140,7 @@ public class ValueProperty {
             Map<ScalarOperator, RangeExtractor.ValueDescriptor> res = extractor.apply(scalarOperator, null);
 
             if (res.size() != 1) {
-                return null;
+                return new RangeExtractor.RangeDescriptor(ConstantOperator.FALSE);
             } else {
                 RangeExtractor.ValueDescriptor valueDesc = res.values().stream().findFirst().get();
                 if (valueDesc instanceof RangeExtractor.MultiValuesDescriptor) {
