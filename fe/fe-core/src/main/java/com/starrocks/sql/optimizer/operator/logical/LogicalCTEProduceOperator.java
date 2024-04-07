@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;

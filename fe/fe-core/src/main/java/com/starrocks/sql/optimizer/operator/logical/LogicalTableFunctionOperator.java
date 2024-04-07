@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.common.Pair;

@@ -22,15 +22,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.property.ValueProperty;
-import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
 
 import java.util.List;
 import java.util.Map;
@@ -164,18 +161,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);
-    }
-
-    @Override
-    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        valueProperty = new ValueProperty(Maps.newHashMap());
-        if (predicate != null) {
-            ValuePropertyDeriver deriver = new ValuePropertyDeriver();
-            ValueProperty property = deriver.derive(predicate);
-            valueProperty = valueProperty.filterValueProperty(property);
-        }
-
-        return valueProperty;
     }
 
     @Override
