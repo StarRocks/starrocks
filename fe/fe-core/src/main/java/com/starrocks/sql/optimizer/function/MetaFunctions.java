@@ -141,85 +141,6 @@ public class MetaFunctions {
     }
 
     /**
-     * Return the logical plan of a materialized-view with cache
-     */
-    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspectMvPlan(ConstantOperator mvName) {
-        return inspectMvPlan(mvName, ConstantOperator.TRUE);
-    }
-
-    /**
-     * Return verbose metadata of a materialized-view
-     */
-    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspectMvPlan(ConstantOperator mvName, ConstantOperator useCache) {
-        TableName tableName = TableName.fromString(mvName.getVarchar());
-        Pair<Database, Table> dbTable = inspectTable(tableName);
-        Table table = dbTable.getRight();
-        if (!table.isMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                    tableName + " is not materialized view");
-        }
-        try {
-            MaterializedView mv = (MaterializedView) table;
-            String plans = "";
-            List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
-            int size = planContexts.size();
-            for (int i = 0; i < size; i++) {
-                MvPlanContext context = planContexts.get(i);
-                if (context != null) {
-                    OptExpression plan = context.getLogicalPlan();
-                    String debugString = plan.debugString();
-                    plans += String.format("plan %d: \n%s\n", i, debugString);
-                } else {
-                    plans += String.format("plan %d: null\n", i);
-                }
-            }
-            return ConstantOperator.createVarchar(plans);
-        } catch (Exception e) {
-            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
-            return ConstantOperator.createVarchar("failed");
-        }
-    }
-
-    /**
-     * Return verbose metadata of a materialized-view
-     */
-    @ConstantFunction(name = "clear_mv_plan_cache", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator clearMvPlanCache(ConstantOperator mvName) {
-        TableName tableName = TableName.fromString(mvName.getVarchar());
-        Pair<Database, Table> dbTable = inspectTable(tableName);
-        Table table = dbTable.getRight();
-        if (!table.isMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                    tableName + " is not materialized view");
-        }
-        try {
-            MaterializedView mv = (MaterializedView) table;
-            CachingMvPlanContextBuilder.getInstance().invalidateFromCache(mv, false);
-            return ConstantOperator.createVarchar("success");
-        } catch (Exception e) {
-            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
-            return ConstantOperator.createVarchar("failed");
-        }
-    }
-
-    /**
-     * Return verbose metadata of a materialized-view
-     */
-    @ConstantFunction(name = "clear_mv_plan_cache", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator clearMvPlanCache() {
-        try {
-            CachingMvPlanContextBuilder.getInstance().rebuildCache();
-            return ConstantOperator.createVarchar("success");
-        } catch (Exception e) {
-            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
-            return ConstantOperator.createVarchar("failed");
-        }
-    }
-
-    /**
      * Return related materialized-views of a table, in JSON array format
      */
     @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
@@ -383,4 +304,46 @@ public class MetaFunctions {
         return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
     }
 
+    /**
+     * Return the logical plan of a materialized view with cache
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName) {
+        return inspectMvPlan(mvName, ConstantOperator.TRUE);
+    }
+
+    /**
+     * Return verbose metadata of a materialized view
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName, ConstantOperator useCache) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
+        }
+        try {
+            MaterializedView mv = (MaterializedView) table;
+            String plans = "";
+            List<MvPlanContext> planContexts =
+                    CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
+            int size = planContexts.size();
+            for (int i = 0; i < size; i++) {
+                MvPlanContext context = planContexts.get(i);
+                if (context != null) {
+                    OptExpression plan = context.getLogicalPlan();
+                    String debugString = plan.debugString();
+                    plans += String.format("plan %d: \n%s\n", i, debugString);
+                } else {
+                    plans += String.format("plan %d: null\n", i);
+                }
+            }
+            return ConstantOperator.createVarchar(plans);
+        } catch (Exception e) {
+            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
+            return ConstantOperator.createVarchar("failed");
+        }
+    }
 }
