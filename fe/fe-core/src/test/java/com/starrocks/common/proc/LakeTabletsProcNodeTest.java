@@ -36,6 +36,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
@@ -48,6 +49,14 @@ import org.junit.Test;
 import java.util.List;
 
 public class LakeTabletsProcNodeTest {
+
+    @Mocked
+    private ConnectContext connectContext;
+
+    public LakeTabletsProcNodeTest() {
+        connectContext = new ConnectContext(null);
+        connectContext.setThreadLocalInfo();
+    }
 
     @Test
     public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws UserException {
