@@ -153,7 +153,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
         columns terminated by ","
         format as "csv"
     )
-    with broker "broker1";
+    WITH BROKER;
     ```
 
   - If you want to include the `__op` field, run the following command:
@@ -167,7 +167,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
         format as "csv"
         set (__op = 'upsert')
     )
-    with broker "broker1";
+    WITH BROKER;
     ```
 
 - Run a Routine Load job.
@@ -302,7 +302,7 @@ Run a load job to delete the record whose `id` is `101` in `example2.csv` from `
       format as "csv"
       set (__op = 'delete')
   )
-  with broker "broker1";  
+  WITH BROKER;  
   ```
 
 - Run a Routine Load job.
@@ -419,7 +419,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
       (id, name, score, temp)
       set (__op=temp)
   )
-  with broker "broker1";
+  WITH BROKER;
   ```
 
 - Run a Routine Load job:
@@ -538,8 +538,13 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
       format as "csv"
       (id, name)
   )
+<<<<<<< HEAD
   with broker "broker1"
   properties
+=======
+  WITH BROKER
+  PROPERTIES
+>>>>>>> 4a8736dd3d ([Doc] update docs about data change&transformation during loading (#43653))
   (
       "partial_update" = "true"
   );
