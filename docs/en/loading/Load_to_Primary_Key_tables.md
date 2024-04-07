@@ -538,13 +538,8 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
       format as "csv"
       (id, name)
   )
-<<<<<<< HEAD
-  with broker "broker1"
-  properties
-=======
   WITH BROKER
   PROPERTIES
->>>>>>> 4a8736dd3d ([Doc] update docs about data change&transformation during loading (#43653))
   (
       "partial_update" = "true"
   );
