@@ -27,6 +27,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -118,6 +119,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
@@ -177,6 +179,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
@@ -1363,18 +1366,44 @@ public class PlanFragmentBuilder {
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
 
-            for (ScalarOperator predicate : predicates) {
-                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            for (ScalarOperator origPredicate : predicates) {
+                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(origPredicate, formatterContext));
                 // if user set table_schema or table_name in where condition and is
                 // binary predicate operator, we can set table_schema and table_name
                 // into scan-node, which can reduce time from be to fe
-                if (!(predicate.getChildren().size() == 2 &&
-                        predicate.getChildren().get(0) instanceof ColumnRefOperator &&
-                        predicate.getChildren().get(1) instanceof ConstantOperator)) {
+                if (origPredicate.getChildren().size() != 2) {
                     continue;
                 }
-                ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChildren().get(0);
-                ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
+                ScalarOperator predicate = origPredicate.clone();
+                ScalarOperator operator0 = origPredicate.getChild(0);
+                ScalarOperator operator1 = origPredicate.getChild(1);
+                if (operator0 instanceof CastOperator && operator0.getChild(0) instanceof ColumnRefOperator &&
+                        operator1 instanceof ConstantOperator) {
+                    // select * from information_schema.load_tracking_logs where job_id = "123", job_id is bigint type.
+                    // analyzer generates where predicate as [cast (job_id as varchar) = "123"] when
+                    // session variable cbo_eq_base_type is varchar, so rewrite the predicate for compatibility.
+                    ColumnRefOperator columnRefOperator = (ColumnRefOperator) operator0.getChild(0);
+                    if (columnRefOperator.getType().isNumericType() && operator0.getType().isStringType() &&
+                            operator1.getType().isStringType()) {
+                        predicate.setChild(0, columnRefOperator);
+                        try {
+                            LiteralExpr literalExpr =
+                                    LiteralExpr.create(((ConstantOperator) operator1).getVarchar(), columnRefOperator.getType());
+                            predicate.setChild(1,
+                                    ConstantOperator.createObject(literalExpr.getRealObjectValue(), columnRefOperator.getType()));
+                        } catch (AnalysisException e) {
+                            throw new SemanticException(((ConstantOperator) operator1).getVarchar() + " is not a number");
+                        }
+                    } else {
+                        continue;
+                    }
+                } else if (!(origPredicate.getChild(0) instanceof ColumnRefOperator &&
+                        origPredicate.getChild(1) instanceof ConstantOperator)) {
+                    continue;
+                }
+
+                ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChild(0);
+                ConstantOperator constantOperator = (ConstantOperator) predicate.getChild(1);
                 if (predicate instanceof BinaryPredicateOperator) {
                     BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
                     if (binaryPredicateOperator.getBinaryType() == BinaryType.EQ) {
@@ -1446,7 +1475,7 @@ public class PlanFragmentBuilder {
                     // currently, we only optimize `log rlike xxx` or `log regexp xxx`, raise an error if using `like`
                     if (columnRefOperator.getName().equals("LOG")) {
                         if (like.getLikeType() == LikePredicateOperator.LikeType.REGEXP) {
-                            scanNode.setLogPattern(((ConstantOperator) like.getChildren().get(1)).getVarchar());
+                            scanNode.setLogPattern(((ConstantOperator) like.getChild(1)).getVarchar());
                         } else {
                             throw UnsupportedException.unsupportedException(
                                     "only support `regexp` or `rlike` for log grep");
