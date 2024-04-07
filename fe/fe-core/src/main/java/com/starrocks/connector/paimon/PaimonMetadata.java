@@ -214,7 +214,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             Column column = new Column(fieldName, fieldType, true, field.description());
             fullSchema.add(column);
         }
-        long createTime = getTableCreateTime(dbName, tblName);
+        long createTime = this.getTableCreateTime(dbName, tblName);
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {
             comment = paimonNativeTable.comment().get();
