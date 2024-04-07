@@ -189,7 +189,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                 RangeExtractor.RangeDescriptor desc = valueProperty.getValueWrapper(seed).getValueDesc();
                 rewriteResult = deriveLessPredicate(offspring, desc.getRange(), toLeft);
             }
-        } else if (binaryType == BinaryType.GT || binaryType == BinaryType.GT) {
+        } else if (binaryType == BinaryType.GT || binaryType == BinaryType.GE) {
             if (valueProperty.contains(seed)) {
                 RangeExtractor.RangeDescriptor desc = valueProperty.getValueWrapper(seed).getValueDesc();
                 rewriteResult = deriveGreaterPredicate(offspring, desc.getRange(), toLeft);

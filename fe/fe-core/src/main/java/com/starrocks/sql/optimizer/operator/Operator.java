@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.ValueProperty;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class Operator {
@@ -202,7 +203,7 @@ public abstract class Operator {
     }
 
     protected ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        return new ValueProperty(ImmutableMap.of());
+        return new ValueProperty(Map.of());
     }
 
     protected RowOutputInfo projectInputRow(RowOutputInfo inputRow) {

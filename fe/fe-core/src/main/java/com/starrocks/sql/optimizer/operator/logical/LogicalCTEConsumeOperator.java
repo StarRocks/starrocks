@@ -80,7 +80,7 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(ImmutableMap.of());
+            return new ValueProperty(Map.of());
         }
         return inputs.get(0).getValueProperty();
     }

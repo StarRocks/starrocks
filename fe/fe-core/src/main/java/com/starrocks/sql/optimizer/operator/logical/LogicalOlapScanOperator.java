@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -28,10 +27,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.ValueProperty;
 import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
@@ -180,14 +176,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         return valueProperty;
-    }
-
-    private ValueProperty.ValueWrapper buildRangeDesc(ColumnRefOperator col, ConstantOperator min, ConstantOperator max) {
-        BinaryPredicateOperator lessEqual = new BinaryPredicateOperator(BinaryType.LE, col, max);
-        BinaryPredicateOperator greaterEqual = new BinaryPredicateOperator(BinaryType.GE, col, min);
-        ScalarOperator compoundAnd = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                greaterEqual, lessEqual);
-        return new ValueProperty.ValueWrapper(compoundAnd);
     }
 
     @Override

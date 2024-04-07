@@ -118,7 +118,7 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
         protected ScalarOperator columnRef;
         protected int sourceCount = 1;
 
-        public ValueDescriptor(ScalarOperator ref) {
+        protected ValueDescriptor(ScalarOperator ref) {
             columnRef = ref;
         }
 

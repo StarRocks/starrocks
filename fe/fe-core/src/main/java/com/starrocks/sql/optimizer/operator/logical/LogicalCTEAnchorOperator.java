@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -26,6 +25,7 @@ import com.starrocks.sql.optimizer.property.ValueProperty;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /*
@@ -62,7 +62,7 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
 
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        return new ValueProperty(ImmutableMap.of());
+        return new ValueProperty(Map.of());
     }
 
     public int getCteId() {

@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -28,6 +27,7 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class LogicalAssertOneRowOperator extends LogicalOperator {
 
@@ -87,10 +87,9 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(ImmutableMap.of());
+            return new ValueProperty(Map.of());
         }
-        ValueProperty childValueProperty = inputs.get(0).getValueProperty();
-        return childValueProperty;
+        return inputs.get(0).getValueProperty();
     }
 
     @Override

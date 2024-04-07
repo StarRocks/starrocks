@@ -37,6 +37,7 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class LogicalTopNOperator extends LogicalOperator {
@@ -155,7 +156,7 @@ public class LogicalTopNOperator extends LogicalOperator {
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(ImmutableMap.of());
+            return new ValueProperty(Map.of());
         }
         return inputs.get(0).getValueProperty();
     }

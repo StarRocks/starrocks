@@ -38,6 +38,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -210,7 +211,7 @@ public class LogicalJoinOperator extends LogicalOperator {
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(ImmutableMap.of());
+            return new ValueProperty(Map.of());
         }
         ValueProperty leftValueProperty = inputs.get(0).getValueProperty();
         ValueProperty rightValueProperty = inputs.get(1).getValueProperty();

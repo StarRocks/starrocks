@@ -28,6 +28,7 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class LogicalLimitOperator extends LogicalOperator {
     public enum Phase {
@@ -115,7 +116,7 @@ public class LogicalLimitOperator extends LogicalOperator {
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(ImmutableMap.of());
+            return new ValueProperty(Map.of());
         }
         return inputs.get(0).getValueProperty();
     }

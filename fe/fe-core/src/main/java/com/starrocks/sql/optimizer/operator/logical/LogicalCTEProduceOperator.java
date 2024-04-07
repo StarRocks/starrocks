@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.property.ValueProperty;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /*
@@ -56,7 +57,7 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(ImmutableMap.of());
+            return new ValueProperty(Map.of());
         }
         return inputs.get(0).getValueProperty();
     }

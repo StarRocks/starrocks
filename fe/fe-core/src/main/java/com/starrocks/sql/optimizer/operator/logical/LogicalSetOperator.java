@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.property.ValueProperty;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class LogicalSetOperator extends LogicalOperator {
@@ -73,7 +74,7 @@ public abstract class LogicalSetOperator extends LogicalOperator {
 
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        return new ValueProperty(ImmutableMap.of());
+        return new ValueProperty(Map.of());
     }
 
     @Override

@@ -133,7 +133,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
         if (predicate == null) {
-            return new ValueProperty(ImmutableMap.of());
+            return new ValueProperty(Map.of());
         }
 
         ValuePropertyDeriver deriver = new ValuePropertyDeriver();
