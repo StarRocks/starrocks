@@ -2282,9 +2282,7 @@ PARALLEL_TEST(PersistentIndexTest, test_index_keep_delete) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-<<<<<<< HEAD
-=======
-TEST_P(PersistentIndexTest, test_l0_append_load_small_data) {
+PARALLEL_TEST(PersistentIndexTest, test_l0_append_load_small_data) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_append_load_small_data";
     const std::string kIndexFile = "./PersistentIndexTest_test_l0_append_load_small_data/index.l0.0.0";
@@ -2381,8 +2379,4 @@ TEST_P(PersistentIndexTest, test_l0_append_load_small_data) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
-                         ::testing::Values(PersistentIndexTestParam{true}, PersistentIndexTestParam{false}));
-
->>>>>>> eec74f4439 ([Enhancement] Add crc32c checksum to persistent index's l0 (#30841))
 } // namespace starrocks

@@ -1814,13 +1814,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         data->set_size(snapshot_size);
         snapshot->clear_dumped_shard_idxes();
         snapshot->mutable_dumped_shard_idxes()->Add(dumped_shard_idxes.begin(), dumped_shard_idxes.end());
-<<<<<<< HEAD
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
-=======
         RETURN_IF_ERROR(checksum_of_file(l0_rfile.get(), 0, snapshot_size, &_checksum));
         snapshot->set_checksum(_checksum);
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_4);
->>>>>>> eec74f4439 ([Enhancement] Add crc32c checksum to persistent index's l0 (#30841))
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset = snapshot_size;
         _page_size = 0;
         _checksum = 0;
@@ -1832,12 +1828,8 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         PagePointerPB* data = wal_pb->mutable_data();
         data->set_offset(_offset);
         data->set_size(_page_size);
-<<<<<<< HEAD
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
-=======
         wal_pb->set_checksum(_checksum);
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_4);
->>>>>>> eec74f4439 ([Enhancement] Add crc32c checksum to persistent index's l0 (#30841))
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset += _page_size;
         _page_size = 0;
         _checksum = 0;
