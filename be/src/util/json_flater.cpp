@@ -134,11 +134,11 @@ static const uint8_t JSON_BASE_TYPE_BITS = 0; // least flat to JSON type
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
 static const std::unordered_map<vpack::ValueType, uint8_t> JSON_TYPE_BITS{
         {vpack::ValueType::None, 255},      // 111111 11, 255
-        {vpack::ValueType::SmallInt, 113},  // 011100 01, 113
-        {vpack::ValueType::UInt, 96},       // 011000 00, 96
-        {vpack::ValueType::Int, 97},        // 011000 01, 97
-        {vpack::ValueType::Double, 64},     // 010000 00, 64
-        {vpack::ValueType::String, 128},    // 100000 00, 128
+        {vpack::ValueType::SmallInt, 241},  // 111100 01, 241
+        {vpack::ValueType::UInt, 224},      // 111000 00, 224
+        {vpack::ValueType::Int, 225},       // 111000 01, 225
+        {vpack::ValueType::Double, 192},    // 110000 00, 192
+        {vpack::ValueType::String, 8},      // 000010 00, 8
 };
 
 static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
