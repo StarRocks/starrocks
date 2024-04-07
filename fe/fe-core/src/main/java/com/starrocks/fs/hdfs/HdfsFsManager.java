@@ -1222,7 +1222,7 @@ public class HdfsFsManager {
                     "You can check the arguments like region, IAM, instance profile and so on.", e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            throw new UserException("listPath failed", e);
+            throw new UserException("Fail to get file status: " + e.getMessage(), e);
         }
         return resultFileStatus;
     }
