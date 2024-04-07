@@ -38,6 +38,7 @@
 
 #include <map>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 
 #include "column/column.h"
@@ -50,6 +51,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
+#include "gutil/casts.h"
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -99,6 +101,13 @@ VExtLiteral::VExtLiteral(LogicalType type, ColumnPtr column, const std::string& 
             _value = "true";
         } else {
             _value = "false";
+        }
+    } else if (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
+        DCHECK(!column->is_null(0));
+        if (column->is_constant()) {
+            _value = down_cast<ConstColumn*>(column.get())->data_column()->debug_item(0);
+        } else {
+            _value = column->debug_item(0);
         }
     } else {
         _value = _value_to_string(column);
