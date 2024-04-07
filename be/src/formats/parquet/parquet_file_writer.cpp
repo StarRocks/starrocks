@@ -28,6 +28,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
@@ -48,7 +49,13 @@ std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
     if (auto status = _rowgroup_writer->write(chunk.get()); !status.ok()) {
         return make_ready_future(std::move(status));
     }
-    if (_rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
+    double mem_usage = 0.0;
+    if (_runtime_state != nullptr) {
+        mem_usage = static_cast<double>(_runtime_state->query_mem_tracker_ptr()->consumption()) /
+                    _runtime_state->query_ctx()->get_static_query_mem_limit();
+    }
+    if (mem_usage > config::parquet_writer_mem_usage_threshold ||
+        _rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
         return _flush_row_group();
     }
     return make_ready_future(Status::OK());

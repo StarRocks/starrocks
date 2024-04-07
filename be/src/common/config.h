@@ -1258,6 +1258,9 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 // Min data processed when scaling connector sink writers, default value is the same as Trino
 CONF_mInt64(writer_scaling_min_size_mb, "128");
 
+// Memory threshold for Parquet writer before a flush, should be greater than 0 and less than 1
+CONF_mDouble(parquet_writer_mem_usage_threshold, "0.8");
+
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
 
