@@ -159,7 +159,7 @@ jobs:
         run: |
           cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-pr-update-image.sh
-          
+
       - name: Upload Thirdparty Result
         uses: actions/upload-artifact@v4
         with:
@@ -530,7 +530,7 @@ jobs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
-    if: > 
+    if: >
       always() && 
       (needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || 
       (needs.be-checker.outputs.src_filter != 'true' && needs.fe-checker.outputs.src_filter == 'true' && needs.fe-ut.result == 'success') || 
@@ -557,7 +557,7 @@ jobs:
         run: |
           echo "package=${package}" >> "$GITHUB_ENV"
           if [[ "${be_change}" != "true" && "${fe_change}" != "true" ]]; then
-            oss_path=oss://${bucket_prefix}-ci-release/daily/commit/${BRANCH}/${build_type}
+            oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/${build_type}/inspection/pr/StarRocks-
             package=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "tar.gz" | sort -n -r | head -n 1 | awk '{print $NF}')
             echo "package=${package}" >> $GITHUB_ENV
           fi
@@ -747,9 +747,12 @@ jobs:
         if: always()
         with:
           name: SQL-Tester Log
-          path: test/log/
+          path: |
+            test/log/
+            test/crash_logs/
           retention-days: 1
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Clean ENV
         if: always()
