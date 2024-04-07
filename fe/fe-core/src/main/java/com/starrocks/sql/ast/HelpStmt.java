@@ -17,11 +17,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -56,13 +53,6 @@ public class HelpStmt extends ShowStmt {
 
     public String getMask() {
         return mask;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(mask)) {
-            throw new AnalysisException("Help empty info.");
-        }
     }
 
     @Override

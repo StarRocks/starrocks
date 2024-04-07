@@ -34,13 +34,11 @@
 
 package com.starrocks.qe;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
@@ -164,7 +162,6 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -183,7 +180,6 @@ import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
-import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -241,40 +237,30 @@ public class StmtExecutor {
     private Coordinator coord = null;
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
-    private final boolean isProxy;
+    /**
+     * When isProxy is true, it proves that the current FE is acting as the
+     * Leader and executing the statement forwarded by the Follower
+     */
+    private boolean isProxy;
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
-
     private HttpResultSender httpResultSender;
-
     private PrepareStmtContext prepareStmtContext;
 
-    // this constructor is mainly for proxy
-    public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
-        this.context = context;
-        this.originStmt = originStmt;
-        this.serializer = context.getSerializer();
-        this.isProxy = isProxy;
-        if (isProxy) {
-            proxyResultBuffer = new ArrayList<>();
-        }
-    }
-
-    @VisibleForTesting
-    public StmtExecutor(ConnectContext context, String stmt) {
-        this(context, new OriginStatement(stmt, 0), false);
-    }
-
-    // constructor for receiving parsed stmt from connect processor
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
         this.context = ctx;
-        this.parsedStmt = parsedStmt;
+        this.parsedStmt = Preconditions.checkNotNull(parsedStmt);
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+    }
+
+    public void setProxy() {
+        isProxy = true;
+        proxyResultBuffer = new ArrayList<>();
     }
 
     public Coordinator getCoordinator() {
@@ -459,14 +445,9 @@ public class StmtExecutor {
         }
 
         try {
-            // parsedStmt may already by set when constructing this StmtExecutor();
-            resolveParseStmtForForward();
-
-            if (parsedStmt != null) {
-                boolean isQuery = parsedStmt instanceof QueryStatement;
-                // set isQuery before `forwardToLeader` to make it right for audit log.
-                context.getState().setIsQuery(isQuery);
-            }
+            boolean isQuery = parsedStmt instanceof QueryStatement;
+            // set isQuery before `forwardToLeader` to make it right for audit log.
+            context.getState().setIsQuery(isQuery);
 
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
@@ -538,9 +519,6 @@ public class StmtExecutor {
                 dumpException(e);
                 if (e.getType().equals(ErrorType.USER_ERROR)) {
                     throw e;
-                } else if (e.getType().equals(ErrorType.UNSUPPORTED) && e.getMessage().contains("UDF function")) {
-                    LOG.warn("New planner not implement : " + originStmt.originStmt, e);
-                    analyze(context.getSessionVariable().toThrift());
                 } else {
                     LOG.warn("New planner error: " + originStmt.originStmt, e);
                     throw e;
@@ -822,20 +800,6 @@ public class StmtExecutor {
         }
     }
 
-    private void resolveParseStmtForForward() throws AnalysisException {
-        if (parsedStmt == null) {
-            List<StatementBase> stmts;
-            try {
-                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt.originStmt,
-                        context.getSessionVariable());
-                parsedStmt = stmts.get(originStmt.idx);
-                parsedStmt.setOrigStmt(originStmt);
-            } catch (ParsingException parsingException) {
-                throw new AnalysisException(parsingException.getMessage());
-            }
-        }
-    }
-
     private void dumpException(Exception e) {
         if (context.isHTTPQueryDump()) {
             context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
@@ -902,40 +866,6 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
         };
         return coord.tryProcessProfileAsync(task);
-    }
-
-    // Analyze one statement to structure in memory.
-    public void analyze(TQueryOptions tQueryOptions) throws UserException {
-        LOG.info("begin to analyze stmt: {}, forwarded stmt id: {}", context.getStmtId(), context.getForwardedStmtId());
-
-        // parsedStmt may already by set when constructing this StmtExecutor();
-        resolveParseStmtForForward();
-        redirectStatus = parsedStmt.getRedirectStatus();
-
-        // yiguolei: insertstmt's grammar analysis will write editlog, so that we check if the stmt should be forward to master
-        // here
-        // if the stmt should be forward to master, then just return here and the master will do analysis again
-        if (isForwardToLeader()) {
-            return;
-        }
-
-        // Convert show statement to select statement here
-        if (parsedStmt instanceof ShowStmt) {
-            QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
-            if (selectStmt != null) {
-                Preconditions.checkState(false, "Shouldn't reach here");
-            }
-        }
-
-        try {
-            parsedStmt.analyze(new Analyzer(context.getGlobalStateMgr(), context));
-        } catch (AnalysisException e) {
-            throw e;
-        } catch (Exception e) {
-            LOG.warn("Analyze failed because ", e);
-            throw new AnalysisException("Unexpected exception: " + e.getMessage());
-        }
-
     }
 
     public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
@@ -1974,7 +1904,7 @@ public class StmtExecutor {
                 }
                 if (scanNode instanceof FileScanNode) {
                     estimateFileNum += ((FileScanNode) scanNode).getFileNum();
-                    estimateScanFileSize += ((FileScanNode ) scanNode).getFileTotalSize();
+                    estimateScanFileSize += ((FileScanNode) scanNode).getFileTotalSize();
                     needQuery = true;
                 }
             }
