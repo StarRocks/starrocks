@@ -40,7 +40,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionNames;
@@ -209,11 +208,6 @@ public class TableRef implements ParseNode, Writable {
 
     public PartitionNames getPartitionNames() {
         return partitionNames;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        ErrorReport.reportAnalysisException(ErrorCode.ERR_UNRESOLVED_TABLE_REF, tableRefToSql());
     }
 
     @Override

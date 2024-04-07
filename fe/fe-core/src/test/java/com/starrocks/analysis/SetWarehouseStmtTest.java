@@ -89,7 +89,8 @@ public class SetWarehouseStmtTest {
 
         Assert.assertEquals("aaa", ctx.getCurrentWarehouseName());
 
-        executor = new StmtExecutor(ctx, "set xxx=aaa");
+        executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
+                String.format("set xxx=aaa"), ctx));
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
     }
