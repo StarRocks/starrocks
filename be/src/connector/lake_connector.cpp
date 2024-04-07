@@ -637,12 +637,12 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
 #ifdef BE_TEST
         ASSIGN_OR_RETURN(auto tablet_num_rows,
                          _tablet_manager->get_tablet_num_rows(
-                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, &version));
+                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #else
         ASSIGN_OR_RETURN(auto tablet_num_rows,
                          ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_num_rows(
-                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, &version));
+                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #endif
     }
@@ -656,14 +656,6 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     // scan_dop is restricted in the range [1, dop].
     *scan_dop = num_table_rows / *splitted_scan_rows;
     *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
-
-    LOG(INFO) << "num_table_rows " << num_table_rows << ", splitted_scan_rows " << *splitted_scan_rows << ", config "
-              << config::tablet_internal_parallel_min_splitted_scan_rows << ", scan dop " << *scan_dop
-              << ", pipeline_dop " << pipeline_dop;
-    std::cout << "num_table_rows " + std::to_string(num_table_rows) + ", splitted_scan_rows " +
-                         std::to_string(*splitted_scan_rows) + ", config " +
-                         std::to_string(config::tablet_internal_parallel_min_splitted_scan_rows) + ", scan dop " +
-                         std::to_string(*scan_dop) + ", pipeline_dop " + std::to_string(pipeline_dop);
 
     if (force_split) {
         return true;

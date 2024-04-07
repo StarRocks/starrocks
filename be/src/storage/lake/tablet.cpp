@@ -191,8 +191,9 @@ int64_t Tablet::data_size() {
 }
 
 size_t Tablet::num_rows() const {
-    int64_t version = _version_hint;
-    auto num_rows = _mgr->get_tablet_num_rows(_id, &version);
+    // set_version_hint should be called before to avoid list tablet metadata
+    DCHECK(_version_hint != 0);
+    auto num_rows = _mgr->get_tablet_num_rows(_id, _version_hint);
     if (num_rows.ok()) {
         return num_rows.value();
     } else {

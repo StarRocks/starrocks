@@ -146,14 +146,9 @@ protected:
 TEST_F(LakeTabletTest, test_get_tablet_num_rows) {
     create_rowsets_for_testing();
 
-    int64_t version = _tablet_metadata->version();
-    ASSIGN_OR_ABORT(auto num_rows_with_version, _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), &version));
-
-    version = 0;
-    ASSIGN_OR_ABORT(auto num_rows_without_version, _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), &version));
-
+    ASSIGN_OR_ABORT(auto num_rows_with_version,
+                    _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), _tablet_metadata->version()));
     ASSERT_EQ(num_rows_with_version, 34);
-    ASSERT_EQ(num_rows_with_version, num_rows_without_version);
 }
 
 } // namespace starrocks::lake
