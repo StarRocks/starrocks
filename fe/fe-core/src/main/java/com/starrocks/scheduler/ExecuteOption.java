@@ -15,15 +15,22 @@
 
 package com.starrocks.scheduler;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.Map;
 
 public class ExecuteOption {
-
+    @SerializedName("priority")
     private int priority = Constants.TaskRunPriority.LOWEST.value();
+    @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
+
+    @SerializedName("taskRunProperties")
     private Map<String, String> taskRunProperties;
     // indicates whether the current execution is manual
+    @SerializedName("isManual")
     private boolean isManual = false;
+    @SerializedName("isSync")
     private boolean isSync = false;
 
     public ExecuteOption() {

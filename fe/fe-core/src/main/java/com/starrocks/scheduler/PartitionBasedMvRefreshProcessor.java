@@ -282,7 +282,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         {
             long refreshDurationMs = System.currentTimeMillis() - startRefreshTs;
             LOG.info("Refresh {} success, cost time(s): {}", materializedView.getName(),
-                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000));
+                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000.0));
             mvEntity.updateRefreshDuration(refreshDurationMs);
         }
 
