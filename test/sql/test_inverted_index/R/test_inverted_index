@@ -403,6 +403,7 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column != "ABC" AND
 -- result:
 2	abc
 4	This is Gin Index
+5	None
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column IS NOT NULL AND text_column != "ABC";
 -- result:
