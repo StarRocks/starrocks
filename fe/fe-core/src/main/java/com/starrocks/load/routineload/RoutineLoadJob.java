@@ -83,6 +83,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -914,6 +915,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             planParams.setLoad_job_id(txnId);
 
             return planParams;
+        } catch (SemanticException e) {
+            // StreamLoadPlanner.plan throws SemanticException when column mapping expr is invalid.
+            // SemanticException is not caught and the routine load task will be aborted by txn manager because of timeout.
+            // Users can't get the real failed message.
+            // So convert SemanticException to UserException, and job will be paused when UserException is caught.
+            throw new UserException(e.getDetailMsg());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
