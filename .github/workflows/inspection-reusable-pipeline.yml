@@ -160,7 +160,7 @@ jobs:
         if: always()
         with:
           name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
-          path: ｜
+          path: |
             test/log
             test/crash_logs
           retention-days: 1

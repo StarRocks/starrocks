@@ -741,7 +741,7 @@ jobs:
         if: always()
         with:
           name: SQL-Tester Log
-          path: ｜
+          path: |
             test/log/
             test/crash_logs/
           retention-days: 1
