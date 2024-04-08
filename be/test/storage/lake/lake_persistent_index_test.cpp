@@ -190,4 +190,57 @@ TEST_F(LakePersistentIndexTest, test_replace) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+TEST_F(LakePersistentIndexTest, test_major_compaction) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int N = 100;
+    vector<Key> total_keys;
+    vector<Slice> total_key_slices;
+    vector<IndexValue> total_values;
+    vector<size_t> idxes;
+    total_key_slices.reserve(config::lake_pk_index_sst_max_compaction_versions * N);
+    total_keys.reserve(config::lake_pk_index_sst_max_compaction_versions * N);
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    int k = 0;
+    for (int i = 0; i < config::lake_pk_index_sst_max_compaction_versions; ++i) {
+        vector<Key> keys;
+        keys.reserve(N);
+        vector<Slice> key_slices;
+        key_slices.reserve(N);
+        vector<IndexValue> values;
+        values.reserve(N);
+        for (int j = 0; j < N; j++) {
+            keys.emplace_back(j);
+            total_keys.emplace_back(j);
+            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+            total_key_slices.emplace_back((uint8_t*)(&total_keys[k]), sizeof(Key));
+            values.emplace_back(j * 2);
+            total_values.emplace_back(j * 2);
+            ++k;
+        }
+        index->prepare(EditVersion(i, 0), 0);
+        vector<IndexValue> upsert_old_values(keys.size());
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+    }
+
+    index->minor_compact();
+    vector<IndexValue> get_values(config::lake_pk_index_sst_max_compaction_versions * N);
+    ASSERT_OK(index->get(config::lake_pk_index_sst_max_compaction_versions * N, total_key_slices.data(),
+                         get_values.data()));
+
+    get_values.clear();
+    get_values.reserve(config::lake_pk_index_sst_max_compaction_versions * N);
+    auto txn_log = std::make_shared<TxnLogPB>();
+    ASSERT_OK(index->major_compact(0, txn_log.get()));
+    ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
+    ASSERT_OK(index->get(config::lake_pk_index_sst_max_compaction_versions * N, total_key_slices.data(),
+                         get_values.data()));
+    for (int i = 0; i < config::lake_pk_index_sst_max_compaction_versions * N; i++) {
+        ASSERT_EQ(total_values[i], get_values[i]);
+    }
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
 } // namespace starrocks::lake
