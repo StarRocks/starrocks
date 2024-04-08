@@ -655,21 +655,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
-    size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
-    size_t memory_usage() const {
-        // commit thread will update primary index memory usage and get index memory usage
-        // apply thread maybe clear or modify _l1_vec
-        // add lock to avoid read/write conflicts
-        std::shared_lock rdlock(_lock);
-        size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
-        for (int i = 0; i < _l1_vec.size(); i++) {
-            memory_usage += _l1_vec[i]->memory_usage();
-        }
-        for (int i = 0; i < _l2_vec.size(); i++) {
-            memory_usage += _l2_vec[i]->memory_usage();
-        }
-        return memory_usage;
-    }
+    size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
 
@@ -860,11 +846,10 @@ private:
 
     Status _reload_usage_and_size_by_key_length(size_t l1_idx_start, size_t l1_idx_end, bool contain_l2);
 
-protected:
-    // prevent concurrent operations
-    // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
-    mutable std::shared_mutex _lock;
+    // Calculate total memory usage after index been modified.
+    void _calc_memory_usage();
 
+protected:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -908,6 +893,8 @@ private:
     std::atomic<bool> _major_compaction_running{false};
     // Latest major compaction time. In second.
     int64_t _latest_compaction_time = 0;
+    // Re-calculated when commit end
+    std::atomic<size_t> _memory_usage{0};
 };
 
 } // namespace starrocks
