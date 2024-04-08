@@ -41,7 +41,8 @@ public class MaterializedViewMetricsRegistry {
         idToMVMetrics = Maps.newHashMap();
         // clear all metrics everyday
         timer = ThreadPoolManager.newDaemonScheduledThreadPool(1, "MaterializedView-Metrics-Cleaner", true);
-        timer.scheduleAtFixedRate(new MaterializedViewMetricsRegistry.MetricsCleaner(), 0, 1L, TimeUnit.DAYS);
+        // add initial delay to avoid all metrics are cleared at the same time
+        timer.scheduleAtFixedRate(new MaterializedViewMetricsRegistry.MetricsCleaner(), 1L, 1L, TimeUnit.DAYS);
     }
 
     public static MaterializedViewMetricsRegistry getInstance() {
