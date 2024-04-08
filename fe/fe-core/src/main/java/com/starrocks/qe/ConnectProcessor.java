@@ -97,7 +97,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.IntStream;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -538,12 +537,13 @@ public class ConnectProcessor {
         packetBuf.get(nullBitmap);
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            Integer[] mysqlTypeCodes = new Integer[numParams];
-
+            
             // new_params_bind_flag
             if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
                 // parse params types
-                IntStream.range(0, numParams).forEach(i -> mysqlTypeCodes[i] = (int) packetBuf.getChar());
+                for (int i = 0; i < numParams; ++i) {
+                    prepareCtx.getStmt().getMysqlTypeCodes().set(i, (int) packetBuf.getChar());
+                }
             }
             // gene exprs
             List<Expr> exprs = new ArrayList<>();
@@ -552,7 +552,7 @@ public class ConnectProcessor {
                     exprs.add(new NullLiteral());
                     continue;
                 }
-                LiteralExpr l = LiteralExpr.parseLiteral(mysqlTypeCodes[i]);
+                LiteralExpr l = LiteralExpr.parseLiteral(prepareCtx.getStmt().getMysqlTypeCodes().get(i));
                 l.parseMysqlParam(packetBuf);
                 exprs.add(l);
             }
