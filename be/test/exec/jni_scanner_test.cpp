@@ -206,20 +206,16 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
                           "./be/test/exec/test_data/jni_scanner/test_create_scanner/hive.scan.json");
     options.scan_range = &t_hdfs_scan_range;
 
-   
-
-
-
     {
-         FSOptions fs_options;
-    init_fs_options(&fs_options);
-    options.fs_options = &fs_options;
+        FSOptions fs_options;
+        init_fs_options(&fs_options);
+        options.fs_options = &fs_options;
 
         JniScanner* scanner = create_hive_jni_scanner(options);
-            // update columns.
-    TupleDescriptor* tuple_desc = create_default_tuple_desc();
-    init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
-    scanner->update_jni_scanner_params();
+        // update columns.
+        TupleDescriptor* tuple_desc = create_default_tuple_desc();
+        init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+        scanner->update_jni_scanner_params();
 
         // check parameters.
         for (const auto& kv : scanner->_jni_scanner_params) {
@@ -228,7 +224,6 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
             }
         }
     }
-
 
     {
         FSOptions fs_options;
@@ -237,10 +232,10 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
 
         JniScanner* scanner = create_hive_jni_scanner(options);
 
-            // update columns.
-    TupleDescriptor* tuple_desc = create_default_tuple_desc();
-    init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
-    scanner->update_jni_scanner_params();
+        // update columns.
+        TupleDescriptor* tuple_desc = create_default_tuple_desc();
+        init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+        scanner->update_jni_scanner_params();
 
         // check parameters.
         for (const auto& kv : scanner->_jni_scanner_params) {
@@ -249,6 +244,74 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
             }
         }
     }
-
 }
+
+TEST_F(JniScannerTest, test_create_hive_jni_scanner2) {
+    // create jni scanner
+    JniScanner::CreateOptions options;
+
+    TTableDescriptor t_table_desc;
+    thrift_read_from_file(&t_table_desc, "./be/test/exec/test_data/jni_scanner/test_create_scanner/hive.table.json");
+    FileTableDescriptor fileTable(t_table_desc, &_pool);
+    options.hive_table = &fileTable;
+
+    THdfsScanRange t_hdfs_scan_range;
+    thrift_read_from_file(&t_hdfs_scan_range,
+                          "./be/test/exec/test_data/jni_scanner/test_create_scanner/hive.scan.json");
+    options.scan_range = &t_hdfs_scan_range;
+
+    {
+        FSOptions fs_options;
+        init_fs_options(&fs_options);
+        options.fs_options = &fs_options;
+
+        JniScanner* scanner = create_hive_jni_scanner(options);
+        // update columns.
+        TupleDescriptor* tuple_desc = create_default_tuple_desc();
+        init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+        scanner->update_jni_scanner_params();
+
+        // check parameters.
+        for (const auto& kv : scanner->_jni_scanner_params) {
+            if (kv.second.size() < 128) {
+                std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
+            }
+        }
+    }
+}
+
+TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
+    // create jni scanner
+    JniScanner::CreateOptions options;
+
+    TTableDescriptor t_table_desc;
+    thrift_read_from_file(&t_table_desc, "./be/test/exec/test_data/jni_scanner/test_create_scanner/odps.table.json");
+    OdpsTableDescriptor odpsTable(t_table_desc, &_pool);
+    options.hive_table = &odpsTable;
+
+    THdfsScanRange t_hdfs_scan_range;
+    thrift_read_from_file(&t_hdfs_scan_range,
+                          "./be/test/exec/test_data/jni_scanner/test_create_scanner/odps.scan.json");
+    options.scan_range = &t_hdfs_scan_range;
+
+    FSOptions fs_options;
+    init_fs_options(&fs_options);
+    TCloudConfiguration* cloud_conf = const_cast<TCloudConfiguration*>(fs_options.cloud_configuration);
+    cloud_conf->__set_cloud_type(TCloudType::ALIYUN);
+    options.fs_options = &fs_options;
+
+    JniScanner* scanner = create_odps_jni_scanner(options);
+    // update columns.
+    TupleDescriptor* tuple_desc = create_default_tuple_desc();
+    init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+    scanner->update_jni_scanner_params();
+
+    // check parameters.
+    for (const auto& kv : scanner->_jni_scanner_params) {
+        if (kv.second.size() < 128) {
+            std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
+        }
+    }
+}
+
 } // namespace starrocks
