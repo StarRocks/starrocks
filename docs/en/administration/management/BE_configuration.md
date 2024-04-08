@@ -3215,35 +3215,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: -
 -->
 
-<!--
 ##### starlet_cache_evict_interval
 
 - Default: 60
 - Type: Int
-- Unit:
+- Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The interval at which the system performs cache eviction in a shared-data cluster with file data cache enabled.
+- Introduced in: v3.0
 
-<!--
 ##### starlet_cache_evict_low_water
 
 - Default: 0.1
 - Type: Double
-- Unit:
+- Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The low water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
+- Introduced in: v3.0
 
 ##### starlet_cache_evict_high_water
 
 - Default: 0.2
 - Type: Double
-- Unit:
+- Unit: -
 - Is mutable: Yes
-- Description: In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
+- Description: The high water at which cache eviction is stopped. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is higher than this value, cache eviction will be stopped.
 - Introduced in: v3.0
 
 <!--
