@@ -3428,13 +3428,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
     }
-<<<<<<< HEAD
-=======
     _calc_memory_usage();
-
-    LOG(INFO) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
-                                     _version.minor_number());
->>>>>>> 05a691135b ([BugFix] fix race condition issue about persistent index's l0 (#43569))
     return Status::OK();
 }
 
