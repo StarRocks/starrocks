@@ -177,8 +177,8 @@ public class MvRefreshArbiter {
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
         }
 
-        // TODO: refactor it by using #collectBaseTablePartitionInfos
-        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
+        MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
+                TableProperty.QueryRewriteConsistencyMode.LOOSE);
         Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
         Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();

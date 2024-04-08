@@ -102,8 +102,11 @@ public class MvUpdateInfo {
      * @return: the partition names to refresh of the ref base table.
      */
     public Set<String> getBaseTableToRefreshPartitionNames(Table refBaseTable) {
-        if (mvToRefreshPartitionNames.isEmpty()) {
+        if (mvToRefreshPartitionNames.isEmpty() || mvToRefreshType == MvToRefreshType.NO_REFRESH) {
             return Sets.newHashSet();
+        }
+        if (mvToRefreshType == MvToRefreshType.FULL) {
+            return null;
         }
         if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = baseTableUpdateInfos.get(refBaseTable);
@@ -113,7 +116,6 @@ public class MvUpdateInfo {
             return mvBaseTableUpdateInfo.getToRefreshPartitionNames();
         }
 
-        // TODO: In some rewrite mode(loose), mv part to base part names are not prepared, skip to this.
         if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
             return null;
         }
