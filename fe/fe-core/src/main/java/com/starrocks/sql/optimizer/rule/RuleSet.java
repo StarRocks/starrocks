@@ -117,6 +117,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownFlatJsonMetaToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
@@ -444,7 +445,7 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.META_SCAN_REWRITE, ImmutableList.of(
                 new PushDownAggToMetaScanRule(),
-                //                new PushDownFlatJsonMetaToMetaScanRule(),
+                new PushDownFlatJsonMetaToMetaScanRule(),
                 new RewriteSimpleAggToMetaScanRule(),
                 new MinMaxCountOptOnScanRule()
         ));

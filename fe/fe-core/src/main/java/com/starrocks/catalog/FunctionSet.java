@@ -278,7 +278,7 @@ public class FunctionSet {
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
-    public static final String FLAT_JSON_META = "flat_json";
+    public static final String FLAT_JSON_META = "flat_json_meta";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
