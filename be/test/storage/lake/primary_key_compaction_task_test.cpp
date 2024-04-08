@@ -215,7 +215,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     }
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -271,7 +271,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -336,7 +336,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     ASSERT_EQ(kChunkSize * 2, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -602,7 +602,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
     {
         // do compaction without input rowsets
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -708,7 +708,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -794,7 +794,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
     }
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -875,7 +875,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
 
     auto txn_id = next_id();
     std::thread t1([&]() {
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -936,7 +936,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
     // make sure compact can generate more than one segment in output rowset
     config::max_segment_file_size = 50;
     config::vector_chunk_size = 10;
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -1001,7 +1001,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
 
     config::lake_pk_compaction_max_input_rowsets = 2;
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
