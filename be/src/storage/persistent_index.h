@@ -86,7 +86,8 @@ enum CommitType {
 };
 
 struct IOStat {
-    uint32_t get_in_shard_cnt = 0;
+    uint32_t read_iops = 0;
+    uint32_t filtered_kv_cnt = 0;
     uint64_t get_in_shard_cost = 0;
     uint64_t read_io_bytes = 0;
     uint64_t l0_write_cost = 0;
@@ -97,10 +98,11 @@ struct IOStat {
 
     std::string print_str() {
         return fmt::format(
-                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
+                "IOStat read_iops: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
+                "l0_write_cost: {} "
                 "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
-                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
-                compaction_cost, reload_meta_cost);
+                read_iops, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
+                flush_or_wal_cost, compaction_cost, reload_meta_cost);
     }
 };
 
@@ -436,7 +438,7 @@ public:
     uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
-            CHECK(res.ok()) << res.status(); // FIXME: no abort
+            DCHECK(res.ok()) << res.status(); // FIXME: no abort
             return *res;
         } else {
             return 0;
@@ -538,8 +540,8 @@ private:
                                         std::map<size_t, IndexPage>& pages) const;
 
     Status _get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
-                                 KeysInfo* found_keys_info,
-                                 std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const;
+                                 KeysInfo* found_keys_info, std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                 IOStat* stat) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
@@ -654,21 +656,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
-    size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
-    size_t memory_usage() const {
-        // commit thread will update primary index memory usage and get index memory usage
-        // apply thread maybe clear or modify _l1_vec
-        // add lock to avoid read/write conflicts
-        std::shared_lock rdlock(_lock);
-        size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
-        for (int i = 0; i < _l1_vec.size(); i++) {
-            memory_usage += _l1_vec[i]->memory_usage();
-        }
-        for (int i = 0; i < _l2_vec.size(); i++) {
-            memory_usage += _l2_vec[i]->memory_usage();
-        }
-        return memory_usage;
-    }
+    size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
 
@@ -763,9 +751,7 @@ public:
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
-    double get_write_amp_score() const;
-
-    static double major_compaction_score(size_t l1_count, size_t l2_count);
+    static double major_compaction_score(const PersistentIndexMetaPB& index_meta);
 
     // not thread safe, just for unit test
     size_t kv_num_in_immutable_index() {
@@ -853,8 +839,6 @@ private:
 
     bool _enable_minor_compaction();
 
-    void _calc_write_amp_score();
-
     size_t _get_tmp_l1_count();
 
     bool _l0_is_full(int64_t l1_l2_size = 0);
@@ -863,11 +847,10 @@ private:
 
     Status _reload_usage_and_size_by_key_length(size_t l1_idx_start, size_t l1_idx_end, bool contain_l2);
 
-protected:
-    // prevent concurrent operations
-    // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
-    mutable std::shared_mutex _lock;
+    // Calculate total memory usage after index been modified.
+    void _calc_memory_usage();
 
+protected:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -909,10 +892,10 @@ private:
     // std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
     // set if major compaction is running
     std::atomic<bool> _major_compaction_running{false};
-    // write amplification score, 0.0 means this index doesn't need major compaction
-    std::atomic<double> _write_amp_score{0.0};
     // Latest major compaction time. In second.
     int64_t _latest_compaction_time = 0;
+    // Re-calculated when commit end
+    std::atomic<size_t> _memory_usage{0};
 };
 
 } // namespace starrocks

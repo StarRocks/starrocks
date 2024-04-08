@@ -141,14 +141,27 @@ void RuntimeProfile::merge(RuntimeProfile* other) {
 
 void RuntimeProfile::update(const TRuntimeProfileTree& thrift_profile) {
     int idx = 0;
-    update(thrift_profile.nodes, &idx);
+    update(thrift_profile.nodes, &idx, false);
     DCHECK_EQ(idx, thrift_profile.nodes.size());
 }
 
-void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* idx) {
+void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* idx, bool is_parent_node_old) {
     DCHECK_LT(*idx, nodes.size());
     const TRuntimeProfileNode& node = nodes[*idx];
+    bool is_node_old;
     {
+        std::lock_guard<std::mutex> l(_version_lock);
+        if (is_parent_node_old || (node.__isset.version && node.version < _version)) {
+            is_node_old = true;
+        } else {
+            is_node_old = false;
+            if (node.__isset.version) {
+                _version = node.version;
+            }
+        }
+    }
+
+    if (!is_node_old) {
         std::lock_guard<std::mutex> l(_counter_lock);
         // update this level
         std::map<std::string, Counter*>::iterator dst_iter;
@@ -179,7 +192,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
         }
     }
 
-    {
+    if (!is_node_old) {
         std::lock_guard<std::mutex> l(_info_strings_lock);
         const InfoStrings& info_strings = node.info_strings;
         for (const std::string& key : node.info_strings_display_order) {
@@ -219,7 +232,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
                 _children.push_back(std::make_pair(child, tchild.indent));
             }
 
-            child->update(nodes, idx);
+            child->update(nodes, idx, is_node_old);
         }
     }
 }
@@ -742,6 +755,11 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
     node.num_children = _children.size();
     node.metadata = _metadata;
     node.indent = true;
+
+    {
+        std::lock_guard<std::mutex> l(_version_lock);
+        node.__set_version(_version);
+    }
 
     CounterMap counter_map;
     {

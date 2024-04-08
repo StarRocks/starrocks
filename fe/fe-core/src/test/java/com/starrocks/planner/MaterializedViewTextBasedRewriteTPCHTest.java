@@ -53,7 +53,6 @@ public class MaterializedViewTextBasedRewriteTPCHTest extends MaterializedViewTe
     @ParameterizedTest(name = "Tpch.{0}")
     @MethodSource("tpchSource")
     public void testTPCH(String name, String sql) {
-        setTracLogModule("MV");
         testRewriteOK(sql, sql);
     }
 

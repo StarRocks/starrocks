@@ -20,6 +20,18 @@
 
 namespace starrocks {
 
+const std::string DEFAULT_FIELD_DELIM = "\001";
+const std::string DEFAULT_COLLECTION_DELIM = "\002";
+const std::string DEFAULT_MAPKEY_DELIM = "\003";
+// LF = Line Feed = '\n'
+const std::string LINE_DELIM_LF = "\n";
+// Most hive TextFile using LF as line delimiter
+const std::string DEFAULT_LINE_DELIM = LINE_DELIM_LF;
+// CR = Carriage Return = '\r'
+const std::string LINE_DELIM_CR = "\r";
+// TODO(SmithCruise) CR + LF, but we don't support it yet, because our code only support single char as line delimiter
+const std::string LINE_DELIM_CR_LF = "\r\n";
+
 // This class used by data lake(Hive, Iceberg,... etc), not for broker load.
 // Broker load plz refer to csv_scanner.cpp
 class HdfsTextScanner final : public HdfsScanner {
@@ -36,7 +48,6 @@ public:
     int64_t estimated_mem_usage() const override;
 
 private:
-    Status _setup_io_ranges() const;
     // create a reader or re init reader
     Status _create_or_reinit_reader();
     Status _build_hive_column_name_2_index();

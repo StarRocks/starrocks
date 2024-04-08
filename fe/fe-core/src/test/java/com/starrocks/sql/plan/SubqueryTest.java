@@ -982,7 +982,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (PARTITIONED)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 12: cast");
+                    "  |  equal join conjunct: 1: v1 = 13: cast");
         }
         {
             // Uncorrelated 2
@@ -996,7 +996,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 12: cast");
+                    "  |  equal join conjunct: 1: v1 = 13: cast");
         }
         {
             // Uncorrelated 3, multi subqueries
@@ -1011,11 +1011,11 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 18: cast");
+                    "  |  equal join conjunct: 1: v1 = 20: cast");
             assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 4: v4 = 17: cast");
+                    "  |  equal join conjunct: 4: v4 = 19: cast");
         }
         {
             // correlated 1

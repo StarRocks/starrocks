@@ -11,7 +11,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -31,7 +30,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -246,4 +244,15 @@ set @test = (select array_agg(c2) from (select t2.c2 from t2 join t2 tt join t2 
 select array_length(@test);
 -- result:
 1296
+-- !result
+set @test= (select cast(50 as boolean));
+-- result:
+-- !result
+select @test;
+-- result:
+1
+-- !result
+set @test= (select cast(50 as time));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't set variable with type TIME.")
 -- !result

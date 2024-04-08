@@ -236,6 +236,38 @@ public class Config extends ConfigBase {
     public static String big_query_log_delete_age = "7d";
 
     /**
+     * profile_log_dir:
+     * This specifies FE profile log dir.
+     * <p>
+     * profile_log_roll_num:
+     * Maximal FE log files to be kept within a profile_log_roll_interval.
+     * <p>
+     * profile_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * profile_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 minutes
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static boolean enable_profile_log = true;
+    @ConfField
+    public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int profile_log_roll_num = 10;
+    @ConfField
+    public static String profile_log_roll_interval = "DAY";
+    @ConfField
+    public static String profile_log_delete_age = "7d";
+    @ConfField
+    public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
+
+    /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
      * in the query detail when enable_collect_query_detail_info is true.
@@ -614,6 +646,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static String priority_networks = "";
 
+    @ConfField
+    public static boolean net_use_ipv6_when_priority_networks_empty = false;
+
     /**
      * Fe http port
      * Currently, all FEs' http port must be same.
@@ -626,7 +661,8 @@ public class Config extends ConfigBase {
      * some I/O operations. If set with a non-positive value, it will use netty's default
      * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
      * default value is 0 which is same as the previous behaviour.
-     * See <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
+     * See
+     * <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
      * for details.
      */
     @ConfField
@@ -1427,7 +1463,6 @@ public class Config extends ConfigBase {
     public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
-     * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
      */
@@ -1435,7 +1470,6 @@ public class Config extends ConfigBase {
     public static double tablet_sched_balance_load_score_threshold = 0.1; // 10%
 
     /**
-     * For DiskAndTabletLoadBalancer:
      * if all backends disk usage is lower than this threshold, disk balance will never happen
      */
     @ConfField(mutable = true, aliases = {"balance_load_disk_safe_threshold"})
@@ -1475,6 +1509,16 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
+
+    /**
+     * Doing num based balance may break the disk size balance,
+     * but the maximum gap between disks cannot exceed
+     * tablet_sched_distribution_balance_threshold_ratio * tablet_sched_balance_load_score_threshold
+     * If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value.
+     * If you want the tablet distribution to be more balanced, increase this value.
+     */
+    @ConfField(mutable = true)
+    public static double tablet_sched_num_based_balance_threshold_ratio = 0.5;
 
     @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
     public static long tablet_report_drop_tablet_delay_sec = 120;
@@ -2042,13 +2086,6 @@ public class Config extends ConfigBase {
     public static int hms_process_events_parallel_num = 4;
 
     /**
-     * Used to split files stored in dfs such as object storage
-     * or hdfs into smaller files for hive external table
-     */
-    @ConfField(mutable = true)
-    public static long hive_max_split_size = 64L * 1024L * 1024L;
-
-    /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField(mutable = true)
@@ -2440,6 +2477,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
+    @ConfField(mutable = true)
+    public static String lake_compaction_warehouse = "default_warehouse";
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
 
@@ -2512,14 +2552,21 @@ public class Config extends ConfigBase {
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
      * e.g. 495501,495503
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     /**
      * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
      */
     @ConfField
-    public static boolean metadata_journal_ignore_replay_failure = false;
+    public static boolean metadata_journal_ignore_replay_failure = true;
+
+    /**
+     * In this mode, system will start some damon to recover metadata (Currently only partition version is supported)
+     * and any kind of loads will be rejected.
+     */
+    @ConfField
+    public static boolean metadata_enable_recovery_mode = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

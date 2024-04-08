@@ -41,7 +41,7 @@ Broker Load 支持如下数据文件格式：
 
 ## 基本原理
 
-提交导入作业以后，FE 会生成对应的查询计划，并根据目前可用 BE 的个数和源数据文件的大小，将查询计划分配给多个 BE 执行。每个 BE 负责执行一部分导入任务。BE 在执行过程中，会从外部存储系统拉取数据，并且会在对数据进行预处理之后将数据导入到 StarRocks 中。所有 BE 均完成导入后，由 FE 最终判断导入作业是否成功。
+提交导入作业以后，FE 会生成对应的查询计划，并根据目前可用 BE（或 CN）的个数和源数据文件的大小，将查询计划分配给多个 BE（或 CN）执行。每个 BE（或 CN）负责执行一部分导入任务。BE（或 CN）在执行过程中，会从外部存储系统拉取数据，并且会在对数据进行预处理之后将数据导入到 StarRocks 中。所有 BE（或 CN）均完成导入后，由 FE 最终判断导入作业是否成功。
 
 下图展示了 Broker Load 的主要流程：
 
@@ -1382,17 +1382,11 @@ WHERE LABEL = "label1";
 
 - 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
 
-每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/FE_configuration.md#配置-fe-动态参数)决定：
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE（或 CN）上并行执行。实例的拆分由 FE 配置参数 [`min_bytes_per_broker_scanner`](../administration/management/FE_configuration.md) 和 BE（或 CN）节点数量决定，可以使用如下公式计算单个子任务的实例总数：
 
-- `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
+单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`, BE/CN 节点数量）
 
-- `load_parallel_instance_num`：单个 BE 上每个作业允许的并发实例数，默认为 1 个。自 3.1 版本起弃用。
-
-   可以使用如下公式计算单个子任务的实例总数：
-
-   单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`，`load_parallel_instance_num` x BE 总数）
-
-一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE 总数相等的实例。
+一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE（或 CN）节点数量相等的实例。
 
 ## 常见问题
 

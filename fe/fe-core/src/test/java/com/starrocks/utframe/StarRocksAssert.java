@@ -238,7 +238,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRoutineLoad(String sql) throws Exception {
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
-        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getNodeTasksNum();
         beTasksNum.put(1L, 100);
         routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
         return this;
@@ -309,6 +309,13 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withTable(String sql) throws Exception {
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTable(MTable mTable) throws Exception {
+        String sql = mTable.getCreateTableSql();
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         utCreateTableWithRetry(createTableStmt, ctx);
         return this;
@@ -878,8 +885,7 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(stmt, ctx);
 
-        ShowExecutor showExecutor = new ShowExecutor();
-        ShowResultSet res =  showExecutor.execute((ShowStmt) stmt, ctx);
+        ShowResultSet res =  ShowExecutor.execute((ShowStmt) stmt, ctx);
         String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
         String body = res.getResultRows().stream()
                 .map(row -> String.join("|", row))
@@ -891,8 +897,7 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof ShowStmt);
         Analyzer.analyze(stmt, ctx);
-        ShowExecutor showExecutor = new ShowExecutor();
-        return showExecutor.execute((ShowStmt) stmt, ctx).getResultRows();
+        return ShowExecutor.execute((ShowStmt) stmt, ctx).getResultRows();
     }
 
     public String showCreateTable(String sql) throws Exception {
@@ -1012,7 +1017,6 @@ public class StarRocksAssert {
     public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
         TableName tableName = new TableName(db, table);
         ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1, NodePosition.ZERO);
-        ShowExecutor showExecutor = new ShowExecutor();
-        return showExecutor.execute(showTabletStmt, getCtx());
+        return ShowExecutor.execute(showTabletStmt, getCtx());
     }
 }

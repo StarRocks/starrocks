@@ -30,6 +30,7 @@ import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
@@ -72,6 +73,7 @@ public class IcebergApiConverter {
                 .setResourceName(toResourceName(catalogName, "iceberg"))
                 .setRemoteDbName(remoteDbName)
                 .setRemoteTableName(remoteTableName)
+                .setComment(nativeTbl.properties().getOrDefault("common", ""))
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl))
                 .setIcebergProperties(toIcebergProps(nativeCatalogType));
@@ -84,8 +86,9 @@ public class IcebergApiConverter {
         for (Column column : columns) {
             int index = icebergColumns.size();
             org.apache.iceberg.types.Type type = toIcebergColumnType(column.getType());
+            String colComment = StringUtils.defaultIfBlank(column.getComment(), null);
             Types.NestedField field = Types.NestedField.of(
-                    index, column.isAllowNull(), column.getName(), type, column.getComment());
+                    index, column.isAllowNull(), column.getName(), type, colComment);
             icebergColumns.add(field);
         }
 

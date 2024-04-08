@@ -46,6 +46,7 @@ public:
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
+        _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -203,7 +204,7 @@ TEST_P(LakePartialUpdateTest, test_write) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -226,7 +227,7 @@ TEST_P(LakePartialUpdateTest, test_write) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -242,7 +243,7 @@ TEST_P(LakePartialUpdateTest, test_write) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
@@ -266,7 +267,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -291,7 +292,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -311,7 +312,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     // check segment size in last metadata
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
@@ -336,7 +337,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -361,7 +362,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -381,7 +382,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     // check segment size in last metadata
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
@@ -405,7 +406,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -430,7 +431,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -449,7 +450,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
@@ -474,7 +475,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -501,7 +502,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -522,7 +523,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     // check segment size in last metadata
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
@@ -546,7 +547,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -579,7 +580,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -595,12 +596,16 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
 
 TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
+        // not support reload yet
+        return;
+    }
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -619,7 +624,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -645,7 +650,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -661,7 +666,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
@@ -686,7 +691,7 @@ TEST_P(LakePartialUpdateTest, test_partial_update_publish_retry) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -709,7 +714,7 @@ TEST_P(LakePartialUpdateTest, test_partial_update_publish_retry) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -749,7 +754,7 @@ TEST_P(LakePartialUpdateTest, test_concurrent_write_publish) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -769,7 +774,7 @@ TEST_P(LakePartialUpdateTest, test_concurrent_write_publish) {
                                                        .set_txn_id(txn_id1)
                                                        .set_partition_id(_partition_id)
                                                        .set_mem_tracker(_mem_tracker.get())
-                                                       .set_index_id(_tablet_schema->id())
+                                                       .set_schema_id(_tablet_schema->id())
                                                        .set_slot_descriptors(&_slot_pointers)
                                                        .build());
             ASSERT_OK(delta_writer->open());
@@ -795,7 +800,7 @@ TEST_P(LakePartialUpdateTest, test_concurrent_write_publish) {
                                                        .set_txn_id(txn_id2)
                                                        .set_partition_id(_partition_id)
                                                        .set_mem_tracker(_mem_tracker.get())
-                                                       .set_index_id(_tablet_schema->id())
+                                                       .set_schema_id(_tablet_schema->id())
                                                        .set_slot_descriptors(&_slot_pointers)
                                                        .build());
             ASSERT_OK(delta_writer->open());
@@ -829,7 +834,7 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -853,7 +858,7 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -881,7 +886,8 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePartialUpdateTest, LakePartialUpdateTest,
-                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
+                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
+                                           PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE}));
 
 class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
 public:
@@ -1007,7 +1013,7 @@ TEST_F(LakeIncompleteSortKeyPartialUpdateTest, test_incomplete_sort_key) {
                                                .set_txn_id(txn_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .set_slot_descriptors(&_slot_pointers)
                                                .build());
     ASSERT_OK(delta_writer->open());
@@ -1034,7 +1040,7 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -1057,7 +1063,7 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -1116,7 +1122,7 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -1139,7 +1145,7 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .build());
         ASSERT_OK(delta_writer->open());

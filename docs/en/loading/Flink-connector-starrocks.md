@@ -135,7 +135,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 **Required**: No<br/>
 **Default value**: AUTO<br/>
-**Description**: The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. <ul><li>`V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. </li> <li>`V2`: Use [Stream Load transaction](../loading/Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation. </li> <li>`AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1` </li></ul>
+**Description**: The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. <ul><li>`V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. </li> <li>`V2`: Use [Stream Load transaction](./Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation. </li> <li>`AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1` </li></ul>
 
 ### sink.label-prefix
 
@@ -198,6 +198,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Description**: The parallelism of loading. Only available for Flink SQL. If this parameter is not specified, Flink planner decides the parallelism. **In the scenario of multi-parallelism, users need to guarantee data is written in the correct order.**
 
 ### sink.properties.*
+
 **Required**: No<br/>
 **Default value**: NONE<br/>
 **Description**: The parameters that are used to control Stream Load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
@@ -266,7 +267,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 ### Exactly Once
 
 - If you want sink to guarantee exactly-once semantics, we recommend you to upgrade StarRocks to 2.5 or later, and Flink connector to 1.2.4 or later
-  - Since Flink connector 1.2.4, the exactly-once is redesigned based on [Stream Load transaction interface](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface)
+  - Since Flink connector 1.2.4, the exactly-once is redesigned based on [Stream Load transaction interface](./Stream_Load_transaction_interface.md)
     provided by StarRocks since 2.4. Compared to the previous implementation based on non-transactional Stream Load non-transactional interface,
     the new implementation reduces memory usage and checkpoint overhead, thereby enhancing real-time performance and
     stability of loading.
@@ -413,7 +414,7 @@ Note you must define the primary key in the Flink DDL if you want to load data i
 
 There are several ways to implement a Flink DataStream job according to the type of the input records, such as a CSV Java `String`, a JSON Java `String` or a custom Java object.
 
-- The input records are CSV-format `String`. See [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCsvRecords.java) for a complete example.
+- The input records are CSV-format `String`. See [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/cd8086cfedc64d5181785bdf5e89a847dc294c1d/examples/src/main/java/com/starrocks/connector/flink/examples/datastream) for a complete example.
 
     ```java
     /**
@@ -448,7 +449,7 @@ There are several ways to implement a Flink DataStream job according to the type
     source.addSink(starRockSink);
     ```
 
-- The input records are JSON-format `String`. See [LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadJsonRecords.java) for a complete example.
+- The input records are JSON-format `String`. See [LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/cd8086cfedc64d5181785bdf5e89a847dc294c1d/examples/src/main/java/com/starrocks/connector/flink/examples/datastream) for a complete example.
 
     ```java
     /**
@@ -481,7 +482,7 @@ There are several ways to implement a Flink DataStream job according to the type
     source.addSink(starRockSink);
     ```
 
-- The input records are custom Java objects. See [LoadCustomJavaRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCustomJavaRecords.java) for a complete example.
+- The input records are custom Java objects. See [LoadCustomJavaRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/cd8086cfedc64d5181785bdf5e89a847dc294c1d/examples/src/main/java/com/starrocks/connector/flink/examples/datastream) for a complete example.
 
   - In this example, the input record is a simple POJO `RowData`.
 
@@ -562,23 +563,25 @@ There are several ways to implement a Flink DataStream job according to the type
 
 ### Synchronize data with Flink CDC 3.0 (with schema change supported)
 
-[Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/releases) framework can be used
-to easily [build a streaming ELT pipeline from CDC sources](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) (such as MySQL and Kafka) to StarRocks. The pipeline can synchronize whole database, merged sharding tables, and schema changes from sources to StarRocks.
+[Flink CDC 3.0](https://nightlies.apache.org/flink/flink-cdc-docs-stable) framework can be used
+to easily build a streaming ELT pipeline from CDC sources (such as MySQL and Kafka) to StarRocks. The pipeline can synchronize whole database, merged sharding tables, and schema changes from sources to StarRocks.
 
-Since v1.2.9, the Flink connector for StarRocks is integrated into this framework as [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html). The StarRocks Pipeline Connector supports:
+Since v1.2.9, the Flink connector for StarRocks is integrated into this framework as [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/starrocks). The StarRocks Pipeline Connector supports:
 
 - Automatic creation of databases and tables
 - Schema change synchronization
 - Full and incremental data synchronization
 
-For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html).
+For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
+
+It is advised to use StarRocks v3.2.1 and later versions to enable [fast_schema_evolution](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution). It will improve the speed of adding or dropping columns and reduce resource usage.
 
 ## Best practices
 
 ### Load data to a Primary Key table
 
 This section will show how to load data to a StarRocks Primary Key table to achieve partial updates and conditional updates.
-You can see [Change data through loading](https://docs.starrocks.io/en-us/latest/loading/Load_to_Primary_Key_tables) for the introduction of those features.
+You can see [Change data through loading](./Load_to_Primary_Key_tables.md) for the introduction of those features.
 These examples use Flink SQL.
 
 #### Preparations
@@ -734,7 +737,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
 
 ### Load data into columns of BITMAP type
 
-[`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
+[`BITMAP`](../sql-reference/data-types/other-data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/Using_bitmap.md).
 Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
 
 1. Create a StarRocks Aggregate table in MySQL client.
@@ -755,7 +758,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
     The column `visit_user_id` in the Flink table is of `BIGINT` type, and we want to load this column to the column `visit_users` of `BITMAP` type in the StarRocks table. So when defining the DDL of the Flink table, note that:
     - Because Flink does not support `BITMAP`, you need to define a column `visit_user_id` as `BIGINT` type to represent the column `visit_users` of `BITMAP` type in the StarRocks table.
-    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)`, which tells the connector the column mapping between the Flink table and StarRocks table. Also you need to use [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap)
+    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)`, which tells the connector the column mapping between the Flink table and StarRocks table. Also you need to use [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
    function to tell the connector to convert the data of `BIGINT` type into `BITMAP` type.
 
     ```SQL
@@ -801,7 +804,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 ### Load data into columns of HLL type
 
-[`HLL`](../sql-reference/sql-statements/data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
+[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.
 

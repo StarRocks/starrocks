@@ -168,6 +168,12 @@ SELECT /*+ SET_VAR
 
 用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
 
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* 含义：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
+* 默认值：64
+* 引入版本：v3.1.9, v3.2.5
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
@@ -206,6 +212,14 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于兼容 MySQL 客户端，无实际作用。
 
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+解决升级中的兼容问题，用户不可见。
+
+默认值：`true`。
+-->
+
 ### enable_connector_adaptive_io_tasks（2.5 及以后）
 
 外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
@@ -220,7 +234,7 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 ### enable_group_level_query_queue （3.1.4 及以后）
 
-是否开启资源组粒度的[查询队列](../administration/query_queues.md)。
+是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 
 默认值：false，表示不开启。
 
@@ -442,11 +456,11 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 ### max_pushdown_conditions_per_column
 
-该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### max_scan_key_num
 
-该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### nested_mv_rewrite_max_level
 
@@ -723,4 +737,10 @@ MySQL 服务器的版本。
 
 ### wait_timeout
 
-用于设置空闲连接的连接时长，单位为秒。当一个空闲连接在该时长内与 StarRocks 没有任何交互，则 StarRocks 会主动断开这个链接。默认为 8 小时。
+用于设置客户端与 StarRocks 数据库交互时的最大空闲时长。如果一个空闲连接在该时长内与 StarRocks 数据库没有任何交互，StarRocks 会主动断开这个连接。
+
+单位：秒。默认值：28800（即 8 小时）。
+
+### orc_use_column_names
+
+设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。该变量从 3.1.10 版本起支持。

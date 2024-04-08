@@ -999,8 +999,7 @@ void PrimaryIndex::unload() {
     if (!_loaded) {
         return;
     }
-    LOG(INFO) << "unload primary index tablet:" << _tablet_id << " size:" << size() << " capacity:" << capacity()
-              << " memory: " << memory_usage();
+    LOG(INFO) << "unload primary index tablet:" << _tablet_id << " size:" << size() << " memory: " << memory_usage();
     if (_pkey_to_rssid_rowid) {
         _pkey_to_rssid_rowid.reset();
     }
@@ -1114,9 +1113,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
@@ -1132,7 +1129,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         }
         auto& itrs = res.value();
         // TODO(cbl): auto close iterators on failure
-        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {
@@ -1176,8 +1173,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     LOG(INFO) << "load primary index finish table:" << tablet->belonged_table_id() << " tablet:" << tablet->tablet_id()
               << " version:" << apply_version << " #rowset:" << rowsets.size() << " #segment:" << total_segments
               << " data_size:" << total_data_size << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size()
-              << " capacity:" << capacity() << " memory:" << memory_usage()
-              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
+              << " memory:" << memory_usage() << " duration: " << timer.elapsed_time() / 1000000 << "ms";
     span->SetAttribute("memory", memory_usage());
     span->SetAttribute("size", size());
     return Status::OK();
@@ -1208,7 +1204,7 @@ const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t id
         const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
         return vkeys + idx_begin;
     } else {
-        CHECK(_key_size > 0);
+        DCHECK(_key_size > 0);
         const uint8_t* keys = pks.raw_data() + idx_begin * _key_size;
         for (size_t i = idx_begin; i < idx_end; i++) {
             key_slices->emplace_back(keys, _key_size);
@@ -1415,13 +1411,6 @@ std::size_t PrimaryIndex::size() const {
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->size() : 0;
 }
 
-std::size_t PrimaryIndex::capacity() const {
-    if (_persistent_index) {
-        return _persistent_index->capacity();
-    }
-    return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->capacity() : 0;
-}
-
 void PrimaryIndex::reserve(size_t s) {
     if (_pkey_to_rssid_rowid) {
         _pkey_to_rssid_rowid->reserve(s);
@@ -1434,14 +1423,6 @@ std::string PrimaryIndex::to_string() const {
 
 std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema) {
     return std::make_unique<PrimaryIndex>(pk_schema);
-}
-
-double PrimaryIndex::get_write_amp_score() {
-    if (_persistent_index != nullptr) {
-        return _persistent_index->get_write_amp_score();
-    } else {
-        return 0.0;
-    }
 }
 
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {

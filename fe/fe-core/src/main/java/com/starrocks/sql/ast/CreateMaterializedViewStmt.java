@@ -640,6 +640,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (mvColumnItem.getAggregationType() != null) {
                 break;
             }
+            // NOTE: Change aggregate type of the column to none rather than null
             mvColumnItem.setAggregationType(AggregateType.NONE, true);
         }
     }
@@ -709,6 +710,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             // supply value
             for (; theBeginIndexOfValue < mvColumnItemList.size(); theBeginIndexOfValue++) {
                 MVColumnItem mvColumnItem = mvColumnItemList.get(theBeginIndexOfValue);
+                // NOTE: Change aggregate type of the column to none rather than null
                 mvColumnItem.setAggregationType(AggregateType.NONE, true);
             }
         }

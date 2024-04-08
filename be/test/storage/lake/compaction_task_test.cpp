@@ -115,7 +115,7 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4560;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeDuplicateKeyCompactionTest, test1) {
@@ -137,7 +137,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -150,7 +150,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -175,7 +175,7 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, task_context->progress.value());
@@ -244,7 +244,7 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4563;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
@@ -266,7 +266,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
@@ -284,7 +284,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Cancelled compaction task
     {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         auto st = task->execute(CompactionTask::kCancelledFn);
@@ -294,7 +294,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Completed compaction task without error
     {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -394,7 +394,7 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4561;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeUniqueKeyCompactionTest, test1) {
@@ -416,7 +416,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -429,7 +429,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -508,7 +508,7 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4562;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
@@ -530,7 +530,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -567,7 +567,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     }
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));

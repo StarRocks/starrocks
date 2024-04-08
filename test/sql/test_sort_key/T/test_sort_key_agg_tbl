@@ -18,7 +18,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -34,6 +33,23 @@ AGGREGATE KEY(k1, k2)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,v2)
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false"
+);
+
+CREATE TABLE `agg_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` bigint REPLACE NULL COMMENT "",
+    `v2` bigint REPLACE NULL COMMENT "",
+    `v3` bigint REPLACE NULL COMMENT ""
+)
+AGGREGATE KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2,k1,k1)
 PROPERTIES (
     "replication_num" = "1",
     "in_memory" = "false",
@@ -54,7 +70,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -70,6 +85,7 @@ select * from agg_test;
 
 alter table agg_test order by (k2,v1);
 alter table agg_test order by (k2);
+alter table agg_test order by (k1,k2,k2);
 alter table agg_test order by (k1,k2);
 function: wait_alter_table_finish()
 show create table agg_test;
@@ -79,6 +95,7 @@ alter table agg_test order by (k2,k1,v2,v1,v3);
 function: wait_alter_table_finish()
 show create table agg_test;
 select * from agg_test;
+
 drop table agg_test;
 drop database sort_key_test_agg;
 
@@ -100,7 +117,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );

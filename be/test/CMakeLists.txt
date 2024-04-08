@@ -58,6 +58,7 @@ set(EXEC_FILES
         ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
@@ -228,6 +229,8 @@ set(EXEC_FILES
         ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
+        ./storage/lake/tablet_test.cpp
+        ./storage/lake/lake_scan_node_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/alter_tablet_meta_test.cpp
         ./storage/lake/tablet_manager_test.cpp
@@ -332,6 +335,7 @@ set(EXEC_FILES
         ./runtime/fragment_mgr_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
+        ./runtime/local_tablets_channel_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
         ./runtime/large_int_value_test.cpp
         ./runtime/load_channel_test.cpp
@@ -341,6 +345,7 @@ set(EXEC_FILES
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
+        ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
@@ -424,10 +429,12 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./service/service_be/internal_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp
+        ./storage/lake/persistent_index_sstable_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -128,6 +129,13 @@ public class MvRewriteTestBase {
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         return mv;
+    }
+
+    protected void refreshMaterializedViewWithPartition(String dbName, String mvName, String partitionStart,
+                                                        String partitionEnd) throws SQLException {
+        cluster.runSql(dbName, String.format("refresh materialized view %s partition start (\"%s\") " +
+                "end (\"%s\") with sync mode", mvName, partitionStart, partitionEnd));
+        cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
     }
 
     protected void refreshMaterializedView(String dbName, String mvName) throws SQLException {
@@ -223,6 +231,7 @@ public class MvRewriteTestBase {
 
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
-        new StmtExecutor(connectContext, sql).execute();
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
     }
 }

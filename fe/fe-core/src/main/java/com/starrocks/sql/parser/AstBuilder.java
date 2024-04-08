@@ -123,6 +123,7 @@ import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -189,7 +190,6 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -498,11 +498,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     FunctionSet.FROM_UNIXTIME, FunctionSet.FROM_UNIXTIME_MS,
                     FunctionSet.STR2DATE);
 
-    public AstBuilder(long sqlMode) {
+    protected AstBuilder(long sqlMode) {
         this(sqlMode, new IdentityHashMap<>());
     }
 
-    public AstBuilder(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+    protected AstBuilder(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
         this.hintMap = hintMap;
         long hintSqlMode = 0L;
         for (Map.Entry<ParserRuleContext, List<HintNode>> entry : hintMap.entrySet()) {
@@ -514,6 +514,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         this.sqlMode = sqlMode | hintSqlMode;
+    }
+
+    private static final AstBuilder.AstBuilderFactory INSTANCE = new AstBuilder.AstBuilderFactory();
+
+    public static AstBuilder.AstBuilderFactory getInstance() {
+        return INSTANCE;
+    }
+
+    public static class AstBuilderFactory {
+        protected AstBuilderFactory() {
+        }
+
+        public AstBuilder create(long sqlMode) {
+            return new AstBuilder(sqlMode, new IdentityHashMap<>());
+        }
+
+        public AstBuilder create(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+            return new AstBuilder(sqlMode, hintMap);
+        }
     }
 
     public List<Parameter> getParameters() {
@@ -1006,9 +1025,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 null,
                 context.orderByDesc() == null ? null :
-                    visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                        .stream().map(Identifier::getValue).collect(toList())
-                );
+                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                .stream().map(Identifier::getValue).collect(toList())
+        );
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
         return new CreateTableAsSelectStmt(
@@ -2131,6 +2150,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(Long::parseLong).collect(toList());
         }
         return new AdminCheckTabletsStmt(tabletIds, (Property) visitProperty(context.property()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminSetPartitionVersion(StarRocksParser.AdminSetPartitionVersionContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        String partitionName = null;
+        if (context.partitionName != null) {
+            partitionName = ((Identifier) visit(context.partitionName)).getValue();
+        }
+        Long partitionId = null;
+        if (context.partitionId != null) {
+            partitionId = Long.parseLong(context.partitionId.getText());
+        }
+        long version = Long.parseLong(context.version.getText());
+        if (partitionName != null) {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionName, version, createPos(context));
+        } else {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionId, version, createPos(context));
+        }
     }
 
     @Override
@@ -5497,20 +5536,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return grantRevokePrivilegeObjects;
     }
 
-    @Override
-    public ParseNode visitCreateSecurityIntegrationStatement(
-            StarRocksParser.CreateSecurityIntegrationStatementContext context) {
-        String name = ((Identifier) visit(context.identifier())).getValue();
-        Map<String, String> propertyMap = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                propertyMap.put(property.getKey(), property.getValue());
-            }
-        }
-        return new CreateSecurityIntegrationStatement(name, propertyMap, createPos(context));
-    }
-
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -7056,7 +7081,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Util Functions -------------------------------------------
 
-    private <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
+    protected <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
         return contexts.stream()
                 .map(this::visit)
                 .map(clazz::cast)
@@ -7380,7 +7405,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private NodePosition createPos(ParserRuleContext context) {
+    protected NodePosition createPos(ParserRuleContext context) {
         return createPos(context.start, context.stop);
     }
 
@@ -7432,4 +7457,3 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return res;
     }
 }
-

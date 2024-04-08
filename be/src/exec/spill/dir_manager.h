@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <memory>
+#include <utility>
 
 #include "common/status.h"
 #include "common/statusor.h"
@@ -27,11 +28,10 @@
 namespace starrocks::spill {
 
 // Dir describes a specific directory, including the directory name and the corresponding FileSystem
-// @TODO(silverbullet233): maintain some stats, such as the capacity
 class Dir {
 public:
     Dir(std::string dir, std::shared_ptr<FileSystem> fs, int64_t max_dir_size)
-            : _dir(std::move(dir)), _fs(fs), _max_size(max_dir_size) {}
+            : _dir(std::move(dir)), _fs(std::move(fs)), _max_size(max_dir_size) {}
 
     virtual ~Dir() = default;
 
@@ -89,7 +89,7 @@ struct AcquireDirOptions {
 class DirManager {
 public:
     DirManager() = default;
-    DirManager(const std::vector<DirPtr>& dirs) : _dirs(dirs) {}
+    DirManager(std::vector<DirPtr> dirs) : _dirs(std::move(dirs)) {}
     ~DirManager() = default;
 
     Status init(const std::string& spill_dirs);

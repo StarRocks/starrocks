@@ -35,6 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
+import com.google.gson.Gson;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -75,6 +76,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
@@ -95,7 +97,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.IntStream;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -107,6 +108,10 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+
+    private static final Gson GSON = new Gson();
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -188,7 +193,15 @@ public class ConnectProcessor {
         }
 
         // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
-        String errorCode = StringUtils.isNotEmpty(ctx.getErrorCode()) ? ctx.getErrorCode() : ctx.getState().getErrType().name();
+        String errorCode = "";
+        if (ctx.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
+            // error happens in FE execution.
+            errorCode = ctx.getState().getErrType().name();
+        } else if (StringUtils.isNotEmpty(ctx.getErrorCode())) {
+            // error happens in BE execution.
+            errorCode = ctx.getErrorCode();
+        }
+
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
                 .setErrorCode(errorCode)
@@ -302,6 +315,11 @@ public class ConnectProcessor {
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+        }
+
+        if (Config.enable_profile_log) {
+            String jsonString = GSON.toJson(queryDetail);
+            PROFILE_LOG.info(jsonString);
         }
 
         QueryDetailQueue.addQueryDetail(queryDetail);
@@ -519,12 +537,13 @@ public class ConnectProcessor {
         packetBuf.get(nullBitmap);
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            Integer[] mysqlTypeCodes = new Integer[numParams];
-
+            
             // new_params_bind_flag
             if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
                 // parse params types
-                IntStream.range(0, numParams).forEach(i -> mysqlTypeCodes[i] = (int) packetBuf.getChar());
+                for (int i = 0; i < numParams; ++i) {
+                    prepareCtx.getStmt().getMysqlTypeCodes().set(i, (int) packetBuf.getChar());
+                }
             }
             // gene exprs
             List<Expr> exprs = new ArrayList<>();
@@ -533,7 +552,7 @@ public class ConnectProcessor {
                     exprs.add(new NullLiteral());
                     continue;
                 }
-                LiteralExpr l = LiteralExpr.parseLiteral(mysqlTypeCodes[i]);
+                LiteralExpr l = LiteralExpr.parseLiteral(prepareCtx.getStmt().getMysqlTypeCodes().get(i));
                 l.parseMysqlParam(packetBuf);
                 exprs.add(l);
             }
@@ -814,11 +833,20 @@ public class ConnectProcessor {
             // set session variables first
             if (request.isSetModified_variables_sql()) {
                 LOG.info("Set session variables first: {}", request.modified_variables_sql);
-                new StmtExecutor(ctx, new OriginStatement(request.modified_variables_sql, 0), true).execute();
+
+                StatementBase statement = SqlParser.parseSingleStatement(request.modified_variables_sql,
+                        ctx.getSessionVariable().getSqlMode());
+                executor = new StmtExecutor(ctx, statement);
+                executor.setProxy();
+                executor.execute();
             }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
-            executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);
+
+            List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
+            StatementBase statement = stmts.get(idx);
+            executor = new StmtExecutor(ctx, statement);
+            executor.setProxy();
             executor.execute();
         } catch (IOException e) {
             // Client failed.
@@ -837,7 +865,7 @@ public class ConnectProcessor {
         }
 
         // no matter the master execute success or fail, the master must transfer the result to follower
-        // and tell the follower the current jounalID.
+        // and tell the follower the current journalID.
         TMasterOpResult result = new TMasterOpResult();
         result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
         // following stmt will not be executed, when current stmt is failed,

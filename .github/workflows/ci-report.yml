@@ -33,12 +33,13 @@ jobs:
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
+      PR_STATE: ${{ steps.pr_details.outputs.PR_STATE }}
     steps:
       - run: |
           sleep 10
 
       - name: Download workflow artifact - PR
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
@@ -58,8 +59,11 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          base_ref=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName -q .baseRefName`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,state`
+          base_ref=$(echo ${pr_info} | jq -r .baseRefName)
+          pr_state=$(echo ${pr_info} | jq -r .state)
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
+          echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
       - name: INFO
@@ -71,7 +75,7 @@ jobs:
   FE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != ''
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
@@ -205,7 +209,7 @@ jobs:
   BE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -304,7 +308,7 @@ jobs:
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
@@ -356,7 +360,7 @@ jobs:
   Admit-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
@@ -407,7 +411,7 @@ jobs:
   NOTIFICATION:
     runs-on: [ self-hosted, quick ]
     needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
-    if: always() && needs.INFO.outputs.PR_NUMBER != ''
+    if: always() && needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
       FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}

@@ -966,16 +966,14 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
 
-    std::string src_snapshot_path;
-    bool incremental_snapshot;
+    TSnapshotInfo src_snapshot_info;
 
     Status res;
     if (remote_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req, &src_snapshot_path,
-                                                                        &incremental_snapshot);
+        res = exec_env->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req, &src_snapshot_info);
     } else {
-        res = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-                remote_snapshot_req, &src_snapshot_path, &incremental_snapshot);
+        res = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_req,
+                                                                                    &src_snapshot_info);
     }
 
     if (!res.ok()) {
@@ -983,8 +981,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
         LOG(WARNING) << "remote snapshot failed. status: " << res << ", signature:" << agent_task_req->signature;
         error_msgs.emplace_back("replicate snapshot failed, " + res.to_string());
     } else {
-        finish_task_request.__set_snapshot_path(src_snapshot_path);
-        finish_task_request.__set_incremental_snapshot(incremental_snapshot);
+        finish_task_request.__set_snapshot_info(src_snapshot_info);
     }
 
     task_status.__set_status_code(status_code);

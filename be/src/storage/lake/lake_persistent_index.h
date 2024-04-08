@@ -16,13 +16,49 @@
 
 #include "storage/persistent_index.h"
 
-namespace starrocks::lake {
+namespace starrocks {
 
+namespace sstable {
+class Iterator;
+class TableBuilder;
+} // namespace sstable
+
+namespace lake {
+
+using KeyIndex = size_t;
+using KeyIndexSet = std::set<KeyIndex>;
+class MetaFileBuilder;
 class PersistentIndexMemtable;
+class PersistentIndexSstable;
+class TabletManager;
+class TxnLogPB;
+class TxnLogPB_OpCompaction;
 
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
+
+class KeyValueMerger {
+public:
+    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder)
+            : _key(std::move(key)), _builder(builder) {}
+
+    Status merge(const std::string& key, const std::string& value);
+
+    void finish() { flush(); }
+
+private:
+    void flush();
+
+private:
+    std::string _key;
+    sstable::TableBuilder* _builder;
+    std::list<IndexValueWithVer> _index_value_vers;
+};
+
+// LakePersistentIndex is not thread-safe.
+// Caller should take care of the multi-thread safety
 class LakePersistentIndex : public PersistentIndex {
 public:
-    explicit LakePersistentIndex(std::string path);
+    explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
     ~LakePersistentIndex();
 
@@ -67,11 +103,51 @@ public:
 
     Status minor_compact();
 
-    Status major_compact(int64_t min_retain_version);
+    Status major_compact(int64_t min_retain_version, TxnLogPB* txn_log);
+
+    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+
+    void commit(MetaFileBuilder* builder);
+
+private:
+    Status flush_memtable();
+
+    bool is_memtable_full() const;
+
+    // batch get
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |key_indexes|: the indexes of keys.
+    // |found_key_indexes|: founded indexes of keys
+    // |version|: version of values
+    Status get_from_immutable_memtable(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
+                                       KeyIndexSet* found_key_indexes, int64_t version) const;
+
+    // batch get
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |key_indexes|: the indexes of keys. If a key is found, its index will be erased.
+    // |version|: version of values
+    Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
+                             int64_t version) const;
+
+    static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
+
+    std::unique_ptr<sstable::Iterator> prepare_merging_iterator();
+
+    Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
-    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable;
+    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _tablet_id{0};
+    // The size of sstables is not expected to be too large.
+    // In major compaction, some sstables will be picked to be merged into one.
+    // sstables are ordered with the smaller version on the left.
+    std::vector<std::unique_ptr<PersistentIndexSstable>> _sstables;
 };
 
-} // namespace starrocks::lake
+} // namespace lake
+} // namespace starrocks

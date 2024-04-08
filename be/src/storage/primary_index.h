@@ -111,8 +111,6 @@ public:
 
     Status on_commited();
 
-    double get_write_amp_score();
-
     Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
 
     Status abort();
@@ -122,9 +120,6 @@ public:
 
     // [not thread-safe]
     std::size_t size() const;
-
-    // [not thread-safe]
-    std::size_t capacity() const;
 
     // [not thread-safe]
     void reserve(size_t s);

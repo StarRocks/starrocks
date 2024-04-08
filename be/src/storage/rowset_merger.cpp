@@ -106,7 +106,8 @@ struct MergeEntry {
             if (encode_schema != nullptr) {
                 // need to encode
                 chunk_pk_column->reset_column();
-                PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
+                RETURN_IF_ERROR(PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(),
+                                                                   chunk_pk_column.get()));
             } else {
                 // just use chunk's first column
                 chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);

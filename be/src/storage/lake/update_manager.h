@@ -92,7 +92,7 @@ public:
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                      const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
+                                      const TabletMetadata& metadata, const Tablet& tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
@@ -136,9 +136,6 @@ public:
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::mutex>>& lock);
 
-    // commit primary index, only take affect when it is local persistent index
-    Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
-
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
     // remove index entry if it isn't nullptr
@@ -159,6 +156,8 @@ public:
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
+
+    Status execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata, TxnLogPB* txn_log);
 
 private:
     // print memory tracker state

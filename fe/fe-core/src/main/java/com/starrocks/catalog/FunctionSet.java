@@ -215,6 +215,7 @@ public class FunctionSet {
     public static final String JSON_QUERY = "json_query";
     public static final String JSON_EXISTS = "json_exists";
     public static final String JSON_EACH = "json_each";
+    public static final String GET_JSON_BOOL = "get_json_bool";
     public static final String GET_JSON_DOUBLE = "get_json_double";
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
@@ -490,6 +491,9 @@ public class FunctionSet {
     public static final String SECONDS_SUB = "seconds_sub";
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
+
+    // table function
+    public static final String UNNEST = "unnest";
 
     public static final String CONNECTION_ID = "connection_id";
 

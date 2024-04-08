@@ -96,10 +96,6 @@ struct SpillIOTaskContext {
 };
 using SpillIOTaskContextPtr = std::shared_ptr<SpillIOTaskContext>;
 
-struct ExecutorT {
-    static Status submit(workgroup::ScanTask task) { return Status::OK(); }
-};
-
 struct IOTaskExecutor {
     static Status submit(workgroup::ScanTask task) {
         const auto& task_ctx = task.get_work_context();

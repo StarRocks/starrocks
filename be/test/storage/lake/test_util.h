@@ -18,10 +18,13 @@
 #include <memory>
 #include <utility>
 
+#include "connector/connector.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
+#include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 #include "service/service_be/lake_service.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -43,6 +46,16 @@ Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet
 
 StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                                int64_t new_version, std::vector<int64_t>& txn_ids);
+
+std::shared_ptr<RuntimeState> create_runtime_state();
+
+std::shared_ptr<RuntimeState> create_runtime_state(const TQueryOptions& query_options);
+
+DescriptorTbl* create_table_desc(RuntimeState* runtime_state, const std::vector<TypeDescriptor>& types);
+
+std::shared_ptr<TPlanNode> create_tplan_node_cloud();
+
+std::vector<TScanRangeParams> create_scan_ranges_cloud(std::vector<TabletMetadata*>& tablet_metas);
 
 class TestBase : public ::testing::Test {
 public:
@@ -97,6 +110,7 @@ protected:
 
 struct PrimaryKeyParam {
     bool enable_persistent_index = false;
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
@@ -215,6 +229,78 @@ inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysTyp
         c1->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
     }
     return metadata;
+}
+
+inline std::shared_ptr<RuntimeState> create_runtime_state() {
+    TQueryOptions query_options;
+    return create_runtime_state(query_options);
+}
+
+inline std::shared_ptr<RuntimeState> create_runtime_state(const TQueryOptions& query_options) {
+    TUniqueId fragment_id;
+    TQueryGlobals query_globals;
+    std::shared_ptr<RuntimeState> runtime_state =
+            std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+    TUniqueId id;
+    runtime_state->init_mem_trackers(id);
+    return runtime_state;
+}
+
+inline DescriptorTbl* create_table_desc(RuntimeState* runtime_state, const std::vector<TypeDescriptor>& types) {
+    /// Init DescriptorTable
+    TDescriptorTableBuilder desc_tbl_builder;
+    TTupleDescriptorBuilder tuple_desc_builder;
+    for (auto& t : types) {
+        TSlotDescriptorBuilder slot_desc_builder;
+        slot_desc_builder.type(t).length(t.len).precision(t.precision).scale(t.scale).nullable(true);
+        tuple_desc_builder.add_slot(slot_desc_builder.build());
+    }
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state, runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
+
+    runtime_state->set_desc_tbl(tbl);
+    return tbl;
+}
+
+inline std::shared_ptr<TPlanNode> create_tplan_node_cloud() {
+    std::vector<::starrocks::TTupleId> tuple_ids{0};
+    std::vector<bool> nullable_tuples{true};
+
+    auto tnode = std::make_shared<TPlanNode>();
+    tnode->__set_node_id(1);
+    tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    tnode->__set_row_tuples(tuple_ids);
+    tnode->__set_nullable_tuples(nullable_tuples);
+    tnode->__set_limit(-1);
+
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.connector_name = connector::Connector::LAKE;
+    tnode->__set_connector_scan_node(connector_scan_node);
+
+    return tnode;
+}
+
+inline std::vector<TScanRangeParams> create_scan_ranges_cloud(std::vector<TabletMetadata*>& tablet_metas) {
+    std::vector<TScanRangeParams> scan_ranges;
+
+    for (auto tablet_meta : tablet_metas) {
+        TInternalScanRange internal_scan_range;
+        internal_scan_range.__set_tablet_id(tablet_meta->id());
+        internal_scan_range.__set_version(std::to_string(tablet_meta->version()));
+
+        TScanRange scan_range;
+        scan_range.__set_internal_scan_range(internal_scan_range);
+
+        TScanRangeParams param;
+        param.__set_scan_range(scan_range);
+        scan_ranges.push_back(param);
+    }
+
+    return scan_ranges;
 }
 
 } // namespace starrocks::lake

@@ -36,7 +36,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     return cache_key_pb.SerializeAsString();
 }
 
-MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
+MetaFileBuilder::MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata)
         : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
@@ -130,6 +130,12 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         } else {
             delvec_it++;
         }
+    }
+    for (auto& input_sstable : op_compaction.input_sstables()) {
+        FileMetaPB file_meta;
+        file_meta.set_name(input_sstable.filename());
+        file_meta.set_size(input_sstable.filesize());
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 
     // add output rowset
@@ -270,6 +276,10 @@ void MetaFileBuilder::_fill_delvec_cache() {
             _tablet.tablet_mgr()->metacache()->cache_delvec(cache_item.first, delvec_iter->second);
         }
     }
+}
+
+void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta) {
+    _tablet_meta->mutable_sstable_meta()->CopyFrom(sstable_meta);
 }
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec) {

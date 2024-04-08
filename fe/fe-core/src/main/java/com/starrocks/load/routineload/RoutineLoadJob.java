@@ -52,8 +52,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -62,6 +60,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -82,6 +81,8 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -98,6 +99,7 @@ import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -123,7 +125,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * The desireTaskConcurrentNum means that user expect the number of concurrent stream load
  * The routine load job support different streaming medium such as KAFKA and Pulsar
  */
-public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback implements Writable, GsonPostProcessable {
+public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
+        implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadJob.class);
 
     public static final long DEFAULT_MAX_ERROR_NUM = 0;
@@ -131,7 +134,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
-
 
     protected static final String STAR_STRING = "*";
 
@@ -310,6 +312,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("os")
     protected OriginStatement origStmt;
 
+    @SerializedName("warehouseId")
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
 
@@ -409,6 +414,22 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
+
+        // set warehouse
+        Map<String, String> prop = stmt.getJobProperties();
+        if (prop.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = prop.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            jobProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouseName);
+
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            if (warehouse == null) {
+                throw new UserException("Warehouse " + warehouseName + " not exists.");
+            }
+
+            setWarehouseId(warehouse.getId());
+        } else {
+            setWarehouseId(ConnectContext.get().getCurrentWarehouseId());
+        }
     }
 
     private void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
@@ -494,8 +515,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public void setOtherMsg(String otherMsg) {
-        this.otherMsg = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                + ": " + Strings.nullToEmpty(otherMsg);
+        this.otherMsg = String.format("[%s] %s", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                Strings.nullToEmpty(otherMsg));
     }
 
     public String getDbFullName() throws MetaNotFoundException {
@@ -675,6 +696,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
     public void processTimeoutTasks() {
         writeLock();
@@ -691,7 +720,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             unprotectRenewTask(System.currentTimeMillis() + taskSchedIntervalS * 1000,
                                     routineLoadTaskInfo);
                     GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                            .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+                            .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
                     GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newTask);
                     LOG.warn(
                             "routine load task [job name {}, task id {}] timeout, remove old task and generate new one",
@@ -834,13 +863,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
         }
+
+        Table table = db.getTable(this.tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("table " + this.tableId + " does not exist");
+        }
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            Table table = db.getTable(this.tableId);
-            if (table == null) {
-                throw new MetaNotFoundException("table " + this.tableId + " does not exist");
-            }
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
             StreamLoadPlanner planner =
@@ -851,7 +882,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        taskTimeoutSecond, true);
+                        taskTimeoutSecond, true, warehouseId);
                 streamLoadTask.setTxnId(txnId);
                 streamLoadTask.setLabel(label);
                 streamLoadTask.setTUniqueId(loadId);
@@ -884,7 +915,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
             return planParams;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -1070,7 +1101,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
             }
             RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(timeToExecuteMs, routineLoadTaskInfo);
-            GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+            GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
+                    releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
             GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
         } finally {
             writeUnlock();
@@ -1211,7 +1243,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
                 newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                        .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+                        .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
                 GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
                 LOG.warn(
                         "routine load task [job name {}, task id {}] aborted because of {}, remove old task and generate new one",
@@ -1226,9 +1258,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected static void unprotectedCheckMeta(Database db, String tblName, RoutineLoadDesc routineLoadDesc)
             throws UserException {
         Table table = db.getTable(tblName);
-        if (table == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
-        }
 
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
@@ -1353,7 +1382,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private void clearTasks() {
         for (RoutineLoadTaskInfo task : routineLoadTaskInfoList) {
             if (task.getBeId() != RoutineLoadTaskInfo.INVALID_BE_ID) {
-                GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(task.getBeId());
+                GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
+                        releaseBeTaskSlot(task.getWarehouseId(), task.getBeId());
             }
         }
         routineLoadTaskInfoList.clear();
@@ -1380,14 +1410,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         // check table belong to database
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        Table table;
-        try {
-            table = db.getTable(tableId);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        Table table = db.getTable(tableId);
         if (table == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id).add("db_id", dbId)
                     .add("table_id", tableId)
@@ -1440,7 +1463,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                                                TransactionState.TxnStatusChangeReason txnStatusChangeReason);
 
     protected abstract String getStatistic();
-
 
     public List<String> getShowInfo() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -1504,7 +1526,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 row.add("");
             }
             row.add(otherMsg);
+
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                if (warehouse != null) {
+                    row.add(warehouse.getName());
+                } else {
+                    row.add("");
+                }
+            }
             row.add(getSourceProgressString());
+
             return row;
         } finally {
             readUnlock();
@@ -1637,7 +1669,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         sb.append(StringEscapeUtils.escapeJava(String.valueOf(escape))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.LOG_REJECTED_RECORD_NUM_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(getLogRejectedRecordNum())).append("\"\n");
+        sb.append(String.valueOf(getLogRejectedRecordNum()));
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            sb.append("\",\n");
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_WAREHOUSE).append("\"=\"");
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse != null) {
+                sb.append(warehouse.getName()).append("\"\n");
+            } else {
+                sb.append("NULL").append("\"\n");
+            }
+        } else {
+            sb.append("\"\n");
+        }
 
         sb.append(")\n");
         return sb.toString();
@@ -1869,7 +1914,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             throws DdlException;
 
     // for ALTER ROUTINE LOAD
-    private void modifyCommonJobProperties(Map<String, String> jobProperties) {
+    private void modifyCommonJobProperties(Map<String, String> jobProperties) throws DdlException {
         // Some properties will be remove from the map, so we copy the jobProperties to copiedJobProperties
         Map<String, String> copiedJobProperties = new HashMap<>(jobProperties);
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
@@ -1900,6 +1945,22 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             this.taskTimeoutSecond = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
         }
+
+        if (copiedJobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = copiedJobProperties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            if (warehouse != null) {
+                this.warehouseId = warehouse.getId();
+            } else {
+                // because default_warehouse not persist, so when replay, warehouse will be null, cause npe
+                if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                    this.warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                } else {
+                    throw new DdlException("Warehouse " + warehouseName + " not exist");
+                }
+            }
+        }
+
         this.jobProperties.putAll(copiedJobProperties);
     }
 

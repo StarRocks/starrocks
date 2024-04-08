@@ -4,6 +4,31 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.10
+
+发布日期：2024 年 3 月 29 日
+
+### 新增特性
+
+- 主键表支持 Size-tiered Compaction。[#42474](https://github.com/StarRocks/starrocks/pull/42474)
+
+### 行为变更
+
+- JSON 中的 null 值通过 `IS NULL` 等方式判断时，修改为按照 SQL 的 NULL 值计算。即，`SELECT parse_json('{"a": null}') -> 'a' IS NULL` 会返回 `true`（原来是返回 `false` ）。[#42815](https://github.com/StarRocks/starrocks/pull/42815)
+
+### 功能优化
+
+- 通过 Broker Load 导入 ORC 格式的数据，在 TIMESTAMP 类型的数据转化为 StarRocks 中的 DATETIME 类型的数据时，新增支持保留微秒信息。[#42348](https://github.com/StarRocks/starrocks/pull/42348)
+
+### 问题修复
+
+修复了如下问题：
+
+- 对于存算分离中的主键表，本地持久化索引的垃圾回收 (Garbage Collection) 和淘汰线程对 CN 节点没有生效，导致无用数据没有被删除。[#42241](https://github.com/StarRocks/starrocks/pull/42241)
+- 通过 Hive Catalog 查询 ORC 格式文件的数据时，可能出现结果错误。原因在于之前采用的是按位置映射的方式从 Hive 读取 ORC 格式文件的数据。用户可以通过修改会话变量 `set orc_use_column_names = true;`，指定按列名映射的方式正确读取 Hive 中的 ORC 格式文件的数据。[#42905](https://github.com/StarRocks/starrocks/pull/42905)
+- 采用 AD 系统的 LDAP 认证方式时，不用密码也能登陆 。[#42476](https://github.com/StarRocks/starrocks/pull/42476)
+- 当磁盘设备名称以数字结尾时，监控指标的值始终为零。原因是通过删除设备名称尾部的数字而得到的设备名可能是无效的。[#42741](https://github.com/StarRocks/starrocks/pull/42741)
+
 ## 3.1.9
 
 发布日期：2024 年 3 月 8 日
@@ -298,7 +323,7 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- 执行 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE/) 语句时，如果 WHERE 条件中的字段类型是 [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BITMAP/) 或 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/HLL/)，则会导致语句执行失败。[#28592](https://github.com/StarRocks/starrocks/pull/28592)
+- 执行 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE/) 语句时，如果 WHERE 条件中的字段类型是 [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/BITMAP/) 或 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/)，则会导致语句执行失败。[#28592](https://github.com/StarRocks/starrocks/pull/28592)
 - 某个 Follower FE 重启后，由于 CpuCores 不同步，导致查询性能受到影响。[#28472](https://github.com/StarRocks/starrocks/pull/28472) [#30434](https://github.com/StarRocks/starrocks/pull/30434)
 - [to_bitmap()](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/to_bitmap/) 函数的 Cost 统计计算不正确，导致物化视图改写后选择了错误的执行计划。[#29961](https://github.com/StarRocks/starrocks/pull/29961)
 - 存算分离架构特定场景下，当 Follower FE 重启后，发送到该 Follower FE 的查询会返回错误信息“Backend node not found. Check if any backend node is down”。[#28615](https://github.com/StarRocks/starrocks/pull/28615)
@@ -331,7 +356,7 @@ displayed_sidebar: "Chinese"
 - 用户在连接时指定默认数据库，并且仅有该数据库下面表权限，但无该数据库权限时，会报对该数据库无访问权限。[#29767](https://github.com/StarRocks/starrocks/pull/29767)
 - RESTful API `show_data` 对于云原生表的返回信息不正确。[#29473](https://github.com/StarRocks/starrocks/pull/29473)
 - 在 [array_agg()](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_agg/) 函数运行过程中，如果查询取消，则会发生 BE Crash。[#29400](https://github.com/StarRocks/starrocks/issues/29400)
-- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/HLL/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - [array_map()](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_map/) 同时涉及多个表时，下推策略问题导致查询失败。[#29504](https://github.com/StarRocks/starrocks/pull/29504)
 - 由于未合入上游 Apache ORC 的 BugFix ORC-1304（[apache/orc#1299](https://github.com/apache/orc/pull/1299)）而导致 ORC 文件查询失败。[#29804](https://github.com/StarRocks/starrocks/pull/29804)
 
@@ -397,7 +422,7 @@ displayed_sidebar: "Chinese"
 - 支持在 [INSERT INTO](https://docs.starrocks.io/zh/docs/loading/InsertInto/) 语句中使用表函数 FILES()，从 AWS S3 或 HDFS 直接导入 Parquet 或 ORC 格式文件的数据。FILES() 函数会自动进行表结构 (Table Schema) 推断，不再需要提前创建 External Catalog 或文件外部表，大大简化导入过程。
 - 支持[生成列（Generated Column）](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/generated_columns/)功能，自动计算生成列表达式的值并存储，且在查询时可自动改写，以提升查询性能。
 - 支持通过 [Spark connector](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/) 导入 Spark 数据至 StarRocks。相较于 [Spark Load](https://docs.starrocks.io/zh/docs/loading/SparkLoad/)，Spark connector 能力更完善。您可以自定义 Spark 作业，对数据进行 ETL 操作，Spark connector 只作为 Spark 作业中的 sink。
-- 支持导入数据到 [MAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/Map/)、[STRUCT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/STRUCT/) 类型的字段，并且在 ARRAY、MAP、STRUCT 类型中支持了 Fast Decimal 类型。
+- 支持导入数据到 [MAP](https://docs.starrocks.io/zh/docs/sql-reference/data-types/semi_structured/Map/)、[STRUCT](https://docs.starrocks.io/zh/docs/sql-reference/data-types/semi_structured/STRUCT/) 类型的字段，并且在 ARRAY、MAP、STRUCT 类型中支持了 Fast Decimal 类型。
 
 #### SQL 语句和函数
 

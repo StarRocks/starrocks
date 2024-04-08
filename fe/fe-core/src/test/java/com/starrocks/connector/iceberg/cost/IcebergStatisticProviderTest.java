@@ -59,7 +59,7 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
-                "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
@@ -99,7 +99,7 @@ public class IcebergStatisticProviderTest extends TableTestBase {
     public void testGetEmptyTableStatistics() {
         IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
-                "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
