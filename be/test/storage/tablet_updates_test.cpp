@@ -3203,4 +3203,45 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     ASSERT_EQ(3, rowsets.size());
 }
 
+TEST_F(TabletUpdatesTest, test_apply_concurrent_with_on_rowset_finish) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    int32_t version = 2;
+    {
+        auto rs0 = create_rowset(_tablet, keys);
+        auto st = _tablet->rowset_commit(version, rs0);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version++));
+    }
+    std::vector<std::thread> _workers;
+    _workers.emplace_back([&]() {
+        // apply version
+        for (int i = 0; i < 50; i++) {
+            auto rs0 = create_rowset(_tablet, keys);
+            auto st = _tablet->rowset_commit(version, rs0);
+            ASSERT_TRUE(st.ok()) << st.to_string();
+            ASSERT_EQ(version, _tablet->updates()->max_version());
+            ASSERT_EQ(version, _tablet->updates()->version_history_count());
+            ASSERT_EQ(N, read_tablet(_tablet, version++));
+        }
+    });
+    _workers.emplace_back([&]() {
+        // on_rowset_finish
+        for (int i = 0; i < 50; i++) {
+            auto rs0 = create_rowset(_tablet, keys);
+            StorageEngine::instance()->update_manager()->on_rowset_finished(_tablet.get(), rs0.get());
+        }
+    });
+    for (auto& each : _workers) {
+        each.join();
+    }
+}
+
 } // namespace starrocks
