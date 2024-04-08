@@ -3060,35 +3060,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### starlet_cache_evict_interval
 
 - 默认值：60
 - 类型：Int
-- 单位：
+- 单位：秒
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：在存算分离模式下启用 file data cache，系统进行缓存淘汰（Cache Eviction）的间隔。
+- 引入版本：v3.0
 
-<!--
 ##### starlet_cache_evict_low_water
 
 - 默认值：0.1
 - 类型：Double
-- 单位：
+- 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）低于此配置项中指定的值，将会触发缓存淘汰。
+- 引入版本：v3.0
 
 ##### starlet_cache_evict_high_water
 
 - 默认值：0.2
 - 类型：Double
-- 单位：
+- 单位：-
 - 是否动态：是
-- 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘容量百分比低于此配置项中指定的值，StarRocks 将触发缓存淘汰。默认值表示 file data cache 默认最多使用 80% 磁盘容量。
+- 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）高于此配置项中指定的值，将会停止缓存淘汰。
 - 引入版本：v3.0
 
 <!--
