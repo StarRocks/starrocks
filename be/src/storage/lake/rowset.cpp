@@ -32,20 +32,22 @@
 namespace starrocks::lake {
 
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
-               TabletSchemaPtr tablet_schema)
+               TabletSchemaPtr tablet_schema, int64_t version)
         : _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_id),
           _metadata(metadata),
           _index(index),
-          _tablet_schema(std::move(tablet_schema)) {}
+          _tablet_schema(std::move(tablet_schema)),
+          _version(version) {}
 
-Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index)
+Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index, int64_t version)
         : _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_metadata->id()),
           _metadata(&tablet_metadata->rowsets(rowset_index)),
           _index(rowset_index),
           _tablet_schema(GlobalTabletSchemaMap::Instance()->emplace(tablet_metadata->schema()).first),
-          _tablet_metadata(std::move(tablet_metadata)) {}
+          _tablet_metadata(std::move(tablet_metadata)),
+          _version(version) {}
 
 Rowset::~Rowset() {
     if (_tablet_metadata) {

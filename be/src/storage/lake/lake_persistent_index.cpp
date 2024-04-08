@@ -15,11 +15,14 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include "fs/fs_util.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
@@ -80,6 +83,18 @@ LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tabl
 LakePersistentIndex::~LakePersistentIndex() {
     _memtable->clear();
     _sstables.clear();
+}
+
+Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    for (auto& sstable_pb : sstable_meta.sstables()) {
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
+                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        auto sstable = std::make_unique<PersistentIndexSstable>();
+        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+        _sstables.emplace_back(std::move(sstable));
+    }
+    return Status::OK();
 }
 
 void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes) {
@@ -327,6 +342,104 @@ void LakePersistentIndex::commit(MetaFileBuilder* builder) {
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
     builder->finalize_sstable_meta(sstable_meta);
+}
+
+Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                                  int64_t base_version, const MetaFileBuilder* builder) {
+    // 1. create and set key column schema
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+    vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
+    for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    // Init PersistentIndex
+    _key_size = fix_size;
+
+    auto sstables = metadata->sstable_meta().sstables();
+    int64_t max_sstable_version = sstables.empty() ? 0 : sstables[sstables.size() - 1].version();
+    if (max_sstable_version > base_version) {
+        return Status::OK();
+    }
+
+    OlapReaderStatistics stats;
+    std::unique_ptr<Column> pk_column;
+    if (pk_columns.size() > 1) {
+        // more than one key column
+        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+            CHECK(false) << "create column for primary key encoder failed";
+        }
+    }
+    vector<uint32_t> rowids;
+    rowids.reserve(4096);
+    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk = chunk_shared_ptr.get();
+    auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
+    // Rowset whose version is between max_sstable_version and base_version should be recovered.
+    for (auto& rowset : rowsets) {
+        int64_t rowset_version = rowset->version();
+        if (rowset_version < max_sstable_version) {
+            continue;
+        }
+        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        if (!res.ok()) {
+            return res.status();
+        }
+        auto& itrs = res.value();
+        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+        for (size_t i = 0; i < itrs.size(); i++) {
+            auto itr = itrs[i].get();
+            if (itr == nullptr) {
+                continue;
+            }
+            while (true) {
+                chunk->reset();
+                rowids.clear();
+                auto st = itr->get_next(chunk, &rowids);
+                if (st.is_end_of_file()) {
+                    break;
+                } else if (!st.ok()) {
+                    return st;
+                } else {
+                    Column* pkc = nullptr;
+                    if (pk_column) {
+                        pk_column->reset_column();
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        pkc = pk_column.get();
+                    } else {
+                        pkc = chunk->columns()[0].get();
+                    }
+                    uint32_t rssid = rowset->id() + i;
+                    uint64_t base = ((uint64_t)rssid) << 32;
+                    std::vector<IndexValue> values;
+                    values.reserve(pkc->size());
+                    DCHECK(pkc->size() <= rowids.size());
+                    for (uint32_t i = 0; i < pkc->size(); i++) {
+                        values.emplace_back(base + rowids[i]);
+                    }
+                    Status st;
+                    if (pkc->is_binary()) {
+                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
+                                               values.data(), rowset_version));
+                    } else {
+                        std::vector<Slice> keys;
+                        keys.reserve(pkc->size());
+                        const auto* fkeys = pkc->continuous_data();
+                        for (size_t i = 0; i < pkc->size(); ++i) {
+                            keys.emplace_back(fkeys, _key_size);
+                            fkeys += _key_size;
+                        }
+                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
+                                               rowset_version));
+                    }
+                }
+            }
+            itr->close();
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

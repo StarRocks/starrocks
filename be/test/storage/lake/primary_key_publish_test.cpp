@@ -619,10 +619,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
         // only test persistent index
         return;
     }
-    if (GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
-        // not support reload yet
-        return;
-    }
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
