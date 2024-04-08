@@ -1179,7 +1179,7 @@ public class QueryAnalyzer {
                         Partition partition = table.getPartition(partitionName, isTemp);
                         if (partition == null) {
                             throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
-                                        table.getName());
+                                    table.getName());
                         }
                     }
                 }

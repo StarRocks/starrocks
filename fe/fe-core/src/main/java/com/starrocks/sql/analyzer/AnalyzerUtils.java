@@ -339,7 +339,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
             if (node.hasWithClause()) {
-                node.getRelations().forEach(this::visit);
+                node.getCteRelations().forEach(this::visit);
             }
             node.getRelations().forEach(this::visit);
             return null;

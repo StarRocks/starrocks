@@ -82,6 +82,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -406,11 +407,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         InsertStmt insertStmt = generateInsertAst(mvToRefreshedPartitions, materializedView, ctx);
 
         // 4. Analyze and prepare partition
-        List<Database> dbs = Lists.newArrayList(AnalyzerUtils.collectAllDatabase(ctx, insertStmt).values());
-        Locker locker = new Locker();
+        PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
         ExecPlan execPlan = null;
         try {
-            locker.lockDatabases(dbs, LockType.READ);
+            StatementPlanner.lock(locker);
 
             insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView, ctx);
             // Must set execution id before StatementPlanner.plan
@@ -420,7 +420,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);
             throw e;
         } finally {
-            locker.unlockDatabases(dbs, LockType.READ);
+            StatementPlanner.unLock(locker);
         }
 
         QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
