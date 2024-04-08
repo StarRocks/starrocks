@@ -18,10 +18,10 @@
 
 #include "gen_cpp/lake_types.pb.h"
 
-namespace starrocks::lake {
+namespace starrocks {
 
 using TxnLog = TxnLogPB;
 using TxnLogPtr = std::shared_ptr<const TxnLog>;
 using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
 
-} // namespace starrocks::lake
+} // namespace starrocks
