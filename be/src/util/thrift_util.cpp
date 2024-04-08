@@ -159,7 +159,7 @@ void thrift_from_json_string(::apache::thrift::TBase* base, const std::string& j
     base->read(&protocol);
 }
 
-const std::string thrift_to_json_string(::apache::thrift::TBase* base) {
+const std::string thrift_to_json_string(const ::apache::thrift::TBase* base) {
     using namespace apache::thrift::transport;
     using namespace apache::thrift::protocol;
     auto* buffer = new TMemoryBuffer();
