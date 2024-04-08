@@ -952,7 +952,7 @@ TEST_F(OrcFileWriterTest, TestWriteMap) {
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcFileWriterTest, TestWriteArray) {
+TEST_F(OrcFileWriterTest, TestWriteArrayNullable) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
@@ -1008,7 +1008,7 @@ TEST_F(OrcFileWriterTest, TestWriteArray) {
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcFileWriterTest, TestWriteArray2) {
+TEST_F(OrcFileWriterTest, TestWriteArrayNotNull) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
@@ -1026,7 +1026,7 @@ TEST_F(OrcFileWriterTest, TestWriteArray2) {
             TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
-    // [1, 2, 3]
+    // [1, 2]
     auto chunk = std::make_shared<Chunk>();
     {
         auto elements_data_col = Int32Column::create();
