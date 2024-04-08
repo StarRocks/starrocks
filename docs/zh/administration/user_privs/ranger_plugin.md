@@ -75,15 +75,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 ### 在 Ranger Admin 上配置 StarRocks Service
 
-<<<<<<< HEAD
-1. 拷贝 [`ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
-=======
 :::note
 本步骤的目的是在 Ranger Admin 上配置 StarRocks 服务，通过 Ranger 对 StarRocks 的对象进行权限管控。
 :::
 
 1. 拷贝 [ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
->>>>>>> 9cd8f9f981 ([Doc]Update ranger_plugin.md (#43636))
 
    ```SQL
    wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
@@ -162,11 +158,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ...
    ```
 
-<<<<<<< HEAD
-7. 在 `fe/conf` 文件夹内拷贝 [`ranger-starrocks-audit.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml) 和 [`ranger-hive-audit.xml`](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) 文件。
-=======
 7. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
->>>>>>> 9cd8f9f981 ([Doc]Update ranger_plugin.md (#43636))
 
 8. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
 
