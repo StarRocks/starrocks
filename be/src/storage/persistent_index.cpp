@@ -2572,6 +2572,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     RETURN_IF_ERROR(_delete_expired_index_file(
             l0_version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+    _calc_memory_usage();
     return Status::OK();
 }
 
@@ -2647,12 +2648,10 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     DCHECK(_l0 != nullptr);
     RETURN_IF_ERROR(_l0->load(l0_meta));
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _l1_merged_num.clear();
-        _has_l1 = false;
-    }
+
+    _l1_vec.clear();
+    _l1_merged_num.clear();
+    _has_l1 = false;
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
@@ -2661,18 +2660,13 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         if (!l1_st.ok()) {
             return l1_st.status();
         }
-        {
-            std::unique_lock wrlock(_lock);
-            _l1_vec.emplace_back(std::move(l1_st).value());
-            _l1_merged_num.emplace_back(-1);
-            _has_l1 = true;
-        }
+        _l1_vec.emplace_back(std::move(l1_st).value());
+        _l1_merged_num.emplace_back(-1);
+        _has_l1 = true;
     }
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_versions.clear();
-        _l2_vec.clear();
-    }
+
+    _l2_versions.clear();
+    _l2_vec.clear();
     if (index_meta.l2_versions_size() > 0) {
         DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
@@ -2681,12 +2675,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
                                                      index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
-            {
-                std::unique_lock wrlock(_lock);
-                _l2_versions.emplace_back(
-                        EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
-                _l2_vec.emplace_back(std::move(l2_index));
-            }
+            _l2_versions.emplace_back(EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
+            _l2_vec.emplace_back(std::move(l2_index));
         }
     }
     // if reload, don't update _usage_and_size_by_key_length
@@ -2931,12 +2921,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     _dump_snapshot = true;
 
     // clear l1
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _usage_and_size_by_key_length.clear();
-        _l1_merged_num.clear();
-    }
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
     _has_l1 = false;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
@@ -2957,11 +2944,8 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         }
     }
     // clear l2
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_vec.clear();
-        _l2_versions.clear();
-    }
+    _l2_vec.clear();
+    _l2_versions.clear();
 
     // Init PersistentIndexMetaPB
     //   1. reset |version| |key_size|
@@ -3158,6 +3142,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
     }
+    _calc_memory_usage();
     return Status::OK();
 }
 
@@ -3373,6 +3358,7 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
             }
         }
     }
+    _calc_memory_usage();
 
     return Status::OK();
 }
@@ -3567,12 +3553,9 @@ Status PersistentIndex::flush_advance() {
     if (!l1_st.ok()) {
         return l1_st.status();
     }
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.emplace_back(std::move(l1_st).value());
-        _l1_merged_num.emplace_back(1);
-        _l1_vec.back()->_bf_map.swap(bf_map);
-    }
+    _l1_vec.emplace_back(std::move(l1_st).value());
+    _l1_merged_num.emplace_back(1);
+    _l1_vec.back()->_bf_map.swap(bf_map);
 
     // clear l0
     _l0->clear();
@@ -4304,18 +4287,14 @@ Status PersistentIndex::_merge_compaction_advance() {
     RETURN_IF_ERROR(writer->finish());
     std::vector<std::unique_ptr<ImmutableIndex>> new_l1_vec;
     std::vector<int> new_l1_merged_num;
-    size_t merge_num = 0;
-    {
-        std::unique_lock wrlock(_lock);
-        merge_num = _l1_merged_num[merge_l1_start_idx];
-        for (int i = 0; i < merge_l1_start_idx; i++) {
-            new_l1_vec.emplace_back(std::move(_l1_vec[i]));
-            new_l1_merged_num.emplace_back(_l1_merged_num[i]);
-        }
+    size_t merge_num = _l1_merged_num[merge_l1_start_idx];
+    for (int i = 0; i < merge_l1_start_idx; i++) {
+        new_l1_vec.emplace_back(std::move(_l1_vec[i]));
+        new_l1_merged_num.emplace_back(_l1_merged_num[i]);
+    }
 
-        for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
-            _l1_vec[i]->destroy();
-        }
+    for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
+        _l1_vec[i]->destroy();
     }
 
     const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(),
@@ -4332,11 +4311,8 @@ Status PersistentIndex::_merge_compaction_advance() {
         new_l1_vec.back()->_bf_map.swap(bf_map);
     }
     new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.swap(new_l1_vec);
-        _l1_merged_num.swap(new_l1_merged_num);
-    }
+    _l1_vec.swap(new_l1_vec);
+    _l1_merged_num.swap(new_l1_merged_num);
     _l0->clear();
     return Status::OK();
 }
@@ -4580,6 +4556,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         RETURN_IF_ERROR(_delete_expired_index_file(
                 l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+        _calc_memory_usage();
     }
     _delete_major_compaction_tmp_index_file();
     return Status::OK();
@@ -4645,7 +4622,6 @@ double PersistentIndex::get_write_amp_score() const {
 }
 
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
-    std::unique_lock wrlock(_lock);
     _cancel_major_compaction = true;
 
     const TabletSchema& tablet_schema = tablet->tablet_schema();
@@ -4688,6 +4664,7 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     PagePointerPB* data = snapshot->mutable_data();
     data->set_offset(0);
     data->set_size(0);
+    _calc_memory_usage();
 
     return Status::OK();
 }
@@ -4696,6 +4673,17 @@ void PersistentIndex::reset_cancel_major_compaction() {
     if (!_major_compaction_running.load(std::memory_order_relaxed)) {
         _cancel_major_compaction = false;
     }
+}
+
+void PersistentIndex::_calc_memory_usage() {
+    size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
+    for (int i = 0; i < _l1_vec.size(); i++) {
+        memory_usage += _l1_vec[i]->memory_usage();
+    }
+    for (int i = 0; i < _l2_vec.size(); i++) {
+        memory_usage += _l2_vec[i]->memory_usage();
+    }
+    _memory_usage.store(memory_usage);
 }
 
 } // namespace starrocks

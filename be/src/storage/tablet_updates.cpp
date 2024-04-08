@@ -3623,7 +3623,11 @@ Status TabletUpdates::pk_index_major_compaction() {
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
 
-    auto st = index.load(&_tablet);
+    auto st = Status::OK();
+    {
+        std::lock_guard lg(_index_lock);
+        st = index.load(&_tablet);
+    }
     if (!st.ok()) {
         // remove index entry when loading fail
         manager->index_cache().remove(index_entry);
