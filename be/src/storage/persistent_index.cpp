@@ -48,16 +48,15 @@ namespace starrocks {
 
 constexpr size_t kDefaultUsagePercent = 85;
 constexpr size_t kPageSize = 4096;
-constexpr size_t kMaxPageSize = 1 << 16;
+constexpr size_t kMaxPerPageSize = 1 << 16;
 constexpr size_t kPageHeaderSize = 64;
 constexpr size_t kBucketHeaderSize = 4;
 constexpr size_t kBucketPerPage = 16;
 constexpr size_t kRecordPerBucket = 8;
 constexpr size_t kShardMax = 1 << 16;
-constexpr uint64_t kPageMax = 1ULL << 16;
+constexpr uint64_t kPageMaxNum = 1ULL << 16;
 constexpr size_t kPackSize = 16;
 constexpr size_t kBucketSizeMax = 256;
-constexpr size_t kLongKeySize = 64;
 constexpr size_t kFixedMaxKeySize = 128;
 constexpr size_t kBatchBloomFilterReadSize = 4ULL << 20;
 
@@ -428,7 +427,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
     MonotonicStopWatch watch;
     watch.start();
     uint64_t retry_cnt = 0;
-    for (size_t npage = npage_hint; npage < kPageMax;) {
+    for (size_t npage = npage_hint; npage < kPageMaxNum;) {
         auto rs_create = ImmutableIndexShard::try_create(key_size, npage, page_size, nbucket, kv_refs);
         // increase npage and retry
         if (!rs_create.ok()) {
@@ -1030,7 +1029,7 @@ std::tuple<size_t, size_t, size_t> MutableIndex::estimate_nshard_and_npage(const
     }
 
     size_t avg_kv_len = total_kv_pairs_usage / total_kv_num;
-    size_t page_size = std::min(kMaxPageSize, pad(avg_kv_len * kRecordPerBucket, kPageSize));
+    size_t page_size = std::min(kMaxPerPageSize, pad(avg_kv_len * kRecordPerBucket, kPageSize));
 
     size_t npage = npad(cap / nshard, page_size);
     return {nshard, npage, page_size};
