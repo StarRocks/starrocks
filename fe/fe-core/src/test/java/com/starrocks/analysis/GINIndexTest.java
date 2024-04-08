@@ -175,7 +175,9 @@ public class GINIndexTest extends PlanTestBase {
 
     @Test
     public void testMatchExpr() {
-        MatchExpr expr = new MatchExpr(new SlotRef("abc", null), new StringLiteral());
+        SlotRef slot = new SlotRef(null, null, null);
+        StringLiteral stringExpr = new StringLiteral("test");
+        MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
     }
 }
