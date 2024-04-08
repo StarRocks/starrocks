@@ -39,3 +39,33 @@ deallocate prepare stmt2; -- deallocate is alias
 drop prepare stmt3;
 
 DROP TABLE prepare_stmt FORCE;
+
+
+CREATE TABLE IF NOT EXISTS `customer_row` (
+  `customer_key` bigint(20) NOT NULL COMMENT "",
+  `customer_row_value_0` varchar(65533) NULL COMMENT "",
+  `customer_row_value_1` varchar(65533) NULL COMMENT "",
+  `customer_row_value_2` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`customer_key`)
+DISTRIBUTED BY HASH(`customer_key`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into customer_row values(1, 'a','a','a');
+insert into customer_row values(2, 'b','b','b');
+
+PREPARE select_customer_stmt FROM 'SELECT customer_key, customer_row_value_0, customer_row_value_1, customer_row_value_2 FROM customer_row WHERE customer_key = ?';
+
+SET @customer_key = 1;
+EXECUTE select_customer_stmt USING @customer_key;
+SET @customer_key = 2;
+EXECUTE select_customer_stmt USING @customer_key;
+
+DROP PREPARE select_customer_stmt;
+DROP TABLE customer_row FORCE;

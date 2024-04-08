@@ -90,3 +90,49 @@ DROP TABLE prepare_stmt FORCE;
 -- result:
 []
 -- !result
+CREATE TABLE `customer_row` (
+  `customer_key` bigint(20) NOT NULL COMMENT "",
+  `customer_row_value_0` varchar(65533) NULL COMMENT "",
+  `customer_row_value_1` varchar(65533) NULL COMMENT "",
+  `customer_row_value_2` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`customer_key`)
+DISTRIBUTED BY HASH(`customer_key`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into customer_row values(1, 'a','a','a');
+-- result:
+-- !result
+insert into customer_row values(2, 'b','b','b');
+-- result:
+-- !result
+PREPARE select_customer_stmt FROM 'SELECT customer_key, customer_row_value_0, customer_row_value_1, customer_row_value_2 FROM customer_row WHERE customer_key = ?';
+-- result:
+-- !result
+SET @customer_key = 1;
+-- result:
+-- !result
+EXECUTE select_customer_stmt USING @customer_key;
+-- result:
+1	a	a	a
+-- !result
+SET @customer_key = 2;
+-- result:
+-- !result
+EXECUTE select_customer_stmt USING @customer_key;
+-- result:
+2	b	b	b
+-- !result
+DROP PREPARE select_customer_stmt;
+-- result:
+-- !result
+DROP TABLE customer_row FORCE;
+-- result:
+-- !result
