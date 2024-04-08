@@ -80,7 +80,7 @@ under the License.
         <profile>
             <id>windows</id>
             <properties>
-                <starrocks.thrift>thrift.exe</starrocks.thrift>
+                <starrocks.thrift>thrift-0.20.0.exe</starrocks.thrift>
             </properties>
         </profile>
         <profile>

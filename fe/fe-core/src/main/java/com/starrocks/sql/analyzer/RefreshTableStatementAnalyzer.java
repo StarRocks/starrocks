@@ -16,6 +16,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;

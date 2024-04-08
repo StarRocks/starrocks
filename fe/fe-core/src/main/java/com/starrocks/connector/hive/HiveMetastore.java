@@ -16,17 +16,30 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.Version;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.RefreshMode;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsDesc;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
+import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -34,34 +47,45 @@ import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
+import static com.google.common.collect.Sets.difference;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
+import static com.starrocks.connector.PartitionUtil.toPartitionValues;
+import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiTable;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.updateStatisticsParameters;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.validateHiveTableType;
 import static com.starrocks.connector.hive.HiveMetastoreOperations.LOCATION_PROPERTY;
 import static com.starrocks.connector.hive.Partition.TRANSIENT_LAST_DDL_TIME;
+import static java.lang.String.join;
 
 public class HiveMetastore implements IHiveMetastore {
 
     private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
     private final HiveMetaClient client;
+    private final HiveConf conf;
     private final String catalogName;
     private final MetastoreType metastoreType;
 
     public HiveMetastore(HiveMetaClient client, String catalogName, MetastoreType metastoreType) {
         this.client = client;
+        this.conf = client.getConf();
         this.catalogName = catalogName;
         this.metastoreType = metastoreType;
     }
@@ -343,5 +367,103 @@ public class HiveMetastore implements IHiveMetastore {
             throw new MetastoreNotificationFetchException("Unable to fetch notifications from metastore. " +
                     "Last synced event id is " + lastSyncedEventId, e);
         }
+    }
+
+    @Override
+    public void syncPartitions(String db, String tableName, List<String> partitionNames, RefreshMode mode) {
+        Table table = getTable(db, tableName);
+        String tableLocation = table.getTableLocation();
+        List<String> partitionCols = table.getPartitionColumnNames();
+        Set<String> partitionsInStorage;
+
+        if (partitionNames != null && !partitionNames.isEmpty()) {
+            partitionsInStorage = client.getPartitionsByNames(db, tableName, partitionNames).stream()
+                    .map(p ->{
+                        StringBuilder partName = new StringBuilder();
+                        Iterator<String> valIter = p.getValuesIterator();
+                        for(Iterator<String> colIter = partitionCols.iterator(); colIter.hasNext() && valIter.hasNext();) {
+                            String col = colIter.next();
+                            String val = valIter.next();
+                            partName.append(col).append("=").append(val);
+                            partName.append("/");
+                        }
+                        partName.delete(partName.length() - 1, partName.length());
+                        return partName.toString();
+                    }).collect(Collectors.toSet());
+        } else {
+            partitionsInStorage = new HashSet<>(client.getPartitionKeys(db, tableName));
+        }
+
+        Set<String> partitionsInFs = listPartitionNames(tableLocation, partitionCols, partitionNames);
+
+        // partitions in file system but not in metastore
+        Set<String> partitionsToAdd = difference(partitionsInFs, partitionsInStorage);
+
+        // partitions in metastore but not in file system
+        Set<String> partitionsToDrop = difference(partitionsInStorage, partitionsInFs);
+
+        HiveTable hiveTable = (HiveTable)table;
+        if (mode == RefreshMode.ADD || mode == RefreshMode.SYNC) {
+            List<HivePartitionWithStats> partitionWithStats = partitionsToAdd.stream().map(p -> {
+                HivePartition hivePartition = HivePartition.builder()
+                        .setDatabaseName(hiveTable.getDbName())
+                        .setTableName(hiveTable.getTableName())
+                        .setColumns(hiveTable.getDataColumnNames().stream()
+                                .map(table::getColumn)
+                                .collect(Collectors.toList()))
+                        .setValues(toPartitionValues(p))
+                        .setParameters(ImmutableMap.<String, String>builder()
+                                .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
+                                .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
+                                .buildOrThrow())
+                        .setStorageFormat(hiveTable.getStorageFormat())
+                        .setLocation(hiveTable.getTableLocation() + "/" + p)
+                        .build();
+                return new HivePartitionWithStats(p, hivePartition, HivePartitionStats.empty());
+            }).collect(Collectors.toList());
+            addPartitions(db, tableName, partitionWithStats);
+        }
+
+        if (mode == RefreshMode.DROP || mode == RefreshMode.SYNC) {
+            partitionsToDrop.forEach(
+                    p -> dropPartition(db, tableName, PartitionUtil.toPartitionValues(p), false)
+            );
+        }
+    }
+
+    private Set<String> listPartitionNames(String tableLocation, List<String> partitionCols, List<String> partitionNames) {
+            try {
+                FileSystem fs = FileSystem.get(new Path(tableLocation).toUri(), conf);
+
+                if (partitionNames != null && !partitionNames.isEmpty()) {
+                    Set<String> names = new HashSet<>();
+                    for (String name : partitionNames) {
+                        if (fs.exists(new Path(tableLocation, name))) {
+                            names.add(name);
+                        }
+                    }
+                    return names;
+                }else {
+                    return listParts(fs, new Path(tableLocation), partitionCols, 0, ImmutableList.of());
+                }
+            } catch (IOException e) {
+                throw new StarRocksConnectorException("error listing partition names", e);
+            }
+    }
+
+    private static Set<String> listParts(FileSystem fs, Path location, List<String> partitionCols, int depth, List<String> partitions) throws IOException {
+        if (depth == partitionCols.size()) {
+            return ImmutableSet.of(join("/", partitions));
+        }
+        PathFilter filter = path -> path.getName().startsWith(partitionCols.get(depth) + "=");
+
+        ImmutableSet.Builder<String> result = ImmutableSet.builder();
+        for (FileStatus file : fs.listStatus(location, filter)) {
+            if (!file.isDirectory()) continue;
+            Path path = file.getPath();
+            List<String> current = ImmutableList.<String>builder().addAll(partitions).add(path.getName()).build();
+            result.addAll(listParts(fs, path, partitionCols, depth + 1, current));
+        }
+        return result.build();
     }
 }

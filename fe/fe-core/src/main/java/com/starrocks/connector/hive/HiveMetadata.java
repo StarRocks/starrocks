@@ -39,6 +39,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.common.RefreshMode;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -362,6 +363,11 @@ public class HiveMetadata implements ConnectorMetadata {
                 fileOps.deleteIfExists(new Path(hiveFileInfo.getPartition_path(), hiveFileInfo.getFile_name()), false);
             }
         }
+    }
+
+    @Override
+    public void syncPartitions(String db, String tableName, List<String> partitionNames, RefreshMode mode) {
+        hmsOps.syncPartitions(db, tableName, partitionNames, mode);
     }
 
     @Override
