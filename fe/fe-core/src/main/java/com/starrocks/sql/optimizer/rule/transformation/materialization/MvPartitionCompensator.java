@@ -145,9 +145,7 @@ public class MvPartitionCompensator {
         }
         if (refTablePartitionNameToRefresh.isEmpty()) {
             logMVRewrite(mvContext, "MV's ref base to refresh partition is empty, no need compensate");
-            // NOTE: This should not happen: `mvPartitionNameToRefresh` is not empty, so `refTablePartitionNameToRefresh`
-            // should not empty. Return true in the situation to avoid bad cases.
-            return MVCompensation.createUnkownState(sessionVariable);
+            return MVCompensation.createNoCompensateState(sessionVariable);
         }
 
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryPlan);

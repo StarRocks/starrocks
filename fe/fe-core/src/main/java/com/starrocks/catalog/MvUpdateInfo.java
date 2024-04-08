@@ -34,6 +34,8 @@ public class MvUpdateInfo {
     private final Map<Table, Map<String, Set<String>>> basePartToMvPartNames = Maps.newHashMap();
     //  The mapping of mv partition name to base partition names
     private final Map<String, Map<Table, Set<String>>> mvPartToBasePartNames = Maps.newHashMap();
+    // The consistency mode of query rewrite
+    private final TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode;
 
     /**
      * Marks the type of mv refresh later.
@@ -47,6 +49,12 @@ public class MvUpdateInfo {
 
     public MvUpdateInfo(MvToRefreshType mvToRefreshType) {
         this.mvToRefreshType = mvToRefreshType;
+        this.queryRewriteConsistencyMode = TableProperty.QueryRewriteConsistencyMode.CHECKED;
+    }
+
+    public MvUpdateInfo(MvToRefreshType mvToRefreshType, TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode) {
+        this.mvToRefreshType = mvToRefreshType;
+        this.queryRewriteConsistencyMode = queryRewriteConsistencyMode;
     }
 
     public MvToRefreshType getMvToRefreshType() {
@@ -73,6 +81,10 @@ public class MvUpdateInfo {
         return basePartToMvPartNames;
     }
 
+    public TableProperty.QueryRewriteConsistencyMode getQueryRewriteConsistencyMode() {
+        return queryRewriteConsistencyMode;
+    }
+
     @Override
     public String toString() {
         return "MvUpdateInfo{" +
@@ -93,6 +105,14 @@ public class MvUpdateInfo {
         if (mvToRefreshPartitionNames.isEmpty()) {
             return Sets.newHashSet();
         }
+        if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
+            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = baseTableUpdateInfos.get(refBaseTable);
+            if (mvBaseTableUpdateInfo == null) {
+                return null;
+            }
+            return mvBaseTableUpdateInfo.getToRefreshPartitionNames();
+        }
+
         // TODO: In some rewrite mode(loose), mv part to base part names are not prepared, skip to this.
         if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
             return null;

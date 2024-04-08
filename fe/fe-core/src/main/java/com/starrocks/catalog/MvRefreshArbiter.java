@@ -16,7 +16,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -146,7 +145,7 @@ public class MvRefreshArbiter {
         logMVPrepare(mv, "MV refresh arbiter start to get partition names to refresh, query rewrite mode: {}",
                 mvConsistencyRewriteMode);
         if (mvConsistencyRewriteMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
-            return getPartitionNamesToRefreshForMvInLooseMode(mv);
+            return getPartitionNamesToRefreshForMvInLooseMode(mv, isQueryRewrite);
         } else {
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
@@ -166,7 +165,8 @@ public class MvRefreshArbiter {
 
     // In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
     // Only need to check the mv partition existence.
-    private static MvUpdateInfo getPartitionNamesToRefreshForMvInLooseMode(MaterializedView mv) {
+    private static MvUpdateInfo getPartitionNamesToRefreshForMvInLooseMode(MaterializedView mv,
+                                                                           boolean isQueryRewrite) {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             List<Partition> partitions = Lists.newArrayList(mv.getPartitions());
@@ -182,16 +182,14 @@ public class MvRefreshArbiter {
         Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
         Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
-        Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
         RangePartitionDiff rangePartitionDiff = null;
         try {
-            for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
-                Table refBaseTable = entry.getKey();
-                Column refBaseTablePartitionColumn = entry.getValue();
-                // Collect the ref base table's partition range map.
-                refBaseTablePartitionMap.put(refBaseTable, PartitionUtil.getPartitionKeyRange(
-                        refBaseTable, refBaseTablePartitionColumn, partitionExpr));
+            if (!collectBaseTablePartitionInfos(mv, partitionTableAndColumn, partitionExpr, isQueryRewrite, mvUpdateInfo)) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
             }
+            Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfos = mvUpdateInfo.getBaseTableUpdateInfos();
+            Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = baseTableUpdateInfos.entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getPartitionNameWithRanges()));
             Table partitionTable = mv.getDirectTableAndPartitionColumn().first;
             Column partitionColumn = mv.getPartitionInfo().getPartitionColumns().get(0);
             PartitionDiffer differ = PartitionDiffer.build(mv, Pair.create(null, null));
