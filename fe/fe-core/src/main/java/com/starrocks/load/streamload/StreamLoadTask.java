@@ -1291,6 +1291,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return state.name();
     }
 
+    public TUniqueId getTUniqueId() {
+        return this.loadId;
+    }
+
     public void setTUniqueId(TUniqueId loadId) {
         this.loadId = loadId;
     }
