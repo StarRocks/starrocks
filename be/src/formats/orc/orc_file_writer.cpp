@@ -285,6 +285,9 @@ void ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr&
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(number_orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     for (size_t i = 0; i < column_size; ++i) {
@@ -307,6 +310,9 @@ void ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr&
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     for (size_t i = 0; i < column_size; ++i) {
@@ -337,6 +343,9 @@ void ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     for (size_t i = 0; i < column_size; ++i) {
@@ -368,6 +377,9 @@ void ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& c
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     for (size_t i = 0; i < column_size; ++i) {
@@ -391,6 +403,9 @@ void ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPt
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     for (size_t i = 0; i < column_size; ++i) {
@@ -417,6 +432,9 @@ void ORCFileWriter::_write_array_column(orc::ColumnVectorBatch& orc_column, Colu
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     auto* offsets = array_col->offsets_column().get()->get_data().data();
@@ -446,6 +464,9 @@ void ORCFileWriter::_write_struct_column(orc::ColumnVectorBatch& orc_column, Col
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     for (size_t i = 0; i < type.children.size(); ++i) {
@@ -476,6 +497,9 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
         for (size_t i = 0; i < column_size; i++) {
             orc_column.notNull[i] = 1 - null_col[i];
         }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 
     for (size_t i = 0; i < column_size + 1; ++i) {
