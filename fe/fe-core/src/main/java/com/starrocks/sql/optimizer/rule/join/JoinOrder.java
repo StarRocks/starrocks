@@ -372,18 +372,7 @@ public abstract class JoinOrder {
                     rightExprInfo.expr);
         }
 
-<<<<<<< HEAD
-        try {
-            InputDependenciesChecker.getInstance().validate(joinExpr, context.getTaskContext());
-        } catch (Exception e) {
-            LOGGER.debug("the reorder result is not a valid plan.", e);
-            return Optional.empty();
-        }
-
         if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
-=======
-        if (reverse) {
->>>>>>> 85026f468c ([Enhancement] Imporve JoinReroder performance (#42322))
             return Optional.of(new ExpressionInfo(joinExpr, rightGroup, leftGroup));
         } else {
             return Optional.of(new ExpressionInfo(joinExpr, leftGroup, rightGroup));
