@@ -56,7 +56,6 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
     @MethodSource("redundantPredicateCases")
     void testRedundantPredicate(String sql, String expect) throws Exception {
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, expect);
     }
 
@@ -65,14 +64,14 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
 
         // scene 1
         String templateSql = "select * from \n" +
-                "(select * from test_all_type where t1a in ('zhongguoren', '中国人') and t1b = 1 and t1c = 1 \n" +
+                "(select * from test_all_type where t1a in ('abc', '中文') and t1b = 1 and t1c = 1 \n" +
                 "and t1d = 20 and t1f = 1.1 and id_datetime between '2021-01-01' and '2021-02-01' and id_decimal = 1.2) t1\n" +
                 " %s join test_all_type_not_null t2\n" +
-                "on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime";
-        String expectPredicate = "12: t1b = 1, 11: t1a <= '中国人', 13: t1c <= 1, 18: id_datetime >= '2021-01-01 00:00:00'";
+                "on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime;";
+        String expectPredicate = "12: t1b = 1, 11: t1a <= '中文', 13: t1c <= 1, 18: id_datetime >= '2021-01-01 00:00:00'";
         argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
 
-        expectPredicate = "11: t1a <= '中国人', 12: t1b = 1, 13: t1c <= 1, 18: id_datetime >= '2021-01-01 00:00:00'";
+        expectPredicate = "11: t1a <= '中文', 12: t1b = 1, 13: t1c <= 1, 18: id_datetime >= '2021-01-01 00:00:00'";
         argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
 
         // scene 2
@@ -86,23 +85,23 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
 
         // scene 3
         templateSql = "select * from \n" +
-                "(select * from test_all_type where abs(t1b + t1d) > 100 and t1a in ('abc', '中文')) t1\n" +
+                "(select * from test_all_type where abs(t1b + t1d) > 20 and t1a in ('abc', '中文')) t1\n" +
                 "%s join test_all_type_not_null t2\n" +
                 "on abs(t1.t1b + t1.t1d) = t2.t1b;";
-        expectPredicate = "12: t1b > 100, CAST(12: t1b AS LARGEINT) IS NOT NULL";
+        expectPredicate = "12: t1b > 20, CAST(12: t1b AS LARGEINT) IS NOT NULL";
         argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
-        expectPredicate = "PREDICATES: 12: t1b > 100";
+        expectPredicate = "PREDICATES: 12: t1b > 20";
         argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
 
         // scene 4
         templateSql = "select * from test_all_type_not_null t2 %s join " +
-                "(select * from test_all_type where t1a in ('zhongguoren', '中国人') and t1b = 1 and t1c = 1 \n" +
+                "(select * from test_all_type where t1a in ('abc', '中文') and t1b = 1 and t1c = 1 \n" +
                 "and t1d = 20 and t1f = 1.1 and id_datetime between '2021-01-01' and '2021-02-01' and id_decimal = 1.2) t1\n" +
-                "on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime";
-        expectPredicate = "2: t1b = 1, 1: t1a <= '中国人', 3: t1c <= 1, 8: id_datetime >= '2021-01-01 00:00:00'";
+                "on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime;";
+        expectPredicate = "2: t1b = 1, 1: t1a <= '中文', 3: t1c <= 1, 8: id_datetime >= '2021-01-01 00:00:00'";
         argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
 
-        expectPredicate = "1: t1a <= '中国人', 2: t1b = 1, 3: t1c <= 1, 8: id_datetime >= '2021-01-01 00:00:00'";
+        expectPredicate = "1: t1a <= '中文', 2: t1b = 1, 3: t1c <= 1, 8: id_datetime >= '2021-01-01 00:00:00'";
         argumentsList.add(Arguments.of(String.format(templateSql, "right"), expectPredicate));
 
         // scene 5
