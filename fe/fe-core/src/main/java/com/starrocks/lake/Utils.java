@@ -32,6 +32,8 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -204,5 +206,22 @@ public class Utils {
                 throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
             }
         }
+    }
+
+    public static long getFirstWorkerGroupByWarehouseId(WarehouseManager manager, long warehouseId) {
+        Warehouse warehouse = manager.getWarehouse(warehouseId);
+        List<Long> ids = warehouse.getWorkerGroupIds();
+        return ids.get(0);
+    }
+
+    public static long getWarehouseIdByBackendId(SystemInfoService systemInfo, long nodeId) {
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        ComputeNode cn = systemInfo.getBackendOrComputeNode(nodeId);
+        if (cn != null) {
+            warehouseId = cn.getWarehouseId();
+        } else {
+            LOG.warn("failed to get node by node id: {}", nodeId);
+        }
+        return warehouseId;
     }
 }
