@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -348,7 +349,7 @@ public abstract class JoinOrder {
                     if (allChildColumns.containsAll(valueUseColumns)) {
                         // depend on two children, must rewrite to origin expression
                         ReplaceColumnRefRewriter rewriter =
-                                new ReplaceColumnRefRewriter(Map.of(entry.getKey(), entry.getValue()));
+                                new ReplaceColumnRefRewriter(ImmutableMap.of(entry.getKey(), entry.getValue()));
                         predicate = rewriter.rewrite(predicate);
                         onPredicates.set(i, predicate);
                     } else {
