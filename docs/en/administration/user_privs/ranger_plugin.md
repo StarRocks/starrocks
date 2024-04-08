@@ -49,7 +49,7 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
    If `Connected to <ip>` is displayed, the connection is successful.
 
-## Integrate StarRocks Service to Ranger
+## Integrate StarRocks Service with Ranger
 
 ### (Optional) Install ranger-starrocks-plugin
 
