@@ -145,6 +145,7 @@ private:
     int64_t _tablet_id{0};
     // The size of sstables is not expected to be too large.
     // In major compaction, some sstables will be picked to be merged into one.
+    // sstables are ordered with the smaller version on the left.
     std::vector<std::unique_ptr<PersistentIndexSstable>> _sstables;
 };
 

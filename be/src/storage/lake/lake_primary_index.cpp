@@ -114,7 +114,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             return Status::OK();
         }
         default:
-            return Status::InternalError("Unsupported lake_persistent_index_type" +
+            return Status::InternalError("Unsupported lake_persistent_index_type " +
                                          PersistentIndexTypePB_Name(metadata->persistent_index_type()));
         }
     }
@@ -177,22 +177,35 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
 
 Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
                                             const TxnLogPB_OpCompaction& op_compaction) {
-    if (!_enable_persistent_index || metadata.persistent_index_type() == PersistentIndexTypePB::LOCAL) {
-        return Status::OK();
-    }
-
-    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-    if (lake_persistent_index != nullptr) {
-        return dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->apply_opcompaction(op_compaction);
-    } else {
-        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
-    }
-}
-
-Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
+
+    switch (metadata.persistent_index_type()) {
+    case PersistentIndexTypePB::LOCAL: {
+        return Status::OK();
+    }
+    case PersistentIndexTypePB::CLOUD_NATIVE: {
+        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+        if (lake_persistent_index != nullptr) {
+            return dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->apply_opcompaction(op_compaction);
+        } else {
+            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+        }
+    }
+    default:
+        return Status::InternalError("Unsupported lake_persistent_index_type " +
+                                     PersistentIndexTypePB_Name(metadata.persistent_index_type()));
+    }
+    return Status::OK();
+}
+
+Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+
     switch (metadata->persistent_index_type()) {
     case PersistentIndexTypePB::LOCAL: {
         // only take affect in local persistent index
@@ -206,28 +219,43 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
         return on_commited();
     }
     case PersistentIndexTypePB::CLOUD_NATIVE: {
-        dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->commit(builder);
-        return Status::OK();
+        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+        if (lake_persistent_index != nullptr) {
+            dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->commit(builder);
+            return Status::OK();
+        } else {
+            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+        }
     }
     default:
-        return Status::InternalError("Unsupported lake_persistent_index_type" +
+        return Status::InternalError("Unsupported lake_persistent_index_type " +
                                      PersistentIndexTypePB_Name(metadata->persistent_index_type()));
     }
-
     return Status::OK();
 }
 
 Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, std::shared_ptr<TxnLogPB>& txn_log) {
-    if (!_enable_persistent_index || metadata.persistent_index_type() == PersistentIndexTypePB::LOCAL) {
+    if (!_enable_persistent_index) {
         return Status::OK();
     }
 
-    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-    if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->major_compact(0 /** min_retain_version **/, txn_log);
-    } else {
-        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+    switch (metadata.persistent_index_type()) {
+    case PersistentIndexTypePB::LOCAL: {
+        return Status::OK();
     }
+    case PersistentIndexTypePB::CLOUD_NATIVE: {
+        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+        if (lake_persistent_index != nullptr) {
+            return lake_persistent_index->major_compact(0 /** min_retain_version **/, txn_log);
+        } else {
+            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+        }
+    }
+    default:
+        return Status::InternalError("Unsupported lake_persistent_index_type " +
+                                     PersistentIndexTypePB_Name(metadata.persistent_index_type()));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

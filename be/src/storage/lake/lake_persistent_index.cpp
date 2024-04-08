@@ -312,6 +312,9 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         }
     }
     _sstables.insert(_sstables.begin(), std::move(sstable));
+    if (_sstables.size() >= 2) {
+        DCHECK(_sstables[0]->sstable_pb().version() <= _sstables[1]->sstable_pb().version());
+    }
     return Status::OK();
 }
 
