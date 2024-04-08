@@ -233,7 +233,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     get_values.clear();
     get_values.reserve(config::lake_pk_index_sst_max_compaction_versions * N);
     auto txn_log = std::make_shared<TxnLogPB>();
-    ASSERT_OK(index->major_compact(0, txn_log));
+    ASSERT_OK(index->major_compact(0, txn_log.get()));
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
     ASSERT_OK(index->get(config::lake_pk_index_sst_max_compaction_versions * N, total_key_slices.data(),
                          get_values.data()));

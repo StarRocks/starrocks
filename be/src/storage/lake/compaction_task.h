@@ -40,7 +40,7 @@ public:
 
     virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
 
-    Status execute_index_major_compaction(std::shared_ptr<TxnLogPB>& txn_log);
+    Status execute_index_major_compaction(TxnLogPB* txn_log);
 
     inline static const CancelFunc kNoCancelFn = []() { return false; };
     inline static const CancelFunc kCancelledFn = []() { return true; };

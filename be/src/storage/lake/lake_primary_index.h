@@ -66,7 +66,7 @@ public:
 
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
-    Status major_compact(const TabletMetadata& metadata, std::shared_ptr<TxnLogPB>& txn_log);
+    Status major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log);
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

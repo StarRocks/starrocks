@@ -43,10 +43,10 @@ public:
 
     Status merge(const std::string& key, const std::string& value);
 
-    void finish() { build_index_value_vers(); }
+    void finish() { flush(); }
 
 private:
-    void build_index_value_vers();
+    void flush();
 
 private:
     std::string _key;
@@ -103,7 +103,7 @@ public:
 
     Status minor_compact();
 
-    Status major_compact(int64_t min_retain_version, std::shared_ptr<TxnLogPB>& txn_log);
+    Status major_compact(int64_t min_retain_version, TxnLogPB* txn_log);
 
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
 

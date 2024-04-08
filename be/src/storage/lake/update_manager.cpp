@@ -843,7 +843,7 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
 }
 
 Status UpdateManager::execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata,
-                                                     std::shared_ptr<TxnLogPB>& txn_log) {
+                                                     TxnLogPB* txn_log) {
     auto index_entry = _index_cache.get(tablet_id);
     if (index_entry == nullptr) {
         return Status::OK();

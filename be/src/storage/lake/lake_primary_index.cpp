@@ -234,7 +234,7 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
     return Status::OK();
 }
 
-Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, std::shared_ptr<TxnLogPB>& txn_log) {
+Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }

@@ -1198,7 +1198,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 10);
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
