@@ -38,10 +38,12 @@
 #include <deque>
 #include <mutex>
 
+#include "gen_cpp/Types_types.h"
 #include "io/input_stream.h"
 #include "runtime/message_body_sink.h"
 #include "util/bit_util.h"
 #include "util/byte_buffer.h"
+#include "util/compression/stream_compression.h"
 
 namespace starrocks {
 
@@ -62,7 +64,7 @@ public:
         return _buf_queue.empty();
     }
 
-    StatusOr<ByteBufferPtr> read();
+    virtual StatusOr<ByteBufferPtr> read();
 
     StatusOr<ByteBufferPtr> no_block_read();
 
@@ -106,6 +108,19 @@ private:
     ByteBufferPtr _write_buf;
     ByteBufferPtr _read_buf;
     Status _err_st = Status::OK();
+};
+
+const size_t DEFAULT_DECOMPRESS_BUFFER_SIZE = 32 * 1024 * 1024;
+class DecompressedStreamLoadPipe : public StreamLoadPipe {
+public:
+    DecompressedStreamLoadPipe(std::shared_ptr<StreamLoadPipe> pipe, TCompressionType::type compression_type);
+    ~DecompressedStreamLoadPipe() override = default;
+    StatusOr<ByteBufferPtr> read() override;
+private:
+    std::shared_ptr<StreamLoadPipe> _pipe;
+    TCompressionType::type _compression_type;
+    ByteBufferPtr _decompressed_buffer;
+    std::unique_ptr<StreamCompression> _decompressor;
 };
 
 // TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.

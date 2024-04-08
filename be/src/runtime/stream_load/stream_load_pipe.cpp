@@ -275,6 +275,81 @@ Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
     return Status::OK();
 }
 
+DecompressedStreamLoadPipe::DecompressedStreamLoadPipe(std::shared_ptr<StreamLoadPipe> pipe,
+                                                       TCompressionType::type compression_type)
+        : _pipe(pipe), _compression_type(compression_type) {}
+
+StatusOr<ByteBufferPtr> DecompressedStreamLoadPipe::read() {
+    if (_decompressor == nullptr) {
+        CompressionTypePB compression = CompressionTypePB::DEFAULT_COMPRESSION;
+        if (_compression_type == TCompressionType::GZIP) {
+            compression = CompressionTypePB::GZIP;
+        } else if (_compression_type == TCompressionType::BZIP2) {
+            compression = CompressionTypePB::BZIP2;
+        } else if (_compression_type == TCompressionType::LZ4_FRAME) {
+            compression = CompressionTypePB::LZ4_FRAME;
+        } else if (_compression_type == TCompressionType::DEFLATE) {
+            compression = CompressionTypePB::DEFLATE;
+        } else if (_compression_type == TCompressionType::ZSTD) {
+            compression = CompressionTypePB::ZSTD;
+        } else {
+            return Status::NotSupported("Unsupported compression algorithm: " + std::to_string(_compression_type));
+        }
+        RETURN_IF_ERROR(StreamCompression::create_decompressor(compression, &_decompressor));
+    }
+
+    if (_decompressed_buffer == nullptr) {
+        _decompressed_buffer = ByteBuffer::allocate(DEFAULT_DECOMPRESS_BUFFER_SIZE);
+    }
+
+    auto ret = _pipe->read();
+    if (!ret.ok()) {
+        return ret.status();
+    }
+    auto buf = ret.value();
+
+    // try to read all compressed data into _decompressed_buffer
+    bool stream_end = false;
+    size_t total_bytes_read = 0;
+    size_t bytes_read = 0;
+    size_t bytes_written = 0;
+    RETURN_IF_ERROR(_decompressor->decompress(reinterpret_cast<uint8_t*>(buf->ptr), buf->remaining(), &bytes_read,
+                                              reinterpret_cast<uint8_t*>(_decompressed_buffer->ptr),
+                                              _decompressed_buffer->capacity, &bytes_written, &stream_end));
+    _decompressed_buffer->pos = bytes_written;
+    bytes_written = 0;
+    total_bytes_read += bytes_read;
+
+    std::list<ByteBufferPtr> pieces;
+    size_t pieces_size = 0;
+    while (!stream_end) {
+        // read all pieces
+        auto piece = ByteBuffer::allocate(DEFAULT_DECOMPRESS_BUFFER_SIZE);
+        RETURN_IF_ERROR(_decompressor->decompress(
+                reinterpret_cast<uint8_t*>(buf->ptr) + total_bytes_read, buf->remaining() - total_bytes_read,
+                &bytes_read, reinterpret_cast<uint8_t*>(piece->ptr), piece->capacity, &bytes_written, &stream_end));
+        piece->pos = bytes_written;
+        pieces.emplace_back(std::move(piece));
+        pieces_size += bytes_written;
+        total_bytes_read += bytes_read;
+        bytes_read = 0;
+        bytes_written = 0;
+    }
+
+    if (pieces_size > 0) {
+        if (_decompressed_buffer->remaining() < pieces_size) {
+            // align to 1024 bytes.
+            auto sz = std::ceil((_decompressed_buffer->capacity + pieces_size) * 1.0 / 1024) * 1024;
+            _decompressed_buffer = ByteBuffer::reallocate(_decompressed_buffer, sz);
+        }
+        for (const auto& piece : pieces) {
+            _decompressed_buffer->put_bytes(piece->ptr, piece->pos);
+        }
+    }
+    _decompressed_buffer->flip();
+    return _decompressed_buffer;
+}
+
 StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file, bool non_blocking_read)
         : _pipe(std::move(file)) {
     if (non_blocking_read) {

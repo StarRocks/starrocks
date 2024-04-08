@@ -913,6 +913,7 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
+    56: optional string compression_type 
 
     101: optional string warehouse   // begin from 101, in case of conflict with other's change
 }
