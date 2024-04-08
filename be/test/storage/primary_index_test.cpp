@@ -282,7 +282,7 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get());
 
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_column).ok());
-    LOG(INFO) << "pk_index memory:" << pk_index->memory_usage() << " capacity:" << pk_index->capacity();
+    LOG(INFO) << "pk_index memory:" << pk_index->memory_usage();
 
     PrimaryIndex::DeletesMap deletes;
     pk_index->upsert(1, 0, *pk_column, &deletes);

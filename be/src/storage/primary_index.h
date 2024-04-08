@@ -112,9 +112,6 @@ public:
     std::size_t size() const;
 
     // [not thread-safe]
-    std::size_t capacity() const;
-
-    // [not thread-safe]
     void reserve(size_t s);
 
     std::string to_string() const;
