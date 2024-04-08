@@ -2921,12 +2921,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     _dump_snapshot = true;
 
     // clear l1
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _usage_and_size_by_key_length.clear();
-        _l1_merged_num.clear();
-    }
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
     _has_l1 = false;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
@@ -2947,11 +2944,8 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         }
     }
     // clear l2
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_vec.clear();
-        _l2_versions.clear();
-    }
+    _l2_vec.clear();
+    _l2_versions.clear();
 
     // Init PersistentIndexMetaPB
     //   1. reset |version| |key_size|
