@@ -488,7 +488,7 @@ You need to create an alert channel (Contact Point) in Grafana to specify how to
 
    ![MA-22](../../../assets/monitor/monitor22.png)
 
-You can configure multiple notification methods for each contact point through "Add contact point integration", which will not be detailed here. For more details about Contact Points, you can refer to the [Grafana Documentation](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/contact-points/).
+You can configure multiple notification methods for each contact point through "Add contact point integration", which will not be detailed here. For more details about Contact Points, you can refer to the [Grafana Documentation](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/notifications/contact-points/)
 
 For subsequent demonstration, let's assume that in this step, you have created two contact points, "StarRocksDev" and "StarRocksOp", using different email addresses.
 
@@ -542,7 +542,7 @@ Grafana uses notification policies to associate contact points with alert rules.
 
    ![MA-29](../../../assets/monitor/monitor29.png)
 
-If you are interested in the details of notification policies or if your business has more complex alerting scenarios, you can refer to the [Grafana Documentation](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/contact-points/) for more information.
+If you are interested in the details of notification policies or if your business has more complex alerting scenarios, you can refer to the [Grafana Documentation](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/notifications/contact-points/) for more information.
 
 ### 3.4 Define alert rules
 
