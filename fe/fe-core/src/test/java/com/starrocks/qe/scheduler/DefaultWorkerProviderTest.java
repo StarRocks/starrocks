@@ -20,7 +20,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -148,6 +148,10 @@ public class DefaultWorkerProviderTest {
         }
     }
 
+    /**
+     *
+     * Mock {@link WarehouseManagerEPack#getAllComputeNodeIds(long)}.
+     */
     @Test
     public void testCaptureAvailableWorkersForSharedData() throws UserException {
         String prevRunMode = Config.run_mode;
@@ -179,13 +183,7 @@ public class DefaultWorkerProviderTest {
                 }
             };
 
-            new MockUp<WarehouseManager>() {
-                @Mock
-                public ImmutableMap<Long, ComputeNode> getComputeNodesFromAvailableWarehouse(long warehouseId)
-                        throws WarehouseUnavailableException {
-                    return id2ComputeNode;
-                }
-
+            new MockUp<WarehouseManagerEPack>() {
                 @Mock
                 public List<Long> getAllComputeNodeIds(long warehouseId) {
                     return new ArrayList<>(id2ComputeNode.keySet());
