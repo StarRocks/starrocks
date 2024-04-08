@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.common.RefreshMode;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -304,5 +305,7 @@ public interface ConnectorMetadata {
     default List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
         return Lists.newArrayList();
     }
+
+    default void syncPartitions(String db, String tableName, List<String> partitionNames, RefreshMode mode) {}
 }
 

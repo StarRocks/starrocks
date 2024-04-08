@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.common.RefreshMode;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -582,5 +583,9 @@ public class MetadataMgr {
                 throw new StarRocksConnectorException(e.getMessage());
             }
         });
+    }
+
+    public void syncPartitions(TableName tableName, List<String> partitionNames, RefreshMode mode) {
+        getOptionalMetadata(tableName.getCatalog()).ifPresent(meta -> meta.syncPartitions(tableName.getDb(), tableName.getTbl(), partitionNames, mode));
     }
 }

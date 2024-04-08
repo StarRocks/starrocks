@@ -27,6 +27,8 @@ import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
+import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsDesc;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -70,6 +72,10 @@ public class HiveMetaClient {
 
     public HiveMetaClient(HiveConf conf) {
         this.conf = conf;
+    }
+
+    public HiveConf getConf() {
+        return this.conf;
     }
 
     public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
@@ -339,6 +345,15 @@ public class HiveMetaClient {
         }
     }
 
+    public List<ColumnStatisticsObj> updateTableColumnStatistics(ColumnStatistics statistics) {
+        ColumnStatisticsDesc statsDesc = statistics.getStatsDesc();
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.updateTableColumnStatistics")) {
+            return callRPC("updateTableColumnStatistics",
+                    String.format("Failed to update table column statistics on [%s.%s]", statsDesc.getDbName(), statsDesc.getTableName()),
+                    statistics);
+        }
+    }
+
     public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName,
                                                                           String tableName,
                                                                           List<String> partitionNames,
@@ -351,6 +366,18 @@ public class HiveMetaClient {
                     String.format("Failed to get partitions column statistics on [%s.%s]. partition size: %d, columns size: %d.",
                             dbName, tableName, partitionNames.size(), columnNames.size()),
                     dbName, tableName, partitionNames, columnNames);
+        }
+    }
+
+    public void updatePartitionColumnStatistics(ColumnStatistics statistics) {
+        ColumnStatisticsDesc statsDesc = statistics.getStatsDesc();
+        Tracers.record(EXTERNAL, "HMS.PARTITIONS.updatePartitionColumnStatistics." + statsDesc.getTableName(), "partition: " + statsDesc.getPartName());
+
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.updatePartitionColumnStatistics")) {
+            callRPC("updatePartitionColumnStatistics",
+                    String.format("Failed to update partitions column statistics on [%s.%s]. partition : %s.",
+                            statsDesc.getDbName(), statsDesc.getTableName(), statsDesc.getPartName()),
+                    statsDesc);
         }
     }
 
@@ -424,6 +451,8 @@ public class HiveMetaClient {
             throw new MetastoreNotificationFetchException(e.getMessage());
         }
     }
+
+
 
     static class ClassUtils {
         private static final HashMap WRAPPER_TO_PRIMITIVE = new HashMap();

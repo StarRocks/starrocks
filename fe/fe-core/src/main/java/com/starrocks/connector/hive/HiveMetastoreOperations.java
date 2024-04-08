@@ -17,6 +17,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -32,6 +33,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.common.RefreshMode;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -343,5 +345,9 @@ public class HiveMetastoreOperations {
         }
 
         return targetPath;
+    }
+
+    public void syncPartitions(String db, String tableName, List<String> partitionNames, RefreshMode mode) {
+        metastore.syncPartitions(db, tableName, partitionNames, mode);
     }
 }
