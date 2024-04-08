@@ -156,9 +156,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ...
    ```
 
-7. （非必需）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml)，并将内容拷贝，必须修改一处内容并保存：
-   
-   - `xasecure.audit.solr.solr_url` 改为您自己的 `solr_url`。
+7. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
 
 8. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
 
