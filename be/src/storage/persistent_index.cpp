@@ -4576,6 +4576,17 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     return Status::OK();
 }
 
+void PersistentIndex::_calc_memory_usage() {
+    size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
+    for (int i = 0; i < _l1_vec.size(); i++) {
+        memory_usage += _l1_vec[i]->memory_usage();
+    }
+    for (int i = 0; i < _l2_vec.size(); i++) {
+        memory_usage += _l2_vec[i]->memory_usage();
+    }
+    _memory_usage.store(memory_usage);
+}
+
 void PersistentIndex::reset_cancel_major_compaction() {
     if (!_major_compaction_running.load(std::memory_order_relaxed)) {
         _cancel_major_compaction = false;
