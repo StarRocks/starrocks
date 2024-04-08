@@ -549,7 +549,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
                             bucket_kv_ptrs_tags[bid].second.data(), ret->pack_in_page(pageid, cur_packid),
                             bucket_data_size[bid].second.data());
             cur_packid += bucket_packs[bid];
-            CHECK(cur_packid <= page_size / pack_size);
+            DCHECK(cur_packid <= page_size / pack_size);
         }
         for (auto& move : moves) {
             if (move.dest_pageid == pageid) {
@@ -562,7 +562,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
                                 bucket_kv_ptrs_tags[bid].second.data(), ret->pack_in_page(pageid, cur_packid),
                                 bucket_data_size[bid].second.data());
                 cur_packid += bucket_packs[bid];
-                CHECK(cur_packid <= page_size / pack_size);
+                DCHECK(cur_packid <= page_size / pack_size);
             }
         }
     }

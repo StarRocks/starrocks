@@ -1734,13 +1734,6 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
             std::vector<IndexValue> get_values(N);
             ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
             for (int j = 0; j < N; j++) {
-                if (values[j].get_value() != get_values[j].get_value()) {
-                    LOG(INFO) << "values[" << j << "] is " << values[j].get_value() << ", get_values[" << j << "] is "
-                              << get_values[j].get_value();
-                    for (int x = 0; x < get_values.size(); x++) {
-                        LOG(INFO) << "get_value[" << x << "]: " << get_values[x].get_value();
-                    }
-                }
                 ASSERT_EQ(values[j], get_values[j]);
             }
         }
