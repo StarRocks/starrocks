@@ -1611,7 +1611,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRuleBasedMaterializedViewRewrite = true;
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE)
-    private boolean enableMaterializedViewTextMatchRewrite = false;
+    private boolean enableMaterializedViewTextMatchRewrite = true;
 
     @VarAttr(name = MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT)
     private int materializedViewSubQueryTextMatchMaxCount = 4;
