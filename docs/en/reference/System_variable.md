@@ -756,4 +756,4 @@ Unit: seconds. Default value: 28800 (8 hours).
 
 ### orc_use_column_names
 
-Set the Data Lake to read ORC file's behavior. Default value is `false`, columns in ORC files are accessed by their ordinal position in the Hive table definition. If set `true`, we will read columns by name.
+Used to set the behavior to read ORC files from Hive. The default value is `false`, which means columns in ORC files are accessed by their ordinal position in the Hive table definition. If this variable is set to `true`, columns are read by their names. This variable is supported from v3.1.10.
