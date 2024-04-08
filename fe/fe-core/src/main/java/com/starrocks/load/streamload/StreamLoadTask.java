@@ -1096,7 +1096,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             this.state = State.COMMITED;
             this.preparedChannelNum = this.channelNum;
-            this.endTimeMs = txnState.getFinishTime();
+            this.endTimeMs = txnState.getCommitTime();
         } finally {
             writeUnlock();
         }
