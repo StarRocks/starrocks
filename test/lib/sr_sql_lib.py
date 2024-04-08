@@ -27,6 +27,7 @@ import bz2
 import configparser
 import datetime
 import json
+import logging
 import os
 import re
 import subprocess
@@ -35,14 +36,20 @@ import ast
 import time
 import unittest
 import uuid
+from typing import List, Dict
 
+from fuzzywuzzy import fuzz
 import pymysql as _mysql
+import requests
+from cup import shell
 from nose import tools
 from cup import log
+from requests.auth import HTTPBasicAuth
 
 from lib import skip
 from lib import data_delete_lib
 from lib import data_insert_lib
+from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
@@ -55,9 +62,47 @@ common_result_path = os.path.join(root_path, "common/result")
 LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
+CRASH_DIR = os.path.join(root_path, "crash_logs")
+if not os.path.exists(CRASH_DIR):
+    os.mkdir(CRASH_DIR)
+
+LOG_LEVEL = logging.INFO
+
+
+class Filter(logging.Filter):
+    """
+    Msg filters by log levels
+    """
+
+    # pylint: disable= super-init-not-called
+    def __init__(self, msg_level=LOG_LEVEL):
+        super().__init__()
+        self.msg_level = msg_level
+
+    def filter(self, record):
+        # replace secret infos
+        for secret_k, secret_v in SECRET_INFOS.items():
+            try:
+                record.msg = record.msg.replace(secret_v, '${%s}' % secret_k)
+            except Exception:
+                record.msg = str(record.msg).replace(secret_v, '${%s}' % secret_k)
+
+        if record.levelno < self.msg_level:
+            return False
+        return True
+
+
+def self_print(msg):
+    # replace secret infos
+    for secret_k, secret_v in SECRET_INFOS.items():
+        msg = msg.replace(secret_v, '${%s}' % secret_k)
+
+    print(msg)
+
 
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
-log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
+log.init_comlog("sql", LOG_LEVEL, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, bprint_console=False, gen_wf=False)
+logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
@@ -70,6 +115,8 @@ NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
+
+SECRET_INFOS = {}
 
 
 class StarrocksSQLApiLib(object):
@@ -86,10 +133,15 @@ class StarrocksSQLApiLib(object):
         self.mysql_port = ""
         self.mysql_user = ""
         self.mysql_password = ""
+        self.http_port = ""
+        self.host_user = ""
+        self.host_password = ""
+        self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
 
         # for t/r record
+        self.case_info = None
         self.log = []
         self.res_log = []
 
@@ -98,6 +150,12 @@ class StarrocksSQLApiLib(object):
             self.read_conf("conf/sr.conf")
         else:
             self.read_conf(config_path)
+
+        if os.environ.get("keep_alive") == "True":
+            self.keep_alive = True
+        else:
+            self.keep_alive = False
+        self.run_info = os.environ.get("run_info", "")
 
     def __del__(self):
         pass
@@ -108,7 +166,191 @@ class StarrocksSQLApiLib(object):
 
     def tearDown(self):
         """tear down"""
-        pass
+        self.keep_cluster_alive()
+
+    def keep_cluster_alive(self):
+        """
+        check crash msg in case logs, and recover alive
+        """
+        if not self.keep_alive:
+            return
+
+        # check if case result contains crash msg: "StarRocks process failed"
+        crash_msg_list = ["StarRocks process failed"]
+        contains_crash_msg = self.check_case_result_contains_crash(crash_msg_list, self.res_log)
+        # wait util be exit
+        if contains_crash_msg:
+            self.wait_until_be_exit()
+
+        # if cluster status is abnormal, get crash log
+        cluster_status_dict = self.get_cluster_status()
+
+        if isinstance(cluster_status_dict, str):
+            if cluster_status_dict == 'abnormal':
+                log.error("FE status is abnormal!")
+
+            return
+
+        if cluster_status_dict["status"] != "abnormal":
+            log.info("Cluster status OK!")
+            return
+
+        # TODO: 判断是不是巡检，不然不需要创建issue
+
+        # analyse be crash info
+        log.warning("Cluster status is abnormal, begin to get crash log...")
+        be_crash_log = self.get_crash_log(cluster_status_dict["ip"][0])
+
+        if be_crash_log != "":
+            crash_similarity = self.get_crash_log_similarity(be_crash_log)
+
+            if crash_similarity >= 90:
+                log.info("Crash log is similarity, skip create issue")
+            else:
+                log.info("Max similarity is %f, create new issue" % crash_similarity)
+                cur_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                with open(f"{CRASH_DIR}/crash_{cur_time}.log", "w") as f:
+                    f.writelines(be_crash_log)
+
+                be_crash_case = self.case_info.name
+
+                title = f"[{self.run_info}] SQL-Tester crash"
+                run_link = os.environ.get('WORKFLOW_URL', '')
+                body = (
+                        """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
+                        % (be_crash_case, be_crash_log, cluster_status_dict["version"], cluster_status_dict["ip"][0], run_link)
+                )
+                assignee = os.environ.get("ISSUE_AUTHOR")
+                repo = os.environ.get("GITHUB_REPOSITORY")
+                label = os.environ.get("ISSUE_LABEL")
+                create_issue_res = GitHubApi.create_issue(title, body, label, assignee)
+                log.info(create_issue_res)
+        else:
+            log.warning("Crash log is empty, please check. cluster status is %s" % cluster_status_dict)
+
+        # after create issue, restart crash be
+        start_be_status = "success"
+        for crash_be_ip in cluster_status_dict["ip"]:
+            res = self.start_be(crash_be_ip)
+            if res != 0:
+                start_be_status = "fail"
+                print("BE start failed, please check, ip: %s" % crash_be_ip)
+                break
+        time.sleep(20)
+        cluster_dict = self.get_cluster_status()
+        if len(cluster_dict["ip"]) != 0:
+            log.error("BE start failed, please check, ip: %s" % cluster_dict["ip"])
+
+    def start_be(self, ip):
+        # backup be.out
+        cur_time = datetime.datetime.now().strftime("%H_%M")
+        cmd = "cd %s/be/log/; mv be.out be.out.%s" % (self.cluster_path, cur_time)
+        backup_res = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
+        if backup_res["exitstatus"] != 0 or backup_res["remote_exitstatus"] != 0:
+            log.error("Backup be.out error in host: %s, msg: %s" % (ip, backup_res))
+
+        # be status is not alive and the process exit failed
+        timeout = 300
+        while timeout >= 0:
+            cmd = "ps -ef | grep starrocks_be | grep -v grep"
+            stop_res = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
+            if stop_res["remote_exitstatus"] == 1:
+                break
+
+            time.sleep(5)
+            timeout -= 5
+
+        if timeout < 0:
+            print("BE exit timeout for 300s after crash, ip: %s" % ip)
+            return -1
+
+        time.sleep(10)
+        cmd = (
+            f". ~/.bash_profile; cd {self.cluster_path}/be; ulimit -c unlimited; export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1;sh bin/start_be.sh --daemon"
+        )
+        start_res = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
+        if start_res["exitstatus"] != 0 or start_res["remote_exitstatus"] != 0:
+            log.error("Start be error, msg: %s" % start_res)
+            return -1
+
+        return 0
+
+    @staticmethod
+    def get_crash_log_similarity(target_crash_log):
+        files_list = os.listdir(CRASH_DIR)
+        crash_log_list = []
+        similarity = 0
+        for crash_file in files_list:
+            with open("%s/%s" % (CRASH_DIR, crash_file), "r") as f:
+                crash_log = "\n".join(f.readlines())
+                crash_log_list.append(crash_log)
+
+        for crash_log in crash_log_list:
+            cur_similarity = fuzz.ratio(crash_log, target_crash_log)
+            similarity = cur_similarity if cur_similarity > similarity else similarity
+
+        return similarity
+
+    def get_crash_log(self, ip):
+        log.warning("Get crash log from %s" % ip)
+        cmd = (
+            f'cd {self.cluster_path}/be/log/; grep -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
+        )
+        crash_log = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=False)
+        return crash_log["result"]
+
+    def wait_until_be_exit(self):
+        """
+        wait until be was exited
+        """
+        log.warning("Wait be exit...")
+        timeout = 60
+        while timeout > 0:
+            status_dict = self.get_cluster_status()
+
+            if status_dict == 'abnormal':
+                # fe abnormal
+                return
+
+            elif status_dict["status"] == "abnormal":
+                return
+
+            else:
+                time.sleep(5)
+                timeout -= 1
+
+        return
+
+    def get_cluster_status(self):
+        cmd = f"curl http://root:@{self.mysql_host}:{self.http_port}/api/show_proc?path=/backends"
+        res = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=30, shell=True
+        )
+        if res.returncode != 0:
+            log.warning("Show backends cmd execute failed, cmd: %s, err_msg: %s" % (cmd, res.stderr))
+            return "abnormal"
+
+        status_dict = {"ip": [], "status": "normal"}
+        for be_info_dict in json.loads(res.stdout):
+            status_dict["version"] = be_info_dict["Version"]
+            if be_info_dict["Alive"] == "false":
+                status_dict["ip"].append(be_info_dict["IP"])
+                status_dict["status"] = "abnormal"
+
+        return status_dict
+
+    @staticmethod
+    def check_case_result_contains_crash(crash_msg_list, case_result_logs):
+        """
+        scan case result logs, return whether contain crash msg
+        """
+        case_result_logs_str = "\n".join(case_result_logs)
+
+        for crash_msg in crash_msg_list:
+            if crash_msg in case_result_logs_str:
+                return True
+
+        return False
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -123,6 +365,9 @@ class StarrocksSQLApiLib(object):
         self.mysql_user = config_parser.get("mysql-client", "user")
         self.mysql_password = config_parser.get("mysql-client", "password")
         self.http_port = config_parser.get("mysql-client", "http_port")
+        self.host_user = config_parser.get("mysql-client", "host_user")
+        self.host_password = config_parser.get("mysql-client", "host_password")
+        self.cluster_path = config_parser.get("mysql-client", "cluster_path")
 
         # read replace info
         for rep_key, rep_value in config_parser.items("replace"):
@@ -132,6 +377,11 @@ class StarrocksSQLApiLib(object):
         for env_key, env_value in config_parser.items("env"):
             if not env_value:
                 env_value = os.environ.get(env_key, "")
+            else:
+                # save secrets info
+                if 'aws' in env_key or 'oss_' in env_key:
+                    SECRET_INFOS[env_key] = env_value
+
             self.__setattr__(env_key, env_value)
 
     def connect_starrocks(self):
@@ -244,7 +494,6 @@ class StarrocksSQLApiLib(object):
         try:
             with self.mysql_lib.connector.cursor() as cursor:
                 cursor.execute(sql)
-
                 result = cursor.fetchall()
                 if isinstance(result, tuple):
                     index = 0
@@ -392,7 +641,7 @@ class StarrocksSQLApiLib(object):
         log.info("shell cmd: %s" % shell)
 
         cmd_res = subprocess.run(
-            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=1800, shell=True
+            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=120, shell=True
         )
 
         log.info("shell result: code: %s, stdout: %s" % (cmd_res.returncode, cmd_res.stdout))
@@ -456,7 +705,7 @@ class StarrocksSQLApiLib(object):
                 try:
                     res = ast.literal_eval(res.replace("null", "None"))
                 except Exception as e:
-                    log.warn("converse array error: %s, %s" % (res, e))
+                    log.warning("converse array error: %s, %s" % (res, e))
 
         return res, res_for_log
 
@@ -520,7 +769,7 @@ class StarrocksSQLApiLib(object):
                     tools.assert_true(re.match(exp_std, act_std, flags=re.S),
                                       "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
                 except Exception as e:
-                    log.warn("Try to treat res as regex, failed!\n:%s" % e)
+                    log.warning("Try to treat res as regex, failed!\n:%s" % e)
 
                 tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
 
@@ -555,7 +804,7 @@ class StarrocksSQLApiLib(object):
                         try:
                             expect_res = ast.literal_eval(exp.replace("null", "None"))
                         except Exception as e:
-                            log.warn("converse array error: %s, %s" % (exp, e))
+                            log.warning("converse array error: %s, %s" % (exp, e))
                             expect_res = str(exp)
 
                     tools.assert_equal(type(expect_res), type(act), "exp and act results' type not match")
@@ -586,7 +835,7 @@ class StarrocksSQLApiLib(object):
                     )
                     return
             except Exception as e:
-                log.warn("analyse result before check error, %s" % e)
+                log.warning("analyse result before check error, %s" % e)
 
             # check str
             log.info("[check type]: Str")
@@ -692,6 +941,8 @@ class StarrocksSQLApiLib(object):
         self.connect_starrocks()
         use_res = self.use_database(T_R_DB)
         tools.assert_true(use_res["status"], "use db: [%s] error" % T_R_DB)
+
+        self.execute_sql("set group_concat_max_len = 1024000;", True)
 
         # get records
         query_sql = """
@@ -907,61 +1158,87 @@ class StarrocksSQLApiLib(object):
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
             if status != "FINISHED":
-                time.sleep(5)
+                time.sleep(1)
             else:
                 # sleep another 5s to avoid FE's async action.
-                time.sleep(5)
+                time.sleep(1)
                 break
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
+        """
+        wait async materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
+        count = 0
+        num = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][12]
+            if status != "SUCCESS":
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
         wait pipe load finish
         """
-        status = ""
-        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        state = ""
+        show_sql = "select state, load_status, last_error  from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
         count = 0
         print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
         while count < check_count:
             res = self.execute_sql(show_sql, True)
             print(res)
-            status = res["result"][0][0]
-            if status != "FINISHED":
-                print("pipe status is " + status)
+            state = res["result"][0][0]
+            if state == 'RUNNING':
+                print("pipe state is " + state)
                 time.sleep(1)
             else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+        tools.assert_equal("FINISHED", state, "didn't wait for the pipe to finish")
 
 
-    def check_hit_materialized_view(self, query, mv_name):
+    def check_hit_materialized_view_plan(self, res, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
+    def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        print(res)
-        tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
-    def check_no_hit_materialized_view(self, query, mv_name):
+    def check_no_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        for expect in expects:
+            tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
 
-    def wait_alter_table_finish(self, alter_type="COLUMN"):
+    def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
         wait alter table job finish and return status
         """
         status = ""
+        sleep_time = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
@@ -970,10 +1247,13 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            status = res["result"][0][9]
+            status = res["result"][0][off]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
+                if sleep_time <= 1:
+                    time.sleep(1)
                 break
             time.sleep(0.5)
+            sleep_time += 0.5
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_alter_table_not_pending(self, alter_type="COLUMN"):
@@ -994,7 +1274,7 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(0.5)
 
-    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
+    def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
         wait alter table job finish and return status
         """
@@ -1011,7 +1291,7 @@ class StarrocksSQLApiLib(object):
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
             time.sleep(0.5)
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        tools.assert_equal(expect_status, status, "wait alter table finish error")
 
     def wait_global_dict_ready(self, column_name, table_name):
         """
@@ -1123,7 +1403,7 @@ class StarrocksSQLApiLib(object):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             encoding="utf-8",
-            timeout=1800,
+            timeout=120,
         )
 
         log.info(cmd_res)
@@ -1175,7 +1455,6 @@ class StarrocksSQLApiLib(object):
         create_table_sqls = self.get_sql_from_file("create.sql", dir_path=os.path.join(common_sql_path, data_name))
         res = self.execute_sql(create_table_sqls, True)
         tools.assert_true(res["status"], "create %s table error, %s" % (data_name, res["msg"]))
-
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:
@@ -1233,3 +1512,168 @@ class StarrocksSQLApiLib(object):
 
             res = self._stream_load(label, db, table_name, data, headers)
             tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
+
+    def execute_cmd(self, exec_url):
+        cmd_template = "curl -XPOST -u {user}:{passwd} '" + exec_url + "'"
+        cmd = cmd_template.format(user=self.mysql_user, passwd=self.mysql_password)
+        res = subprocess.run(
+            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=1800
+        )
+        return str(res)
+
+    def post_http_request(self, exec_url) -> str:
+        """Sends a POST request.
+
+        Returns:
+            the response content.
+        """
+        res = requests.post(exec_url, auth=HTTPBasicAuth(self.mysql_user, self.mysql_password))
+        tools.assert_equal(200, res.status_code, f"failed to post http request [res={res}] [url={exec_url}]")
+        return res.content.decode("utf-8")
+
+    def manual_compact(self, database_name, table_name):
+        sql = "show tablet from " + database_name + "." + table_name
+        res = self.execute_sql(sql, "dml")
+        tools.assert_true(res["status"], res["msg"])
+        url = res["result"][0][20]
+
+        pos = url.find("api")
+        exec_url = url[0:pos] + "api/update_config?min_cumulative_compaction_num_singleton_deltas=0"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url[0:pos] + "api/update_config?base_compaction_interval_seconds_since_last_operation=0"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url[0:pos] + "api/update_config?cumulative_compaction_skip_window_seconds=1"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url.replace("compaction/show", "compact") + "&compaction_type=cumulative"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url.replace("compaction/show", "compact") + "&compaction_type=base"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+    def wait_analyze_finish(self, database_name, table_name, sql):
+        timeout = 300
+        analyze_sql = "show analyze status where `Database` = 'default_catalog.%s'" % database_name
+        res = self.execute_sql(analyze_sql, "dml")
+        while timeout > 0:
+            res = self.execute_sql(analyze_sql, "dml")
+            if len(res["result"]) > 0:
+                for table in res["result"]:
+                    if table[2] == table_name and table[4] == "FULL" and table[6] == "SUCCESS":
+                        break
+                break
+            else:
+                time.sleep(1)
+                timeout -= 1
+        else:
+            tools.assert_true(False, "analyze timeout")
+
+        finished = False
+        counter = 0
+        while True:
+            res = self.execute_sql(sql, "dml")
+            tools.assert_true(res["status"], res["msg"])
+            if str(res["result"]).find("Decode") > 0:
+                finished = True
+                break
+            time.sleep(5)
+            if counter > 10:
+                break
+            counter = counter + 1
+
+        tools.assert_true(finished, "analyze timeout")
+
+    def _get_backend_http_endpoints(self) -> List[Dict]:
+        """Get the http host and port of all the backends.
+
+        Returns:
+            a dict list, each of which contains the key "host" and "host" of a backend.
+        """
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+
+        backends = []
+        for row in res["result"]:
+            backends.append({
+                "host": row[1],
+                "port": row[4],
+            })
+
+        return backends
+
+    def update_be_config(self, key, value):
+        """Update the config to all the backends.
+        """
+        backends = self._get_backend_http_endpoints()
+        for backend in backends:
+            exec_url = f"http://{backend['host']}:{backend['port']}/api/update_config?{key}={value}"
+            print(f"post {exec_url}")
+            res = self.post_http_request(exec_url)
+
+            res_json = json.loads(res)
+            tools.assert_dict_contains_subset({"status": "OK"}, res_json,
+                                              f"failed to update be config [response={res}] [url={exec_url}]")
+
+    def assert_table_cardinality(self, sql, rows):
+        """
+        assert table with an expected row counts
+        """
+        res = self.execute_sql(sql, True)
+        expect = r"cardinality=" + rows
+        match = re.search(expect, str(res["result"]))
+        print(expect)
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
+
+    def wait_refresh_dictionary_finish(self, name, check_status):
+        """
+        wait dictionary refresh job finish and return status
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW DICTIONARY %s" % name,
+                True,
+            )
+
+            status = res["result"][0][6]
+            if status != ("REFRESHING") and status != ("COMMITTING"):
+                break
+            time.sleep(0.5)
+        tools.assert_equal(check_status, status, "wait refresh dictionary finish error")
+
+    def set_first_tablet_bad_and_recover(self, table_name):
+        """
+        set table first tablet as bad replica and recover until success
+        """
+        res = self.execute_sql(
+            "SHOW TABLET FROM %s" % table_name,
+            True,
+        )
+
+        tablet_id = res["result"][0][0]
+        backend_id = res["result"][0][2]
+
+        res = self.execute_sql(
+            "ADMIN SET REPLICA STATUS PROPERTIES('tablet_id' = '%s', 'backend_id' = '%s', 'status' = 'bad')" % (tablet_id, backend_id),
+            True,
+        )
+
+        time.sleep(20)
+
+        while True:
+            res = self.execute_sql(
+                "SHOW TABLET FROM %s" % table_name,
+                True,
+            )
+
+            if len(res["result"]) != 2:
+                time.sleep(0.5)
+            else:
+                break
