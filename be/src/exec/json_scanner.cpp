@@ -681,6 +681,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
 Status JsonReader::_read_file_stream() {
     // TODO: Remove the down_cast, should not rely on the specific implementation.
     auto* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
     ASSIGN_OR_RETURN(_file_stream_buffer, stream_file->pipe()->read());
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
@@ -703,6 +704,7 @@ Status JsonReader::_read_file_stream() {
 
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_file_broker() {
+    ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
     // TODO: Remove the down_cast, should not rely on the specific implementation.

@@ -33,6 +33,7 @@ public:
 private:
     std::shared_ptr<::arrow::RecordBatch> _batch;
     std::shared_ptr<ParquetChunkReader> _file_reader;
+    ScannerCounter _counter;
 };
 
 } // namespace starrocks

@@ -271,6 +271,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         size_t length = 0;
         auto* stream_file = down_cast<StreamLoadPipeInputStream*>(file->stream().get());
         {
+            ++_counter->file_read_count;
             SCOPED_RAW_TIMER(&_counter->file_read_ns);
             ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
         }

@@ -171,6 +171,8 @@ class ParquetScannerTest : public ::testing::Test {
             num_rows += chunk->num_rows();
             check_func(chunk);
         }
+        ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
+        ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
         scanner->close();
     }
 

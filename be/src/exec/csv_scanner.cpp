@@ -70,6 +70,7 @@ const std::string& CSVScanner::ScannerCSVReader::filename() {
 }
 
 Status CSVScanner::ScannerCSVReader::_fill_buffer() {
+    ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
     DCHECK(_buff.free_space() > 0);

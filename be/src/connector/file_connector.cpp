@@ -187,6 +187,7 @@ void FileDataSource::_init_counter() {
         _scanner_materialize_timer = ADD_CHILD_TIMER(p, "MaterializeTime", prefix);
         _scanner_init_chunk_timer = ADD_CHILD_TIMER(p, "CreateChunkTime", prefix);
         _scanner_file_reader_timer = ADD_CHILD_TIMER(p, "FileReadTime", prefix);
+        _scanner_file_read_count = ADD_CHILD_COUNTER(p, "FileReadCount", TUnit::UNIT, prefix);
     }
 }
 
@@ -201,6 +202,7 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_materialize_timer, _counter.materialize_ns);
     COUNTER_UPDATE(_scanner_init_chunk_timer, _counter.init_chunk_ns);
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
+    COUNTER_UPDATE(_scanner_file_read_count, _counter.file_read_count);
 }
 
 } // namespace starrocks::connector

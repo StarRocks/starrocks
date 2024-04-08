@@ -22,10 +22,12 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -348,8 +350,9 @@ using ArrowStatusCode = ::arrow::StatusCode;
 using StarRocksStatus = ::starrocks::Status;
 using ArrowStatus = ::arrow::Status;
 
-ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos)
-        : _file(std::move(file)), _pos(pos) {}
+ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos,
+                                   ScannerCounter* counter)
+        : _file(std::move(file)), _pos(pos), _counter(counter) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
     [[maybe_unused]] auto st = Close();
@@ -370,6 +373,8 @@ arrow::Result<int64_t> ParquetChunkFile::Read(int64_t nbytes, void* buffer) {
 
 arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, void* out) {
     _pos += nbytes;
+    ++_counter->file_read_count;
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
     auto status = _file->read_at_fully(position, out, nbytes);
     return status.ok()
                    ? nbytes
