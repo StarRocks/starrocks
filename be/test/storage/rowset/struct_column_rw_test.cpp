@@ -185,10 +185,8 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 auto dst_f1_column = Int32Column::create();
-                auto dst_f2_column = BinaryColumn::create();
                 Columns dst_columns;
                 dst_columns.emplace_back(std::move(dst_f1_column));
-                dst_columns.emplace_back(std::move(dst_f2_column));
 
                 ColumnPtr dst_column = StructColumn::create(dst_columns, names);
                 size_t rows_read = src_column->size();
@@ -196,7 +194,7 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:1,f2:''}", dst_column->debug_item(0));
+                ASSERT_EQ("{f1:1}", dst_column->debug_item(0));
             }
         }
 
@@ -220,10 +218,8 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_f1_column = Int32Column::create();
                 auto dst_f2_column = BinaryColumn::create();
                 Columns dst_columns;
-                dst_columns.emplace_back(std::move(dst_f1_column));
                 dst_columns.emplace_back(std::move(dst_f2_column));
 
                 ColumnPtr dst_column = StructColumn::create(dst_columns, names);
@@ -232,7 +228,7 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:CONST: 0,f2:'Column2'}", dst_column->debug_item(0));
+                ASSERT_EQ("{f2:'Column2'}", dst_column->debug_item(0));
             }
         }
     }
