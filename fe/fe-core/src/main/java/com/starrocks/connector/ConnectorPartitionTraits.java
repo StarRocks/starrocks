@@ -553,8 +553,7 @@ public abstract class ConnectorPartitionTraits {
         public Optional<Long> maxPartitionRefreshTs() {
             Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
                     getPartitionNameWithPartitionInfo();
-            return
-                    partitionNameWithPartition.values().stream()
+            return partitionNameWithPartition.values().stream()
                             .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
                             .max(Long::compareTo);
         }
