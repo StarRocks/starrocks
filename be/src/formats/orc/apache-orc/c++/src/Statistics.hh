@@ -572,7 +572,8 @@ public:
 
     void reset() override {
         _stats.reset();
-        setSum(Decimal());
+        // Note(letian-jiang): Do not compute the sum of decimal column since it is time-consuming and hard to exploit.
+        _stats.setHasSum(false);
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
