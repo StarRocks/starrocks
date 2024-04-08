@@ -384,8 +384,7 @@ public class ScalarOperatorToExpr {
         public Expr visitMatchExprOperator(MatchExprOperator operator, FormatterContext context) {
             Expr child1 = buildExpr.build(operator.getChild(0), context);
             Expr child2 = buildExpr.build(operator.getChild(1), context);
-            MatchExpr expr = new MatchExpr(child1, child2);
-            return expr;
+            return new MatchExpr(child1, child2);
         }
 
         @Override
