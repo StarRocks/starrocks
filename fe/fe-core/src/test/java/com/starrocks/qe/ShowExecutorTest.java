@@ -734,6 +734,8 @@ public class ShowExecutorTest {
             }
         };
 
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -743,6 +745,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
@@ -805,6 +811,8 @@ public class ShowExecutorTest {
             }
         };
 
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -814,6 +822,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
