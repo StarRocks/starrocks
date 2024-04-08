@@ -93,6 +93,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
@@ -267,6 +268,8 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportLakeCompactionRequest;
+import com.starrocks.thrift.TReportLakeCompactionResponse;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
@@ -2882,5 +2885,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TTableReplicationResponse startTableReplication(TTableReplicationRequest request) throws TException {
         return leaderImpl.startTableReplication(request);
+    }
+
+    @Override
+    public TReportLakeCompactionResponse reportLakeCompaction(TReportLakeCompactionRequest request) throws TException {
+        TReportLakeCompactionResponse resp = new TReportLakeCompactionResponse();
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+            resp.setValid(compactionMgr.existCompaction(request.getTxn_id()));
+        } else {
+            // if not leader, treat all compactions as valid in case compactions is cancelled in the middle
+            resp.setValid(true);
+        }
+        return resp;
     }
 }
