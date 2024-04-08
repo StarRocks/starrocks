@@ -35,6 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
+import com.google.gson.Gson;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -95,6 +96,10 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     private StmtExecutor executor = null;
+
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+
+    private static final Gson GSON = new Gson();
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -292,6 +297,11 @@ public class ConnectProcessor {
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+        }
+
+        if (Config.enable_profile_log) {
+            String jsonString = GSON.toJson(queryDetail);
+            PROFILE_LOG.info(jsonString);
         }
 
         QueryDetailQueue.addQueryDetail(queryDetail);
