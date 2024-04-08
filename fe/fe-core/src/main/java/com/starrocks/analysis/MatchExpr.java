@@ -54,11 +54,6 @@ public class MatchExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj);
-    }
-
-    @Override
     public String toSqlImpl() {
         return getChild(0).toSql() + " MATCH " + getChild(1).toSql();
     }
