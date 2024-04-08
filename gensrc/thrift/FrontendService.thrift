@@ -847,7 +847,10 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
-    101: optional string warehouse   // begin from 101, in case of conflict with other's change
+    
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse
+    102: optional Types.TBackend backend
 }
 
 struct TLoadTxnBeginResult {
@@ -914,7 +917,9 @@ struct TStreamLoadPutRequest {
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
 
-    101: optional string warehouse   // begin from 101, in case of conflict with other's change
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse  // deprecated, because it needs client to pass warehouse name
+    102: optional Types.TBackend backend
 }
 
 struct TStreamLoadPutResult {
@@ -1353,6 +1358,7 @@ struct TImmutablePartitionRequest {
     2: optional i64 db_id
     3: optional i64 table_id
     4: optional list<i64> partition_ids
+    5: optional Types.TBackend backend
 }
 
 struct TImmutablePartitionResult {

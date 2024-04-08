@@ -439,19 +439,9 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
-        throws DdlException {
-        return createShards(numShards, pathInfo, cacheInfo, groupId, null, Collections.EMPTY_MAP);
-    }
-
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
-                                   @NotNull Map<String, String> properties)
-            throws DdlException {
-        return createShards(numShards, pathInfo, cacheInfo, groupId, null, properties);
-    }
-
-    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
-                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties)
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   long workerGroupId)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
@@ -466,7 +456,8 @@ public class StarOSAgent {
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
-                    .putAllShardProperties(properties);
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
 
             for (int i = 0; i < numShards; ++i) {
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());

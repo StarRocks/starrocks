@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
@@ -348,15 +349,17 @@ public class StreamLoadInfo {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
                 request.getFileType(), request.getFormatType());
         streamLoadInfo.setOptionalFromTSLPutRequest(request, db);
-        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (request.getWarehouse() != null) {
-            warehouseName = request.getWarehouse();
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.getBackend() != null) {
+            SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            warehouseId = com.starrocks.lake.Utils.getWarehouseIdFromBackend(systemInfo, request.getBackend());
+        } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
+            String warehouseName = request.getWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            warehouseId = warehouse.getId();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-        if (warehouse == null) {
-            throw new UserException("Warehouse " + warehouseName + " not exist");
-        }
-        streamLoadInfo.setWarehouseId(warehouse.getId());
+        streamLoadInfo.setWarehouseId(warehouseId);
         return streamLoadInfo;
     }
 

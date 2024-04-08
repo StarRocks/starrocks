@@ -31,6 +31,9 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TBackend;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -203,5 +206,23 @@ public class Utils {
                 throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
             }
         }
+    }
+
+    public static long getWorkerGroupByWarehouseId(WarehouseManager manager, long warehouseId) {
+        Warehouse warehouse = manager.getWarehouse(warehouseId);
+        return warehouse.getWorkerGroupId();
+    }
+
+    public static long getWarehouseIdFromBackend(SystemInfoService systemInfo, TBackend tBackend) {
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (tBackend != null) {
+            String host = tBackend.getHost();
+            int bePort = tBackend.getBe_port();
+            ComputeNode cn = systemInfo.getBackendOrComputeNodeWithBePort(host, bePort);
+            if (cn != null) {
+                warehouseId = cn.getWarehouseId();
+            }
+        }
+        return warehouseId;
     }
 }

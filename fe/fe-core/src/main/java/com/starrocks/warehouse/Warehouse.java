@@ -17,6 +17,7 @@ package com.starrocks.warehouse;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;
@@ -52,5 +53,9 @@ public abstract class Warehouse implements Writable {
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
+    }
+
+    public long getWorkerGroupId() {
+        return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
     }
 }

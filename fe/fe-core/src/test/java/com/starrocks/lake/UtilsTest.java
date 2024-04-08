@@ -18,11 +18,15 @@ package com.starrocks.lake;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TBackend;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Test;
 
 public class UtilsTest {
@@ -32,9 +36,6 @@ public class UtilsTest {
 
     @Mocked
     NodeMgr nodeMgr;
-
-    @Mocked
-    SystemInfoService systemInfoService;
 
     @Mocked
     NodeSelector nodeSelector;
@@ -52,7 +53,8 @@ public class UtilsTest {
         new MockUp<NodeMgr>() {
             @Mock
             public SystemInfoService getClusterInfo() {
-                return systemInfoService;
+                SystemInfoService systemInfo = new SystemInfoService();
+                return systemInfo;
             }
         };
 
@@ -69,5 +71,43 @@ public class UtilsTest {
                 throw new UserException("No backend or compute node alive.");
             }
         };
+    }
+
+    @Test
+    public void testGetWarehouse() {
+        WarehouseManager manager = new WarehouseManager();
+        manager.initDefaultWarehouse();
+
+        long workerGroupId = Utils.getWorkerGroupByWarehouseId(manager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId);
+    }
+
+    @Test
+    public void testGetWarehouseIdFromBackend() {
+        SystemInfoService systemInfo = new SystemInfoService();
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        b1.setBePort(9060);
+        b1.setWarehouseId(10001L);
+        Backend b2 = new Backend(10002L, "192.168.0.2", 9050);
+        b2.setBePort(9060);
+        b2.setWarehouseId(10002L);
+
+        // add two backends to different warehouses
+        systemInfo.addBackend(b1);
+        systemInfo.addBackend(b2);
+
+        // If the version of be is old, it may pass null.
+        long warehouseId = Utils.getWarehouseIdFromBackend(systemInfo, null);
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, warehouseId);
+
+        // pass a wrong tBackend
+        warehouseId = Utils.getWarehouseIdFromBackend(systemInfo, new TBackend("192.168.100.1", 9060, 8040));
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, warehouseId);
+
+        // pass a right tBackend
+        warehouseId = Utils.getWarehouseIdFromBackend(systemInfo, new TBackend("192.168.0.1", 9060, 8040));
+        Assert.assertEquals(10001L, warehouseId);
+        warehouseId = Utils.getWarehouseIdFromBackend(systemInfo, new TBackend("192.168.0.2", 9060, 8040));
+        Assert.assertEquals(10002L, warehouseId);
     }
 }
