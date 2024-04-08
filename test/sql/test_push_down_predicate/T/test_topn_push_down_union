@@ -1,0 +1,177 @@
+-- name: test_topn_push_down_union
+
+CREATE TABLE tbl_mock_001 (
+    mock_008 datetime,
+    mock_036 varchar(1048576),
+    mock_009 varchar(1048576),
+    mock_028 varchar(1048576),
+    mock_040 varchar(1048576),
+    mock_004 varchar(1048576),
+    mock_003 double,
+    mock_035 double,
+    mock_007 double,
+    mock_039 double,
+    mock_021 double,
+    mock_022 double,
+    mock_023 double,
+    mock_024 double,
+    mock_038 double,
+    mock_034 double,
+    mock_015 double,
+    mock_002 double,
+    mock_020 double,
+    mock_013 double,
+    mock_032 double,
+    mock_041 double,
+    mock_005 double,
+    mock_014 double,
+    mock_011 double,
+    mock_033 double,
+    mock_016 double,
+    mock_012 double,
+    mock_037 varchar(1048576),
+    mock_006 varchar(1048576),
+    mock_010 varchar(1048576),
+    mock_019 varchar(1048576),
+    mock_018 varchar(1048576),
+    mock_017 varchar(1048576),
+    mock_031 varchar(1048576),
+    mock_030 varchar(1048576),
+    mock_027 varchar(1048576),
+    mock_029 varchar(1048576),
+    mock_025 varchar(1048576),
+    mock_026 varchar(1048576)
+) ENGINE= OLAP  DUPLICATE KEY(mock_008, mock_036) DISTRIBUTED BY RANDOM PROPERTIES ( 'replication_num' = '1' );
+
+INSERT INTO tbl_mock_001 (
+    mock_008, mock_036, mock_009, mock_028, mock_040, mock_004, mock_003, mock_035, 
+    mock_007, mock_039, mock_021, mock_022, mock_023, mock_024, mock_038, mock_034, 
+    mock_015, mock_002, mock_020, mock_013, mock_032, mock_041, mock_005, mock_014, 
+    mock_011, mock_033, mock_016, mock_012, mock_037, mock_006, mock_010, mock_019, 
+    mock_018, mock_017, mock_031, mock_030, mock_027, mock_029, mock_025, mock_026
+) VALUES (
+    '2024-01-01 00:00:00', 'Sample text for mock_036', 'Sample text for mock_009', 'Sample text for mock_028', 
+    'Sample text for mock_040', 'Sample text for mock_004', 123.456, 789.012, 
+    345.678, 901.234, 567.890, 234.567, 890.123, 456.789, 678.901, 234.345, 
+    567.123, 890.456, 123.789, 456.012, 789.345, 123.654, 987.210, 654.321, 
+    321.987, 432.109, 876.543, 210.987, 'Sample text for mock_037', 'Sample text for mock_006', 
+    'Sample text for mock_010', 'Sample text for mock_019', 'Sample text for mock_018', 'Sample text for mock_017', 
+    'Sample text for mock_031', 'Sample text for mock_030', 'Sample text for mock_027', 'Sample text for mock_029', 
+    'Sample text for mock_025', 'Sample text for mock_026'
+), (
+    '2024-02-02 12:34:56', 'Another sample for mock_036', 'Another sample for mock_009', 'Another sample for mock_028', 
+    'Another sample for mock_040', 'Another sample for mock_004', 654.321, 987.654, 
+    321.654, 987.321, 654.987, 321.987, 987.654, 321.654, 654.321, 987.123, 
+    321.456, 654.789, 987.456, 321.123, 654.456, 987.789, 321.789, 654.123, 
+    987.321, 654.987, 321.234, 987.567, 'Another text for mock_037', 'Another text for mock_006', 
+    'Another text for mock_010', 'Another text for mock_019', 'Another text for mock_018', 'Another text for mock_017', 
+    'Another text for mock_031', 'Another text for mock_030', 'Another text for mock_027', 'Another text for mock_029', 
+    'Another text for mock_025', 'Another text for mock_026'
+);
+
+
+-- SET cbo_push_down_topn_limit=0;
+SELECT *
+FROM (
+	(SELECT *
+	FROM (
+		(SELECT CAST('AAA' AS VARCHAR) AS mock_042, CAST('' AS VARCHAR) AS mock_043, '' AS mock_044, CAST(SUM(tbl_mock_001.mock_058) AS DOUBLE) AS mock_045, CAST(SUM(tbl_mock_001.mock_059) AS DOUBLE) AS mock_046
+			, CAST(SUM(tbl_mock_001.mock_060) AS DOUBLE) AS mock_047, CAST(SUM(tbl_mock_001.mock_061) AS DOUBLE) AS mock_048, CAST(SUM(tbl_mock_001.mock_062) AS DOUBLE) AS mock_049, CAST(CAST(round(CAST(SUM(tbl_mock_001.mock_063) / CASE 
+				WHEN SUM(tbl_mock_001.mock_064) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+				ELSE SUM(tbl_mock_001.mock_064)
+			END AS DECIMAL128(38, 8)), 4) AS DECIMAL128(38, 4)) AS DOUBLE) AS mock_050, CAST(SUM(tbl_mock_001.mock_065) AS DOUBLE) AS mock_051
+			, CAST(SUM(tbl_mock_001.mock_066) AS DOUBLE) AS mock_052, CAST(CAST(round(CAST(SUM(tbl_mock_001.mock_067) / CASE 
+				WHEN SUM(tbl_mock_001.mock_064) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+				ELSE SUM(tbl_mock_001.mock_064)
+			END AS DECIMAL128(38, 8)), 4) AS DECIMAL128(38, 4)) AS DOUBLE) AS mock_053, 1 AS mock_054, 1000 AS mock_055
+		FROM (
+			SELECT 1 AS mock_054, CAST(tbl_mock_001.mock_007 AS DECIMAL128(38, 8)) AS mock_058, CAST(tbl_mock_001.mock_039 AS DECIMAL128(38, 8)) AS mock_059, CAST(tbl_mock_001.mock_023 AS DECIMAL128(38, 8)) AS mock_060, CAST(tbl_mock_001.mock_024 AS DECIMAL128(38, 8)) AS mock_061
+				, CAST(tbl_mock_001.mock_015 AS DECIMAL128(38, 8)) AS mock_062
+				, CASE 
+					WHEN CAST(tbl_mock_001.mock_015 AS DECIMAL128(38, 8)) IS NOT NULL THEN CAST(tbl_mock_001.mock_015 AS DECIMAL128(38, 8))
+					ELSE 0
+				END AS mock_063
+				, CASE 
+					WHEN CAST(tbl_mock_001.mock_024 AS DECIMAL128(38, 8)) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+					ELSE CAST(tbl_mock_001.mock_024 AS DECIMAL128(38, 8))
+				END AS mock_064, CAST(tbl_mock_001.mock_014 AS DECIMAL128(38, 8)) AS mock_065, CAST(tbl_mock_001.mock_011 AS DECIMAL128(38, 8)) AS mock_066
+				, CASE 
+					WHEN CAST(tbl_mock_001.mock_011 AS DECIMAL128(38, 8)) IS NOT NULL THEN CAST(tbl_mock_001.mock_011 AS DECIMAL128(38, 8))
+					ELSE 0
+				END AS mock_067
+			FROM (
+				SELECT tbl_mock_001.mock_008, tbl_mock_001.mock_007, tbl_mock_001.mock_039, tbl_mock_001.mock_023, tbl_mock_001.mock_024
+					, tbl_mock_001.mock_015, tbl_mock_001.mock_014, tbl_mock_001.mock_011
+				FROM tbl_mock_001
+			) tbl_mock_001
+		) tbl_mock_001
+		
+		HAVING COUNT(*) > 0)
+		UNION ALL
+		(SELECT tbl_mock_069.mock_042, CAST('BBB' AS VARCHAR) AS mock_043, '' AS mock_044, CAST(SUM(tbl_mock_069.mock_058) AS DOUBLE) AS mock_045, CAST(SUM(tbl_mock_069.mock_059) AS DOUBLE) AS mock_046
+			, CAST(SUM(tbl_mock_069.mock_060) AS DOUBLE) AS mock_047, CAST(SUM(tbl_mock_069.mock_061) AS DOUBLE) AS mock_048, CAST(SUM(tbl_mock_069.mock_062) AS DOUBLE) AS mock_049, CAST(CAST(round(CAST(SUM(tbl_mock_069.mock_063) / CASE 
+				WHEN SUM(tbl_mock_069.mock_064) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+				ELSE SUM(tbl_mock_069.mock_064)
+			END AS DECIMAL128(38, 8)), 4) AS DECIMAL128(38, 4)) AS DOUBLE) AS mock_050, CAST(SUM(tbl_mock_069.mock_065) AS DOUBLE) AS mock_051
+			, CAST(SUM(tbl_mock_069.mock_066) AS DOUBLE) AS mock_052, CAST(CAST(round(CAST(SUM(tbl_mock_069.mock_067) / CASE 
+				WHEN SUM(tbl_mock_069.mock_064) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+				ELSE SUM(tbl_mock_069.mock_064)
+			END AS DECIMAL128(38, 8)), 4) AS DECIMAL128(38, 4)) AS DOUBLE) AS mock_053, 1000 AS mock_054, 1 AS mock_055
+		FROM (
+			SELECT tbl_mock_069.mock_029 AS mock_042, CAST(tbl_mock_069.mock_007 AS DECIMAL128(38, 8)) AS mock_058, CAST(tbl_mock_069.mock_039 AS DECIMAL128(38, 8)) AS mock_059, CAST(tbl_mock_069.mock_023 AS DECIMAL128(38, 8)) AS mock_060, CAST(tbl_mock_069.mock_024 AS DECIMAL128(38, 8)) AS mock_061
+				, CAST(tbl_mock_069.mock_015 AS DECIMAL128(38, 8)) AS mock_062
+				, CASE 
+					WHEN CAST(tbl_mock_069.mock_015 AS DECIMAL128(38, 8)) IS NOT NULL THEN CAST(tbl_mock_069.mock_015 AS DECIMAL128(38, 8))
+					ELSE 0
+				END AS mock_063
+				, CASE 
+					WHEN CAST(tbl_mock_069.mock_024 AS DECIMAL128(38, 8)) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+					ELSE CAST(tbl_mock_069.mock_024 AS DECIMAL128(38, 8))
+				END AS mock_064, CAST(tbl_mock_069.mock_014 AS DECIMAL128(38, 8)) AS mock_065, CAST(tbl_mock_069.mock_011 AS DECIMAL128(38, 8)) AS mock_066
+				, CASE 
+					WHEN CAST(tbl_mock_069.mock_011 AS DECIMAL128(38, 8)) IS NOT NULL THEN CAST(tbl_mock_069.mock_011 AS DECIMAL128(38, 8))
+					ELSE 0
+				END AS mock_067
+			FROM (
+				SELECT tbl_mock_001.mock_008, tbl_mock_001.mock_007, tbl_mock_001.mock_039, tbl_mock_001.mock_023, tbl_mock_001.mock_024
+					, tbl_mock_001.mock_015, tbl_mock_001.mock_014, tbl_mock_001.mock_011, tbl_mock_001.mock_029
+				FROM tbl_mock_001
+			) tbl_mock_069
+		) tbl_mock_069
+		GROUP BY tbl_mock_069.mock_042)
+	) tbl_mock_057)
+	UNION ALL
+	(SELECT CAST('CCC' AS VARCHAR) AS mock_042, tbl_mock_071.mock_043, 'BBB' AS mock_044, CAST(SUM(tbl_mock_071.mock_059) AS DOUBLE) AS mock_045, CAST(SUM(tbl_mock_071.mock_060) AS DOUBLE) AS mock_046
+		, CAST(SUM(tbl_mock_071.mock_061) AS DOUBLE) AS mock_047, CAST(SUM(tbl_mock_071.mock_062) AS DOUBLE) AS mock_048, CAST(SUM(tbl_mock_071.mock_063) AS DOUBLE) AS mock_049, CAST(CAST(round(CAST(SUM(tbl_mock_071.mock_064) / CASE 
+			WHEN SUM(tbl_mock_071.mock_065) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+			ELSE SUM(tbl_mock_071.mock_065)
+		END AS DECIMAL128(38, 8)), 4) AS DECIMAL128(38, 4)) AS DOUBLE) AS mock_050, CAST(SUM(tbl_mock_071.mock_066) AS DOUBLE) AS mock_051
+		, CAST(SUM(tbl_mock_071.mock_067) AS DOUBLE) AS mock_052, CAST(CAST(round(CAST(SUM(tbl_mock_071.mock_070) / CASE 
+			WHEN SUM(tbl_mock_071.mock_065) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+			ELSE SUM(tbl_mock_071.mock_065)
+		END AS DECIMAL128(38, 8)), 4) AS DECIMAL128(38, 4)) AS DOUBLE) AS mock_053, 1000 AS mock_054, 1000 AS mock_055
+	FROM (
+		SELECT tbl_mock_071.mock_025 AS mock_043, tbl_mock_071.mock_029 AS mock_042, CAST(tbl_mock_071.mock_007 AS DECIMAL128(38, 8)) AS mock_059, CAST(tbl_mock_071.mock_039 AS DECIMAL128(38, 8)) AS mock_060, CAST(tbl_mock_071.mock_023 AS DECIMAL128(38, 8)) AS mock_061
+			, CAST(tbl_mock_071.mock_024 AS DECIMAL128(38, 8)) AS mock_062, CAST(tbl_mock_071.mock_015 AS DECIMAL128(38, 8)) AS mock_063
+			, CASE 
+				WHEN CAST(tbl_mock_071.mock_015 AS DECIMAL128(38, 8)) IS NOT NULL THEN CAST(tbl_mock_071.mock_015 AS DECIMAL128(38, 8))
+				ELSE 0
+			END AS mock_064
+			, CASE 
+				WHEN CAST(tbl_mock_071.mock_024 AS DECIMAL128(38, 8)) = 0 THEN CAST(NULL AS DECIMAL128(38, 8))
+				ELSE CAST(tbl_mock_071.mock_024 AS DECIMAL128(38, 8))
+			END AS mock_065, CAST(tbl_mock_071.mock_014 AS DECIMAL128(38, 8)) AS mock_066, CAST(tbl_mock_071.mock_011 AS DECIMAL128(38, 8)) AS mock_067
+			, CASE 
+				WHEN CAST(tbl_mock_071.mock_011 AS DECIMAL128(38, 8)) IS NOT NULL THEN CAST(tbl_mock_071.mock_011 AS DECIMAL128(38, 8))
+				ELSE 0
+			END AS mock_070
+		FROM (
+			SELECT tbl_mock_001.mock_008, tbl_mock_001.mock_007, tbl_mock_001.mock_039, tbl_mock_001.mock_023, tbl_mock_001.mock_024
+				, tbl_mock_001.mock_015, tbl_mock_001.mock_014, tbl_mock_001.mock_011, tbl_mock_001.mock_029, tbl_mock_001.mock_025
+			FROM tbl_mock_001
+		) tbl_mock_071
+	) tbl_mock_071
+	GROUP BY tbl_mock_071.mock_043)
+) tbl_mock_056
+ORDER BY tbl_mock_056.mock_054 ASC, tbl_mock_056.mock_042 DESC, tbl_mock_056.mock_055 ASC, tbl_mock_056.mock_043 DESC
+LIMIT 200;
