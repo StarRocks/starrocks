@@ -14,6 +14,7 @@
 
 #include "storage/lake/compaction_scheduler.h"
 
+#include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
 #include "testutil/assert.h"
 #include "util/bthreads/util.h"
@@ -80,6 +81,34 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     EXPECT_FALSE(tasks[0].skipped);
 
     bthread_join(tid, nullptr);
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
+    CompactRequest request;
+    CompactResponse response;
+
+    // has error
+    {
+        auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
+        cb->update_status(Status::Aborted("aborted for test"));
+        EXPECT_EQ(compaction_should_cancel(&ctx), true);
+    }
+
+    // not checker
+    {
+        auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
+        EXPECT_EQ(compaction_should_cancel(&ctx), false);
+    }
+
+    // is checker
+    {
+        auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, true /* is_checker */, cb);
+        ctx.last_check_time = 0;
+        EXPECT_EQ(compaction_should_cancel(&ctx), false);
+    }
 }
 
 } // namespace starrocks::lake

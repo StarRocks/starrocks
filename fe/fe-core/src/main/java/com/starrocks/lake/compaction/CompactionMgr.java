@@ -71,6 +71,10 @@ public class CompactionMgr {
         sorter = (Sorter) sorterClazz.getConstructor().newInstance();
     }
 
+    public void setCompactionScheduler(CompactionScheduler compactionScheduler) {
+        this.compactionScheduler = compactionScheduler;
+    }
+
     public void start() {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentSystemInfo(),
@@ -183,6 +187,10 @@ public class CompactionMgr {
 
     public void cancelCompaction(long txnId) {
         compactionScheduler.cancelCompaction(txnId);
+    }
+
+    public boolean existCompaction(long txnId) {
+        return compactionScheduler.existCompaction(txnId);
     }
 
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
