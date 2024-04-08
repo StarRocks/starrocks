@@ -24,6 +24,9 @@ import java.util.Map;
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
 import com.starrocks.analysis.IndexDef.IndexType;
+import com.starrocks.analysis.MatchExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -168,5 +171,11 @@ public class GINIndexTest extends PlanTestBase {
             put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
         }}, olapIndex.getSearch_properties());
+    }
+
+    @Test
+    public void testMatchExpr() {
+        MatchExpr expr = new MatchExpr(new SlotRef("abc", null), new StringLiteral());
+        MatchExpr newMatch = (MatchExpr) expr.clone();
     }
 }
