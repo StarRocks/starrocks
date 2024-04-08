@@ -1059,9 +1059,65 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         return true;
     }
 
+<<<<<<< HEAD
     private static void handleMigration(ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap,
                                         long backendId) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+    public static boolean migratableTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
+        if (tbl.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return true;
+        }
+
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Backend> backends = currentSystemInfo.getBackends();
+        long maxLastSuccessReportTabletsTime = -1L;
+
+        for (Backend be : backends) {
+            long lastSuccessReportTabletsTime = TimeUtils.timeStringToLong(be.getBackendStatus().lastSuccessReportTabletsTime);
+            maxLastSuccessReportTabletsTime = Math.max(maxLastSuccessReportTabletsTime, lastSuccessReportTabletsTime);
+        }
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            PhysicalPartition physicalPartition = tbl.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null || physicalPartition.getVisibleVersionTime() > maxLastSuccessReportTabletsTime) {
+                // partition is null or tablet report has not been updated, unmigratable
+                return false;
+            }
+            MaterializedIndex idx = physicalPartition.getIndex(indexId);
+            if (idx == null) {
+                // index is null, unmigratable
+                return false;
+            }
+
+            LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
+            // get max rowset creation time for all replica of the tablet
+            long maxRowsetCreationTime = -1L;
+            for (Replica replica : tablet.getImmutableReplicas()) {
+                maxRowsetCreationTime = Math.max(maxRowsetCreationTime, replica.getMaxRowsetCreationTime());
+            }
+
+            // get negative max rowset creation time or too close to the max rowset creation time, unmigratable
+            if (maxRowsetCreationTime < 0 || System.currentTimeMillis() - maxRowsetCreationTime * 1000 <=
+                    Config.primary_key_disk_schedule_time * 1000) {
+                LOG.warn("primary key tablet {} can not be migrated, " +
+                        "because the creation time of the latest row set is less than {} seconds than the current time",
+                        tablet.getId(), Config.primary_key_disk_schedule_time);
+                return false;
+            }
+
+            return true;
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+    }
+
+    protected static void handleMigration(ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap,
+                                          long backendId) {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> 377816ee2b ([Enhancement] Print primary key table migration failed reason (#43197))
         AgentBatchTask batchTask = new AgentBatchTask();
 
         OUTER:
