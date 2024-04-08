@@ -226,7 +226,7 @@ std::unique_ptr<sstable::Iterator> LakePersistentIndex::prepare_merging_iterator
     for (const auto& sstable : _sstables) {
         sstable::Iterator* iter = sstable->new_iterator(read_options);
         iters.emplace_back(iter);
-        if (iters.size() >= config::lake_pk_index_sst_max_compaction_versions) {
+        if (iters.size() >= max_compaction_versions) {
             break;
         }
     }
@@ -271,11 +271,12 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version, std::share
     RETURN_IF_ERROR(merge_sstables(std::move(iter_ptr), &builder));
     RETURN_IF_ERROR(wf->close());
 
+    auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
     for (const auto& sstable : _sstables) {
         auto input_sstable = txn_log->mutable_op_compaction()->add_input_sstables();
         auto sstable_pb = sstable->sstable_pb();
         input_sstable->CopyFrom(sstable_pb);
-        if (txn_log->op_compaction().input_sstables_size() >= config::lake_pk_index_sst_max_compaction_versions) {
+        if (txn_log->op_compaction().input_sstables_size() >= max_compaction_versions) {
             break;
         }
     }

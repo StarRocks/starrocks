@@ -188,7 +188,7 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            return dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->apply_opcompaction(op_compaction);
+            return lake_persistent_index->apply_opcompaction(op_compaction);
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }
@@ -221,7 +221,7 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->commit(builder);
+            lake_persistent_index->commit(builder);
             return Status::OK();
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
