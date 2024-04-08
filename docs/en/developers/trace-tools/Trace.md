@@ -19,13 +19,8 @@ displayed_sidebar: "English"
 
 Steps to enable tracing in SR:
 
-<<<<<<< HEAD
-1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.31/getting-started)
-    The guide above uses docker. For simplicity, you can also just download binary package and run locally, `https://github.com/jaegertracing/jaeger/releases`
-=======
 1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.31/getting-started/)
     The guide above uses docker. For simplicity, you can also just download [binary package](https://github.com/jaegertracing/jaeger/releases) and run locally.
->>>>>>> a72ce31306 ([Doc] fix broken external links (#43601))
 
 ```
     decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ll
