@@ -183,5 +183,6 @@ message PersistentIndexSstablePB {
 }
 
 message PersistentIndexSstableMetaPB {
+    // sstables are ordered with the smaller version on the left.
     repeated PersistentIndexSstablePB sstables = 1;
 }

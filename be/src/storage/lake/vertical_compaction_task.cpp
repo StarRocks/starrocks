@@ -99,6 +99,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
+    RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state

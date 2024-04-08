@@ -89,15 +89,15 @@ public:
     }
 
     Status finish() override {
-        // Must call `commit_primary_index` before `finalize`,
-        // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
+        // Must call `commit` before `finalize`,
+        // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
-        RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
-        Status st = _builder.finalize(_max_txn_id);
-        if (st.ok()) {
-            _has_finalized = true;
+        if (_index_entry != nullptr) {
+            RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
         }
-        return st;
+        RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
+        _has_finalized = true;
+        return Status::OK();
     }
 
 private:

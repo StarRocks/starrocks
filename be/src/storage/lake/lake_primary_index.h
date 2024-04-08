@@ -62,6 +62,12 @@ public:
         _enable_persistent_index = enable_persistent_index;
     }
 
+    Status apply_opcompaction(const TabletMetadata& metadata, const TxnLogPB_OpCompaction& op_compaction);
+
+    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
+
+    Status major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log);
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);

@@ -57,6 +57,8 @@ public:
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
+    void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
+
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
