@@ -1014,4 +1014,8 @@ CONF_mInt32(get_txn_status_internal_sec, "30");
 CONF_mBool(dump_metrics_with_bvar, "true");
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
+
+CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
+CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
+CONF_mInt64(arrow_read_batch_size, "4096");
 } // namespace starrocks::config
