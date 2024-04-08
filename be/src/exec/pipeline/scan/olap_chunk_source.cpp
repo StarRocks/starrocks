@@ -334,6 +334,9 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
 }
 
 Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
+    if (path->children().size() < 1) {
+        return Status::OK();
+    }
     if (field->type()->type() == LogicalType::TYPE_ARRAY) {
         DCHECK_EQ(path->children().size(), 1);
         DCHECK_EQ(field->sub_fields().size(), 1);
