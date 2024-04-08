@@ -262,12 +262,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
         normal.addPartitions(db, tableName, addPartitionClause);
     }
 
     @Override
-    public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException, AnalysisException {
+    public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
         normal.dropPartition(db, table, clause);
     }
 

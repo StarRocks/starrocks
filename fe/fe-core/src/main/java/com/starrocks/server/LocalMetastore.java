@@ -868,7 +868,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         Map<String, String> tableProperties;
@@ -911,34 +911,12 @@ public class LocalMetastore implements ConnectorMetadata {
             if (partitionColumns.size() != 1) {
                 throw new DdlException("Alter batch build partition only support single range column.");
             }
-
-            Column firstPartitionColumn = partitionColumns.get(0);
-            MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
-            boolean isAutoPartitionTable = false;
-            if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
-                isAutoPartitionTable = true;
-                ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-                Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
-                if (expr instanceof FunctionCallExpr) {
-                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                    checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
-                }
-            }
             Map<String, String> properties = addPartitionClause.getProperties();
-            if (properties == null) {
-                properties = Maps.newHashMap();
-            }
-            if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
-                properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
-                        tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
-            }
-            PartitionConvertContext context = new PartitionConvertContext();
-            context.setAutoPartitionTable(isAutoPartitionTable);
-            context.setFirstPartitionColumnType(firstPartitionColumn.getType());
-            context.setProperties(properties);
-            context.setTempPartition(addPartitionClause.isTempPartition());
-
-            List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+            boolean isTempPartition = addPartitionClause.isTempPartition();
+            List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                    convertMultiRangePartitionDescToSingleRangePartitionDescs(partitionInfo, tableProperties, isTempPartition,
+                            (MultiRangePartitionDesc) partitionDesc,
+                            partitionColumns, properties);
             List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
             addPartitions(db, tableName, partitionDescs, addPartitionClause);
@@ -1594,7 +1572,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!partitionInfo.isRangePartition() && partitionInfo.getType() != PartitionType.LIST) {
             throw new DdlException("Alter table [" + olapTable.getName() + "] failed. Not a partitioned table");
         }
-        List<String> partitionNames = new ArrayList<>();
+        List<String> partitionNames = Lists.newArrayList();
         boolean isTempPartition = clause.isTempPartition();
 
         if (clause.hasMultiPartitions()) {
@@ -1610,37 +1588,11 @@ public class LocalMetastore implements ConnectorMetadata {
                     ErrorReport.reportDdlException("%s", ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS,
                             partitionColumns.size());
                 }
-                Column firstPartitionColumn = partitionColumns.get(0);
-                MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
-                boolean isAutoPartitionTable = false;
-                if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
-                    isAutoPartitionTable = true;
-                    ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-                    Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
-                    if (expr instanceof FunctionCallExpr) {
-                        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                        checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
-                    }
-                }
                 Map<String, String> properties = clause.getProperties();
-                if (properties == null) {
-                    properties = Maps.newHashMap();
-                }
-                if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
-                    properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
-                            tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
-                }
-                PartitionConvertContext context = new PartitionConvertContext();
-                context.setAutoPartitionTable(isAutoPartitionTable);
-                context.setFirstPartitionColumnType(firstPartitionColumn.getType());
-                context.setProperties(properties);
-                context.setTempPartition(clause.isTempPartition());
-                List<SingleRangePartitionDesc> singleRangePartitionDescs;
-                try {
-                    singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
-                } catch (AnalysisException e) {
-                    throw new SemanticException(e.getMessage());
-                }
+                List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                        convertMultiRangePartitionDescToSingleRangePartitionDescs(partitionInfo, tableProperties, isTempPartition,
+                                (MultiRangePartitionDesc) partitionDesc,
+                                partitionColumns, properties);
                 partitionNames.addAll(singleRangePartitionDescs.stream()
                         .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList()));
             }
@@ -1661,13 +1613,13 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (CollectionUtils.isNotEmpty(notExistPartitions)) {
             if (clause.isSetIfExists()) {
-                LOG.info("drop partition[{}] which does not exist", notExistPartitions.toString());
-                if (CollectionUtils.isEmpty(existPartitions)) {
-                    return;
-                }
+                LOG.info("drop partition[{}] which does not exist", notExistPartitions);
             } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, notExistPartitions.toString());
+                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, notExistPartitions);
             }
+        }
+        if (CollectionUtils.isEmpty(existPartitions)) {
+            return;
         }
         for (String partitionName : existPartitions) {
             // drop
@@ -1717,6 +1669,46 @@ public class LocalMetastore implements ConnectorMetadata {
         GlobalStateMgr.getCurrentState().getEditLog().logDropPartition(info);
         LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionNames, isTempPartition,
                 clause.isForceDrop());
+    }
+
+    private List<SingleRangePartitionDesc> convertMultiRangePartitionDescToSingleRangePartitionDescs(PartitionInfo partitionInfo,
+                                                                        Map<String, String> tableProperties,
+                                                                        boolean isTempPartition,
+                                                                        MultiRangePartitionDesc partitionDesc,
+                                                                        List<Column> partitionColumns,
+                                                                        Map<String, String> properties) throws DdlException {
+        Column firstPartitionColumn = partitionColumns.get(0);
+        MultiRangePartitionDesc multiRangePartitionDesc = partitionDesc;
+        boolean isAutoPartitionTable = false;
+        if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+            isAutoPartitionTable = true;
+            ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
+            if (expr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
+            }
+        }
+
+        if (properties == null) {
+            properties = Maps.newHashMap();
+        }
+        if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+            properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
+                    tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
+        }
+        PartitionConvertContext context = new PartitionConvertContext();
+        context.setAutoPartitionTable(isAutoPartitionTable);
+        context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+        context.setProperties(properties);
+        context.setTempPartition(isTempPartition);
+        List<SingleRangePartitionDesc> singleRangePartitionDescs;
+        try {
+            singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        return singleRangePartitionDescs;
     }
 
     public void replayDropPartition(DropPartitionInfo info, String partitionName) {
