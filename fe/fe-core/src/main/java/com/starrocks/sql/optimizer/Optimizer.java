@@ -431,8 +431,6 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
-        //        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
-        //        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownFlatJsonMetaToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
@@ -534,8 +532,6 @@ public class Optimizer {
         }
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        //        ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
-        //        ruleRewriteOnlyOnce(tree, rootTaskContext, new MinMaxCountOptOnScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.META_SCAN_REWRITE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
 
