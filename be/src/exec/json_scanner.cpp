@@ -702,6 +702,7 @@ Status JsonReader::_read_and_parse_json() {
     // TODO: Remove the down_cast, should not rely on the specific implementation.
     auto* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     {
+        ++_counter->file_read_count;
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
 

@@ -36,6 +36,7 @@ public:
     ~ORCFileStream() override { _file.reset(); }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
+        ++_counter->file_read_count;
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ORCHdfsFileStream::read(buf, length, offset);
     }
