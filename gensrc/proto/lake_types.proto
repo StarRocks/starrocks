@@ -101,6 +101,7 @@ message TabletMetadataPB {
     optional int64 commit_time = 13;
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     optional TabletSchemaPB source_schema = 14;
+    optional PersistentIndexSstableMetaPB sstable_meta = 15;
 }
 
 message MetadataUpdateInfoPB {
@@ -121,6 +122,8 @@ message TxnLogPB {
     message OpCompaction {
         repeated uint32 input_rowsets = 1;
         optional RowsetMetadataPB output_rowset = 2;
+        repeated PersistentIndexSstablePB input_sstables = 3;
+        optional PersistentIndexSstablePB output_sstable = 4;
     }
 
     message OpSchemaChange {
