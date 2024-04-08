@@ -743,4 +743,4 @@ MySQL 服务器的版本。
 
 ### orc_use_column_names
 
-设置数据湖读取 ORC 文件，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
+设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。该变量从 3.1 版本起支持。
