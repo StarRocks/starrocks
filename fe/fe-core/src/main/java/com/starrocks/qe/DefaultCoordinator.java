@@ -918,9 +918,10 @@ public class DefaultCoordinator extends Coordinator {
             if (ctx != null) {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
-            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}",
+            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
                     status, DebugUtil.printId(jobSpec.getQueryId()),
-                    DebugUtil.printId(params.getFragment_instance_id()));
+                    DebugUtil.printId(params.getFragment_instance_id()),
+                    params.getBackend_id());
             updateStatus(status, params.getFragment_instance_id());
         }
 
