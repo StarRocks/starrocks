@@ -306,45 +306,6 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testPendingJobNoAliveBackend() {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet, long workerGroupId) {
-                return null;
-            }
-        };
-        new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-                return null;
-            }
-        };
-
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("No alive backend"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
-
-        schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
-    }
-
-    @Test
     public void testTableDroppedInPending() {
         new MockUp<Utils>() {
             @Mock

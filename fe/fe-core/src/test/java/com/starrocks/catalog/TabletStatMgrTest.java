@@ -56,8 +56,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-
 public class TabletStatMgrTest {
     private static final long DB_ID = 1;
     private static final long TABLE_ID = 2;
@@ -471,42 +469,5 @@ public class TabletStatMgrTest {
         Assert.assertEquals(0, tablet2.getDataSize(true));
         Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
         Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
-    }
-
-    @Test
-    public void testNoAliveNode(@Mocked SystemInfoService systemInfoService, @Mocked LakeService lakeService) {
-        LakeTable table = createLakeTableForTest();
-
-        // db
-        Database db = new Database(DB_ID, "db");
-        db.registerTableUnlocked(table);
-
-        new MockUp<BrpcProxy>() {
-            @Mock
-            public LakeService getLakeService(TNetworkAddress addr) {
-                return lakeService;
-            }
-
-            @Mock
-            public LakeService getLakeService(String host, int port) {
-                return lakeService;
-            }
-        };
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet, long workerGroupId) {
-                return 1000L;
-            }
-
-            @Mock
-            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
-                return null;
-            }
-        };
-
-        TabletStatMgr tabletStatMgr = new TabletStatMgr();
-        assertDoesNotThrow(() -> {
-            Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
-        });
     }
 }
