@@ -81,6 +81,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
@@ -725,6 +726,8 @@ public class ShowExecutorTest {
             }
         };
 
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -734,6 +737,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
@@ -755,7 +762,6 @@ public class ShowExecutorTest {
                 starosAgent.getWorkerIdByBackendId(anyLong);
                 minTimes = 1;
                 result = workerId;
-
             }
         };
 
@@ -763,7 +769,7 @@ public class ShowExecutorTest {
         
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertEquals(30, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(31, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
@@ -797,6 +803,8 @@ public class ShowExecutorTest {
             }
         };
 
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -806,6 +814,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
@@ -848,7 +860,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(14));
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
-        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(20));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(21));
     }
 
     @Test
