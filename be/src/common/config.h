@@ -1070,4 +1070,48 @@ CONF_mInt32(desc_hint_split_range, "10");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 
+<<<<<<< HEAD
+=======
+CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+
+CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
+CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+// json flat flag
+CONF_mBool(enable_json_flat, "true");
+
+// extract flat json column when row_num * null_factor < null_row_num
+CONF_mDouble(json_flat_null_factor, "0.3");
+
+// extract flat json column when row_num * sparsity_factor < hit_row_num
+CONF_mDouble(json_flat_sparsity_factor, "0.9");
+
+// only flatten json when the number of sub-field in the JSON exceeds the limit
+CONF_mInt32(json_flat_internal_column_min_limit, "5");
+
+// the maximum number of extracted JSON sub-field
+CONF_mInt32(json_flat_column_max, "20");
+
+// Allowable intervals for continuous generation of pk dumps
+// Disable when pk_dump_interval_seconds <= 0
+CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
+// Min data processed when scaling connector sink writers, default value is the same as Trino
+CONF_mInt64(writer_scaling_min_size_mb, "128");
+
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
+
+// the max length supported for varchar type
+CONF_mInt32(olap_string_max_length, "1048576");
+
+// jit LRU cache size for total 32 shards, it will be an auto value if it <=0:
+// mem_limit = system memory or process memory limit if set.
+// if mem_limit < 16 GB, disable JIT.
+// else it = min(mem_limit*0.01, 1GB)
+CONF_mInt64(jit_lru_cache_size, "0");
+
+CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
+CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
+CONF_mInt64(arrow_read_batch_size, "4096");
+>>>>>>> 35f61f77c2 ([Enhancement] Optimize parquet scanner by arrow io coalesce (#43546))
 } // namespace starrocks::config
