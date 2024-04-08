@@ -27,6 +27,7 @@ import bz2
 import configparser
 import datetime
 import json
+import logging
 import os
 import re
 import subprocess
@@ -35,16 +36,15 @@ import ast
 import time
 import unittest
 import uuid
+from typing import List, Dict
 
 from fuzzywuzzy import fuzz
 import pymysql as _mysql
-<<<<<<< HEAD
-=======
 import requests
 from cup import shell
->>>>>>> 2d488606aa ([Tool] SQL-Tester support keep_alive mode (#43341))
 from nose import tools
 from cup import log
+from requests.auth import HTTPBasicAuth
 
 from lib import skip
 from lib import data_delete_lib
@@ -68,10 +68,6 @@ if not os.path.exists(CRASH_DIR):
 
 LOG_LEVEL = logging.INFO
 
-<<<<<<< HEAD
-__LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
-log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
-=======
 
 class Filter(logging.Filter):
     """
@@ -107,7 +103,6 @@ def self_print(msg):
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
 log.init_comlog("sql", LOG_LEVEL, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, bprint_console=False, gen_wf=False)
 logging.getLogger().addFilter(Filter())
->>>>>>> 2d488606aa ([Tool] SQL-Tester support keep_alive mode (#43341))
 
 T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
@@ -120,6 +115,8 @@ NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
+
+SECRET_INFOS = {}
 
 
 class StarrocksSQLApiLib(object):
@@ -380,6 +377,11 @@ class StarrocksSQLApiLib(object):
         for env_key, env_value in config_parser.items("env"):
             if not env_value:
                 env_value = os.environ.get(env_key, "")
+            else:
+                # save secrets info
+                if 'aws' in env_key or 'oss_' in env_key:
+                    SECRET_INFOS[env_key] = env_value
+
             self.__setattr__(env_key, env_value)
 
     def connect_starrocks(self):
@@ -492,7 +494,6 @@ class StarrocksSQLApiLib(object):
         try:
             with self.mysql_lib.connector.cursor() as cursor:
                 cursor.execute(sql)
-
                 result = cursor.fetchall()
                 if isinstance(result, tuple):
                     index = 0
@@ -941,11 +942,8 @@ class StarrocksSQLApiLib(object):
         use_res = self.use_database(T_R_DB)
         tools.assert_true(use_res["status"], "use db: [%s] error" % T_R_DB)
 
-<<<<<<< HEAD
-=======
         self.execute_sql("set group_concat_max_len = 1024000;", True)
 
->>>>>>> 2d488606aa ([Tool] SQL-Tester support keep_alive mode (#43341))
         # get records
         query_sql = """
         select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
@@ -1160,61 +1158,87 @@ class StarrocksSQLApiLib(object):
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
             if status != "FINISHED":
-                time.sleep(5)
+                time.sleep(1)
             else:
                 # sleep another 5s to avoid FE's async action.
-                time.sleep(5)
+                time.sleep(1)
                 break
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
+        """
+        wait async materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
+        count = 0
+        num = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][12]
+            if status != "SUCCESS":
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
         wait pipe load finish
         """
-        status = ""
-        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        state = ""
+        show_sql = "select state, load_status, last_error  from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
         count = 0
         print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
         while count < check_count:
             res = self.execute_sql(show_sql, True)
             print(res)
-            status = res["result"][0][0]
-            if status != "FINISHED":
-                print("pipe status is " + status)
+            state = res["result"][0][0]
+            if state == 'RUNNING':
+                print("pipe state is " + state)
                 time.sleep(1)
             else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+        tools.assert_equal("FINISHED", state, "didn't wait for the pipe to finish")
 
 
-    def check_hit_materialized_view(self, query, mv_name):
+    def check_hit_materialized_view_plan(self, res, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
+    def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        print(res)
-        tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
-    def check_no_hit_materialized_view(self, query, mv_name):
+    def check_no_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        for expect in expects:
+            tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
 
-    def wait_alter_table_finish(self, alter_type="COLUMN"):
+    def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
         wait alter table job finish and return status
         """
         status = ""
+        sleep_time = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
@@ -1223,10 +1247,13 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            status = res["result"][0][9]
+            status = res["result"][0][off]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
+                if sleep_time <= 1:
+                    time.sleep(1)
                 break
             time.sleep(0.5)
+            sleep_time += 0.5
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_alter_table_not_pending(self, alter_type="COLUMN"):
@@ -1247,11 +1274,7 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(0.5)
 
-<<<<<<< HEAD
-    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
-=======
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
->>>>>>> 2d488606aa ([Tool] SQL-Tester support keep_alive mode (#43341))
         """
         wait alter table job finish and return status
         """
@@ -1268,7 +1291,7 @@ class StarrocksSQLApiLib(object):
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
             time.sleep(0.5)
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        tools.assert_equal(expect_status, status, "wait alter table finish error")
 
     def wait_global_dict_ready(self, column_name, table_name):
         """
@@ -1432,7 +1455,6 @@ class StarrocksSQLApiLib(object):
         create_table_sqls = self.get_sql_from_file("create.sql", dir_path=os.path.join(common_sql_path, data_name))
         res = self.execute_sql(create_table_sqls, True)
         tools.assert_true(res["status"], "create %s table error, %s" % (data_name, res["msg"]))
-
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:
@@ -1489,9 +1511,6 @@ class StarrocksSQLApiLib(object):
                     headers["columns"] = switch[table_name]
 
             res = self._stream_load(label, db, table_name, data, headers)
-<<<<<<< HEAD
-            tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
-=======
             tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
 
     def execute_cmd(self, exec_url):
@@ -1658,4 +1677,3 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
->>>>>>> 2d488606aa ([Tool] SQL-Tester support keep_alive mode (#43341))
