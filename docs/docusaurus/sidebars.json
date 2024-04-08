@@ -253,10 +253,6 @@
             },
             "items": [
                 {
-                    "type": "doc",
-                    "id": "data_source/icebergtutorial"
-                },
-                {
                     "type": "category",
                     "label": "Catalog",
                     "link": {
@@ -274,6 +270,7 @@
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
+                        "data_source/icebergtutorial",
                         "data_source/catalog/query_external_data"
                     ]
                 },
@@ -1671,10 +1668,6 @@
             },
             "items": [
                 {
-                    "type": "doc",
-                    "id": "data_source/icebergtutorial"
-                },
-                {
                     "type": "category",
                     "label": "Catalog",
                     "link": {
@@ -1692,6 +1685,7 @@
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
+                        "data_source/icebergtutorial",
                         "data_source/catalog/query_external_data"
                     ]
                 },
