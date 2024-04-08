@@ -38,6 +38,7 @@ import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -46,11 +47,13 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
-public class DropPartitionInfo implements Writable {
+public class DropPartitionInfo implements Writable, GsonPostProcessable {
     @SerializedName(value = "dbId")
     private Long dbId;
     @SerializedName(value = "tableId")
     private Long tableId;
+    @SerializedName(value = "partitionName")
+    private String partitionName;
     @SerializedName(value = "isTempPartition")
     private boolean isTempPartition = false;
     @SerializedName(value = "forceDrop")
@@ -75,6 +78,10 @@ public class DropPartitionInfo implements Writable {
 
     public Long getTableId() {
         return tableId;
+    }
+
+    public String getPartitionName() {
+        return partitionName;
     }
 
     public boolean isTempPartition() {
@@ -122,5 +129,12 @@ public class DropPartitionInfo implements Writable {
                 (partitionNames != null && partitionNames.equals(info.partitionNames)))
                 && (isTempPartition == info.isTempPartition)
                 && (forceDrop == info.forceDrop);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (partitionName != null) {
+            partitionNames.add(partitionName);
+        }
     }
 }

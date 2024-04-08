@@ -1560,10 +1560,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
         CatalogUtils.checkTableExist(db, table.getName());
+        Locker locker = new Locker();
         OlapTable olapTable = (OlapTable) table;
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         Map<String, String> tableProperties = olapTable.getTableProperty().getProperties();
-        Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -1579,14 +1579,15 @@ public class LocalMetastore implements ConnectorMetadata {
             PartitionDesc partitionDesc = clause.getPartitionDesc();
             if (partitionDesc instanceof MultiRangePartitionDesc) {
                 if (!(partitionInfo instanceof RangePartitionInfo)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO);
+                    ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO);
                 }
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
                 if (partitionColumns.size() != 1) {
-                    ErrorReport.reportDdlException("%s", ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS,
+                    ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS,
                             partitionColumns.size());
+
                 }
                 Map<String, String> properties = clause.getProperties();
                 List<SingleRangePartitionDesc> singleRangePartitionDescs =
@@ -1711,17 +1712,23 @@ public class LocalMetastore implements ConnectorMetadata {
         return singleRangePartitionDescs;
     }
 
-    public void replayDropPartition(DropPartitionInfo info, String partitionName) {
+    public void replayDropPartition(DropPartitionInfo info) {
         Database db = this.getDb(info.getDbId());
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
+            List<String> partitionNames = info.getPartitionNames();
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
-            if (info.isTempPartition()) {
-                olapTable.dropTempPartition(partitionName, true);
-            } else {
-                olapTable.dropPartition(info.getDbId(), partitionName, info.isForceDrop());
-            }
+            boolean isTempPartition = info.isTempPartition();
+            long dbId = info.getDbId();
+            boolean isForceDrop = info.isForceDrop();
+            partitionNames.stream().forEach(partitionName -> {
+                if (isTempPartition) {
+                    olapTable.dropTempPartition(partitionName, true);
+                } else {
+                    olapTable.dropPartition(dbId, partitionName, isForceDrop);
+                }
+            });
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
