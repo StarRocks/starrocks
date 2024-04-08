@@ -46,11 +46,6 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
           _read_size(read_size) {
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
-<<<<<<< HEAD
-    _properties.enable_buffered_stream();
-    _properties.set_buffer_size(8 * 1024 * 1024);
-=======
->>>>>>> 35f61f77c2 ([Enhancement] Optimize parquet scanner by arrow io coalesce (#43546))
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
