@@ -81,6 +81,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
@@ -725,6 +726,8 @@ public class ShowExecutorTest {
             }
         };
 
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -734,6 +737,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
@@ -755,7 +762,6 @@ public class ShowExecutorTest {
                 starosAgent.getWorkerIdByBackendId(anyLong);
                 minTimes = 1;
                 result = workerId;
-
             }
         };
 
@@ -797,6 +803,8 @@ public class ShowExecutorTest {
             }
         };
 
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -806,6 +814,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
