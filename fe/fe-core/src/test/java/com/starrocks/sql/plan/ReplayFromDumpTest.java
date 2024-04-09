@@ -489,7 +489,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  14:Decode\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  13:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
@@ -827,7 +827,7 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void test() throws Exception {
+    public void testTopJoinProjection() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/top_join_projection"), null, TExplainLevel.COSTS);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("57:Project\n" +
@@ -838,6 +838,21 @@ public class ReplayFromDumpTest {
                 "  |  1322 <-> [1322: arrival_duration, INT, true]\n" +
                 "  |  1347 <-> [1347: responsible_department_name, VARCHAR, true]\n" +
                 "  |  1371 <-> [1371: induction_duration, INT, true]"));
+    }
+
+    @Test
+    public void testJoinAssociativity() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_associativity"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 73: mock_011 = 141: replace\n" +
+                "  |  equal join conjunct: 143: cast = 144: cast\n" +
+                "  |  equal join conjunct: 79: mock_008 = 121: mock_023\n" +
+                "  |  equal join conjunct: 93: mock_008 = 122: mock_018\n" +
+                "  |  equal join conjunct: 114: max = 123: mock_021\n" +
+                "  |  equal join conjunct: 115: min = 124: mock_022"));
     }
 
     @Test
