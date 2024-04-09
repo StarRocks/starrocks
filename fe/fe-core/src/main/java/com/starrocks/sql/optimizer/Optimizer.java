@@ -52,10 +52,8 @@ import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTranspare
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
@@ -66,7 +64,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
@@ -453,7 +450,6 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
@@ -557,8 +553,7 @@ public class Optimizer {
         }
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new MinMaxCountOptOnScanRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.META_SCAN_REWRITE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
 
         // After this rule, we shouldn't generate logical project operator
