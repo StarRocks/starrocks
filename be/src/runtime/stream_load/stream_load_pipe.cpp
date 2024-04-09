@@ -277,7 +277,7 @@ Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
 
 CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe,
                                                                TCompressionType::type compression_type)
-        : StreamLoadPipeReader(pipe), _compression_type(compression_type) {}
+        : StreamLoadPipeReader(std::move(pipe)), _compression_type(compression_type) {}
 
 StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     if (_decompressor == nullptr) {
