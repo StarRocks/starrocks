@@ -71,6 +71,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.UserException;
@@ -107,6 +108,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.common.ErrorCode.ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND;
+import static com.starrocks.common.ErrorCode.ERR_MAPPING_EXPR_INVALID;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -796,9 +799,8 @@ public class Load {
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 if (slotDesc == null) {
-                    throw new UserException(String.format(
-                            "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'",
-                            slot.getColumnName(), AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey()));
+                    ErrorReport.reportAnalysisException(ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND, slot.getColumnName(),
+                            AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey());
                 }
                 if (useVectorizedLoad) {
                     slotDesc.setIsMaterialized(true);
@@ -813,8 +815,8 @@ public class Load {
             try {
                 expr = Expr.analyzeAndCastFold(expr);
             } catch (SemanticException e) {
-                throw new UserException(String.format("Expr '%s' analyze error: %s, derived column is '%s'",
-                        AstToSQLBuilder.toSQL(entry.getValue()), e.getDetailMsg(), entry.getKey()));
+                ErrorReport.reportAnalysisException(ERR_MAPPING_EXPR_INVALID, AstToSQLBuilder.toSQL(entry.getValue()),
+                        e.getDetailMsg(), entry.getKey());
             }
 
             // check if contain aggregation
@@ -901,9 +903,8 @@ public class Load {
                     smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
                             exprsByName.get(slot.getColumnName())));
                 } else {
-                    throw new UserException(String.format(
-                            "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'",
-                            slot.getColumnName(), AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey()));
+                    ErrorReport.reportAnalysisException(ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND, slot.getColumnName(),
+                            AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey());
                 }
             }
             Expr expr = entry.getValue().clone(smap);

@@ -35,6 +35,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -285,7 +286,7 @@ public class LoadTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Expr 'year()' analyze error: No matching function with signature: year(), derived column is 'c1'",
                 () -> Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
                         slotDescByName, params, true, true, columnsFromPath));
