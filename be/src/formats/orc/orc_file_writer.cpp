@@ -552,7 +552,7 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
 }
 
 void ORCFileWriter::_populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column,
-                                                 size_t column_size) {
+                                          size_t column_size) {
     if (null_column != nullptr) {
         orc_column.hasNulls = true;
         orc_column.notNull.resize(column_size);
