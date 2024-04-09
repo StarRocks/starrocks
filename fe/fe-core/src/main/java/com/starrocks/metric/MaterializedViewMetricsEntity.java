@@ -22,12 +22,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-import com.starrocks.common.Config;
-=======
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
->>>>>>> 0e8bd5b877 ([BugFix] Add enable_materialized_view_metrics_collect to control whether to collect mv's metrics (#43588))
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskBuilder;
