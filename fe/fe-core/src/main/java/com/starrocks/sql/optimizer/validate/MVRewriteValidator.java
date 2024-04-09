@@ -16,13 +16,8 @@ package com.starrocks.sql.optimizer.validate;
 
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-import com.starrocks.metric.MaterializedViewMetricsEntity;
-=======
 import com.starrocks.common.Config;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
->>>>>>> 0e8bd5b877 ([BugFix] Add enable_materialized_view_metrics_collect to control whether to collect mv's metrics (#43588))
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.PlannerProfile;
