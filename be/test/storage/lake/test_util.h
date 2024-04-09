@@ -110,6 +110,7 @@ protected:
 
 struct PrimaryKeyParam {
     bool enable_persistent_index = false;
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
