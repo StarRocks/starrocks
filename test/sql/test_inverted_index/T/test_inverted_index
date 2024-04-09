@@ -104,18 +104,17 @@ insert into t_test_gin_index_query values
 (4, 'materialized view', 'materialized view', '物化视图'),
 (5, '中文测试', 'chinese test', '中文测试');
 
--- normal term index
+
 select count(*) from t_test_gin_index_query where query_none_analyzer = 'starrocks';
-select count(*) from t_test_gin_index_query where query_english = 'hello';
-select count(*) from t_test_gin_index_query where query_english in ('world', 'lakehouse', 'view');
--- hybrid filter
-select count(*) from t_test_gin_index_query where query_english != 'hello' and id1 > 4;
-select count(*) from t_test_gin_index_query where query_english = 'hello' and query_none_analyzer = 'lakehouse';
--- whole line index, can match by `like`
+select count(*) from t_test_gin_index_query where query_english match 'hello';
+
+select count(*) from t_test_gin_index_query where query_english not match 'hello' and id1 > 4;
+select count(*) from t_test_gin_index_query where query_english match 'hello' and query_none_analyzer = 'lakehouse';
+
 select count(*) from t_test_gin_index_query where query_none_analyzer like '%ed vi%';
--- split terms and index, match by term
-select count(*) from t_test_gin_index_query where query_english like '%ed vi%';
-select count(*) from t_test_gin_index_query where query_english like '%teria%';
+
+select count(*) from t_test_gin_index_query where query_english match '%ed vi%';
+select count(*) from t_test_gin_index_query where query_english match '%teria%';
 
 drop table t_test_gin_index_query;
 
@@ -155,6 +154,7 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "ABC";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%ABC%";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%BC";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "AB%";
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match "AB%";
 
 DROP TABLE t_gin_index_single_predicate_none;
 
@@ -181,11 +181,10 @@ INSERT INTO t_gin_index_single_predicate_english VALUES
 (5, NULL);
 
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "This is Gin Index";
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "This";
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "this";
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column != "this";
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IS NULL;
-SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IS NOT NULL;
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column match "This";
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column match "this";
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column match "thi%";
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column not match "this";
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column <= "this";
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column >= "this";
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IN ("this");
@@ -231,6 +230,8 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column IN ("ABC", "
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT IN ("ABC") OR text_column NOT IN ("ABD");
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "ABC" OR text_column LIKE "ABD";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" AND text_column LIKE "%C";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
 
 DROP TABLE t_gin_index_multiple_predicate_none;
 
@@ -256,12 +257,8 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 (4, "This is Gin Index"),
 (5, NULL);
 
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column = "this" OR text_column = "abc";
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column != "this" AND text_column != "abc";
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IS NOT NULL AND text_column = "this";
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column <= "this" AND text_column >= "abc";
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IN ("this") OR text_column IN ("abc");
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column NOT IN ("this") AND text_column NOT IN ("abc");
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
 
@@ -527,6 +524,13 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) LIKE "%
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column LIKE CONCAT("ab", "c");
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column LIKE CONCAT("ab", "%");
 
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "abc";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "%");
+
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 INSERT INTO t_complex_predicate_for_gin_english VALUES (2, "cbd edf");
 
@@ -536,6 +540,13 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) LIKE
 SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) LIKE "%abc%";
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "c");
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "%");
+
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match "abc";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "%");
 
 DROP TABLE t_complex_predicate_for_gin_none;
 DROP TABLE t_complex_predicate_for_gin_english;

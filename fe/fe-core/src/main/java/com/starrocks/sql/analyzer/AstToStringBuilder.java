@@ -43,6 +43,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -1136,6 +1137,11 @@ public class AstToStringBuilder {
         public String visitLikePredicate(LikePredicate node, Void context) {
             return printWithParentheses(node.getChild(0))
                     + " " + node.getOp() + " " + printWithParentheses(node.getChild(1));
+        }
+
+        public String visitMatchExpr(MatchExpr node, Void context) {
+            return printWithParentheses(node.getChild(0))
+                    + " MATCH " + printWithParentheses(node.getChild(1));
         }
 
         @Override
