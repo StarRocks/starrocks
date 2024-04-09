@@ -45,8 +45,8 @@ struct PersistentIndexTestParam {
 class PersistentIndexTest : public testing::TestWithParam<PersistentIndexTestParam> {
 public:
     virtual ~PersistentIndexTest() {}
-    void SetUp() override { 
-        config::enable_pindex_compression = GetParam().enable_pindex_compression; 
+    void SetUp() override {
+        config::enable_pindex_compression = GetParam().enable_pindex_compression;
         config::enable_pindex_read_by_page = GetParam().enable_pindex_read_by_page;
     }
 };
@@ -3144,6 +3144,7 @@ TEST_P(PersistentIndexTest, pindex_major_compact_meta) {
 }
 
 INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
-                         ::testing::Values(PersistentIndexTestParam{true, false}, PersistentIndexTestParam{false, true}));
+                         ::testing::Values(PersistentIndexTestParam{true, false},
+                                           PersistentIndexTestParam{false, true}));
 
 } // namespace starrocks

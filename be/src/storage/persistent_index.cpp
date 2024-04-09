@@ -2578,8 +2578,8 @@ Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb
             // skip empty shard
             continue;
         }
-        shard_ptrs[shard_idx] = std::make_unique<ImmutableIndexShard>(shard_info.npage);
-        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard_ptrs[shard_idx]->pages.data(), shard_info.bytes));
+        shard_ptrs[shard_idx] = std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard_ptrs[shard_idx]->data(), shard_info.bytes));
         RETURN_IF_ERROR(shard_ptrs[shard_idx]->decompress_pages(_compression_type, shard_info.npage,
                                                                 shard_info.uncompressed_size, shard_info.bytes));
         if (shard_info.key_size != 0) {
