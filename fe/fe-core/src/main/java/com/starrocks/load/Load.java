@@ -85,6 +85,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.UserIdentity;
@@ -809,7 +810,12 @@ public class Load {
             }
             Expr expr = entry.getValue().clone(smap);
 
-            expr = Expr.analyzeAndCastFold(expr);
+            try {
+                expr = Expr.analyzeAndCastFold(expr);
+            } catch (SemanticException e) {
+                throw new UserException(String.format("Expr '%s' analyze error: %s, derived column is '%s'",
+                        AstToSQLBuilder.toSQL(entry.getValue()), e.getDetailMsg(), entry.getKey()));
+            }
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();

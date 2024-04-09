@@ -1087,8 +1087,8 @@ public class FrontendServiceImplTest {
         List<String> errMsg = status.getError_msgs();
         Assert.assertEquals(1, errMsg.size());
         Assert.assertEquals(
-                "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
-                        "No matching function with signature: str_to_date(varchar).",
+                "Expr 'str_to_date(`col1`)' analyze error: No matching function with signature: str_to_date(varchar), " +
+                        "derived column is 'event_day'",
                 errMsg.get(0));
     }
 
