@@ -105,7 +105,7 @@ public class AnalyzeUpdateTest {
 
         new MockUp<MetaUtils>() {
             @Mock
-            public Table getTable(ConnectContext session, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext session, TableName tableName) {
                 long dbId = 1L;
                 long tableId = 2L;
                 long partitionId = 3L;
