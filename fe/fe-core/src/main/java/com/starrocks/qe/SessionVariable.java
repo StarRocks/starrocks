@@ -419,6 +419,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_DATACACHE = "enable_scan_datacache";
     public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
+    public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
+    public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
+
     // The following configurations will be deprecated, and we use the `datacache` suffix instead.
     // But it is temporarily necessary to keep them for a period of time to be compatible with
     // the old session variable names.
@@ -1369,6 +1372,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public String getCatalog() {
         return this.catalog;
     }
+
+    @VariableMgr.VarAttr(name = ENABLE_DATACACHE_ASYNC_POPULATE_MODE)
+    private boolean enableDataCacheAsyncPopulateMode = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_DATACACHE_IO_ADAPTOR)
+    private boolean enableDataCacheIOAdaptor = false;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -3434,6 +3443,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_scan_datacache(enableScanDataCache);
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
+        tResult.setEnable_datacache_async_populate_mode(enableDataCacheAsyncPopulateMode);
+        tResult.setEnable_datacache_io_adaptor(enableDataCacheIOAdaptor);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);

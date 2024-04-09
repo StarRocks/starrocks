@@ -53,6 +53,7 @@ public:
 private:
     std::unique_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
+    bool _enable_tiered_cache = false;
 };
 
 // In order to split the starcache library to a separate registry for other users such as the cloud team,

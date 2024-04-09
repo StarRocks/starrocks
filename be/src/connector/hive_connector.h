@@ -106,6 +106,8 @@ private:
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
+    bool _enable_datacache_aync_populate_mode = false;
+    bool _enable_datacache_io_adaptor = false;
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;
 
