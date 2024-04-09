@@ -457,7 +457,11 @@ public class StreamLoadInfo {
         }
 
         if (request.isSetCompression_type()) {
-            payloadCompressionType = CompressionUtils.findTCompressionByName(request.getCompression_type());
+            TCompressionType compression = CompressionUtils.findTCompressionByName(request.getCompression_type());
+            if (compression == null) {
+                throw new UserException("unsupported compression type: " + request.getCompression_type());
+            }
+            payloadCompressionType = compression;
         }
     }
 
