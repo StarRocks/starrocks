@@ -93,6 +93,13 @@ public class StreamLoadManagerTest {
             }
         };
 
+        new MockUp<Database>() {
+            @Mock
+            public long getDataQuota() {
+                return 100;
+            }
+        };
+
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
         new Expectations() {
             {
@@ -146,7 +153,7 @@ public class StreamLoadManagerTest {
         
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
-        
+
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
         Assert.assertEquals(1, idToStreamLoadTask.size());
@@ -266,4 +273,35 @@ public class StreamLoadManagerTest {
         StreamLoadTask task = streamLoadManager.getTaskById(1002L);
         Assert.assertNull(task);
     }
+
+    @Test
+    public void testStreamLoadTaskAfterCommit() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName = "label2";
+        long timeoutMillis = 100000;
+        int channelNum = 1;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+
+        Map<String, StreamLoadTask> idToStreamLoadTask =
+                Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
+
+        Assert.assertEquals(1, idToStreamLoadTask.size());
+
+        StreamLoadTask task = idToStreamLoadTask.get(labelName);
+
+        TransactionState state = new TransactionState();
+        task.afterCommitted(state, true);
+        Assert.assertNotEquals(-1, task.endTimeMs());
+
+        state.setCommitTime(task.endTimeMs());
+        task.replayOnCommitted(state);
+        Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
+    }
+
 }
