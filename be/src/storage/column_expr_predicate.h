@@ -64,6 +64,8 @@ public:
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override;
 
+    const std::vector<ExprContext*>& get_expr_ctxs() const { return _expr_ctxs; }
+
 private:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                         const SlotDescriptor* slot_desc);
