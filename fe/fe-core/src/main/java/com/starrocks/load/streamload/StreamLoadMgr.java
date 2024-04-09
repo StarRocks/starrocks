@@ -313,6 +313,12 @@ public class StreamLoadMgr implements MemoryTrackable {
                 if (streamLoadTask.checkNeedRemove(currentMs)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
+<<<<<<< HEAD
+=======
+                    if (streamLoadTask.isSyncStreamLoad()) {
+                        txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
+                    }
+>>>>>>> 6074120bb9 ([BugFix] Fix IllegalStateException when clean StreamLoadTask (#43483))
                     LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, streamLoadTask.getId())
                             .add("label", streamLoadTask.getLabel())
                             .add("end_timestamp", streamLoadTask.endTimeMs())

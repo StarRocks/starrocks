@@ -90,6 +90,13 @@ public class StreamLoadManagerTest {
             }
         };
 
+        new MockUp<Database>() {
+            @Mock
+            public long getDataQuota() {
+                return 100;
+            }
+        };
+
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
         SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
@@ -126,7 +133,7 @@ public class StreamLoadManagerTest {
         
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
-        
+
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
         Assert.assertEquals(1, idToStreamLoadTask.size());
@@ -184,4 +191,101 @@ public class StreamLoadManagerTest {
         Assert.assertEquals(20000, tasks.get(0).getDBId());
         Assert.assertEquals("test_tbl", tasks.get(0).getTableName());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetTaskByNameWithNullLabelName() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName1 = "label1";
+        String labelName2 = "label2";
+        long timeoutMillis = 100000;
+        int channelNum = 5;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName1, timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName2, timeoutMillis, channelNum, channelId, resp);
+
+        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
+        Assert.assertEquals(2, tasks.size());
+        Assert.assertEquals("label1", tasks.get(0).getLabel());
+        Assert.assertEquals("label2", tasks.get(1).getLabel());
+    }
+
+    @Test
+    public void testGetTaskByIdWhenMatched() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName = "label1";
+        long timeoutMillis = 100000;
+        int channelNum = 5;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+
+        StreamLoadTask task = streamLoadManager.getTaskById(1001L);
+        Assert.assertNotNull(task);
+        Assert.assertEquals("label1", task.getLabel());
+        Assert.assertEquals(1001L, task.getId());
+        Assert.assertEquals("test_db", task.getDBName());
+        Assert.assertEquals(20000, task.getDBId());
+        Assert.assertEquals("test_tbl", task.getTableName());
+    }
+
+    @Test
+    public void testGetTaskByIdWhenNotMatched() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName = "label1";
+        long timeoutMillis = 100000;
+        int channelNum = 5;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+
+        StreamLoadTask task = streamLoadManager.getTaskById(1002L);
+        Assert.assertNull(task);
+    }
+
+    @Test
+    public void testStreamLoadTaskAfterCommit() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName = "label2";
+        long timeoutMillis = 100000;
+        int channelNum = 1;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+
+        Map<String, StreamLoadTask> idToStreamLoadTask =
+                Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
+
+        Assert.assertEquals(1, idToStreamLoadTask.size());
+
+        StreamLoadTask task = idToStreamLoadTask.get(labelName);
+
+        TransactionState state = new TransactionState();
+        task.afterCommitted(state, true);
+        Assert.assertNotEquals(-1, task.endTimeMs());
+
+        state.setCommitTime(task.endTimeMs());
+        task.replayOnCommitted(state);
+        Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
+    }
+
+>>>>>>> 6074120bb9 ([BugFix] Fix IllegalStateException when clean StreamLoadTask (#43483))
 }
