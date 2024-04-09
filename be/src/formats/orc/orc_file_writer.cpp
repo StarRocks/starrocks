@@ -281,13 +281,7 @@ void ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<Type>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         number_orc_column.data[i] = data_col[i];
@@ -303,13 +297,7 @@ void ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     auto* null_col = get_raw_null_column(column);
     auto* data_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(ColumnHelper::get_data_column(column.get()));
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         auto slice = data_col->get_slice(i);
@@ -333,13 +321,7 @@ void ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<DecimalType>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         T value;
@@ -364,13 +346,7 @@ void ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& c
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<TYPE_DATE>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         date_orc_column.data[i] = OrcDateHelper::native_date_to_orc_date(data_col[i]);
@@ -387,13 +363,7 @@ void ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPt
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<TYPE_DATETIME>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         OrcTimestampHelper::native_ts_to_orc_ts(data_col[i], timestamp_orc_column.data[i],
@@ -413,13 +383,7 @@ void ORCFileWriter::_write_array_column(orc::ColumnVectorBatch& orc_column, Colu
     auto* null_col = get_raw_null_column(column);
     auto* array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column.get()));
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     auto* offsets = array_col->offsets_column().get()->get_data().data();
     for (size_t i = 0; i < column_size + 1; ++i) {
@@ -439,17 +403,11 @@ void ORCFileWriter::_write_struct_column(orc::ColumnVectorBatch& orc_column, Col
 
     auto* null_col = get_raw_null_column(column);
     auto* data_col = ColumnHelper::get_data_column(column.get());
+
+    _populate_orc_notnull(orc_column, null_col, column_size);
+
     auto* struct_col = down_cast<StructColumn*>(data_col);
     Columns& field_columns = struct_col->fields_column();
-
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
-
     for (size_t i = 0; i < type.children.size(); ++i) {
         _write_column(*struct_orc_column.fields[i], field_columns[i], type.children[i]);
     }
@@ -472,13 +430,7 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
     auto& values = map_col->values_column();
     auto& offsets = map_col->offsets_column()->get_data();
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size + 1; ++i) {
         map_orc_column.offsets[i] = offsets[i];
@@ -598,6 +550,20 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     default:
         return Status::NotSupported(
                 fmt::format("ORC writer does not support to write {} type yet", type_desc.debug_string()));
+    }
+}
+
+void ORCFileWriter::_populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column,
+                                          size_t column_size) {
+    if (null_column != nullptr) {
+        orc_column.hasNulls = true;
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_column[i];
+        }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
 }
 
