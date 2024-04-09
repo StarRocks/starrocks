@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -41,6 +42,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ConstantFunction;
 import org.apache.commons.collections4.MapUtils;
@@ -49,10 +52,12 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.util.SizeEstimator;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
 import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 
 /**
@@ -299,4 +304,46 @@ public class MetaFunctions {
         return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
     }
 
+    /**
+     * Return the logical plan of a materialized view with cache
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName) {
+        return inspectMvPlan(mvName, ConstantOperator.TRUE);
+    }
+
+    /**
+     * Return verbose metadata of a materialized view
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName, ConstantOperator useCache) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
+        }
+        try {
+            MaterializedView mv = (MaterializedView) table;
+            String plans = "";
+            List<MvPlanContext> planContexts =
+                    CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
+            int size = planContexts.size();
+            for (int i = 0; i < size; i++) {
+                MvPlanContext context = planContexts.get(i);
+                if (context != null) {
+                    OptExpression plan = context.getLogicalPlan();
+                    String debugString = plan.debugString();
+                    plans += String.format("plan %d: \n%s\n", i, debugString);
+                } else {
+                    plans += String.format("plan %d: null\n", i);
+                }
+            }
+            return ConstantOperator.createVarchar(plans);
+        } catch (Exception e) {
+            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
+            return ConstantOperator.createVarchar("failed");
+        }
+    }
 }
