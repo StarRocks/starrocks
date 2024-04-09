@@ -63,6 +63,7 @@ import org.roaringbitmap.RoaringBitmap;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
@@ -181,6 +182,13 @@ public class Utils {
         }
 
         return count;
+    }
+
+    public static List<Operator> collectScanOperators(OptExpression tree) {
+        List<Operator> scanOperators = new ArrayList<>();
+        Utils.extractOperator(tree, scanOperators, op -> op instanceof LogicalScanOperator ||
+                op instanceof PhysicalOlapScanOperator);
+        return scanOperators;
     }
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {

@@ -442,7 +442,11 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_UKFK_JOIN);
         deriveLogicalProperty(tree);
 
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
+        // apply skew join optimize after push down join on expression to child project,
+        // we need to compute the stats of child project(like subfield).
         skewJoinOptimize(tree, rootTaskContext);
+        // skew join generate new join and on predicate, need to push down join on expression to child project again
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
