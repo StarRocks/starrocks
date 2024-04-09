@@ -96,6 +96,8 @@ Usage: $0 <options>
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
+     --skip-proguard
+                        skip proguard when compiling FE
 
   Eg.
     $0                                           build all
@@ -126,6 +128,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
+  -l 'skip-proguard' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -148,6 +151,7 @@ WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
+SKIP_PROGUARD=false
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -230,6 +234,7 @@ else
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
+            --skip-proguard) SKIP_PROGUARD=true; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -271,6 +276,7 @@ echo "Get params:
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
+    SKIP_PROGUARD       -- $SKIP_PROGUARD
 "
 
 check_tool()
@@ -412,7 +418,7 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests -Dproguard-cfg=${PROGUARD}
+    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests -Dproguard-cfg=${PROGUARD} -Dskip-proguard=${SKIP_PROGUARD}
     cd ${STARROCKS_HOME}/java-extensions
     ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
     cd ${STARROCKS_HOME}

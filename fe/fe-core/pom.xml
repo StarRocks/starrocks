@@ -43,6 +43,7 @@ under the License.
         <paimon.version>0.7.0-incubating</paimon.version>
         <staros.version>3.2-rc9</staros.version>
         <python>python</python>
+        <skip-proguard>false</skip-proguard>
     </properties>
 
     <profiles>
@@ -1186,6 +1187,7 @@ under the License.
                     </execution>
                 </executions>
                 <configuration>
+                    <skip>${skip-proguard}</skip>
                     <obfuscate>true</obfuscate>
                     <proguardInclude>${proguard-cfg}</proguardInclude>
                     <outputDirectory>${project.build.directory}</outputDirectory>
