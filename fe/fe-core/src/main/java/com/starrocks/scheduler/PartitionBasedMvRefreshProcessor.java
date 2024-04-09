@@ -66,7 +66,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.HdfsScanNode;
@@ -166,7 +166,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         SUCCESS,
         FAILED,
         EMPTY,
-        TOTAL
     }
 
     @VisibleForTesting
@@ -191,9 +190,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         prepare(context);
 
         Preconditions.checkState(materializedView != null);
-        MaterializedViewMetricsEntity mvEntity =
+        IMaterializedViewMetricsEntity mvEntity =
                 MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(materializedView.getMvId());
-        mvEntity.increaseRefreshJobStatus(RefreshJobStatus.TOTAL);
 
         ConnectContext connectContext = context.getCtx();
         try {
@@ -210,7 +208,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
-    private RefreshJobStatus doMvRefresh(TaskRunContext context, MaterializedViewMetricsEntity mvEntity)
+    private RefreshJobStatus doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity)
             throws Exception {
         int retryNum = 0;
         boolean checked = false;
@@ -751,10 +749,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MVActiveChecker.tryToActivate(materializedView);
             LOG.info("Activated the MV before refreshing: {}", materializedView.getName());
         }
+
+        IMaterializedViewMetricsEntity mvEntity =
+                MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(materializedView.getMvId());
         if (!materializedView.isActive()) {
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     materializedView.getName(), mvId, materializedView.getInactiveReason());
             LOG.warn(errorMsg);
+            mvEntity.increaseRefreshJobStatus(RefreshJobStatus.FAILED);
             throw new DmlException(errorMsg);
         }
         // wait util transaction is visible for mv refresh task
