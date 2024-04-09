@@ -1017,10 +1017,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             return;
         }
 
-        // sync stream load collect profile
+        // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
             collectProfile();
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
 
         writeLock();
@@ -1033,6 +1032,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             endTimeMs = System.currentTimeMillis();
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
 
@@ -1125,10 +1126,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             return;
         }
 
-        if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
-        }
-
         writeLock();
         try {
             if (isFinalState()) {
@@ -1148,6 +1145,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
 
@@ -1308,6 +1307,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public String getStateName() {
         return state.name();
+    }
+
+    public TUniqueId getTUniqueId() {
+        return this.loadId;
     }
 
     public void setTUniqueId(TUniqueId loadId) {
