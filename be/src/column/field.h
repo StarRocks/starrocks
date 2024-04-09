@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "storage/aggregate_type.h"
@@ -155,7 +156,11 @@ public:
 
     void add_sub_field(const Field& sub_field);
 
+    void set_sub_fields(const std::vector<Field>& sub_fields);
+
     const Field& sub_field(int i) const;
+
+    std::vector<Field>& sub_fields() { return *_sub_fields; }
 
     const std::vector<Field>& sub_fields() const { return *_sub_fields; }
 
@@ -197,6 +202,14 @@ inline void Field::set_is_key(bool is_key) {
     } else {
         _flags &= static_cast<uint8_t>(~(1 << kIsKeyShift));
     }
+}
+
+inline void Field::set_sub_fields(const std::vector<Field>& sub_fields) {
+    if (_sub_fields == nullptr) {
+        _sub_fields = new std::vector<Field>();
+    }
+    _sub_fields->clear();
+    _sub_fields->assign(sub_fields.begin(), sub_fields.end());
 }
 
 inline void Field::add_sub_field(const Field& sub_field) {
