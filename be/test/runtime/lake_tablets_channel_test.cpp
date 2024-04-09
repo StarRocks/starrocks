@@ -32,6 +32,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -119,8 +120,8 @@ public:
         tablet3->set_tablet_id(10089);
     }
 
-    std::unique_ptr<lake::TabletMetadata> new_tablet_metadata(int64_t tablet_id) {
-        auto metadata = std::make_unique<lake::TabletMetadata>();
+    std::unique_ptr<TabletMetadata> new_tablet_metadata(int64_t tablet_id) {
+        auto metadata = std::make_unique<TabletMetadata>();
         metadata->set_id(tablet_id);
         metadata->set_version(1);
         //
@@ -572,8 +573,8 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
 
     {
-        lake::DeleteTabletRequest request;
-        lake::DeleteTabletResponse response;
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
         request.add_tablet_ids(10089);
         lake::delete_tablets(_tablet_manager.get(), request, &response);
 

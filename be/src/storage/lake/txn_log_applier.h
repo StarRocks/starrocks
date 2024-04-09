@@ -19,11 +19,15 @@
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "storage/lake/tablet_metadata.h"
+
+namespace starrocks {
+class TxnLogPB;
+class TabletMetadataPB;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class Tablet;
-class TxnLogPB;
-class TabletMetadataPB;
 
 class TxnLogApplier {
 public:

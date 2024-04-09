@@ -21,6 +21,7 @@
 
 namespace starrocks {
 class TabletSchema;
+class TabletMetadataPB;
 class Schema;
 class ThreadPool;
 } // namespace starrocks
@@ -29,7 +30,6 @@ namespace starrocks::lake {
 
 class Rowset;
 class TabletManager;
-class TabletMetadataPB;
 class TabletWriter;
 class TabletReader;
 enum WriterType : int;

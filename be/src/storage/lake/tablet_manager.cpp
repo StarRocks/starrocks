@@ -371,6 +371,10 @@ Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path
     return put_txn_log(log, path);
 }
 
+Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
+    return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
+}
+
 StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
     int64_t size = 0;
     TabletMetadataPtr metadata;
