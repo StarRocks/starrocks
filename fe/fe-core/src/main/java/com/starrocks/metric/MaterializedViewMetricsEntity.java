@@ -22,11 +22,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -36,9 +34,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public final class MaterializedViewMetricsEntity {
+public final class MaterializedViewMetricsEntity implements IMaterializedViewMetricsEntity {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsEntity.class);
-
 
     private final MvId mvId;
     private final MetricRegistry metricRegistry;
@@ -93,6 +90,7 @@ public final class MaterializedViewMetricsEntity {
         initMaterializedViewMetrics();
     }
 
+    @Override
     public List<Metric> getMetrics() {
         return metrics;
     }
@@ -288,42 +286,32 @@ public final class MaterializedViewMetricsEntity {
                 }
             }
         };
-        metrics.add(counterInactiveState);
+        metrics.add(counterPartitionCount);
     }
 
-    public static boolean isUpdateMaterializedViewMetrics(ConnectContext connectContext) {
-        if (connectContext == null) {
-            return false;
-        }
-        // ignore: explain queries
-        if (connectContext.getExplainLevel() != null) {
-            return false;
-        }
-        // ignore: queries that are not using materialized view rewrite(eg: stats jobs)
-        if (!connectContext.getSessionVariable().isEnableMaterializedViewRewrite() ||
-                !Config.enable_materialized_view) {
-            return false;
-        }
-        return true;
-    }
-
+    @Override
     public void increaseQueryConsideredCount(long count) {
         this.counterQueryConsideredTotal.increase(count);
     }
 
+    @Override
     public void increaseQueryMatchedCount(long count) {
         this.counterQueryMatchedTotal.increase(count);
     }
 
+    @Override
     public void increaseQueryHitCount(long count) {
         this.counterQueryHitTotal.increase(count);
     }
 
+    @Override
     public void increaseQueryMaterializedViewCount(long count) {
         this.counterQueryMaterializedViewTotal.increase(count);
     }
 
+    @Override
     public void increaseRefreshJobStatus(PartitionBasedMvRefreshProcessor.RefreshJobStatus status) {
+        this.counterRefreshJobTotal.increase(1L);
         switch (status) {
             case EMPTY:
                 this.counterRefreshJobEmptyTotal.increase(1L);
@@ -334,16 +322,15 @@ public final class MaterializedViewMetricsEntity {
             case FAILED:
                 this.counterRefreshJobFailedTotal.increase(1L);
                 break;
-            case TOTAL:
-                this.counterRefreshJobTotal.increase(1L);
-                break;
         }
     }
 
+    @Override
     public void increaseRefreshRetryMetaCount(Long retryNum) {
         this.counterRefreshJobRetryCheckChangedTotal.increase(retryNum);
     }
 
+    @Override
     public void updateRefreshDuration(long duration) {
         this.histRefreshJobDuration.update(duration);
     }
