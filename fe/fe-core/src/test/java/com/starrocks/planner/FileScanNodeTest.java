@@ -359,9 +359,6 @@ public class FileScanNodeTest {
         Assert.assertEquals(1, rangeDescs.size());
         Assert.assertEquals(0, rangeDescs.get(0).size);
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testNoFilesFound() {
@@ -388,4 +385,3 @@ public class FileScanNodeTest {
                 () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
     }
 }
->>>>>>> b4a230439c ([Enhancement] Improve no source file error message (#43594))
