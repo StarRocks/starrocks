@@ -76,6 +76,7 @@ public:
 private:
     FileSystem* _fs;
     std::string _datafile_path;
+    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 
 class ORCPositionDeleteBuilder : public PositionDeleteBuilder {
