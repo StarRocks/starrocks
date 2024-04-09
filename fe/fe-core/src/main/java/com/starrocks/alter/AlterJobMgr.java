@@ -849,8 +849,7 @@ public class AlterJobMgr {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, partitionRenameClause);
                 break;
             } else if (alterClause instanceof ColumnRenameClause) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, (ColumnRenameClause) alterClause);
-                break;
+                throw new DdlException("not supported");
             } else {
                 Preconditions.checkState(false);
             }
