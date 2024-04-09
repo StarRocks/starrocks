@@ -87,6 +87,7 @@ public:
     size_t leaf_size() const;
 
 private:
+    // path type, to mark the path is KEY/OFFSET/FIELD/ALL/INDEX
     TAccessPathType::type _type;
 
     std::string _path;
@@ -101,6 +102,7 @@ private:
 
     bool _from_predicate;
 
+    // the data type of the subfield
     TypeDescriptor _value_type;
 
     std::vector<std::unique_ptr<ColumnAccessPath>> _children;

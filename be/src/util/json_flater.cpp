@@ -200,9 +200,12 @@ std::vector<LogicalType> JsonFlater::get_flat_types() {
 }
 
 struct FlatColumnDesc {
-public:
+    // json compatible type
     uint8_t type = JsonFlater::JSON_NULL_TYPE_BITS;
+    // column path hit count, some json may be null or none, so hit use to record the actual value
+    // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
     uint64_t hits = 0;
+    // how many rows need to be cast to a compatible type
     uint16_t casts = 0;
 };
 
