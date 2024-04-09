@@ -126,7 +126,7 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_cumulat
             }
         }
 
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, -1 /*unused*/));
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i));
 
         segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
         if (segment_num_score >= config::max_cumulative_compaction_num_singleton_deltas) {
@@ -145,7 +145,7 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_base_ro
     uint32_t cumulative_point = _tablet_metadata->cumulative_point();
     uint32_t segment_num_score = 0;
     for (uint32_t i = 0; i < cumulative_point; ++i) {
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, -1 /*unused*/));
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i));
         if (++segment_num_score >= config::max_base_compaction_num_singleton_deltas) {
             break;
         }
@@ -396,7 +396,7 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
         int64_t max_segments = config::max_cumulative_compaction_num_singleton_deltas;
         for (auto i : selected_level->rowsets) {
             DCHECK_LT(i, _tablet_metadata->rowsets_size());
-            auto rowset = std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, -1 /*unused*/);
+            auto rowset = std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i);
             max_segments -= rowset->metadata().overlapped() ? rowset->metadata().segments_size() : 1;
             input_rowsets.emplace_back(std::move(rowset));
             if (max_segments <= 0) {

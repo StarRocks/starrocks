@@ -576,8 +576,8 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
-    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/, tablet_schema,
-                         -1 /*unused*/);
+    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
+                         tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
     compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
@@ -807,7 +807,7 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
     const int segments_size = txnlog.op_compaction().output_rowset().segments_size();
     if (segments_size <= 0) return;
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &txnlog.op_compaction().output_rowset(), -1 /*unused*/,
-                         tablet_schema, -1 /*unused*/);
+                         tablet_schema);
     // use tabletid-txnid as compaction state cache's key, so it can retry safe.
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txnlog.txn_id()));
     compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());

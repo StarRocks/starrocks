@@ -718,7 +718,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     // check compaction state
     ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
     Rowset output_rowset(_tablet_mgr.get(), _tablet_metadata->id(), &txn_log->op_compaction().output_rowset(), -1,
-                         _tablet_schema, -1 /*unused*/);
+                         _tablet_schema);
     {
         auto compaction_state = std::make_unique<CompactionState>();
         EXPECT_TRUE(_update_mgr->compaction_state_mem_tracker() != nullptr);
