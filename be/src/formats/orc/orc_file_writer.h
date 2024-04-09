@@ -96,6 +96,8 @@ private:
 
     void _write_map_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type);
 
+    inline static const std::string STARROCKS_ORC_WRITER_VERSION_KEY = "starrocks.writer.version";
+
     const std::string _location;
     std::shared_ptr<OrcOutputStream> _output_stream;
     const std::vector<std::string> _column_names;
