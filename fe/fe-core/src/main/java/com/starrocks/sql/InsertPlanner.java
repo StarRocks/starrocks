@@ -844,8 +844,9 @@ public class InsertPlanner {
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
                 LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
+                Type type = expr.isConstantNull() ? Type.NULL : column.getType();
                 ScalarOperator scalarOperator =
-                        ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
+                        ConstantOperator.createObject(expr.getRealObjectValue(), type);
                 ColumnRefOperator col = columnRefFactory
                         .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
                 outputColumns.add(col);
@@ -908,9 +909,6 @@ public class InsertPlanner {
             String columnName = targetColumnNames.get(i);
             if (targetTable.getPartitionColumnNames().contains(columnName)) {
                 Expr expr = listItems.get(i).getExpr();
-                if (expr instanceof NullLiteral) {
-                    throw new SemanticException("partition value can't be null");
-                }
                 if (!expr.isConstant()) {
                     return false;
                 }
