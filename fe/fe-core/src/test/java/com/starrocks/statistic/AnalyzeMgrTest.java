@@ -153,13 +153,13 @@ public class AnalyzeMgrTest {
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeStatusMap().size());
 
         // test analyze job
-        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(123, 1234, null,
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(123, 1234, null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
                 LocalDateTime.MIN);
         ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", "hive_db", "t1",
-                null, StatsConstants.AnalyzeType.FULL,
+                null, null, StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
         analyzeMgr.addAnalyzeJob(nativeAnalyzeJob);

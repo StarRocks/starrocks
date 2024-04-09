@@ -388,10 +388,17 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(new ExternalAnalyzeJob("iceberg_catalog",
                 "iceberg_db", "table1", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING,
                 LocalDateTime.MIN));
+=======
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(new ExternalAnalyzeJob("iceberg_catalog",
+                "iceberg_db", "table1", Lists.newArrayList(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN));
+>>>>>>> a75d40ce2a ([Enhancement] Support analyze subfield of struct type (#43551))
 
         new MockUp<IcebergMetadata>() {
             @Mock
