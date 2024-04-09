@@ -25,11 +25,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarMgrMetaSyncer;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
@@ -46,7 +43,6 @@ import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -56,7 +52,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJobTest {
@@ -91,6 +86,7 @@ public class LakeTableSchemaChangeJobTest {
     private LakeTableSchemaChangeJob getAlterJob(Table table) {
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        alterJobMgr.getSchemaChangeHandler().clearJobs();
         Assert.assertEquals(1, jobs.size());
         AlterJobV2 alterJob = jobs.get(0);
         Assert.assertTrue(alterJob instanceof LakeTableSchemaChangeJob);
@@ -119,13 +115,6 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCancelPendingJob() throws IOException {
-        new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-        };
-
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -136,13 +125,6 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testDropTableBeforeCancel() {
-        new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-        };
-
         db.dropTable(table.getName());
 
         schemaChangeJob.cancel("test");
@@ -201,12 +183,6 @@ public class LakeTableSchemaChangeJobTest {
                 return 1L;
             }
         };
-        new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-        };
 
         db.dropTable(table.getName());
 
@@ -231,23 +207,11 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCreateTabletFailed() {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
                                              long timeoutSeconds) throws AlterCancelException {
                 throw new AlterCancelException("Create tablet failed");
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
             }
         };
 
@@ -264,39 +228,8 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCreateTabletSuccess() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
-        new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                Assert.assertEquals(NUM_BUCKETS, countDownLatch.getCount());
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-        };
-
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -309,35 +242,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testPreviousTxnNotFinished() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
         new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
                 return false;
@@ -346,7 +251,6 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
@@ -361,36 +265,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testThrowAnalysisExceptiondWhileWaitingTxn() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
+    public void testThrowAnalysisExceptionWhileWaitingTxn() throws AlterCancelException {
         new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
                 throw new AnalysisException("isPreviousLoadFinished exception");
@@ -399,7 +275,6 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runWaitingTxnJob();
@@ -418,44 +293,8 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
-        new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-
-            @Mock
-            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-                return true;
-            }
-        };
-
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         db.dropTable(table.getName());
 
@@ -485,49 +324,8 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testTableDroppedBeforeRewriting() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
-        new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
-            @Mock
-            public void sendAgentTask(AgentBatchTask batchTask) {
-                // nothing to do
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-
-            @Mock
-            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-                return true;
-            }
-        };
-
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -559,51 +357,17 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testAlterTabletFailed() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
         new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().stream().findFirst().get().failed();
                 batchTask.getAllTasks().stream().findFirst().get().failed();
                 batchTask.getAllTasks().stream().findFirst().get().failed();
             }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-
-            @Mock
-            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-                return true;
-            }
         };
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -624,49 +388,15 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testAlterTabletSuccess() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
         new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-
-            @Mock
-            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-                return true;
             }
         };
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -700,11 +430,6 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
                                        long commitTime, long warehouseId)
                     throws
@@ -715,47 +440,13 @@ public class LakeTableSchemaChangeJobTest {
 
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
-            @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
-                JournalTask journalTask = new JournalTask(System.nanoTime(), null, -1);
-                journalTask.markSucceed();
-                return journalTask;
-            }
-
-            @Mock
-            public long getNextTransactionId() {
-                return 10101L;
-            }
-
-            @Mock
-            public long peekNextTransactionId() {
-                return 10102L;
-            }
-
-            @Mock
-            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-                return true;
             }
         };
 
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
@@ -804,20 +495,8 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
                                        long commitTime, long warehouseId) {
-                // nothing to do
-            }
-        };
-
-        new MockUp<StarMgrMetaSyncer>() {
-            @Mock
-            public void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
                 // nothing to do
             }
         };
@@ -849,33 +528,10 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testTransactionRaceCondition() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
         new MockUp<LakeTableSchemaChangeJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
-            }
-
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
-            }
-
-            @Mock
-            public void writeEditLog(LakeTableSchemaChangeJob job) {
-                // nothing to do.
-            }
-
-            @Mock
-            public Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
-                return ConcurrentUtils.constantFuture(true);
             }
 
             @Mock
