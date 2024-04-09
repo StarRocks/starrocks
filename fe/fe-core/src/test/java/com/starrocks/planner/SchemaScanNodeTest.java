@@ -17,10 +17,10 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -80,7 +80,7 @@ public class SchemaScanNodeTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public List<Long> getAllComputeNodeIds(long warehouseId) {
                 return Lists.newArrayList(1L);
