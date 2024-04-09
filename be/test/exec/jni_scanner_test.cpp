@@ -22,10 +22,12 @@
 
 namespace starrocks {
 
+namespace {
 struct SlotDesc {
     string name;
     TypeDescriptor type;
 };
+} // namespace
 
 class JniScannerTest : public ::testing::Test {
 public:
@@ -34,10 +36,8 @@ public:
     std::string read_from_file(const std::string& path) {
         std::ifstream inputFile(path);
         std::stringstream buffer;
-        std::string jsonString;
         buffer << inputFile.rdbuf();
-        jsonString = buffer.str();
-        return jsonString;
+        return buffer.str();
     }
 
     void thrift_read_from_file(::apache::thrift::TBase* base, const std::string& path) {
@@ -126,6 +126,24 @@ public:
     RuntimeState* _runtime_state;
 };
 
+static void print_jni_scanner_params(const std::map<std::string, std::string>& params) {
+    std::cout << "-------- params --------\n";
+    for (const auto& kv : params) {
+        std::cout << "{\"" << kv.first << "\", \"" << kv.second.substr(0, std::min<int>(kv.second.size(), 128))
+                  << "\"},\n";
+    }
+}
+
+static void check_jni_scanner_params(const std::map<std::string, std::string>& params,
+                                     const std::map<std::string, std::string>& expected) {
+    ASSERT_EQ(params.size(), expected.size());
+    for (const auto& kv : params) {
+        std::string act = kv.second.substr(0, std::min<int>(kv.second.size(), 128));
+        const std::string exp = expected.at(kv.first);
+        ASSERT_EQ(act, exp);
+    }
+}
+
 TEST_F(JniScannerTest, test_create_paimon_jni_scanner) {
     // create jni scanner
     JniScanner::CreateOptions options;
@@ -144,7 +162,7 @@ TEST_F(JniScannerTest, test_create_paimon_jni_scanner) {
     init_fs_options(&fs_options);
     options.fs_options = &fs_options;
 
-    JniScanner* scanner = create_paimon_jni_scanner(options);
+    auto scanner = create_paimon_jni_scanner(options);
 
     // update columns.
     TupleDescriptor* tuple_desc = create_default_tuple_desc();
@@ -152,11 +170,21 @@ TEST_F(JniScannerTest, test_create_paimon_jni_scanner) {
     scanner->update_jni_scanner_params();
 
     // check parameters.
-    for (const auto& kv : scanner->_jni_scanner_params) {
-        if (kv.second.size() < 128) {
-            std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
-        }
-    }
+    print_jni_scanner_params(scanner->_jni_scanner_params);
+
+    std::map<std::string, std::string> expected = {
+            {"native_table",
+             "rO0ABXNyADBvcmcuYXBhY2hlLnBhaW1vbi50YWJsZS5BcHBlbmRPbmx5RmlsZVN0b3JlVGFibGUAAAAAAAAAAQIAAHhyAC5vcmcuYXBhY"
+             "2hlLnBhaW1vbi50YWJsZS5B"},
+            {"nested_fields", "c1.Cc1"},
+            {"predicate_info", "rO0ABXNyABNqYXZhLnV0aWwuQXJyYXlMaXN0eIHSHZnHYZ0DAAFJAARzaXpleHAAAAAAdwQAAAAAeA"},
+            {"required_fields", "c0,c1"},
+            {"split_info",
+             "rO0ABXNyAChvcmcuYXBhY2hlLnBhaW1vbi50YWJsZS5zb3VyY2UuRGF0YVNwbGl0AAAAAAAAAAUDAAdJAAZidWNrZXRaAAtpc1N0cmVhb"
+             "WluZ0oACnNuYXBzaG90SWRM"},
+            {"time_zone", "Asia/Shanghai"},
+    };
+    check_jni_scanner_params(scanner->_jni_scanner_params, expected);
 }
 
 TEST_F(JniScannerTest, test_create_hudi_jni_scanner) {
@@ -177,7 +205,7 @@ TEST_F(JniScannerTest, test_create_hudi_jni_scanner) {
     init_fs_options(&fs_options);
     options.fs_options = &fs_options;
 
-    JniScanner* scanner = create_hudi_jni_scanner(options);
+    auto scanner = create_hudi_jni_scanner(options);
 
     // update columns.
     TupleDescriptor* tuple_desc = create_default_tuple_desc();
@@ -185,11 +213,31 @@ TEST_F(JniScannerTest, test_create_hudi_jni_scanner) {
     scanner->update_jni_scanner_params();
 
     // check parameters.
-    for (const auto& kv : scanner->_jni_scanner_params) {
-        if (kv.second.size() < 128) {
-            std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
-        }
-    }
+    print_jni_scanner_params(scanner->_jni_scanner_params);
+
+    std::map<std::string, std::string> expected = {
+            {"base_path",
+             "hdfs://emr-header-1.cluster-49091:9000/user/hive/warehouse/hudi_db.db/hudi_mor_parquet_snappy"},
+            {"data_file_length", "440794"},
+            {"data_file_path",
+             "hdfs://emr-header-1.cluster-49091:9000/user/hive/warehouse/hudi_db.db/hudi_mor_parquet_snappy/"
+             "cdbd9f89-236c-457f-95e1-6acf2dfccf"},
+            {"delta_file_paths", ""},
+            {"fs_options_props", "xxx\x1xxx0\x2yyy\x1yyy0\x2zzz\x1zzz0"},
+            {"hive_column_names",
+             "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_name,"
+             "uuid,col_boolean,col_int,co"},
+            {"hive_column_types",
+             "string#string#string#string#string#int#boolean#int#bigint#float#double#decimal(38,18)#date#timestamp-"
+             "micros#string#string#array<"},
+            {"input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat"},
+            {"instant_time", "20230810190954595"},
+            {"nested_fields", "c1.Cc1"},
+            {"required_fields", "c0,c1"},
+            {"serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"},
+            {"time_zone", "Asia/Shanghai"},
+    };
+    check_jni_scanner_params(scanner->_jni_scanner_params, expected);
 }
 
 TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
@@ -211,18 +259,36 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
         init_fs_options(&fs_options);
         options.fs_options = &fs_options;
 
-        JniScanner* scanner = create_hive_jni_scanner(options);
+        auto scanner = create_hive_jni_scanner(options);
         // update columns.
         TupleDescriptor* tuple_desc = create_default_tuple_desc();
         init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
         scanner->update_jni_scanner_params();
 
         // check parameters.
-        for (const auto& kv : scanner->_jni_scanner_params) {
-            if (kv.second.size() < 128) {
-                std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
-            }
-        }
+        print_jni_scanner_params(scanner->_jni_scanner_params);
+
+        std::map<std::string, std::string> expected = {
+                {"SerDe.serialization.format", "1"},
+                {"block_length", "713"},
+                {"block_offset", "0"},
+                {"data_file_path",
+                 "hdfs://emr-header-1.cluster-49091:9000/user/hive/warehouse/hive_extbl_test.db/"
+                 "hive_hdfs_rcfile_snappy/part-00001-29762f87-098a-4"},
+                {"fs_options_props", "xxx\x1xxx0\x2yyy\x1yyy0\x2zzz\x1zzz0"},
+                {"hive_column_names",
+                 "col_tinyint,col_smallint,col_int,col_integer,col_bigint,col_float,col_double,col_double_precision,"
+                 "col_decimal,col_timestamp,col_"},
+                {"hive_column_types",
+                 "tinyint#smallint#int#int#bigint#float#double#double#decimal(10,2)#timestamp#date#string#varchar(100)#"
+                 "binary#char(100)#boolean#ar"},
+                {"input_format", "org.apache.hadoop.hive.ql.io.RCFileInputFormat"},
+                {"nested_fields", "c1.Cc1"},
+                {"required_fields", "c0,c1"},
+                {"serde", "org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"},
+                {"time_zone", "Asia/Shanghai"},
+        };
+        check_jni_scanner_params(scanner->_jni_scanner_params, expected);
     }
 
     {
@@ -230,7 +296,7 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
         init_fs_options(&fs_options, true);
         options.fs_options = &fs_options;
 
-        JniScanner* scanner = create_hive_jni_scanner(options);
+        auto scanner = create_hive_jni_scanner(options);
 
         // update columns.
         TupleDescriptor* tuple_desc = create_default_tuple_desc();
@@ -238,11 +304,28 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
         scanner->update_jni_scanner_params();
 
         // check parameters.
-        for (const auto& kv : scanner->_jni_scanner_params) {
-            if (kv.second.size() < 128) {
-                std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
-            }
-        }
+        print_jni_scanner_params(scanner->_jni_scanner_params);
+        std::map<std::string, std::string> expected = {
+                {"SerDe.serialization.format", "1"},
+                {"block_length", "713"},
+                {"block_offset", "0"},
+                {"data_file_path",
+                 "hdfs://emr-header-1.cluster-49091:9000/user/hive/warehouse/hive_extbl_test.db/"
+                 "hive_hdfs_rcfile_snappy/part-00001-29762f87-098a-4"},
+                {"fs_options_props", "xxx\x1xxx0\x2yyy\x1yyy0\x2zzz\x1zzz0"},
+                {"hive_column_names",
+                 "col_tinyint,col_smallint,col_int,col_integer,col_bigint,col_float,col_double,col_double_precision,"
+                 "col_decimal,col_timestamp,col_"},
+                {"hive_column_types",
+                 "tinyint#smallint#int#int#bigint#float#double#double#decimal(10,2)#timestamp#date#string#varchar(100)#"
+                 "binary#char(100)#boolean#ar"},
+                {"input_format", "org.apache.hadoop.hive.ql.io.RCFileInputFormat"},
+                {"nested_fields", "c1.Cc1"},
+                {"required_fields", "c0,c1"},
+                {"serde", "org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"},
+                {"time_zone", "Asia/Shanghai"},
+        };
+        check_jni_scanner_params(scanner->_jni_scanner_params, expected);
     }
 }
 
@@ -265,18 +348,29 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner2) {
         init_fs_options(&fs_options);
         options.fs_options = &fs_options;
 
-        JniScanner* scanner = create_hive_jni_scanner(options);
+        auto scanner = create_hive_jni_scanner(options);
         // update columns.
         TupleDescriptor* tuple_desc = create_default_tuple_desc();
         init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
         scanner->update_jni_scanner_params();
 
         // check parameters.
-        for (const auto& kv : scanner->_jni_scanner_params) {
-            if (kv.second.size() < 128) {
-                std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
-            }
-        }
+        print_jni_scanner_params(scanner->_jni_scanner_params);
+
+        std::map<std::string, std::string> expected = {
+                {"block_length", "713"},
+                {"block_offset", "0"},
+                {"data_file_path", ""},
+                {"fs_options_props", "xxx\x1xxx0\x2yyy\x1yyy0\x2zzz\x1zzz0"},
+                {"hive_column_names", ""},
+                {"hive_column_types", ""},
+                {"input_format", ""},
+                {"nested_fields", "c1.Cc1"},
+                {"required_fields", "c0,c1"},
+                {"serde", ""},
+                {"time_zone", ""},
+        };
+        check_jni_scanner_params(scanner->_jni_scanner_params, expected);
     }
 }
 
@@ -300,18 +394,26 @@ TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
     cloud_conf->__set_cloud_type(TCloudType::ALIYUN);
     options.fs_options = &fs_options;
 
-    JniScanner* scanner = create_odps_jni_scanner(options);
+    auto scanner = create_odps_jni_scanner(options);
     // update columns.
     TupleDescriptor* tuple_desc = create_default_tuple_desc();
     init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
     scanner->update_jni_scanner_params();
 
     // check parameters.
-    for (const auto& kv : scanner->_jni_scanner_params) {
-        if (kv.second.size() < 128) {
-            std::cout << "{\"" << kv.first << "\", \"" << kv.second << "\"},\n";
-        }
-    }
+    print_jni_scanner_params(scanner->_jni_scanner_params);
+
+    std::map<std::string, std::string> expected = {
+            {"access_id", ""},
+            {"access_key", ""},
+            {"endpoint", ""},
+            {"nested_fields", "c1.Cc1"},
+            {"project_name", "hive_extbl_test"},
+            {"required_fields", "c0,c1"},
+            {"table_name", "hive_hdfs_rcfile_snappy"},
+            {"time_zone", "Asia/Shanghai"},
+    };
+    check_jni_scanner_params(scanner->_jni_scanner_params, expected);
 }
 
 } // namespace starrocks

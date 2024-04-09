@@ -200,6 +200,6 @@ void t_network_address_to_string(const TNetworkAddress& address, std::string* ou
 bool t_network_address_comparator(const TNetworkAddress& a, const TNetworkAddress& b);
 
 void thrift_from_json_string(::apache::thrift::TBase* base, const std::string& json_val);
-const std::string thrift_to_json_string(const ::apache::thrift::TBase* base);
+std::string thrift_to_json_string(const ::apache::thrift::TBase* base);
 
 } // namespace starrocks

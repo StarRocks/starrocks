@@ -111,9 +111,9 @@ private:
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
 
-JniScanner* create_paimon_jni_scanner(const JniScanner::CreateOptions& options);
-JniScanner* create_hudi_jni_scanner(const JniScanner::CreateOptions& options);
-JniScanner* create_odps_jni_scanner(const JniScanner::CreateOptions& options);
-JniScanner* create_hive_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options);
 
 } // namespace starrocks

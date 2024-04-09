@@ -496,7 +496,7 @@ Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     return status;
 }
 
-JniScanner* create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
+std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);
     const HiveTableDescriptor* hive_table = options.hive_table;
     static const char* serde_property_prefix = "SerDe.";
@@ -510,7 +510,7 @@ JniScanner* create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
     std::string time_zone;
 
     if (dynamic_cast<const FileTableDescriptor*>(hive_table)) {
-        const auto* file_table = dynamic_cast<const FileTableDescriptor*>(hive_table);
+        const auto* file_table = down_cast<const FileTableDescriptor*>(hive_table);
 
         data_file_path = scan_range.full_path;
 
@@ -519,9 +519,8 @@ JniScanner* create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
         serde = file_table->get_serde_lib();
         input_format = file_table->get_input_format();
         time_zone = file_table->get_time_zone();
-    } else {
-        const auto* hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(hive_table);
-
+    } else if (dynamic_cast<const HdfsTableDescriptor*>(hive_table)) {
+        const auto* hdfs_table = down_cast<const HdfsTableDescriptor*>(hive_table);
         auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
         std::string partition_full_path = partition_desc->location();
         data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
@@ -532,6 +531,8 @@ JniScanner* create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
         input_format = hdfs_table->get_input_format();
         serde_properties = hdfs_table->get_serde_properties();
         time_zone = hdfs_table->get_time_zone();
+    } else {
+        return nullptr;
     }
 
     std::map<std::string, std::string> jni_scanner_params;
@@ -552,11 +553,11 @@ JniScanner* create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
 
     std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
 
-    return new HiveJniScanner(scanner_factory_class, jni_scanner_params);
+    return std::make_unique<HiveJniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
 // ---------------paimon jni scanner------------------
-JniScanner* create_paimon_jni_scanner(const JniScanner::CreateOptions& options) {
+std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);
     const HiveTableDescriptor* hive_table = options.hive_table;
     const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(hive_table);
@@ -568,11 +569,11 @@ JniScanner* create_paimon_jni_scanner(const JniScanner::CreateOptions& options) 
     jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
-    return new JniScanner(scanner_factory_class, jni_scanner_params);
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
 // -------------hudi jni scanner---------------------
-JniScanner* create_hudi_jni_scanner(const JniScanner::CreateOptions& options) {
+std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);
     const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(options.hive_table);
     auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
@@ -608,11 +609,11 @@ JniScanner* create_hudi_jni_scanner(const JniScanner::CreateOptions& options) {
     jni_scanner_params["time_zone"] = hudi_table->get_time_zone();
 
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
-    return new JniScanner(scanner_factory_class, jni_scanner_params);
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
 // ---------------odps jni scanner------------------
-JniScanner* create_odps_jni_scanner(const JniScanner::CreateOptions& options) {
+std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);
     const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(options.hive_table);
 
@@ -630,7 +631,7 @@ JniScanner* create_odps_jni_scanner(const JniScanner::CreateOptions& options) {
     jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
 
     std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
-    return new JniScanner(scanner_factory_class, jni_scanner_params);
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
 } // namespace starrocks

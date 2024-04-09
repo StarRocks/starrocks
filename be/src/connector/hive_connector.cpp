@@ -587,30 +587,35 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
-        scanner = _pool.add(new HdfsPartitionScanner());
+        scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
-        scanner = _pool.add(create_paimon_jni_scanner(jni_scanner_create_options));
+        scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {
-        scanner = _pool.add(create_hudi_jni_scanner(jni_scanner_create_options));
+        scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
-        scanner = _pool.add(create_odps_jni_scanner(jni_scanner_create_options));
+        scanner = create_odps_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;
-        scanner = _pool.add(new HdfsOrcScanner());
+        scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
-        scanner = _pool.add(new HdfsTextScanner());
+        scanner = new HdfsTextScanner();
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
-        scanner = _pool.add(create_hive_jni_scanner(jni_scanner_create_options));
+        scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
+    if (scanner == nullptr) {
+        return Status::InternalError("create hdfs scanner failed");
+    }
+    _pool.add(scanner);
+
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
