@@ -126,6 +126,7 @@ public:
     CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe, TCompressionType::type compression_type);
     ~CompressedStreamLoadPipeReader() override = default;
     StatusOr<ByteBufferPtr> read() override;
+
 private:
     TCompressionType::type _compression_type;
     ByteBufferPtr _decompressed_buffer;
