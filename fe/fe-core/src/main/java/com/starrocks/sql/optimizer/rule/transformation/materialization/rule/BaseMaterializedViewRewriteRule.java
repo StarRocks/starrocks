@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -52,7 +52,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.metric.MaterializedViewMetricsEntity.isUpdateMaterializedViewMetrics;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedMVUnionRewrite;
 
@@ -195,11 +194,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
             // update metrics
             mvContext.updateMVUsedCount();
-            if (isUpdateMaterializedViewMetrics(connectContext)) {
-                MaterializedViewMetricsEntity mvEntity =
-                        MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
-                mvEntity.increaseQueryMatchedCount(1L);
-            }
+            IMaterializedViewMetricsEntity mvEntity =
+                    MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
+            mvEntity.increaseQueryMatchedCount(1L);
 
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();
