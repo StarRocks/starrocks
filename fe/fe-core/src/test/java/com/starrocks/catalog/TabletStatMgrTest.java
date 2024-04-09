@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -64,7 +65,7 @@ public class TabletStatMgrTest {
 
     @Before
     public void before() {
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
 
             @Mock
             public Warehouse getWarehouse(String warehouseName) {
