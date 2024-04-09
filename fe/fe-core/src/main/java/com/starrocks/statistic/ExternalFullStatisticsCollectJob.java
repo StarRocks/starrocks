@@ -21,7 +21,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
@@ -77,9 +76,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
     public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
-                                            List<String> columns, StatsConstants.AnalyzeType type,
-                                            StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
-        super(db, table, columns, type, scheduleType, properties);
+                                            List<String> columnNames, List<Type> columnTypes,
+                                            StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                            Map<String, String> properties) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
     }
@@ -128,18 +128,19 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     protected List<List<String>> buildCollectSQLList(int parallelism) {
         List<String> totalQuerySQL = new ArrayList<>();
         for (String partitionName : partitionNames) {
-            for (String columnName : columns) {
-                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnName));
+            for (int i = 0; i < columnNames.size(); i++) {
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnNames.get(i),
+                        columnTypes.get(i)));
             }
         }
 
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
-    private String buildBatchCollectFullStatisticSQL(Table table, String partitionName, String columnName) {
+    private String buildBatchCollectFullStatisticSQL(Table table, String partitionName, String columnName,
+                                                     Type columnType) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
-        Column column = table.getColumn(columnName);
 
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(columnName);
@@ -156,12 +157,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
                 table.getPartitionColumnNames(), nullValue));
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", fullAnalyzeGetDataSize(column));
+        context.put("dataSize", fullAnalyzeGetDataSize(columnName, columnType));
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("catalogName", this.catalogName);
 
-        if (!column.getType().canStatistic()) {
+        if (!columnType.canStatistic()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
@@ -169,8 +170,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         } else {
             context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
-            context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
-            context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
+            context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnName, true));
+            context.put("minFunction", getMinMaxFunction(columnType, quoteColumnName, false));
         }
 
         if (table.isUnPartitioned()) {

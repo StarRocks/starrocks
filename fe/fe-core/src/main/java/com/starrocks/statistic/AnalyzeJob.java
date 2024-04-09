@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.starrocks.catalog.Type;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 
@@ -35,6 +36,8 @@ public interface AnalyzeJob {
     String getTableName() throws MetaNotFoundException;
 
     List<String> getColumns();
+
+    List<Type> getColumnTypes();
 
     StatsConstants.AnalyzeType getAnalyzeType();
 

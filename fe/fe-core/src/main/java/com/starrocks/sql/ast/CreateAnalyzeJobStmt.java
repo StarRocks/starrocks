@@ -16,20 +16,25 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatsConstants;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CreateAnalyzeJobStmt extends DdlStmt {
     private String catalogName;
     private long dbId;
     private long tableId;
     private final TableName tbl;
-    private List<String> columnNames;
+
+    private List<Expr> columns;
+    private List<String> columnNames = Lists.newArrayList();
     private final boolean isSample;
     private Map<String, String> properties;
 
@@ -41,14 +46,14 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this(new TableName(db, null), Lists.newArrayList(), isSample, properties, pos);
     }
 
-    public CreateAnalyzeJobStmt(TableName tbl, List<String> columnNames, boolean isSample,
+    public CreateAnalyzeJobStmt(TableName tbl, List<Expr> columns, boolean isSample,
                                 Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.tbl = tbl;
         this.dbId = StatsConstants.DEFAULT_ALL_ID;
         this.tableId = StatsConstants.DEFAULT_ALL_ID;
-        this.columnNames = columnNames;
+        this.columns = columns;
         this.isSample = isSample;
         this.properties = properties;
     }
@@ -80,6 +85,15 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     public void setColumnNames(List<String> columnNames) {
         this.columnNames = columnNames;
     }
+
+    public List<Expr> getColumns() {
+        return columns;
+    }
+
+    public List<Type> getColumnTypes() {
+        return columns.stream().map(Expr::getType).collect(Collectors.toList());
+    }
+
 
     public boolean isSample() {
         return isSample;
