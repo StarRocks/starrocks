@@ -5533,18 +5533,12 @@ public class LocalMetastore implements ConnectorMetadata {
         writer.writeJson(idToDbNormal.size());
         for (Database database : idToDbNormal.values()) {
             writer.writeJson(database);
-            int totalTableNumber = database.getTables().size() + database.getTemporaryTables().size();
+            int totalTableNumber = database.getTables().size();
             writer.writeJson(totalTableNumber);
             List<Table> tables = database.getTables();
             for (Table table : tables) {
                 writer.writeJson(table);
             }
-
-            List<Table> tempTables = database.getTemporaryTables();
-            for (Table table : tempTables) {
-                writer.writeJson(table);
-            }
-
         }
 
         AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
