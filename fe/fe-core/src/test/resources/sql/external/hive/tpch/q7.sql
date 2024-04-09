@@ -113,10 +113,10 @@ OutPut Exchange Id: 24
 |
 21:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
-|  equal join conjunct: [25: o_custkey, INT, true] = [33: c_custkey, INT, true]
 |  equal join conjunct: [45: n_nationkey, INT, true] = [36: c_nationkey, INT, true]
+|  equal join conjunct: [25: o_custkey, INT, true] = [33: c_custkey, INT, true]
 |  build runtime filters:
-|  - filter_id = 3, build_expr = (33: c_custkey), remote = true
+|  - filter_id = 4, build_expr = (33: c_custkey), remote = true
 |  output columns: 13, 14, 18, 42, 46
 |  cardinality: 554680
 |  column statistics:
@@ -392,7 +392,7 @@ numNodes=0
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (24: o_orderkey)
-- filter_id = 3, probe_expr = (25: o_custkey)
+- filter_id = 4, probe_expr = (25: o_custkey)
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE

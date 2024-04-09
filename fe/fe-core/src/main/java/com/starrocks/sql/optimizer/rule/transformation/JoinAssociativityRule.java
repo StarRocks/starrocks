@@ -39,6 +39,11 @@ import java.util.stream.Collectors;
  *  A     B               B      C
  * */
 public class JoinAssociativityRule extends TransformationRule {
+
+    public static final int ASSOCIATIVITY_BOTTOM_MASK = 1 << 1;
+
+    public static final int ASSOCIATIVITY_TOP_MASK = 1 << 2;
+
     private JoinAssociativityRule() {
         super(RuleType.TF_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
@@ -65,6 +70,12 @@ public class JoinAssociativityRule extends TransformationRule {
         }
 
         LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
+
+        if ((joinOperator.getTransformMask() & ASSOCIATIVITY_TOP_MASK) > 0 &&
+                (leftChildJoin.getTransformMask() & ASSOCIATIVITY_BOTTOM_MASK) > 0) {
+            return false;
+        }
+
         if (leftChildJoin.getProjection() != null) {
             Projection projection = leftChildJoin.getProjection();
             // 1. Forbidden expression column on join-reorder
@@ -150,6 +161,7 @@ public class JoinAssociativityRule extends TransformationRule {
                 .setJoinType(JoinOperator.INNER_JOIN)
                 .setOnPredicate(Utils.compoundAnd(newParentConjuncts))
                 .setPredicate(topJoinPredicate)
+                .setTransformMask(parentJoin.getTransformMask() | createTransformMask(true))
                 .build();
 
         ColumnRefSet outputCols = parentJoin.getOutputColumns(new ExpressionContext(input));
@@ -190,6 +202,7 @@ public class JoinAssociativityRule extends TransformationRule {
                     .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
                     .setProjection(new Projection(newRightOutputColumns.stream()
                             .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()))
+                    .setTransformMask(createTransformMask(false))
                     .build();
             newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
         } else {
@@ -200,6 +213,7 @@ public class JoinAssociativityRule extends TransformationRule {
                     .setJoinType(JoinOperator.INNER_JOIN)
                     .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
                     .setProjection(new Projection(rightExpression))
+                    .setTransformMask(createTransformMask(false))
                     .build();
             newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
 
@@ -300,5 +314,9 @@ public class JoinAssociativityRule extends TransformationRule {
             }
         }
         return new Projection(columnRefMap);
+    }
+
+    private int createTransformMask(boolean isTop) {
+        return isTop ? ASSOCIATIVITY_TOP_MASK : ASSOCIATIVITY_BOTTOM_MASK;
     }
 }
