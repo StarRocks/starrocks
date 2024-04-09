@@ -63,12 +63,18 @@ public class SqlParser {
         List<StatementBase> statements = Lists.newArrayList();
         try {
             StatementSplitter splitter = new StatementSplitter(sql);
-            for (StatementSplitter.Statement statement : splitter.getCompleteStatements()) {
-                statements.add(TrinoParserUtils.toStatement(statement.statement(), sessionVariable.getSqlMode()));
+            for (int idx = 0; idx < splitter.getCompleteStatements().size(); ++idx) {
+                StatementSplitter.Statement statement = splitter.getCompleteStatements().get(idx);
+                StatementBase statementBase = TrinoParserUtils.toStatement(statement.statement(),
+                        sessionVariable.getSqlMode());
+                statementBase.setOrigStmt(new OriginStatement(sql, idx));
+                statements.add(statementBase);
             }
             if (!splitter.getPartialStatement().isEmpty()) {
-                statements.add(TrinoParserUtils.toStatement(splitter.getPartialStatement(),
-                        sessionVariable.getSqlMode()));
+                StatementBase statement = TrinoParserUtils.toStatement(splitter.getPartialStatement(),
+                        sessionVariable.getSqlMode());
+                statement.setOrigStmt(new OriginStatement(sql, splitter.getCompleteStatements().size()));
+                statements.add(statement);
             }
             if (ConnectContext.get() != null) {
                 ConnectContext.get().setRelationAliasCaseInSensitive(true);
