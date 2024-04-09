@@ -281,7 +281,7 @@ public enum ErrorCode {
     /**
      * 5600 - 5699: DML operation failure
      */
-    ERR_NO_FILES_FOUND(5600, new byte[] {'4', '2', '0', '0', '0'},
+    ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
             "No files were found matching the pattern(s) or path(s): '%s'"),
 
     /**
