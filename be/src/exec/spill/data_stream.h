@@ -15,23 +15,30 @@
 #pragma once
 
 #include "common/status.h"
+#include "exec/spill/spill_fwd.h"
 #include "runtime/runtime_state.h"
 #include "util/slice.h"
 
 namespace starrocks::spill {
-class Spiller;
-class BlockGroup;
-class BlockManager;
 
 class SpillOutputDataStream {
 public:
     virtual ~SpillOutputDataStream() = default;
-    virtual Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size) = 0;
+    virtual Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
+                          size_t write_num_rows) = 0;
     virtual Status flush() = 0;
     virtual bool is_remote() const = 0;
 };
 using SpillOutputDataStreamPtr = std::shared_ptr<SpillOutputDataStream>;
 SpillOutputDataStreamPtr create_spill_output_stream(Spiller* spiller, BlockGroup* block_group,
                                                     BlockManager* block_manager);
+
+using InputStreamPtr = std::shared_ptr<SpillInputStream>;
+
+class DataTranster {
+public:
+    static Status transfer(workgroup::YieldContext& yield_ctx, RuntimeState* state, Serde* serde,
+                           const SpillOutputDataStreamPtr& output, const InputStreamPtr& input_stream);
+};
 
 } // namespace starrocks::spill
