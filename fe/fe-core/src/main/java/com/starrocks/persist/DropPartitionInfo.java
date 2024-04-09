@@ -44,6 +44,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -59,7 +60,7 @@ public class DropPartitionInfo implements Writable, GsonPostProcessable {
     @SerializedName(value = "forceDrop")
     private boolean forceDrop = false;
     @SerializedName(value = "partitionNames")
-    private List<String> partitionNames;
+    private List<String> partitionNames = new ArrayList<>();
 
     private DropPartitionInfo() {
     }
