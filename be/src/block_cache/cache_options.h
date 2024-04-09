@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -27,26 +28,32 @@ struct DirSpace {
 
 struct CacheOptions {
     // basic
-    size_t mem_space_size;
+    size_t mem_space_size = 0;
     std::vector<DirSpace> disk_spaces;
     std::string meta_path;
 
     // advanced
-    size_t block_size;
-    bool enable_checksum;
-    bool enable_direct_io;
+    size_t block_size = 0;
+    bool enable_checksum = false;
+    bool enable_direct_io = false;
+    bool enable_tiered_cache = true;
     std::string engine;
-    size_t max_concurrent_inserts;
-    size_t max_flying_memory_mb;
-    bool enable_cache_adaptor;
-    size_t skip_read_factor;
+    size_t max_concurrent_inserts = 0;
+    size_t max_flying_memory_mb = 0;
+    double scheduler_threads_per_cpu = 0;
+    double skip_read_factor = 0;
 };
 
 struct WriteCacheOptions {
     // If ttl_seconds=0 (default), no ttl restriction will be set. If an old one exists, remove it.
     uint64_t ttl_seconds = 0;
     // If overwrite=true, the cache value will be replaced if it already exists.
-    bool overwrite = true;
+    bool overwrite = false;
+    bool async = false;
+    // When allow_zero_copy=true, it means the caller can ensure the target buffer not be released before
+    // the write finish. So the cache library can use the buffer directly without copying it to another buffer.
+    bool allow_zero_copy = false;
+    std::function<void(int, const std::string&)> callback = nullptr;
 
     struct Stats {
         int64_t write_mem_bytes = 0;
@@ -55,6 +62,8 @@ struct WriteCacheOptions {
 };
 
 struct ReadCacheOptions {
+    bool use_adaptor = false;
+
     struct Stats {
         int64_t read_mem_bytes = 0;
         int64_t read_disk_bytes = 0;

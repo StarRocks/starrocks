@@ -156,7 +156,6 @@ const DataCacheMetrics BlockCache::cache_metrics(int level) const {
 
 Status BlockCache::shutdown() {
     Status st = _kv_cache->shutdown();
-    _kv_cache = nullptr;
     _initialized.store(false, std::memory_order_relaxed);
     return st;
 }

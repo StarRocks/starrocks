@@ -130,6 +130,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -179,6 +180,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     options.mem_space_size = 20 * 1024 * 1024;
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -192,6 +194,10 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
 
     WriteCacheOptions write_options;
     std::string value2(cache_size, 'b');
+    st = cache->write_buffer(cache_key, 0, cache_size, value2.c_str(), &write_options);
+    ASSERT_TRUE(st.is_already_exist());
+
+    write_options.overwrite = true;
     st = cache->write_buffer(cache_key, 0, cache_size, value2.c_str(), &write_options);
     ASSERT_TRUE(st.ok());
 
@@ -219,8 +225,8 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "starcache";
-    options.enable_cache_adaptor = true;
     options.skip_read_factor = 1;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -251,6 +257,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
         ReadCacheOptions opts;
+        opts.use_adaptor = true;
         auto res = cache->read_buffer(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().is_resource_busy());
     }
@@ -267,6 +274,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
         ReadCacheOptions opts;
+        opts.use_adaptor = true;
         auto res = cache->read_buffer(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().ok());
     }
@@ -285,6 +293,7 @@ TEST_F(BlockCacheTest, custom_lru_insertion_point) {
     options.mem_space_size = 20 * 1024 * 1024;
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "cachelib";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
