@@ -23,10 +23,13 @@
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
 
+namespace starrocks {
+class TxnLogPB;
+}
+
 namespace starrocks::lake {
 
 class Rowset;
-class TxnLogPB;
 
 class CompactionTask {
 public:
