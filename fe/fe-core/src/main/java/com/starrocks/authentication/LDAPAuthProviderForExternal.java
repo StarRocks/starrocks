@@ -51,7 +51,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
                     ldapSecurityIntegration.getLdapBindRootPwd());
             if (!authenticated) {
                 throw new AuthenticationException(String.format(
-                        "external ldap authentication failure for user %s@%s", user, host));
+                                "external ldap authentication failure for user %s@%s", user, host));
             }
         } catch (Exception e) {
             throw new AuthenticationException(String.format(
