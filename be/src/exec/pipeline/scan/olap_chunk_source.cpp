@@ -15,7 +15,13 @@
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
 #include <cstdint>
+#include <string_view>
+#include <unordered_map>
 
+#include "column/column.h"
+#include "column/column_access_path.h"
+#include "column/field.h"
+#include "common/status.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
@@ -327,6 +333,66 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     return Status::OK();
 }
 
+Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
+    if (path->children().size() < 1) {
+        return Status::OK();
+    }
+    if (field->type()->type() == LogicalType::TYPE_ARRAY) {
+        DCHECK_EQ(path->children().size(), 1);
+        DCHECK_EQ(field->sub_fields().size(), 1);
+        RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[0], path->children()[0].get()));
+    } else if (field->type()->type() == LogicalType::TYPE_MAP) {
+        DCHECK_EQ(path->children().size(), 1);
+        auto child_path = path->children()[0].get();
+        if (child_path->is_index() || child_path->is_all()) {
+            DCHECK_EQ(field->sub_fields().size(), 2);
+            RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[1], child_path));
+        } else {
+            return Status::OK();
+        }
+    } else if (field->type()->type() == LogicalType::TYPE_STRUCT) {
+        std::unordered_map<std::string_view, ColumnAccessPath*> path_index;
+        for (auto& child_path : path->children()) {
+            path_index[child_path->path()] = child_path.get();
+        }
+
+        std::vector<Field> new_fields;
+        for (auto& child_fields : field->sub_fields()) {
+            auto iter = path_index.find(child_fields.name());
+            if (iter != path_index.end()) {
+                auto child_path = iter->second;
+                RETURN_IF_ERROR(prune_field_by_access_paths(&child_fields, child_path));
+                new_fields.emplace_back(child_fields);
+            }
+        }
+
+        field->set_sub_fields(std::move(new_fields));
+    }
+    return Status::OK();
+}
+
+Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
+    if (_column_access_paths.empty()) {
+        return Status::OK();
+    }
+
+    // schema
+    for (auto& path : _column_access_paths) {
+        if (path->is_from_predicate()) {
+            continue;
+        }
+        auto& root = path->path();
+        auto field = schema->get_field_by_name(root);
+        if (field == nullptr) {
+            LOG(WARNING) << "failed to find column in schema: " << root;
+            continue;
+        }
+        RETURN_IF_ERROR(prune_field_by_access_paths(field.get(), path.get()));
+    }
+
+    return Status::OK();
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -359,6 +425,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
+    RETURN_IF_ERROR(_prune_schema_by_access_paths(&child_schema));
 
     std::vector<RowsetSharedPtr> rowsets;
     for (auto& rowset : _morsel->rowsets()) {
