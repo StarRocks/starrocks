@@ -620,7 +620,7 @@ int ScalarColumnIterator::dict_size() {
 
 bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {
     if (_reader->has_zone_map() && _delete_partial_satisfied_pages.has_value()) {
-        return _delete_partial_satisfied_pages.value().contains(page_index);
+        return _delete_partial_satisfied_pages->contains(page_index);
     }
     // if there is no zone map should be treated as DEL_PARTIAL_SATISFIED
     return true;
