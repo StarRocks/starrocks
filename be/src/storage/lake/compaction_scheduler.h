@@ -361,4 +361,6 @@ inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
     DCHECK(*context == nullptr);
 }
 
+bool compaction_should_cancel(CompactionTaskContext* context);
+
 } // namespace starrocks::lake

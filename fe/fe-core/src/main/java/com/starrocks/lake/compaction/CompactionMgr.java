@@ -75,6 +75,10 @@ public class CompactionMgr implements MemoryTrackable {
         sorter = (Sorter) sorterClazz.getConstructor().newInstance();
     }
 
+    public void setCompactionScheduler(CompactionScheduler compactionScheduler) {
+        this.compactionScheduler = compactionScheduler;
+    }
+
     public void start() {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
@@ -192,6 +196,10 @@ public class CompactionMgr implements MemoryTrackable {
 
     public void cancelCompaction(long txnId) {
         compactionScheduler.cancelCompaction(txnId);
+    }
+
+    public boolean existCompaction(long txnId) {
+        return compactionScheduler.existCompaction(txnId);
     }
 
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
