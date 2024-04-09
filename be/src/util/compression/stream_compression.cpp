@@ -281,14 +281,13 @@ public:
 
     Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
                       size_t* output_bytes_written, bool* stream_end) override;
-    Status decompress_header(uint8_t* input, size_t input_len, size_t* decompressed_len) override;
 
 private:
     compression::LZ4F_DCtx_Pool::Ref _decompress_context;
     ssize_t _expect_dec_buf_size{-1};
 
     const static unsigned STARROCKS_LZ4F_VERSION;
-    };
+};
 
 Status Lz4FrameStreamCompression::init() {
     StatusOr<compression::LZ4F_DCtx_Pool::Ref> maybe_decompress_context = compression::getLZ4F_DCtx();
@@ -369,19 +368,6 @@ Status Lz4FrameStreamCompression::decompress(uint8_t* input, size_t input_len, s
         *stream_end = false;
     }
 
-    return Status::OK();
-}
-
-Status Lz4FrameStreamCompression::decompress_header(uint8_t* input, size_t input_len, size_t* decompressed_len) {
-    LZ4F_decompressionContext_t ctx = _decompress_context->ctx;
-    LZ4F_frameInfo_t info;
-    auto ret = LZ4F_getFrameInfo(ctx, &info, (void*)input, &input_len);
-    if (LZ4F_isError(ret)) {
-        std::stringstream ss;
-        ss << "LZ4F_getFrameInfo error: " << std::string(LZ4F_getErrorName(ret));
-        return Status::InternalError(ss.str());
-    }
-    *decompressed_len = info.contentSize;
     return Status::OK();
 }
 

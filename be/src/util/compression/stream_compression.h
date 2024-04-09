@@ -59,10 +59,6 @@ public:
     virtual Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
                               size_t output_len, size_t* output_bytes_written, bool* stream_end) = 0;
 
-    virtual Status decompress_header(uint8_t* input, size_t input_len, size_t* decompressed_len) {
-        return Status::NotSupported("decompressHeader for StreamCompression not supported");
-    }
-
     virtual Status compress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
                             size_t output_len, size_t* output_bytes_written, bool* stream_end) {
         return Status::NotSupported("compress for StreamCompression not supported");
