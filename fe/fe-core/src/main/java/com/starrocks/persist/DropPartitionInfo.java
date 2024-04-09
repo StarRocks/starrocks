@@ -39,6 +39,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -48,7 +49,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class DropPartitionInfo implements Writable, GsonPostProcessable {
+public class DropPartitionInfo implements Writable, GsonPreProcessable, GsonPostProcessable {
     @SerializedName(value = "dbId")
     private Long dbId;
     @SerializedName(value = "tableId")
@@ -136,6 +137,12 @@ public class DropPartitionInfo implements Writable, GsonPostProcessable {
     public void gsonPostProcess() throws IOException {
         if (partitionName != null) {
             partitionNames.add(partitionName);
+        }
+    }
+    @Override
+    public void gsonPreProcess() throws IOException {
+        if (partitionNames != null && partitionNames.size() == 1) {
+            partitionName = partitionNames.get(0);
         }
     }
 }
