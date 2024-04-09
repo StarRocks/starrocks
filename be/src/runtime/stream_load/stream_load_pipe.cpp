@@ -275,11 +275,11 @@ Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
     return Status::OK();
 }
 
-DecompressedStreamLoadPipe::DecompressedStreamLoadPipe(std::shared_ptr<StreamLoadPipe> pipe,
-                                                       TCompressionType::type compression_type)
-        : _pipe(pipe), _compression_type(compression_type) {}
+CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe,
+                                                               TCompressionType::type compression_type)
+        : StreamLoadPipeReader(pipe), _compression_type(compression_type) {}
 
-StatusOr<ByteBufferPtr> DecompressedStreamLoadPipe::read() {
+StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     if (_decompressor == nullptr) {
         CompressionTypePB compression = CompressionTypePB::DEFAULT_COMPRESSION;
         if (_compression_type == TCompressionType::GZIP) {
@@ -302,7 +302,7 @@ StatusOr<ByteBufferPtr> DecompressedStreamLoadPipe::read() {
         _decompressed_buffer = ByteBuffer::allocate(DEFAULT_DECOMPRESS_BUFFER_SIZE);
     }
 
-    auto ret = _pipe->read();
+    auto ret = StreamLoadPipeReader::read();
     if (!ret.ok()) {
         return ret.status();
     }
