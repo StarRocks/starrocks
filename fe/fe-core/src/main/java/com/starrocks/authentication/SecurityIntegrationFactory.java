@@ -19,36 +19,14 @@ import com.starrocks.common.DdlException;
 import java.util.Map;
 
 public class SecurityIntegrationFactory {
-
-    public static SecurityIntegration createSecurityIntegration(
-            String name, Map<String, String> propertyMap) throws DdlException {
+    public static SecurityIntegration createSecurityIntegration(String name, Map<String, String> propertyMap)
+            throws DdlException {
         String type = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
-        SecurityIntegrationType securityIntegrationType = getSecurityIntegrationType(type);
-        SecurityIntegration integration;
-        switch (securityIntegrationType) {
-            case LDAP:
-                integration = new LDAPSecurityIntegration(name, propertyMap);
-                break;
-            case CUSTOM:
-                integration = new CustomSecurityIntegration(name, propertyMap);
-                break;
-            default:
-                throw new DdlException("unsupported '" + type + "' type security integration");
+        if (type.equals(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+            return new LDAPSecurityIntegration(name, propertyMap);
+        } else {
+            throw new DdlException("unsupported '" + type + "' type security integration");
         }
-        integration.checkProperties();
-        return integration;
-    }
 
-    public static SecurityIntegrationType getSecurityIntegrationType(String type) throws DdlException {
-        try {
-            return SecurityIntegrationType.valueOf(type.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new DdlException("unsupported security integration type '" + type + "'");
-        }
     }
-
-    public enum SecurityIntegrationType {
-        LDAP, CUSTOM;
-    }
-
 }

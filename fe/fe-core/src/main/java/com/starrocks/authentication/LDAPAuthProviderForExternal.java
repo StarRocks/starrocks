@@ -39,7 +39,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     public void authenticate(String user, String host, byte[] password, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         LDAPSecurityIntegration ldapSecurityIntegration =
-                (LDAPSecurityIntegration) authenticationInfo.extraInfo.get(SecurityIntegration.SECURITY_INTEGRATION_KEY);
+                (LDAPSecurityIntegration) authenticationInfo.extraInfo.get(PLUGIN_NAME);
         try {
             boolean authenticated = LDAPAuthProviderForExternal.authenticate(
                     user, StringUtils.stripEnd(new String(password), "\0"),

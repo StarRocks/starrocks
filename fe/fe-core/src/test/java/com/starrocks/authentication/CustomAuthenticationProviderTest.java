@@ -76,22 +76,4 @@ public class CustomAuthenticationProviderTest {
 
     }
 
-    @Test
-    public void testCustomInNonNativeAuthentication() throws Exception {
-        AuthenticationMgr mgr = ctx.getGlobalStateMgr().getAuthenticationMgr();
-        String authMechanism = "custom";
-        SecurityIntegration securityIntegration = new CustomSecurityIntegration(authMechanism, Collections.EMPTY_MAP);
-
-        AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-
-        try {
-            UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-            userAuthenticationInfo.extraInfo.put(SecurityIntegration.SECURITY_INTEGRATION_KEY, securityIntegration);
-            provider.authenticate(user, host, password, randomString, userAuthenticationInfo);
-            Assert.fail();
-        } catch (AuthenticationException e) {
-            Assert.assertTrue(e.getMessage().contains("Login error"));
-        }
-    }
-
 }

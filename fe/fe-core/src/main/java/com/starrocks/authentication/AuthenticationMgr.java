@@ -277,7 +277,8 @@ public class AuthenticationMgr {
             try {
                 AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                 UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                userAuthenticationInfo.extraInfo.put(SecurityIntegration.SECURITY_INTEGRATION_KEY, securityIntegration);
+                userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
+                        securityIntegration);
                 provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
                         userAuthenticationInfo);
                 // the ephemeral user is identified as 'username'@'auth_mechanism'
