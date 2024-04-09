@@ -10,7 +10,7 @@ You can define one or more generated columns to store the results of expressions
 
 It is also recommended to **evaluate the impact of generated columns on loading performance because computing expressions takes some time**. Additionally, it is advised to **[create generated columns at table creation](#create-generated-columns-at-table-creation-recommended) rather than adding or modifying them after table creation**. Because it is time-consuming and costly to add or modify generated columns after table creation.
 
-However, note that when data load into tables with a generated column, the time and overhead may increase because StarRocks needs to perform additional computation to calculate the results based on the expression and writes the results into the generated column.
+However, note that when data loads into tables with a generated column, the time and overhead may increase because StarRocks needs to perform additional computation to calculate the results based on the expression and writes the results into the generated column.
 
 Currently, StarRocks's shared-data mode does not support generated columns.
 
