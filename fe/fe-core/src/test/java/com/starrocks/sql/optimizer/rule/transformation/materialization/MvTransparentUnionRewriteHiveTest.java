@@ -158,7 +158,8 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                                 "     rollup: mv0\n" +
                                 "     tabletRatio=18/18", // case 1
                         "     TABLE: lineitem_par\n" +
-                                "     PARTITION PREDICATES: 26: l_shipdate != '1998-01-01', 26: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
+                                "     PARTITION PREDICATES: 26: l_shipdate != '1998-01-01', 26: l_shipdate " +
+                                "IN ('1998-01-02', '1998-01-05')\n" +
                                 "     partitions=2/6",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -167,7 +168,8 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                                 "     rollup: mv0\n" +
                                 "     tabletRatio=18/18", // case 2
                         "     TABLE: lineitem_par\n" +
-                                "     PARTITION PREDICATES: 26: l_shipdate >= '1998-01-02', 26: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
+                                "     PARTITION PREDICATES: 26: l_shipdate >= '1998-01-02', 26: l_shipdate " +
+                                "IN ('1998-01-02', '1998-01-05')\n" +
                                 "     NON-PARTITION PREDICATES: 25: l_suppkey > 1\n" +
                                 "     MIN/MAX PREDICATES: 25: l_suppkey > 1\n" +
                                 "     partitions=2/6",
