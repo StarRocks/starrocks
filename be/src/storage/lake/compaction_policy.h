@@ -19,13 +19,16 @@
 #include "common/statusor.h"
 #include "storage/compaction_utils.h"
 
+namespace starrocks {
+class TabletMetadataPB;
+}
+
 namespace starrocks::lake {
 
 class Rowset;
 using RowsetPtr = std::shared_ptr<Rowset>;
 class CompactionPolicy;
 using CompactionPolicyPtr = std::shared_ptr<CompactionPolicy>;
-class TabletMetadataPB;
 class TabletManager;
 
 // Compaction policy for lake tablet

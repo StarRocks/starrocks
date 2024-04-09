@@ -17,6 +17,8 @@
 #include "storage/persistent_index.h"
 
 namespace starrocks {
+class TxnLogPB;
+class TxnLogPB_OpCompaction;
 
 namespace sstable {
 class Iterator;
@@ -31,8 +33,6 @@ class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
-class TxnLogPB;
-class TxnLogPB_OpCompaction;
 
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
