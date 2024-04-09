@@ -119,6 +119,7 @@ private:
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
     Status _collect_count(Column* column, LogicalType type);
+    Status _collect_flat_json(ColumnId cid, Column* column);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
     SegmentSharedPtr _segment;

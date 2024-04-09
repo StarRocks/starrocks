@@ -278,6 +278,7 @@ public class FunctionSet {
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
+    public static final String FLAT_JSON_META = "flat_json_meta";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -1151,6 +1152,9 @@ public class FunctionSet {
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
+        // flat json meta
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.JSON),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion

@@ -166,6 +166,8 @@ public:
 
     const std::string& name() const { return _name; }
 
+    const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
+
 private:
     const std::string& file_name() const { return _segment->file_name(); }
 

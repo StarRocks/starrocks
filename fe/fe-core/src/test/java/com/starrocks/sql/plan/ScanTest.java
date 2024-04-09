@@ -437,7 +437,7 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: false; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: false; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, VARCHAR, false]); args: INVALID_TYPE; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, false]); args: INVALID_TYPE; " +
                 "result: VARCHAR; args nullable: false; result nullable: true]");
 
         // with count, all columns should be nullable
@@ -447,9 +447,9 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, VARCHAR, true]); args: INVALID_TYPE; result: VARCHAR; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "sum[([count_t1a, VARCHAR, true]); args: BIGINT; result: BIGINT; " +
+                "sum[([count_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
                 "args nullable: true; result nullable: true]");
     }
 

@@ -79,6 +79,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
@@ -109,12 +110,14 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownFlatJsonMetaToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
@@ -438,6 +441,13 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
                 EliminateGroupByConstantRule.INSTANCE
+        ));
+
+        REWRITE_RULES.put(RuleSetType.META_SCAN_REWRITE, ImmutableList.of(
+                new PushDownAggToMetaScanRule(),
+                new PushDownFlatJsonMetaToMetaScanRule(),
+                new RewriteSimpleAggToMetaScanRule(),
+                new MinMaxCountOptOnScanRule()
         ));
     }
 
