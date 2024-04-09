@@ -104,10 +104,7 @@ public class HiveTableSink extends DataSink {
         tHiveTableSink.setStaging_dir(stagingDir);
         tHiveTableSink.setFile_format(fileFormat);
         tHiveTableSink.setIs_static_partition_sink(isStaticPartitionSink);
-        if (CompressionUtils.getConnectorSinkCompressionType(compressionType).isEmpty()) {
-            throw new SemanticException(String.format("Unsupported compression codec %s. " +
-                    "Use any of (uncompressed, snappy, lz4, zstd, gzip)", compressionType));
-        }
+        Preconditions.checkState(CompressionUtils.getConnectorSinkCompressionType(compressionType).isPresent());
         TCompressionType compression = CompressionUtils.getConnectorSinkCompressionType(compressionType).get();
         tHiveTableSink.setCompression_type(compression);
         tHiveTableSink.setTarget_max_file_size(targetMaxFileSize);
