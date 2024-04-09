@@ -1,17 +1,6 @@
 # committer will be the owner of all codes
 *   @StarRocks/starrocks-committer
 
-<<<<<<< HEAD
-# /docs/ belong to docs-maintainer
-/docs/  @StarRocks/docs-maintainer
-
-# sql/parser/StarRocksLex.g4 sql/parser/StarRocks.g4 belong to syntax-committer
-/fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocksLex.g4  @StarRocks/syntax-committer
-/fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4  @StarRocks/syntax-committer
-/gensrc/script/functions.py  @StarRocks/syntax-committer
-
 # /thirdparty/ /docker/dockerfiles/dev-env/dev-env.Dockerfile belong to thirdparty-maintainer
 /thirdparty/  @StarRocks/thirdparty-maintainer
 /docker/dockerfiles/dev-env/dev-env.Dockerfile   @StarRocks/thirdparty-maintainer
-=======
->>>>>>> 07bf48bff7 ([Tool] Disable the code owners check on the branch (#43769))
