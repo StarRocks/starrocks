@@ -212,6 +212,8 @@ struct HdfsScannerParams {
 
     bool use_datacache = false;
     bool enable_populate_datacache = false;
+    bool enable_datacache_async_populate_mode = false;
+    bool enable_datacache_io_adaptor = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
