@@ -203,9 +203,11 @@ void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     }
     case TYPE_FLOAT: {
         _write_number<TYPE_FLOAT, orc::DoubleVectorBatch>(orc_column, column);
+        break;
     }
     case TYPE_DOUBLE: {
         _write_number<TYPE_DOUBLE, orc::DoubleVectorBatch>(orc_column, column);
+        break;
     }
     case TYPE_CHAR:
         [[fallthrough]];
