@@ -518,7 +518,7 @@ public class ShowExecutor {
         }
 
         @Override
-        public ShowResultSet visitShowTemporaryTableStatement(ShowTemporaryTableStmt statement, ConnectContext context) {
+        public ShowResultSet visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, ConnectContext context) {
             ShowTemporaryTableStmt showTemporaryTableStmt = statement;
             List<List<String>> rows = Lists.newArrayList();
             String catalogName = showTemporaryTableStmt.getCatalogName();

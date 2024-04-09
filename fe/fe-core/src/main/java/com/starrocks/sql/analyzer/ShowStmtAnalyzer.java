@@ -123,7 +123,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowTemporaryTableStatement(ShowTemporaryTableStmt node, ConnectContext context) {
+        public Void visitShowTemporaryTablesStatement(ShowTemporaryTableStmt node, ConnectContext context) {
             return visitShowTableStatement(node, context);
         }
 

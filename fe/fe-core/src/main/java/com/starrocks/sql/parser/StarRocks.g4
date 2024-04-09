@@ -69,7 +69,7 @@ statement
     | alterTableStatement
     | cancelAlterTableStatement
     | showAlterStatement
-    | showTemporaryTableStatement
+    | showTemporaryTablesStatement
 
     // View Statement
     | createViewStatement
@@ -569,7 +569,7 @@ showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-showTemporaryTableStatement
+showTemporaryTablesStatement
     : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 

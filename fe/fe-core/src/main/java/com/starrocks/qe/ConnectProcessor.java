@@ -767,15 +767,20 @@ public class ConnectProcessor {
             ctx.setCurrentRoleIds(new HashSet<>());
         }
 
+        // after https://github.com/StarRocks/starrocks/pull/43162, we support temporary tables.
+        // DDL/DML operations related to temporary tables are bound to a specific session,
+        // so the request forwarded by the follower needs to specifically set the session id.
+
+        //  During the grayscale upgrade process,
+        //  if the leader is a new version and the follower is an old version,
+        //  the forwarded request won't have a session id.
+        //  Considering that the old version FE does not support operations related to temporary tables,
+        //  the session id is not necessary at this time.
+        //  in this case, we just set a random session id to ensure that subsequent processing can be processed normally.
         if (request.isSetSession_id()) {
             ctx.setSessionId(UUID.fromString(request.getSession_id()));
         } else {
-            TMasterOpResult result = new TMasterOpResult();
-            ctx.getState().setError(
-                    "Missing current session id. You need to upgrade this Frontend to the same version as Leader Frontend.");
-            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
-            result.setPacket(getResultPacket());
-            return result;
+            ctx.setSessionId(UUIDUtil.genUUID());
         }
 
         if (request.isSetIsLastStmt()) {

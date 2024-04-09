@@ -1173,7 +1173,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowTemporaryTableStatement(StarRocksParser.ShowTemporaryTableStatementContext context) {
+    public ParseNode visitShowTemporaryTablesStatement(StarRocksParser.ShowTemporaryTablesStatementContext context) {
         String database = null;
         String catalog = null;
         // catalog.db

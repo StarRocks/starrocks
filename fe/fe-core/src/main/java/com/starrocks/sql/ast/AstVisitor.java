@@ -197,7 +197,7 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowTemporaryTableStatement(ShowTemporaryTableStmt statement, C context) {
+    default R visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
