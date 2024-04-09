@@ -50,25 +50,35 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
     @Test
     public void testHiveSplit() throws Exception {
         String executeSql = "select * from hive0.file_split_db.file_split_tbl;";
-        Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
-        List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
-                .get(new PlanNodeId(0)).getScanRangeLocations(100);
-        Assert.assertEquals(4, scanRangeLocations.size());
 
-        scanRangeLocations.sort((o1, o2) -> {
-            THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
-            THdfsScanRange scanRange2 = o2.scan_range.hdfs_scan_range;
-            if (scanRange1.relative_path.equalsIgnoreCase(scanRange2.relative_path)) {
-                return (int) (scanRange1.offset - scanRange2.offset);
-            } else {
-                return scanRange1.compareTo(scanRange2);
-            }
-        });
+        {
+            connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(true);
+            Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+            List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
+                    .get(new PlanNodeId(0)).getScanRangeLocations(100);
+            Assert.assertEquals(2, scanRangeLocations.size());
+        }
+        {
+            connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(false);
+            Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+            List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
+                    .get(new PlanNodeId(0)).getScanRangeLocations(100);
+            Assert.assertEquals(4, scanRangeLocations.size());
+            scanRangeLocations.sort((o1, o2) -> {
+                THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
+                THdfsScanRange scanRange2 = o2.scan_range.hdfs_scan_range;
+                if (scanRange1.relative_path.equalsIgnoreCase(scanRange2.relative_path)) {
+                    return (int) (scanRange1.offset - scanRange2.offset);
+                } else {
+                    return scanRange1.compareTo(scanRange2);
+                }
+            });
 
-        TScanRange scanRange1 = scanRangeLocations.get(0).scan_range;
-        TScanRange scanRange2 = scanRangeLocations.get(1).scan_range;
+            TScanRange scanRange1 = scanRangeLocations.get(0).scan_range;
+            TScanRange scanRange2 = scanRangeLocations.get(1).scan_range;
 
-        Assert.assertEquals(scanRange1.hdfs_scan_range.length, scanRange2.hdfs_scan_range.offset);
+            Assert.assertEquals(scanRange1.hdfs_scan_range.length, scanRange2.hdfs_scan_range.offset);
+        }
     }
 
     @Test
