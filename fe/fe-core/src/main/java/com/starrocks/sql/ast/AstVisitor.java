@@ -154,7 +154,7 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitCreateTemporaryTableStatement(CreateTemporaryTableStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitDDLStatement(statement, context);
     }
 
     default R visitCreateTemporaryTableAsSelectStatement(CreateTemporaryTableAsSelectStmt statement, C context) {
@@ -162,7 +162,7 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitCreateTemporaryTableLikeStatement(CreateTemporaryTableLikeStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitDDLStatement(statement, context);
     }
 
     default R visitDropTableStatement(DropTableStmt statement, C context) {

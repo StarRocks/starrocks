@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -37,28 +34,5 @@ public class CreateTemporaryTableAsSelectStmt extends CreateTableAsSelectStmt {
     public UUID getSessionId() {
         CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) getCreateTableStmt();
         return createTemporaryTableStmt.getSessionId();
-    }
-
-    @Override
-    public boolean createTable(ConnectContext session) throws AnalysisException {
-        try {
-            CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) getCreateTableStmt();
-            createTemporaryTableStmt.setSessionId(session.getSessionId());
-            return session.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
-        } catch (DdlException e) {
-            throw new AnalysisException(e.getMessage());
-        }
-    }
-
-    @Override
-    public void dropTable(ConnectContext session) throws AnalysisException {
-        try {
-            DropTemporaryTableStmt dropTemporaryTableStmt =
-                    new DropTemporaryTableStmt(true, getCreateTableStmt().getDbTbl(), true);
-            dropTemporaryTableStmt.setSessionId(session.getSessionId());
-            session.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
-        } catch (Exception e) {
-            throw new AnalysisException(e.getMessage());
-        }
     }
 }

@@ -111,7 +111,6 @@ public class Database extends MetaObject implements Writable {
     private final Map<String, Table> nameToTable;
     private final Map<Long, Table> idToTable;
 
-    private final Map<Long, Table> idToTemporaryTable;
     // catalogName is set if the database comes from an external catalog
     private String catalogName;
 
@@ -143,7 +142,6 @@ public class Database extends MetaObject implements Writable {
         this.rwLock = new QueryableReentrantReadWriteLock(true);
         this.idToTable = new ConcurrentHashMap<>();
         this.nameToTable = new ConcurrentHashMap<>();
-        this.idToTemporaryTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
         this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
         this.location = location;
@@ -305,10 +303,10 @@ public class Database extends MetaObject implements Writable {
             return false;
         }
         long tableId = table.getId();
-        if (idToTemporaryTable.containsKey(tableId)) {
+        if (idToTable.containsKey(tableId)) {
             return false;
         }
-        idToTemporaryTable.put(tableId, table);
+        idToTable.put(tableId, table);
         return true;
     }
 
@@ -352,7 +350,7 @@ public class Database extends MetaObject implements Writable {
         Locker locker = new Locker();
         locker.lockDatabase(this, LockType.WRITE);
         try {
-            table = getTemporaryTable(tableId);
+            table = getTable(tableId);
             if (table == null) {
                 if (isSetIfExists) {
                     return;
@@ -422,15 +420,16 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Table dropTemporaryTable(long tableId) {
-        Table table = this.idToTemporaryTable.get(tableId);
+        Table table = this.idToTable.get(tableId);
         if (table != null) {
-            this.idToTemporaryTable.remove(tableId);
+            Preconditions.checkArgument(table.isTemporaryTable(), "table should be temporary table");
+            this.idToTable.remove(tableId);
         }
         return table;
     }
 
     public List<Table> getTables() {
-        return new ArrayList<Table>(idToTable.values());
+        return new ArrayList<>(idToTable.values());
     }
 
     public int getTableNumber() {
@@ -438,11 +437,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public List<Table> getTemporaryTables() {
-        return new ArrayList<>(idToTemporaryTable.values());
-    }
-
-    public int getTemporaryTableNumber() {
-        return idToTemporaryTable.size();
+        return idToTable.values().stream().filter(t -> t.isTemporaryTable()).collect(Collectors.toList());
     }
 
     public List<Table> getViews() {
@@ -511,9 +506,6 @@ public class Database extends MetaObject implements Writable {
      * This is a thread-safe method when idToTable is a concurrent hash map
      */
     public Table getTable(long tableId) {
-        if (idToTemporaryTable.containsKey(tableId)) {
-            return idToTemporaryTable.get(tableId);
-        }
         return idToTable.get(tableId);
     }
 
@@ -521,9 +513,6 @@ public class Database extends MetaObject implements Writable {
         return Optional.ofNullable(getTable(tableId));
     }
 
-    public Table getTemporaryTable(long tableId) {
-        return idToTemporaryTable.get(tableId);
-    }
     public static Database read(DataInput in) throws IOException {
         Database db = new Database();
         db.readFields(in);

@@ -21,6 +21,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.UUID;
 
 public class DropTemporaryTableStmt extends DropTableStmt {
+    // the session's id associated with this temporary table
     private UUID sessionId = null;
 
     public DropTemporaryTableStmt(boolean ifExists, TableName tableName, boolean forceDrop) {

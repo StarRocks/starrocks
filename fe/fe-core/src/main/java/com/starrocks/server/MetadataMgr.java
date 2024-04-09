@@ -472,7 +472,7 @@ public class MetadataMgr {
         if (database == null) {
             return null;
         }
-        return database.getTemporaryTable(tableId);
+        return database.getTable(tableId);
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {

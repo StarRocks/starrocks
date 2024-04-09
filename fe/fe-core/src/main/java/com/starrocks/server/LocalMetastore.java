@@ -467,7 +467,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new MetaNotFoundException("Database not found");
             }
             db = this.fullNameToDb.get(dbName);
-            if (!isForceDrop && db.getTemporaryTableNumber() > 0) {
+            if (!isForceDrop && db.getTemporaryTables().size() > 0) {
                 throw new DdlException("The database [" + dbName + "] " +
                         "cannot be dropped because there are still some temporary tables in it. " +
                         "If you want to forcibly drop, please use \"DROP DATABASE <database> FORCE.\"");
@@ -5525,7 +5525,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         int totalTableNum = 0;
         for (Database database : idToDbNormal.values()) {
-            totalTableNum += database.getTableNumber() + database.getTemporaryTableNumber();
+            totalTableNum += database.getTableNumber();
         }
         int cnt = 1 + idToDbNormal.size() + idToDbNormal.size() /* record database table size */ + totalTableNum + 1;
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
@@ -5573,17 +5573,12 @@ public class LocalMetastore implements ConnectorMetadata {
             db.getTables().forEach(tbl -> {
                 try {
                     tbl.onReload();
+                    if (tbl.isTemporaryTable()) {
+                        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                        temporaryTableMgr.addTemporaryTable(UUIDUtil.genUUID(), db.getId(), tbl.getName(), tbl.getId());
+                    }
                 } catch (Throwable e) {
                     LOG.error("reload table failed: {} {}", tbl, e);
-                }
-            });
-            db.getTemporaryTables().forEach(tbl -> {
-                try {
-                    tbl.onReload();
-                    TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-                    temporaryTableMgr.addTemporaryTable(UUIDUtil.genUUID(), db.getId(), tbl.getName(), tbl.getId());
-                } catch (Throwable e) {
-                    LOG.error("reload temporary table failed: {} {}", tbl, e);
                 }
             });
         }

@@ -461,6 +461,11 @@ public class OlapTable extends Table {
         return indexes.getIndexes();
     }
 
+    @Override
+    public boolean isTemporaryTable() {
+        return this.sessionId != null;
+    }
+
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
         // check if rollup has same name
         for (String idxName : getIndexNameToId().keySet()) {

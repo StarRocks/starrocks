@@ -24,7 +24,9 @@ import java.util.Map;
 import java.util.UUID;
 
 public class CreateTemporaryTableStmt extends CreateTableStmt {
+    // the session's id associated with this temporary table
     private UUID sessionId = null;
+
     public CreateTemporaryTableStmt(boolean ifNotExists,
                            boolean isExternal,
                            TableName tableName,

@@ -136,9 +136,23 @@ public class MetaUtils {
         return table;
     }
 
-    // get the Table in the session based on table name,
-    // if there are temporary tables and normal tables with the same name, the temporary table will be used first.
     public static Table getTable(ConnectContext session, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(session.getCurrentCatalog());
+        }
+        Table table = session.getGlobalStateMgr().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
+
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+        return table;
+    }
+
+    // get table by tableName, unlike getTable, this interface is session aware,
+    // which means if there is a temporary table with the same name,
+    // use temporary table first, otherwise, treat it as a permanent table
+    public static Table getSessionAwareTable(ConnectContext session, TableName tableName) {
         if (Strings.isNullOrEmpty(tableName.getCatalog())) {
             tableName.setCatalog(session.getCurrentCatalog());
         }
