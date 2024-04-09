@@ -2317,37 +2317,6 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
     return Status::OK();
 }
 
-Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
-    // put all kvs in one shard
-    std::vector<std::vector<KVRef>> kvs_by_shard(1);
-    for (size_t shard_idx = 0; shard_idx < _shards.size(); shard_idx++) {
-        const auto& shard_info = _shards[shard_idx];
-        if (shard_info.size == 0) {
-            // skip empty shard
-            continue;
-        }
-        auto shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
-        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
-        RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
-                                                shard_info.bytes));
-        if (shard_info.key_size != 0) {
-            RETURN_IF_ERROR(_get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard));
-        } else {
-            RETURN_IF_ERROR(_get_varlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard));
-        }
-    }
-
-    // read kv from KVRef
-    for (const auto& each : kvs_by_shard) {
-        for (const auto& each_kv : each) {
-            auto value = UNALIGNED_LOAD64(each_kv.kv_pos + each_kv.size - kIndexValueSize);
-            RETURN_IF_ERROR(dump->add_pindex_kvs(
-                    std::string_view(reinterpret_cast<const char*>(each_kv.kv_pos), each_kv.size - kIndexValueSize),
-                    value, dump_pb));
-        }
-    }
-    return dump->finish_pindex_kvs(dump_pb);
-}
 bool ImmutableIndex::_filter(size_t shard_idx, std::vector<KeyInfo>& keys_info, std::vector<KeyInfo>* res) const {
     // add configure enable_pindex_filter, if there are some bug exists, set it to false
     if (!config::enable_pindex_filter || _bf_off.empty()) {
@@ -2540,6 +2509,39 @@ Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const S
     } else {
         return _get_in_varlen_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, pages);
     }
+}
+
+Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
+    // put all kvs in one shard
+    std::vector<std::vector<KVRef>> kvs_by_shard(1);
+    std::vector<std::unique_ptr<ImmutableIndexShard>> shard_ptrs(_shards.size());
+    for (size_t shard_idx = 0; shard_idx < _shards.size(); shard_idx++) {
+        const auto& shard_info = _shards[shard_idx];
+        if (shard_info.size == 0) {
+            // skip empty shard
+            continue;
+        }
+        shard_ptrs[shard_idx] = std::make_unique<ImmutableIndexShard>(shard_info.npage);
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard_ptrs[shard_idx]->pages.data(), shard_info.bytes));
+        RETURN_IF_ERROR(shard_ptrs[shard_idx]->decompress_pages(_compression_type, shard_info.npage,
+                                                                shard_info.uncompressed_size, shard_info.bytes));
+        if (shard_info.key_size != 0) {
+            RETURN_IF_ERROR(_get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard_ptrs[shard_idx]));
+        } else {
+            RETURN_IF_ERROR(_get_varlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard_ptrs[shard_idx]));
+        }
+    }
+
+    // read kv from KVRef
+    for (const auto& each : kvs_by_shard) {
+        for (const auto& each_kv : each) {
+            auto value = UNALIGNED_LOAD64(each_kv.kv_pos + each_kv.size - kIndexValueSize);
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(reinterpret_cast<const char*>(each_kv.kv_pos), each_kv.size - kIndexValueSize),
+                    value, dump_pb));
+        }
+    }
+    return dump->finish_pindex_kvs(dump_pb);
 }
 
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
