@@ -353,13 +353,12 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
     // Init PersistentIndex
-    _key_size = fix_size;
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
-    auto sstables = metadata->sstable_meta().sstables();
-    int64_t max_sstable_version = sstables.empty() ? 0 : sstables[sstables.size() - 1].version();
+    const auto& sstables = metadata->sstable_meta().sstables();
+    int64_t max_sstable_version = sstables.empty() ? 0 : sstables.rbegin()->version();
     if (max_sstable_version > base_version) {
         return Status::OK();
     }
@@ -379,7 +378,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
-        int64_t rowset_version = rowset->version();
+        // If it is upgraded from old version of sr, the rowset version will be not set.
+        // The generated rowset version will be treated as base_version.
+        int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
         if (rowset_version < max_sstable_version) {
             continue;
         }
