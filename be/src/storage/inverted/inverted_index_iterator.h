@@ -29,7 +29,7 @@ public:
     InvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader)
             : _index_meta(index_meta), _reader(reader) {
         _analyser_type = get_inverted_index_parser_type_from_string(
-                get_parser_string_from_properties(_index_meta->common_properties()));
+                get_parser_string_from_properties(_index_meta->index_properties()));
     }
 
     Status read_from_inverted_index(const std::string& column_name, const void* query_value,
@@ -40,6 +40,8 @@ public:
     InvertedIndexParserType get_inverted_index_analyser_type() const;
 
     InvertedIndexReaderType get_inverted_index_reader_type() const;
+
+    bool is_untokenized() const { return _analyser_type == InvertedIndexParserType::PARSER_NONE; }
 
 private:
     const std::shared_ptr<TabletIndex> _index_meta;

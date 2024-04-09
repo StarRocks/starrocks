@@ -142,5 +142,6 @@ public enum OperatorType {
     //  /  \
     // table table
     PATTERN_MULTIJOIN,
-    DICTIONARY_GET
+    DICTIONARY_GET,
+    MATCH_EXPR
 }

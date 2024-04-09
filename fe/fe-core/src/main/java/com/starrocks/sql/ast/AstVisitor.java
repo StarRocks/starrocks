@@ -38,6 +38,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.OrderByElement;
@@ -1298,6 +1299,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitLikePredicate(LikePredicate node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitMatchExpr(MatchExpr node, C context) {
         return visitExpression(node, context);
     }
 
