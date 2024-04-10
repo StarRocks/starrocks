@@ -246,6 +246,10 @@ public class JsonTypeTest extends PlanTestBase {
                 "  |  output: count(1)\n" +
                 "  |  group by: flat_json_meta_v_json");
 
+        sql = "select array_join(flat_json_meta(v_json), ', '), count(1) from tjson_test[_META_]";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_join(18: flat_json_meta_v_json, ', ')");
+
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(12) from tjson_test[_META_]"));
 
