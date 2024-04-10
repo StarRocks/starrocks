@@ -26,6 +26,10 @@ import java.util.Queue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.function.Consumer;
 
+/**
+ * Schedule pending task runs to running task runs, it uses priority queue to schedule task runs.
+ * The task run with higher priority or older created time will be scheduled first.
+ */
 public class TaskRunScheduler {
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
@@ -167,12 +171,8 @@ public class TaskRunScheduler {
             return res;
         }
         Queue<TaskRun> queue = pendingTaskRunMap.get(taskId);
-        if (queue != null) {
-            for (TaskRun run : queue) {
-                if (run.getTaskId() == taskId) {
-                    return run;
-                }
-            }
+        if (queue != null && !queue.isEmpty()) {
+            return queue.peek();
         }
         return null;
     }
@@ -181,7 +181,8 @@ public class TaskRunScheduler {
     public String toString() {
         JsonObject res = new JsonObject();
         res.addProperty("running", GsonUtils.GSON.toJson(runningTaskRunMap));
-        res.addProperty("pending", GsonUtils.GSON.toJson(pendingTaskRunMap));
+        res.addProperty("pending_map", GsonUtils.GSON.toJson(pendingTaskRunMap));
+        res.addProperty("pending_queue", GsonUtils.GSON.toJson(pendingTaskRunQueue));
         return res.toString();
     }
 }

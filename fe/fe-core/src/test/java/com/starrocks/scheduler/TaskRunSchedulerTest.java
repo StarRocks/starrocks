@@ -126,7 +126,7 @@ public class TaskRunSchedulerTest {
             TaskRun taskRun = queue.poll();
             Assert.assertTrue(taskRun.equals(taskRuns.get(i)));
         }
-   }
+    }
 
     @Test
     public void testScheduledPendingTaskRun() {
@@ -155,7 +155,36 @@ public class TaskRunSchedulerTest {
     }
 
     @Test
-    public void testSchedulederString() {
+    public void testScheduledPendingTaskRunWithSameTaskId() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        List<TaskRun> taskRuns = Lists.newArrayList();
+        TaskRunScheduler scheduler = new TaskRunScheduler();
+        for (int i = 0; i < 10; i++) {
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false, 1), i);
+            taskRuns.add(taskRun);
+            scheduler.addPendingTaskRun(taskRun);
+        }
+
+        Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, 1));
+        scheduler.scheduledPendingTaskRun(taskRun -> {
+            Assert.assertTrue(runningTaskRuns.contains(taskRun));
+        });
+        // running queue only support one task with same task id
+        Assert.assertTrue(scheduler.getRunningTaskRunMap().size() == 1);
+        Assert.assertTrue(scheduler.getPendingQueueCount() == 9);
+
+        System.out.println(scheduler);
+        for (int i = 0; i < 1; i++) {
+            Assert.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
+        }
+        for (int i = 1; i < 10; i++) {
+            Assert.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
+        }
+    }
+
+    @Test
+    public void testScheduledToString() {
         Task task = new Task("test");
         task.setDefinition("select 1");
         List<TaskRun> taskRuns = Lists.newArrayList();
@@ -169,7 +198,9 @@ public class TaskRunSchedulerTest {
         scheduler.scheduledPendingTaskRun(taskRun -> {
             Assert.assertTrue(runningTaskRuns.contains(taskRun));
         });
+        System.out.println(scheduler);
         Assert.assertTrue(scheduler.toString().equals("{\"running\":\"{\\\"0\\\":{},\\\"1\\\":{},\\\"2\\\":{},\\\"3\\\":{}}\"," +
-                "\"pending\":\"{\\\"4\\\":[{}],\\\"5\\\":[{}],\\\"6\\\":[{}],\\\"7\\\":[{}],\\\"8\\\":[{}],\\\"9\\\":[{}]}\"}"));
+                "\"pending_map\":\"{\\\"4\\\":[{}],\\\"5\\\":[{}],\\\"6\\\":[{}],\\\"7\\\":[{}],\\\"8\\\":[{}]," +
+                "\\\"9\\\":[{}]}\",\"pending_queue\":\"[{},{},{},{},{},{}]\"}"));
     }
 }

@@ -315,8 +315,7 @@ public class TaskManagerTest {
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
         Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
-        Assert.assertEquals(now + 10, taskRun.getStatus().getCreateTime());
-
+        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
@@ -352,8 +351,7 @@ public class TaskManagerTest {
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
         Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
-        Assert.assertEquals(now + 10, taskRun.getStatus().getCreateTime());
-
+        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
