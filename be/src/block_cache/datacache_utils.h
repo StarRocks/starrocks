@@ -21,7 +21,7 @@ namespace starrocks {
 
 class DataCacheUtils {
 public:
-    static TDataCacheMetrics convertMetricsToThrift(const DataCacheMetrics& metrics);
+    static void set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics);
 };
 
 } // namespace starrocks

@@ -336,8 +336,9 @@ public:
         metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
 
         const BlockCache* cache = BlockCache::instance();
-        const TDataCacheMetrics datacache_metrics = DataCacheUtils::convertMetricsToThrift(cache->cache_metrics());
-        metrics.__set_metrics(datacache_metrics);
+        TDataCacheMetrics t_metrics{};
+        DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+        metrics.__set_metrics(t_metrics);
 
         load_params->__set_load_datacache_metrics(metrics);
     }

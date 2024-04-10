@@ -834,7 +834,7 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         if (config::datacache_enable) {
             const BlockCache* cache = BlockCache::instance();
             const DataCacheMetrics& metrics = cache->cache_metrics();
-            t_metrics = DataCacheUtils::convertMetricsToThrift(metrics);
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
         } else {
             t_metrics.__set_status(TDataCacheStatus::DISABLED);
         }

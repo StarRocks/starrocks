@@ -35,7 +35,7 @@ public class DataCacheSelectMetrics {
             .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
             .addColumn(new Column("ALREADY_CACHED_SIZE", ScalarType.createVarcharType()))
             .addColumn(new Column("WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
-            .addColumn(new Column("WRITE_CACHE_TIME", ScalarType.createVarcharType()))
+            .addColumn(new Column("AVG_WRITE_CACHE_TIME", ScalarType.createVarcharType()))
             .addColumn(new Column("TOTAL_CACHE_USAGE", ScalarType.createVarcharType()))
             .build();
 
@@ -118,7 +118,11 @@ public class DataCacheSelectMetrics {
         row.add("SUCCESS");
         row.add(new ByteSizeValue(alreadyCachedSize).toString());
         row.add(new ByteSizeValue(writeCacheSize).toString());
-        row.add(new TimeValue(writeCacheTime, TimeUnit.NANOSECONDS).toString());
+
+        // get avg write cache time
+        Double avgWriteCacheTime = Math.ceil((double) writeCacheTime / beMetrics.size());
+        row.add(new TimeValue(avgWriteCacheTime.longValue(), TimeUnit.NANOSECONDS).toString());
+
         row.add(String.format("%.2f%%", ((double) totalUsedCacheSize / totalCacheSize) * 100));
         return new ShowResultSet(SIMPLE_META_DATA, rows);
     }
@@ -142,10 +146,13 @@ public class DataCacheSelectMetrics {
                     metrics.getLastDataCacheMetrics().getMemUsedBytes().getBytes();
         }
 
+        // get avg write cache time
+        Double avgWriteCacheTime = Math.ceil((double) writeCacheTime / beMetrics.size());
+
         return String.format(
-                "AlreadyCachedSize: %s, WriteCacheSize: %s, WriteCacheTime: %s, TotalCacheUsage: %.2f%%",
+                "AlreadyCachedSize: %s, WriteCacheSize: %s, AvgWriteCacheTime: %s, TotalCacheUsage: %.2f%%",
                 new ByteSizeValue(alreadyCachedSize), new ByteSizeValue(writeCacheSize),
-                new TimeValue(writeCacheTime, TimeUnit.NANOSECONDS),
+                new TimeValue(avgWriteCacheTime.longValue(), TimeUnit.NANOSECONDS),
                 ((double) totalUsedCacheSize / totalCacheSize) * 100);
     }
 }

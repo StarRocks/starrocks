@@ -15,9 +15,7 @@
 #include "block_cache/datacache_utils.h"
 
 namespace starrocks {
-TDataCacheMetrics DataCacheUtils::convertMetricsToThrift(const DataCacheMetrics& metrics) {
-    TDataCacheMetrics t_metrics{};
-
+void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics) {
     switch (metrics.status) {
     case starcache::CacheStatus::NORMAL:
         t_metrics.__set_status(TDataCacheStatus::NORMAL);
@@ -36,7 +34,6 @@ TDataCacheMetrics DataCacheUtils::convertMetricsToThrift(const DataCacheMetrics&
     t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
     t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
     t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
-    return t_metrics;
 }
 
 } // namespace starrocks

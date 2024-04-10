@@ -66,7 +66,7 @@ public class DataCacheSelectMetricsTest {
         be2.setRead_bytes(2 * megabyte);
         be2.setRead_time_ns(2 * second);
         be2.setWrite_bytes(2 * gigabyte);
-        be2.setWrite_time_ns(20 * second);
+        be2.setWrite_time_ns(35 * second);
 
         be2.setMetrics(dataCacheMetrics);
         LoadDataCacheMetrics be2Metrics = LoadDataCacheMetrics.buildFromThrift(be2);
@@ -75,18 +75,18 @@ public class DataCacheSelectMetricsTest {
         dataCacheSelectMetrics.updateLoadDataCacheMetrics(be2Id, be2Metrics);
 
         List<List<String>> rows = dataCacheSelectMetrics.getShowResultSet(false).getResultRows();
-        Assert.assertEquals("SUCCESS,3MB,3GB,30s,50.00%", String.join(",", rows.get(0)));
+        Assert.assertEquals("SUCCESS,3MB,3GB,22.5s,50.00%", String.join(",", rows.get(0)));
         rows = dataCacheSelectMetrics.getShowResultSet(true).getResultRows();
         for (List<String> row : rows) {
             if (row.get(0).equals("127.0.0.2")) {
                 Assert.assertEquals("127.0.0.2,SUCCESS,1MB,1GB,10s,50.00%", String.join(",", row));
             }
             if (row.get(0).equals("127.0.0.3")) {
-                Assert.assertEquals("127.0.0.3,SUCCESS,2MB,2GB,20s,50.00%", String.join(",", row));
+                Assert.assertEquals("127.0.0.3,SUCCESS,2MB,2GB,35s,50.00%", String.join(",", row));
             }
         }
 
-        Assert.assertEquals("AlreadyCachedSize: 3MB, WriteCacheSize: 3GB, WriteCacheTime: 30s, TotalCacheUsage: 50.00%",
+        Assert.assertEquals("AlreadyCachedSize: 3MB, WriteCacheSize: 3GB, AvgWriteCacheTime: 22.5s, TotalCacheUsage: 50.00%",
                 dataCacheSelectMetrics.toString());
     }
 }
