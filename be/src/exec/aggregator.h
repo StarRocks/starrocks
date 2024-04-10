@@ -508,6 +508,8 @@ public:
     void build_hash_set_with_selection(size_t chunk_size);
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
+    bool is_pre_cache() { return _aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE; }
+
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
