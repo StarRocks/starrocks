@@ -194,7 +194,7 @@ public class TableFunctionTable extends Table {
             throw new SemanticException("format is a mandatory property. " +
                     "Use any of (parquet, orc, csv)");
         }
-        this.format = properties.get("format");
+        this.format = properties.get(PROPERTY_FORMAT);
 
         if (!SUPPORTED_FORMATS.contains(format)) {
             throw new SemanticException(String.format("Unsupported format %s. " +
@@ -251,6 +251,14 @@ public class TableFunctionTable extends Table {
             }
 
             this.partitionColumnIDs = Optional.of(partitionColumnIDs);
+        }
+
+        // csv options
+        if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
+            this.csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+        }
+        if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
+            this.csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
         }
 
         super.setNewFullSchema(columns);
