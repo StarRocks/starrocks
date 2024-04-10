@@ -45,6 +45,9 @@ add_library(Storage STATIC
     options.cpp
     page_cache.cpp
     persistent_index.cpp
+    pindex_common.cpp
+    pindex_immutable_index.cpp
+    pindex_mutable_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
