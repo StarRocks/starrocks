@@ -57,7 +57,6 @@ import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
@@ -72,6 +71,7 @@ import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -356,8 +356,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME,
-                                        (LakeTablet) shadowTablet);
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
                         if (computeNode == null) {
                             //todo: fix the error message.
                             throw new AlterCancelException("No alive backend");
@@ -458,10 +457,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, (LakeTablet) shadowTablet);
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
                         if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }
+
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId =
                                 physicalPartitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
@@ -997,6 +997,14 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             info.add(errMsg);
             info.add(progress);
             info.add(timeoutMs / 1000);
+
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+            if (warehouse == null) {
+                info.add("null");
+            } else {
+                info.add(warehouse.getName());
+            }
+
             infos.add(info);
         }
     }

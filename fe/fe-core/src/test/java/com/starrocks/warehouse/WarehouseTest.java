@@ -65,4 +65,14 @@ public class WarehouseTest {
             Assert.assertTrue(e.getMessage().contains("No alive backend or compute node in warehouse"));
         }
     }
+
+    @Test
+    public void testGetWarehouse() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+        Assert.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
+        Assert.assertNull(warehouseManager.getWarehouseAllowNull("w"));
+        Assert.assertNull(warehouseManager.getWarehouseAllowNull(-1));
+    }
 }
