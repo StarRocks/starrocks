@@ -34,7 +34,7 @@
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/json.h"
-#include "util/json_flater.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 

@@ -29,7 +29,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "util/json_flater.h"
+#include "util/json_flattener.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -275,8 +275,8 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
     // 2. flat
     json_data->init_flat_columns(_flat_paths);
 
-    JsonFlater flater(_flat_paths);
-    flater.flatten(input, &(json_data->get_flat_fields()));
+    JsonFlattener flattener(_flat_paths);
+    flattener.flatten(input, &(json_data->get_flat_fields()));
     return Status::OK();
 }
 

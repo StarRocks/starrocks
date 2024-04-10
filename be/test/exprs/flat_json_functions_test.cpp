@@ -38,7 +38,7 @@
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/json.h"
-#include "util/json_flater.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -65,7 +65,7 @@ TEST_P(FlatJsonDeriverPaths, flat_json_path_test) {
     json_column->append(&*json2);
 
     Columns columns{json_column};
-    JsonFlater jf;
+    JsonFlattener jf;
     config::json_flat_internal_column_min_limit = 0;
     jf.derived_paths(columns);
     config::json_flat_internal_column_min_limit = 5;

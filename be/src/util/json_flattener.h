@@ -30,18 +30,18 @@
 namespace starrocks {
 namespace vpack = arangodb::velocypack;
 
-class JsonFlater {
+class JsonFlattener {
 public:
     static const uint8_t JSON_NULL_TYPE_BITS = 0xFC | 1; // must be the NULL type
 
 public:
-    JsonFlater() = default;
+    JsonFlattener() = default;
 
-    ~JsonFlater() = default;
+    ~JsonFlattener() = default;
 
-    JsonFlater(std::vector<std::string>& paths);
+    JsonFlattener(std::vector<std::string>& paths);
 
-    JsonFlater(std::vector<std::string>& paths, const std::vector<LogicalType>& types);
+    JsonFlattener(std::vector<std::string>& paths, const std::vector<LogicalType>& types);
 
     void flatten(const Column* json_column, std::vector<ColumnPtr>* result);
 

@@ -15,8 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/json_flater.h"
-
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -34,6 +32,7 @@
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/json_converter.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -162,21 +161,22 @@ static const std::unordered_map<uint8_t, JsonFlatAppendFunc> JSON_BITS_FUNC {
 };
 // clang-format on
 
-uint8_t JsonFlater::get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
+uint8_t JsonFlattener::get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
     if (JSON_TYPE_BITS.contains(type1)) {
         return JSON_TYPE_BITS.at(type1) & type2;
     }
     return JSON_BASE_TYPE_BITS;
 }
 
-JsonFlater::JsonFlater(std::vector<std::string>& paths) : _flat_paths(paths) {
+JsonFlattener::JsonFlattener(std::vector<std::string>& paths) : _flat_paths(paths) {
     _flat_types.resize(paths.size(), JSON_BASE_TYPE_BITS);
     for (int i = 0; i < _flat_paths.size(); i++) {
         _flat_index[_flat_paths[i]] = i;
     }
 };
 
-JsonFlater::JsonFlater(std::vector<std::string>& paths, const std::vector<LogicalType>& types) : _flat_paths(paths) {
+JsonFlattener::JsonFlattener(std::vector<std::string>& paths, const std::vector<LogicalType>& types)
+        : _flat_paths(paths) {
     for (const auto& t : types) {
         for (const auto& [k, v] : JSON_BITS_TO_LOGICAL_TYPE) {
             if (t == v) {
@@ -191,7 +191,7 @@ JsonFlater::JsonFlater(std::vector<std::string>& paths, const std::vector<Logica
     }
 };
 
-std::vector<LogicalType> JsonFlater::get_flat_types() {
+std::vector<LogicalType> JsonFlattener::get_flat_types() {
     std::vector<LogicalType> types;
     for (const auto& t : _flat_types) {
         types.emplace_back(JSON_BITS_TO_LOGICAL_TYPE.at(t));
@@ -201,7 +201,7 @@ std::vector<LogicalType> JsonFlater::get_flat_types() {
 
 struct FlatColumnDesc {
     // json compatible type
-    uint8_t type = JsonFlater::JSON_NULL_TYPE_BITS;
+    uint8_t type = JsonFlattener::JSON_NULL_TYPE_BITS;
     // column path hit count, some json may be null or none, so hit use to record the actual value
     // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
     uint64_t hits = 0;
@@ -209,7 +209,7 @@ struct FlatColumnDesc {
     uint16_t casts = 0;
 };
 
-void JsonFlater::derived_paths(std::vector<ColumnPtr>& json_datas) {
+void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
     _flat_paths.clear();
     _flat_types.clear();
 
@@ -262,7 +262,7 @@ void JsonFlater::derived_paths(std::vector<ColumnPtr>& json_datas) {
                 derived_maps[name].hits++;
                 uint8_t type = derived_maps[name].type;
                 uint8_t compatibility_type =
-                        JsonFlater::get_compatibility_type(it.value.type(), derived_maps[name].type);
+                        JsonFlattener::get_compatibility_type(it.value.type(), derived_maps[name].type);
                 derived_maps[name].type = compatibility_type;
                 derived_maps[name].casts += (type != compatibility_type);
             }
@@ -312,7 +312,7 @@ void JsonFlater::derived_paths(std::vector<ColumnPtr>& json_datas) {
     }
 }
 
-void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* result) {
+void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* result) {
     DCHECK(result->size() == _flat_paths.size());
 
     // input
