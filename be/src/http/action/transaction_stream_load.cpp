@@ -423,6 +423,10 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_timeout(ctx->timeout_second);
     }
 
+    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty()) {
+        request.__set_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
+    }
+
     return Status::OK();
 }
 
