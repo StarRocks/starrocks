@@ -181,7 +181,7 @@ public class TableFunctionTable extends Table {
             throw new SemanticException(
                     "path is a mandatory property. \"path\" = \"s3://path/to/your/location/\"");
         }
-        this.path = properties.get(path);
+        this.path = properties.get(PROPERTY_PATH);
         if (!this.path.endsWith("/")) {
             this.path += "/";
         }
