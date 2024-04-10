@@ -346,7 +346,8 @@
                     ]
                 },
                 "using_starrocks/sorted_aggregate",
-                "using_starrocks/query_acceleration_with_auto_increment"
+                "using_starrocks/query_acceleration_with_auto_increment",
+                "using_starrocks/Flat_json.md"
             ]
         },
         {
@@ -1957,7 +1958,8 @@
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
-                        }
+                        },
+                        "administration/management/BackendBlacklist"
                     ]
                 },
                 "administration/Data_recovery",

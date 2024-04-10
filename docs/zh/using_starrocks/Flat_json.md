@@ -37,7 +37,7 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 
 StarRocks 当前对 Flat JSON 的支持情况：
 
-* 导入时，支持提取公共字段，单独存储为 JSON 类型，暂未实现类型推导。StarRocks 会逐步迭代升级 Flat JSON 功能，在后续版本中支持类型推导和存储优化。
+* 导入时，支持提取公共字段，自动推导公共字段类型。
 * 目前只支持最顶层 JSON 字段的提取。
 * 目前会同时存储提取列和原始 JSON 数据。
 * 兼容历史数据，无须重新导入。
@@ -59,7 +59,12 @@ set cbo_prune_json_subfield = true;
 
 ## 验证 Flat JSON 是否生效
 
-可以通过 [Query Profile](../administration/query_profile.md) 观察其中几个相关指标：
+导入后，使用SQL可以查询对应列提取的子列：
+```sql
+select flat_json_meta(json_column), count(1) from tableA[_META];
+```
+
+查询中，可以通过 [Query Profile](../administration/query_profile.md) 观察其中几个相关指标：
 
 * `PushdownAccessPaths`：下推存储的子字段路径数量。
 * `AccessPathHits`：命中 Flat JSON 优化的存储文件数量，其子项详细打印了具体命中的 JSON。 
@@ -83,3 +88,7 @@ BE 配置：
 * 开启 Flat JSON 后，Compaction 的耗时和内存使用量会增高。
 * 系统变量 `cbo_prune_json_subfield` 只有在命中 Flat JSON 时才有效果，其他情况下可能存在性能负优化。
 * 如果遇到 Crash 或者查询报错，可以通过关闭 BE 参数 `enable_json_flat` 以及 Session 变量 `cbo_prune_json_subfield` 进行规避。
+
+## 关键字
+
+FLAT JSON, JSON, VARIANT, FLAT
