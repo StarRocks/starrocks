@@ -75,7 +75,7 @@ class RowDescriptor;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
-
+using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
 }
@@ -502,6 +502,20 @@ public:
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
+    void set_shuffle_hash_bucket_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
+        this->_shuffle_hash_bucket_rf_ids = std::move(filter_ids);
+    }
+
+    const std::unordered_set<int32_t>& shuffle_hash_bucket_rf_ids() const { return this->_shuffle_hash_bucket_rf_ids; }
+
+    void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
+        this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
+    }
+
+    const BroadcastJoinRightOffsprings& broadcast_join_right_offsprings() const {
+        return this->_broadcast_join_right_offsprings;
+    }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -641,6 +655,9 @@ private:
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
+
+    std::unordered_set<int32_t> _shuffle_hash_bucket_rf_ids;
+    BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

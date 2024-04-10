@@ -177,6 +177,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return probeRuntimeFilters;
     }
 
+    public void setProbeRuntimeFilters(List<RuntimeFilterDescription> runtimeFilters) {
+        this.probeRuntimeFilters = runtimeFilters;
+    }
+
     public void clearProbeRuntimeFilters() {
         probeRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }

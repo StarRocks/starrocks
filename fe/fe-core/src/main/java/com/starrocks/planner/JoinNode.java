@@ -36,9 +36,11 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
@@ -56,6 +58,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -178,7 +181,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl, ExecGroupSets execGroupSets) {
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
@@ -297,6 +301,56 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 
+    private Optional<Boolean> pushDownRuntimeFilterBilaterally(RuntimeFilterPushDownContext context,
+                                                                      Expr probeExpr,
+                                                                      List<Expr> partitionByExprs) {
+        if (joinOp.isCrossJoin() || joinOp.isNullAwareLeftAntiJoin() || eqJoinConjuncts.isEmpty()) {
+            return Optional.empty();
+        }
+
+        if (!(probeExpr instanceof SlotRef)) {
+            return Optional.empty();
+        }
+        SlotRef probeSlotRefExpr = probeExpr.cast();
+        int slotId = probeSlotRefExpr.getSlotId().asInt();
+        boolean probeExprIsNotJoinColumn = eqJoinConjuncts.stream()
+                .filter(conj -> conj.getOp().equals(BinaryType.EQ))
+                .noneMatch(conj -> conj.getUsedSlotIds().contains(slotId));
+
+        if (probeExprIsNotJoinColumn) {
+            return Optional.empty();
+        }
+
+        // for join types except null-aware-left-anti-join and cross join
+        // runtime-filer probe expr uses join column, it can always be push down to both side of the join.
+        boolean hasPushedDown = pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 0);
+        hasPushedDown |= pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 1);
+        return Optional.of(hasPushedDown);
+    }
+
+
+    private Optional<Boolean> pushDownRuntimeFilterUnilaterally(RuntimeFilterPushDownContext context,
+                                                                Expr probeExpr,
+                                                                List<Expr> partitionByExprs) {
+        List<Integer> sides = ImmutableList.of();
+        if (joinOp.isLeftAntiJoin() || joinOp.isLeftOuterJoin()) {
+            sides = ImmutableList.of(0, 1);
+        } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
+            sides = ImmutableList.of(1);
+        } else if (joinOp.isInnerJoin() || joinOp.isSemiJoin() || joinOp.isCrossJoin()) {
+            sides = ImmutableList.of(0);
+        }
+
+        boolean result = false;
+        for (Integer side : sides) {
+            result = pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, side);
+            if (result) {
+                break;
+            }
+        }
+        return Optional.of(result);
+    }
+
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
@@ -306,18 +360,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
 
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
-            boolean hasPushedDown = false;
-            // If probeExpr is SlotRef(a) and an equalJoinConjunct SlotRef(a)=SlotRef(b) exists in SemiJoin
-            // or InnerJoin, then the rf also can be pushed down to both sides of HashJoin because SlotRef(a) and
-            // SlotRef(b) are equivalent.
-            boolean isInnerOrSemiJoin = joinOp.isSemiJoin() || joinOp.isInnerJoin();
-            if ((probeExpr instanceof SlotRef) && isInnerOrSemiJoin) {
-                hasPushedDown |= pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 0);
-                hasPushedDown |= pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 1);
+
+            Optional<Boolean> pushDownResult = pushDownRuntimeFilterBilaterally(context, probeExpr, partitionByExprs);
+            if (pushDownResult.isEmpty()) {
+                pushDownResult = pushDownRuntimeFilterUnilaterally(context, probeExpr, partitionByExprs);
             }
-            // fall back to PlanNode.pushDownRuntimeFilters for HJ if rf cannot be pushed down via equivalent
-            // equalJoinConjuncts
-            if (hasPushedDown || super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs)) {
+
+            if (pushDownResult.isPresent() && pushDownResult.get()) {
                 return true;
             }
 

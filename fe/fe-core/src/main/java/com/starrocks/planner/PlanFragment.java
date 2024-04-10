@@ -58,6 +58,7 @@ import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -893,5 +894,65 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (PlanNode child : root.getChildren()) {
             forEachNode(child, consumer);
         }
+    }
+
+
+    private RoaringBitmap collectShuffleHashBucketRfIds(PlanNode root) {
+        RoaringBitmap filterIds = root.getChildren().stream()
+                .filter(child -> child.getFragmentId().equals(root.getFragmentId()))
+                .map(this::collectShuffleHashBucketRfIds)
+                .reduce(RoaringBitmap.bitmapOf(), (a, b) -> RoaringBitmap.or(a, b));
+        if (root instanceof HashJoinNode) {
+            HashJoinNode joinNode = (HashJoinNode) root;
+            if (joinNode.getDistrMode().equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+                joinNode.getBuildRuntimeFilters().forEach(rf -> filterIds.add(rf.getFilterId()));
+            }
+        }
+        return filterIds;
+    }
+
+    private RoaringBitmap collectLocalRightOffspringsOfBroadcastJoin(PlanNode root,
+                                                                     RoaringBitmap localRightOffsprings) {
+        List<RoaringBitmap> localOffspringsPerChild = root.getChildren().stream()
+                .filter(child -> child.getFragmentId().equals(root.getFragmentId()))
+                .map(child -> collectLocalRightOffspringsOfBroadcastJoin(child, localRightOffsprings))
+                .collect(Collectors.toList());
+        RoaringBitmap localOffsprings =
+                localOffspringsPerChild.stream().reduce(RoaringBitmap.bitmapOf(), (a, b) -> RoaringBitmap.or(a, b));
+        localOffsprings.add(root.getId().asInt());
+        if (root instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) root;
+            boolean hasGlobalRuntimeFilter = hashJoinNode.getBuildRuntimeFilters()
+                    .stream().anyMatch(RuntimeFilterDescription::isHasRemoteTargets);
+            if (hashJoinNode.isBroadcast() && hasGlobalRuntimeFilter) {
+                localRightOffsprings.or(localOffspringsPerChild.get(1));
+            }
+        }
+        return localOffsprings;
+    }
+
+    private void removeRfOfRightOffspring(PlanNode root, RoaringBitmap targetRightOffsprings, RoaringBitmap filterIds) {
+        if (targetRightOffsprings.contains(root.getId().asInt())) {
+            List<RuntimeFilterDescription> reservedRuntimeFilters = root.getProbeRuntimeFilters()
+                    .stream()
+                    .filter(rf -> !filterIds.contains(rf.getFilterId()))
+                    .collect(Collectors.toList());
+            root.setProbeRuntimeFilters(reservedRuntimeFilters);
+        }
+
+        root.getChildren()
+                .stream()
+                .filter(child -> child.getFragmentId().equals(root.getFragmentId()))
+                .forEach(child -> removeRfOfRightOffspring(child, targetRightOffsprings, filterIds));
+    }
+
+    public void removeRfOnRightOffspringsOfBroadcastJoin() {
+        RoaringBitmap localRightOffsprings = RoaringBitmap.bitmapOf();
+        collectLocalRightOffspringsOfBroadcastJoin(getPlanRoot(), localRightOffsprings);
+        RoaringBitmap filterIds = collectShuffleHashBucketRfIds(getPlanRoot());
+        if (localRightOffsprings.isEmpty() || filterIds.isEmpty()) {
+            return;
+        }
+        removeRfOfRightOffspring(getPlanRoot(), localRightOffsprings, filterIds);
     }
 }
