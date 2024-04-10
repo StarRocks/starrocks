@@ -35,8 +35,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
-import com.starrocks.sql.optimizer.property.ValueProperty;
-import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -181,32 +181,32 @@ public class LogicalAggregationOperator extends LogicalOperator {
     }
 
     @Override
-    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(Map.of());
+            return new DomainProperty(Map.of());
         }
-        ValueProperty childValueProperty = inputs.get(0).getValueProperty();
+        DomainProperty childDomainProperty = inputs.get(0).getValueProperty();
 
-        Map<ScalarOperator, ValueProperty.ValueWrapper> newValueMap = Maps.newHashMap();
+        Map<ScalarOperator, DomainProperty.DomainWrapper> newValueMap = Maps.newHashMap();
         for (ColumnRefOperator groupByKey : groupingKeys) {
-            if (childValueProperty.contains(groupByKey)) {
-                newValueMap.put(groupByKey, childValueProperty.getValueWrapper(groupByKey));
+            if (childDomainProperty.contains(groupByKey)) {
+                newValueMap.put(groupByKey, childDomainProperty.getValueWrapper(groupByKey));
             }
         }
 
         ColumnRefSet groupByCols = new ColumnRefSet(groupingKeys);
-        for (Map.Entry<ScalarOperator, ValueProperty.ValueWrapper> entry : childValueProperty.getValueMap().entrySet()) {
+        for (Map.Entry<ScalarOperator, DomainProperty.DomainWrapper> entry : childDomainProperty.getDomainMap().entrySet()) {
             if (!newValueMap.containsKey(entry.getKey()) && groupByCols.containsAll(entry.getKey().getUsedColumns())) {
                 newValueMap.put(entry.getKey(), entry.getValue());
             }
         }
-        ValueProperty valueProperty = new ValueProperty(newValueMap);
+        DomainProperty domainProperty = new DomainProperty(newValueMap);
         if (predicate != null) {
-            ValuePropertyDeriver deriver = new ValuePropertyDeriver();
-            ValueProperty property = deriver.derive(predicate);
-            valueProperty = valueProperty.filterValueProperty(property);
+            DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+            DomainProperty property = deriver.derive(predicate);
+            domainProperty = domainProperty.filterValueProperty(property);
         }
-        return valueProperty;
+        return domainProperty;
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {

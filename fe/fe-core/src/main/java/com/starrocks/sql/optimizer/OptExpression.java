@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
-import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -146,7 +146,7 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
-    public ValueProperty getValueProperty() {
+    public DomainProperty getValueProperty() {
         return op.getValueProperty(inputs);
     }
 

@@ -31,7 +31,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -208,13 +208,13 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
-    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(Map.of());
+            return new DomainProperty(Map.of());
         }
-        ValueProperty leftValueProperty = inputs.get(0).getValueProperty();
-        ValueProperty rightValueProperty = inputs.get(1).getValueProperty();
-        return ValueProperty.mergeValueProperty(List.of(leftValueProperty, rightValueProperty));
+        DomainProperty leftDomainProperty = inputs.get(0).getValueProperty();
+        DomainProperty rightDomainProperty = inputs.get(1).getValueProperty();
+        return DomainProperty.mergeValueProperty(List.of(leftDomainProperty, rightDomainProperty));
     }
 
     @Override

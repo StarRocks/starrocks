@@ -22,8 +22,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.property.ValueProperty;
-import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,11 +61,11 @@ public class LogicalFilterOperator extends LogicalOperator {
     }
 
     @Override
-    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        ValueProperty childValueProperty = inputs.get(0).getValueProperty();
-        ValuePropertyDeriver deriver = new ValuePropertyDeriver();
-        ValueProperty filterValueProperty = deriver.derive(predicate);
-        return childValueProperty.filterValueProperty(filterValueProperty);
+    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+        DomainProperty childDomainProperty = inputs.get(0).getValueProperty();
+        DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+        DomainProperty filterDomainProperty = deriver.derive(predicate);
+        return childDomainProperty.filterValueProperty(filterDomainProperty);
     }
 
     @Override

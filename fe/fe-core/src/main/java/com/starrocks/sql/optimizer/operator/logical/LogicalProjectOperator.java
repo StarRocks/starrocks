@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -71,13 +71,13 @@ public final class LogicalProjectOperator extends LogicalOperator {
     }
 
     @Override
-    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
-            return new ValueProperty(Map.of());
+            return new DomainProperty(Map.of());
         }
-        ValueProperty childValueProperty = inputs.get(0).getValueProperty();
+        DomainProperty childDomainProperty = inputs.get(0).getValueProperty();
 
-        return childValueProperty.projectValueProperty(columnRefMap);
+        return childDomainProperty.projectValueProperty(columnRefMap);
     }
 
     @Override

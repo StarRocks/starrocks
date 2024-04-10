@@ -161,7 +161,6 @@ public class TablePruningCTETest extends TablePruningTestBase {
     public void testUpdateWithPredicates() {
         String q = getSqlList("sql/tpch_pk_tables/", "q5").get(0);
         String plan = checkHashJoinCountWithOnlyRBO(q, 3);
-        System.out.println(plan);
         plan = plan.replaceAll("\\d+:\\s*", "");
         Assert.assertTrue(plan.contains("Predicates: " +
                 "l_suppkey IN (1, 2, 100), " +

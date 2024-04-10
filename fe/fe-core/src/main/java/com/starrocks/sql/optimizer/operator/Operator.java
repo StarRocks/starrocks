@@ -23,7 +23,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 
 import java.util.List;
 import java.util.Map;
@@ -70,7 +70,7 @@ public abstract class Operator {
     // eg: LogicalViewScanOperator is logically equivalent to the operator build from the view
     protected Operator equivalentOp;
 
-    protected ValueProperty valueProperty;
+    protected DomainProperty domainProperty;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -185,24 +185,24 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
-    public ValueProperty getValueProperty(List<OptExpression> inputs) {
-        if (valueProperty == null) {
-            valueProperty = deriveValueProperty(inputs);
+    public DomainProperty getValueProperty(List<OptExpression> inputs) {
+        if (domainProperty == null) {
+            domainProperty = deriveValueProperty(inputs);
         }
 
         if (projection != null) {
-            valueProperty = valueProperty.projectValueProperty(projection.getColumnRefMap());
+            domainProperty = domainProperty.projectValueProperty(projection.getColumnRefMap());
         }
 
-        return valueProperty;
+        return domainProperty;
     }
 
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         throw new UnsupportedOperationException();
     }
 
-    protected ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        return new ValueProperty(Map.of());
+    protected DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+        return new DomainProperty(Map.of());
     }
 
     protected RowOutputInfo projectInputRow(RowOutputInfo inputRow) {

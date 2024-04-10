@@ -26,71 +26,71 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
- * ValueProperty is used to store the value property info of a column or expr.
+ * DomainProperty is used to store the domain of a column or expr.
  * For a sql like `select col_a, col_b, col_c from table where col_a > 10 and col_b + col_c = 20`,
- * we can get the value property of col_a, col_b + col_c from the where clause like
+ * we can get the domain property of col_a, col_b + col_c from the where clause like
  * col_a -> {predicateDesc : col_a > 10, rangeDesc : [10, +inf)}
  * col_b + col_c -> {predicateDesc : col_b + col_c = 20, rangeDesc : [20, 20]}
  */
-public class ValueProperty {
+public class DomainProperty {
 
-    private Map<ScalarOperator, ValueWrapper> valueMap;
+    private Map<ScalarOperator, DomainWrapper> domainMap;
 
 
-    public ValueProperty(Map<ScalarOperator, ValueWrapper> valueMap) {
-        this.valueMap = valueMap;
+    public DomainProperty(Map<ScalarOperator, DomainWrapper> domainMap) {
+        this.domainMap = domainMap;
     }
 
     public boolean contains(ScalarOperator scalarOperator) {
-        return valueMap.containsKey(scalarOperator);
+        return domainMap.containsKey(scalarOperator);
     }
 
-    public Map<ScalarOperator, ValueWrapper> getValueMap() {
-        return valueMap;
+    public Map<ScalarOperator, DomainWrapper> getDomainMap() {
+        return domainMap;
     }
 
-    public ValueWrapper getValueWrapper(ScalarOperator scalarOperator) {
-        return valueMap.get(scalarOperator);
+    public DomainWrapper getValueWrapper(ScalarOperator scalarOperator) {
+        return domainMap.get(scalarOperator);
     }
     public ScalarOperator getPredicateDesc(ScalarOperator scalarOperator) {
-        return valueMap.get(scalarOperator).getPredicateDesc();
+        return domainMap.get(scalarOperator).getPredicateDesc();
     }
 
-    public ValueProperty projectValueProperty(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
-        Map<ScalarOperator, ValueWrapper> newValueMap = Maps.newHashMap();
+    public DomainProperty projectValueProperty(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+        Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
-            if (valueMap.containsKey(entry.getValue()) && !entry.getValue().equals(entry.getKey())) {
+            if (domainMap.containsKey(entry.getValue()) && !entry.getValue().equals(entry.getKey())) {
                 ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(entry.getValue(), entry.getKey()));
-                ScalarOperator rewriteResult = shuttle.rewrite(valueMap.get(entry.getValue()).getPredicateDesc());
-                newValueMap.put(entry.getKey(), new ValueWrapper(rewriteResult));
+                ScalarOperator rewriteResult = shuttle.rewrite(domainMap.get(entry.getValue()).getPredicateDesc());
+                newValueMap.put(entry.getKey(), new DomainWrapper(rewriteResult));
             }
         }
         ColumnRefSet outputCols = new ColumnRefSet(columnRefMap.keySet());
-        for (Map.Entry<ScalarOperator, ValueWrapper> entry : valueMap.entrySet()) {
+        for (Map.Entry<ScalarOperator, DomainWrapper> entry : domainMap.entrySet()) {
             if (!newValueMap.containsKey(entry.getKey()) && outputCols.containsAll(entry.getKey().getUsedColumns())) {
                 newValueMap.put(entry.getKey(), entry.getValue());
             }
         }
-        return new ValueProperty(newValueMap);
+        return new DomainProperty(newValueMap);
     }
 
-    public ValueProperty filterValueProperty(ValueProperty filterValueProperty) {
-        Map<ScalarOperator, ValueWrapper> newValueMap = Maps.newHashMap(valueMap);
+    public DomainProperty filterValueProperty(DomainProperty filterDomainProperty) {
+        Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap(domainMap);
 
-        for (Map.Entry<ScalarOperator, ValueWrapper> entry : filterValueProperty.valueMap.entrySet()) {
-            if (valueMap.containsKey(entry.getKey())) {
-                newValueMap.put(entry.getKey(), valueMap.get(entry.getKey()).andValueWrapper(entry.getValue()));
+        for (Map.Entry<ScalarOperator, DomainWrapper> entry : filterDomainProperty.domainMap.entrySet()) {
+            if (domainMap.containsKey(entry.getKey())) {
+                newValueMap.put(entry.getKey(), domainMap.get(entry.getKey()).andValueWrapper(entry.getValue()));
             } else {
                 newValueMap.put(entry.getKey(), entry.getValue());
             }
         }
-        return new ValueProperty(newValueMap);
+        return new DomainProperty(newValueMap);
     }
 
-    public static ValueProperty mergeValueProperty(List<ValueProperty> valuePropertyList) {
-        Map<ScalarOperator, ValueWrapper> newValueMap = Maps.newHashMap();
-        for (ValueProperty valueProperty : valuePropertyList) {
-            for (Map.Entry<ScalarOperator, ValueWrapper> entry : valueProperty.valueMap.entrySet()) {
+    public static DomainProperty mergeValueProperty(List<DomainProperty> domainPropertyList) {
+        Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap();
+        for (DomainProperty domainProperty : domainPropertyList) {
+            for (Map.Entry<ScalarOperator, DomainWrapper> entry : domainProperty.domainMap.entrySet()) {
                 if (newValueMap.containsKey(entry.getKey())) {
                     newValueMap.put(entry.getKey(), newValueMap.get(entry.getKey()).orValueWrapper(entry.getValue()));
                 } else {
@@ -98,24 +98,24 @@ public class ValueProperty {
                 }
             }
         }
-        return new ValueProperty(newValueMap);
+        return new DomainProperty(newValueMap);
     }
 
-    public static class ValueWrapper {
+    public static class DomainWrapper {
         private ScalarOperator predicateDesc;
 
         @Nullable
-        private RangeExtractor.RangeDescriptor valueDesc;
+        private RangeExtractor.RangeDescriptor rangeDesc;
 
         private boolean withNull;
 
-        public ValueWrapper(ScalarOperator predicateDesc) {
+        public DomainWrapper(ScalarOperator predicateDesc) {
             this(predicateDesc, false);
         }
 
-        public ValueWrapper(ScalarOperator predicateDesc, boolean withNull) {
+        public DomainWrapper(ScalarOperator predicateDesc, boolean withNull) {
             this.predicateDesc = predicateDesc;
-            this.valueDesc = deriveRange(predicateDesc);
+            this.rangeDesc = deriveRange(predicateDesc);
             this.withNull = withNull;
         }
 
@@ -123,24 +123,24 @@ public class ValueProperty {
             return predicateDesc;
         }
 
-        public RangeExtractor.RangeDescriptor getValueDesc() {
-            return valueDesc;
+        public RangeExtractor.RangeDescriptor getRangeDesc() {
+            return rangeDesc;
         }
 
         public void setWithNull(boolean withNull) {
             this.withNull = withNull;
         }
 
-        public ValueWrapper andValueWrapper(ValueWrapper valueWrapper) {
+        public DomainWrapper andValueWrapper(DomainWrapper domainWrapper) {
             ScalarOperator newScalarOperator = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                    predicateDesc, valueWrapper.predicateDesc);
-            return new ValueWrapper(newScalarOperator);
+                    predicateDesc, domainWrapper.predicateDesc);
+            return new DomainWrapper(newScalarOperator);
         }
 
-        public ValueWrapper orValueWrapper(ValueWrapper valueWrapper) {
+        public DomainWrapper orValueWrapper(DomainWrapper domainWrapper) {
             ScalarOperator newScalarOperator = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
-                    predicateDesc, valueWrapper.predicateDesc);
-            return new ValueWrapper(newScalarOperator, withNull || valueWrapper.withNull);
+                    predicateDesc, domainWrapper.predicateDesc);
+            return new DomainWrapper(newScalarOperator, withNull || domainWrapper.withNull);
         }
 
         private RangeExtractor.RangeDescriptor deriveRange(ScalarOperator scalarOperator) {

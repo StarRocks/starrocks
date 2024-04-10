@@ -24,7 +24,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,8 +72,8 @@ public abstract class LogicalSetOperator extends LogicalOperator {
     }
 
     @Override
-    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        return new ValueProperty(Map.of());
+    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+        return new DomainProperty(Map.of());
     }
 
     @Override
