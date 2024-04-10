@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -220,6 +221,12 @@ public class SimpleScheduler {
         } finally {
             lock.unlock();
         }
+    }
+
+    // ONLY FOR TESTING
+    @VisibleForTesting
+    public static void clearBlacklist() {
+        blacklistNodes.clear();
     }
 
     public static void updateBlacklist() {
