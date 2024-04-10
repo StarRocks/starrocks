@@ -156,9 +156,11 @@ public:
 
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+    void add_in_writing_data_size(int64_t tablet_id, int64_t size);
 
-    void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
+    void remove_in_writing_data_size(int64_t tablet_id);
+
+    void clean_in_writing_data_size();
 
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
@@ -197,7 +199,7 @@ private:
     UpdateManager* _update_mgr;
 
     std::shared_mutex _meta_lock;
-    std::unordered_map<int64_t, std::unordered_map<int64_t, int64_t>> _tablet_in_writing_txn_size;
+    std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
 };
 
 } // namespace starrocks::lake
