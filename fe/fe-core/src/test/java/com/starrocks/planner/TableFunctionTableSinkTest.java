@@ -19,10 +19,15 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,8 +36,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TableFunctionTableSinkTest {
     @Test
     public void testTableFunctionTableSink() {
-        TableFunctionTable tableFunctionTable = new TableFunctionTable("s3://path/to/directory/", "parquet",
-                "uncompressed", ImmutableList.of(new Column("k1", Type.INT)), null, false, 100, ImmutableMap.of());
+        List<Column> columns = ImmutableList.of(new Column("k1", Type.INT));
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "s3://path/to/directory/");
+        properties.put("format", "parquet");
+        properties.put("compression", "uncompressed");
+        TableFunctionTable tableFunctionTable = new TableFunctionTable(columns, properties, new SessionVariable());
 
         TableFunctionTableSink tableFunctionTableSink = new TableFunctionTableSink(tableFunctionTable);
 
