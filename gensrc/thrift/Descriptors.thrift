@@ -456,7 +456,7 @@ struct TTableFunctionTable {
 
     7: optional i64 target_max_file_size
 
-    8: optional string csv_row_delimter
+    8: optional string csv_row_delimiter
 
     9: optional string csv_column_seperator
 }

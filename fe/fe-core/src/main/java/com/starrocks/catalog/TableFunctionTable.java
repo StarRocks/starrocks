@@ -300,7 +300,7 @@ public class TableFunctionTable extends Table {
         tTableFunctionTable.setTarget_max_file_size(targetMaxFileSize);
         if (CSV.equalsIgnoreCase(format)) {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
-            tTableFunctionTable.setCsv_row_delimter(csvRowDelimiter);
+            tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
         }
         partitionColumnIDs.ifPresent(tTableFunctionTable::setPartition_column_ids);
         return tTableFunctionTable;

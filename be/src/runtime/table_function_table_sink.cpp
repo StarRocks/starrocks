@@ -99,8 +99,8 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     if (target_table.__isset.csv_column_seperator) {
         sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = target_table.csv_column_seperator;
     }
-    if (target_table.__isset.csv_row_delimter) {
-        sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = target_table.csv_row_delimter;
+    if (target_table.__isset.csv_row_delimiter) {
+        sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = target_table.csv_row_delimiter;
     }
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
