@@ -90,6 +90,18 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public Warehouse getWarehouseAllowNull(String warehouseName) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.get(warehouseName);
+        }
+    }
+
+    public Warehouse getWarehouseAllowNull(long warehouseId) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return idToWh.get(warehouseId);
+        }
+    }
+
     public boolean warehouseExists(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return nameToWh.containsKey(warehouseName);

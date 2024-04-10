@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -280,6 +281,11 @@ public class LakeTableSchemaChangeJobTest {
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+                return null;
             }
 
             @Mock
@@ -1028,5 +1034,38 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
+    @Test
+    public void testShow() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouseAllowNull(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        LakeTableSchemaChangeJob alterJobV2 =
+                new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+
+        schemaChangeHandler.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouseAllowNull(long warehouseId) {
+                return null;
+            }
+        };
+
+        SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
+        alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+        schemaChangeHandler2.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler2.getAlterJobInfosByDb(db));
     }
 }
