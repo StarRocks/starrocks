@@ -84,7 +84,11 @@ public class TaskRunScheduler {
         if (!pendingTaskRunQueue.offer(taskRun)) {
             return false;
         }
-        return pendingTaskRunMap.computeIfAbsent(taskRun.getTaskId(), ignored -> new PriorityBlockingQueue<>()).add(taskRun);
+        if (!pendingTaskRunMap.computeIfAbsent(taskRun.getTaskId(), ignored -> new PriorityBlockingQueue<>()).add(taskRun)) {
+            pendingTaskRunQueue.remove(taskRun);
+            return false;
+        }
+        return true;
     }
 
     /**
