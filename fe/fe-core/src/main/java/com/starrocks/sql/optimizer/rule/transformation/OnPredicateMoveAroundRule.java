@@ -154,6 +154,10 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                 if (binaryPredicate.getBinaryType().isEqualOrRange()) {
                     ColumnRefSet leftUsedCols = binaryPredicate.getChild(0).getUsedColumns();
                     ColumnRefSet rightUsedCols = binaryPredicate.getChild(1).getUsedColumns();
+                    if (leftUsedCols.isEmpty() || rightUsedCols.isEmpty()) {
+                        // skip constant predicate
+                        continue;
+                    }
                     if (leftCols.containsAll(leftUsedCols) && rightCols.containsAll(rightUsedCols)) {
                         result.add(binaryPredicate);
                     } else if (leftCols.containsAll(rightUsedCols) && rightCols.containsAll(leftUsedCols)) {
