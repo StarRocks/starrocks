@@ -148,6 +148,23 @@ void test_integral_pk() {
         CHECK_EQ(i * 2, deletes[1][i]);
     }
 
+    // replace, range [0, 2 * kSegmentSize]
+    std::vector<uint32_t> replace_indexes;
+    for (uint32_t i = 0; i < kSegmentSize; i++) {
+        replace_indexes.push_back(i);
+    }
+    ASSERT_TRUE(pk_index->replace(5, 0, replace_indexes, *pk_col).ok());
+    {
+        // check result
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, 5);
+        }
+    }
+
     // remove all odd numbers in range [2 * kSegmentSize, 4 * kSegmentSize)
     for (int i = 0; i < kSegmentSize; i++) {
         pk_data[i] = 2 * kSegmentSize + i * 2 + 1;
@@ -164,6 +181,8 @@ void test_integral_pk() {
             uint32_t rssid = v >> 32;
             CHECK_EQ(rssid, -1);
         }
+        // replace not exist keys
+        ASSERT_TRUE(pk_index->replace(6, 0, replace_indexes, *pk_col).is_not_found());
     }
 
     CHECK(deletes.find(2) != deletes.end());
@@ -291,6 +310,31 @@ void test_binary_pk() {
         CHECK_EQ(i * 2, deletes[1][i]);
     }
 
+    // replace all the odd numbers by indexes, range [0, 2 * kSegmentSize]
+    pk_col->resize(0);
+    std::vector<uint32_t> replace_indexes;
+    for (int i = 0; i < kSegmentSize * 2; i++) {
+        pk_col->append(strings::Substitute("binary_pk_$0", i));
+    }
+    for (uint32_t i = 0; i < kSegmentSize; i++) {
+        replace_indexes.push_back(i * 2 + 1);
+    }
+    ASSERT_TRUE(pk_index->replace(5, 0, replace_indexes, *pk_col).ok());
+    {
+        // check result
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize * 2; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            if (i % 2 == 0) {
+                CHECK_EQ(rssid, 4);
+            } else {
+                CHECK_EQ(rssid, 5);
+            }
+        }
+    }
+
     // remove all odd numbers in range [2 * kSegmentSize, 4 * kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
@@ -308,6 +352,9 @@ void test_binary_pk() {
             uint32_t rssid = v >> 32;
             CHECK_EQ(rssid, -1);
         }
+
+        // replace not exist keys
+        ASSERT_TRUE(pk_index->replace(6, 0, replace_indexes, *pk_col).is_not_found());
     }
 
     CHECK(deletes.find(2) != deletes.end());
@@ -360,10 +407,28 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     ASSERT_EQ(deletes.size(), 1);
     ASSERT_EQ(deletes[0].size(), kSegmentSize);
 
+    std::vector<uint32_t> replace_indexes;
+    for (uint32_t i = 0; i < kSegmentSize; i++) {
+        replace_indexes.push_back(i);
+    }
+    ASSERT_TRUE(pk_index->replace(2, 0, replace_indexes, *pk_column).ok());
+    {
+        std::vector<uint64_t> rowids(pk_column->size());
+        pk_index->get(*pk_column, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, 2);
+        }
+    }
+
     deletes.clear();
     pk_index->erase(*pk_column, &deletes);
     ASSERT_EQ(deletes.size(), 1);
-    ASSERT_EQ(deletes[1].size(), kSegmentSize);
+    ASSERT_EQ(deletes[2].size(), kSegmentSize);
+
+    // replace not exist keys
+    ASSERT_TRUE(pk_index->replace(3, 0, replace_indexes, *pk_column).is_not_found());
 }
 
 // TODO: test composite primary key
