@@ -30,9 +30,10 @@
 
 namespace starrocks {
 
+class TxnLogPB_OpWrite;
+
 namespace lake {
 
-class TxnLogPB_OpWrite;
 class LocationProvider;
 class Tablet;
 class MetaFileBuilder;

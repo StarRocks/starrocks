@@ -14,7 +14,7 @@
 //
 syntax="proto2";
 
-package starrocks.lake;
+package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";

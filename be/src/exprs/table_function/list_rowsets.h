@@ -20,13 +20,11 @@
 
 namespace starrocks {
 
-namespace lake {
 class TabletMetadataPB;
-}
 
 class ListRowsets final : public TableFunction {
     struct MyState final : public TableFunctionState {
-        std::shared_ptr<const lake::TabletMetadataPB> metadata;
+        std::shared_ptr<const TabletMetadataPB> metadata;
 
         ~MyState() override = default;
 

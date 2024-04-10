@@ -59,7 +59,7 @@ public:
 
         {
             // create the tablet with its schema prepared
-            lake::TabletMetadata metadata;
+            TabletMetadata metadata;
             metadata.set_id(_tablet_id);
             metadata.set_version(2);
 

@@ -1107,7 +1107,7 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {
-        starrocks::lake::TabletMetadataPB metadata;
+        starrocks::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse tablet metadata\n";
             return -1;
@@ -1122,7 +1122,7 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_txn_log") {
-        starrocks::lake::TxnLogPB txn_log;
+        starrocks::TxnLogPB txn_log;
         if (!txn_log.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse txn log\n";
             return -1;

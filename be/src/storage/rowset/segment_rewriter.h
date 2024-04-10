@@ -39,7 +39,7 @@ public:
     static Status rewrite(const std::string& src_path, FileInfo* dest_path, const TabletSchemaCSPtr& tschema,
                           starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                           std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
-                          const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet);
+                          const starrocks::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet);
 };
 
 } // namespace starrocks

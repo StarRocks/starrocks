@@ -70,9 +70,9 @@ public:
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
+    Status put_tablet_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadataPtr& metadata);
+    Status put_tablet_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version);
 
@@ -82,17 +82,19 @@ public:
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
 
-    [[nodiscard]] Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
+    Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+    Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
+    Status put_txn_log(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log, const std::string& path);
+    Status put_txn_log(const TxnLogPtr& log, const std::string& path);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+    Status put_txn_slog(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+    Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+
+    Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 

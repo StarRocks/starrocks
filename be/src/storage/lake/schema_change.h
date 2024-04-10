@@ -19,11 +19,14 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/schema_change_utils.h"
 
+namespace starrocks {
+class TxnLogPB_OpSchemaChange;
+}
+
 namespace starrocks::lake {
 
 class TabletManager;
 class VersionedTablet;
-class TxnLogPB_OpSchemaChange;
 struct SchemaChangeParams;
 
 class SchemaChangeHandler {
