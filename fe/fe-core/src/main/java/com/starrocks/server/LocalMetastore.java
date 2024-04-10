@@ -2020,11 +2020,15 @@ public class LocalMetastore implements ConnectorMetadata {
         short shortKeyColumnCount = 0;
         List<Integer> sortKeyIdxes = new ArrayList<>();
         if (stmt.getSortKeys() != null) {
+            Set<Integer> addedSortKey = new HashSet<>();
             List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
             for (String column : stmt.getSortKeys()) {
                 int idx = baseSchemaNames.indexOf(column);
                 if (idx == -1) {
                     throw new DdlException("Invalid column '" + column + "': not exists in all columns.");
+                }
+                if (!addedSortKey.add(idx)) {
+                    throw new DdlException("Duplicate sort key column " + column + " is not allowed.");
                 }
                 sortKeyIdxes.add(idx);
             }
