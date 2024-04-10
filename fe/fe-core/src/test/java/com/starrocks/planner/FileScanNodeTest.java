@@ -391,8 +391,7 @@ public class FileScanNodeTest {
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
         fileStatusesList.add(Lists.newArrayList());
-        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
-                fileStatusesList, 0, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 0);
 
         List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file*");
         DataDescription desc =
