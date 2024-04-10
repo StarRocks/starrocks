@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "jni_scanner.h"
+#include "exec/jni_scanner.h"
 
 #include "column/array_column.h"
 #include "column/map_column.h"
@@ -37,20 +37,19 @@ Status JniScanner::_check_jni_exception(JNIEnv* env, const std::string& message)
 
 Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     RETURN_IF_ERROR(detect_java_runtime());
-    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    update_jni_scanner_params();
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
-    if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
-        RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));
-    }
-    RETURN_IF_ERROR(_init_jni_table_scanner(env, runtime_state));
-    RETURN_IF_ERROR(_init_jni_method(env));
     return Status::OK();
 }
 
 Status JniScanner::do_open(RuntimeState* state) {
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+    update_jni_scanner_params();
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
+        RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));
+    }
+    RETURN_IF_ERROR(_init_jni_table_scanner(env, state));
+    RETURN_IF_ERROR(_init_jni_method(env));
     env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_open);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to open the off-heap table scanner."));
     return Status::OK();
