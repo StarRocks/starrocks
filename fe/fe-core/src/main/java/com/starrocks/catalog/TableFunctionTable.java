@@ -21,6 +21,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.Load;
@@ -316,7 +318,7 @@ public class TableFunctionTable extends Table {
         }
 
         if (fileStatuses.isEmpty()) {
-            throw new DdlException("no file found with given path pattern: " + path);
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_FILES_FOUND, path);
         }
     }
 
