@@ -190,8 +190,8 @@ private:
     Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                      const uint32_t max_src_rssid, vector<uint32_t>* deletes);
 
-    Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes,
-                                     const Column& pks);
+    Status _replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
+                                                const std::vector<uint32_t>& replace_indexes, const Column& pks);
 
 protected:
     std::mutex _lock;

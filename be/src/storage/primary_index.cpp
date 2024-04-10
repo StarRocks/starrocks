@@ -145,7 +145,7 @@ public:
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
-                   uint32_t idx_end, const Column& pks) {
+                   uint32_t idx_end, const Column& pks) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -352,7 +352,7 @@ public:
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
-                   uint32_t idx_end, const Column& pks) {
+                   uint32_t idx_end, const Column& pks) override {
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -663,7 +663,7 @@ public:
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
-                   uint32_t idx_end, const Column& pks) {
+                   uint32_t idx_end, const Column& pks) override {
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -882,7 +882,7 @@ public:
     }
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
-                   uint32_t idx_end, const Column& pks) {
+                   uint32_t idx_end, const Column& pks) override {
         if (!indexes.empty() && idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
@@ -1427,8 +1427,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     return st;
 }
 
-Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start,
-                                               const std::vector<uint32_t>& replace_indexes, const Column& pks) {
+Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
+                                                          const std::vector<uint32_t>& replace_indexes,
+                                                          const Column& pks) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
@@ -1446,7 +1447,7 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
                              const Column& pks) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
-        return _replace_persistent_index(rssid, rowid_start, replace_indexes, pks);
+        return _replace_persistent_index_by_indexes(rssid, rowid_start, replace_indexes, pks);
     } else {
         return _pkey_to_rssid_rowid->replace(rssid, rowid_start, replace_indexes, 0, replace_indexes.size(), pks);
     }
