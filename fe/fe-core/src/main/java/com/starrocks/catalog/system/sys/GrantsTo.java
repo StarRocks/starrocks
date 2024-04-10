@@ -34,6 +34,7 @@ import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.PolicyPEntryObject;
 import com.starrocks.epack.privilege.PrivilegeBuiltinConstantsEPack;
 import com.starrocks.epack.privilege.WarehousePEntryObject;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -326,8 +327,9 @@ public class GrantsTo {
                             (WarehousePEntryObject) privilegeEntry.getObject();
                     long warehouseId = warehousePEntryObject.getId();
                     if (warehouseId == PrivilegeBuiltinConstantsEPack.ALL_WAREHOUSES_ID) {
-                        Set<String> allWarehouseNames = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getAllWarehouseNames();
+                        WarehouseManagerEPack warehouseManager =
+                                (WarehouseManagerEPack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                        Set<String> allWarehouseNames = warehouseManager.getAllWarehouseNames();
                         for (String warehouseName : allWarehouseNames) {
                             objects.add(Lists.newArrayList(null, null, warehouseName));
                         }

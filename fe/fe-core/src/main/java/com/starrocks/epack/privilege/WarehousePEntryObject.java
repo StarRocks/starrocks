@@ -3,6 +3,7 @@
 package com.starrocks.epack.privilege;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeException;
@@ -31,7 +32,8 @@ public class WarehousePEntryObject implements PEntryObject {
         if (name.equals("*")) {
             return new WarehousePEntryObject(PrivilegeBuiltinConstantsEPack.ALL_WAREHOUSES_ID);
         } else {
-            Warehouse warehouse = mgr.getWarehouseMgr().getWarehouse(name);
+            WarehouseManagerEPack warehouseManagerEPack = (WarehouseManagerEPack) mgr.getWarehouseMgr();
+            Warehouse warehouse = warehouseManagerEPack.getWarehouseAllowNull(name);
             if (warehouse == null) {
                 throw new PrivObjNotFoundException("cannot find warehouse: " + name);
             }

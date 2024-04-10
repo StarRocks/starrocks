@@ -67,7 +67,7 @@ public class SystemHandlerEPack extends SystemHandler {
             return INSTANCE;
         }
 
-        public void addComuteNodeToWarehouse(ComputeNode computeNode, String warehouseName)
+        public void addComputeNodeToWarehouse(ComputeNode computeNode, String warehouseName)
                 throws DdlException {
             LocalWarehouse warehouse = (LocalWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getWarehouse(warehouseName);
@@ -95,12 +95,9 @@ public class SystemHandlerEPack extends SystemHandler {
 
                 for (Pair<String, Integer> pair : hostPortPairs) {
                     Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), pair.first, pair.second);
-                    systemInfoService.addBackend(newBackend);
-
-                    addComuteNodeToWarehouse(newBackend, warehouseName);
-
-                    // add backend to DEFAULT_CLUSTER
                     systemInfoService.setBackendOwner(newBackend);
+                    addComputeNodeToWarehouse(newBackend, warehouseName);
+                    systemInfoService.addBackend(newBackend);
 
                     // log
                     GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -129,17 +126,14 @@ public class SystemHandlerEPack extends SystemHandler {
                 for (Pair<String, Integer> pair : hostPortPairs) {
                     ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(),
                             pair.first, pair.second);
-                    systemInfoService.addComputeNode(newComputeNode);
-
-                    addComuteNodeToWarehouse(newComputeNode, warehouseName);
-
                     systemInfoService.setComputeNodeOwner(newComputeNode);
+                    addComputeNodeToWarehouse(newComputeNode, warehouseName);
+                    systemInfoService.addComputeNode(newComputeNode);
 
                     // log
                     GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
                     LOG.info("finished to add {} ", newComputeNode);
                 }
-
             } catch (DdlException e) {
                 throw new RuntimeException(e);
             }

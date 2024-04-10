@@ -64,17 +64,25 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
     }
 
+    public Set<String> getAllWarehouseNames() {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.keySet();
+        }
+    }
+
+    private void checkWarehouseState(LocalWarehouse warehouse) {
+        if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
+            ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouse.getName());
+        }
+    }
+
     @Override
     public List<Long> getAllComputeNodeIds(long warehouseId) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
-        }
-
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
+        checkWarehouseState(warehouse);
         try {
-            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getWorkersByWorkerGroup(localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    .getWorkersByWorkerGroup(warehouse.getAnyAvailableCluster().getWorkerGroupId());
         } catch (UserException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return new ArrayList<>();
@@ -83,15 +91,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public List<Long> getAllComputeNodeIds(String warehouseName) {
-        Warehouse warehouse = nameToWh.get(warehouseName);
-        if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
-        }
-
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseName);
+        checkWarehouseState(warehouse);
         try {
-            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getWorkersByWorkerGroup(localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    .getWorkersByWorkerGroup(warehouse.getAnyAvailableCluster().getWorkerGroupId());
         } catch (UserException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return new ArrayList<>();
@@ -100,15 +104,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
-        }
-
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
+        checkWarehouseState(warehouse);
         try {
-            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
 
             Long nodeId;
             Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
@@ -126,15 +126,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        Warehouse warehouse = nameToWh.get(warehouseName);
-        if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
-        }
-
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseName);
+        checkWarehouseState(warehouse);
         try {
-            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
 
             Long nodeId;
             Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
@@ -152,15 +148,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-        Warehouse warehouse = idToWh.get(warehouseId);
-        if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
-        }
-
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
+        checkWarehouseState(warehouse);
         try {
-            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), localWarehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
 
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllBackendIdsByShard(shardInfo, true);
@@ -171,7 +163,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-        Warehouse warehouse = getWarehouse(warehouseName);
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseName);
+        checkWarehouseState(warehouse);
         return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
     }
 
@@ -183,8 +176,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
-        LocalWarehouse localWarehouse = (LocalWarehouse) getWarehouse(warehouseId);
-        return localWarehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
+        checkWarehouseState(warehouse);
+        return warehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
@@ -194,7 +188,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
         String warehouseName = stmt.getWarehouseName();
 
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             if (nameToWh.containsKey(warehouseName)) {
                 if (stmt.isSetIfNotExists()) {
                     LOG.info("Warehouse {} already exists", warehouseName);
@@ -229,7 +223,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     public void replayCreateWarehouse(Warehouse warehouse) {
         String whName = warehouse.getName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(!nameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
             nameToWh.put(whName, warehouse);
             idToWh.put(warehouse.getId(), warehouse);
@@ -242,8 +236,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
 
         String warehouseName = stmt.getWarehouseName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse == null) {
                 if (stmt.isSetIfExists()) {
@@ -261,7 +254,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     public void replayDropWarehouse(DropWarehouseLog log) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             String warehouseName = log.getWarehouseName();
             if (nameToWh.containsKey(warehouseName)) {
                 Warehouse warehouse = nameToWh.remove(warehouseName);
@@ -276,7 +269,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
 
         String warehouseName = stmt.getWarehouseName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
 
@@ -291,7 +284,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     public void replayAlterWarehouse(Warehouse warehouse) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             nameToWh.put(warehouse.getName(), warehouse);
             idToWh.put(warehouse.getId(), warehouse);
         }
@@ -303,7 +296,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
 
         String warehouseName = stmt.getWarehouseName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
