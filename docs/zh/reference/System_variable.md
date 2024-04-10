@@ -174,6 +174,72 @@ SELECT /*+ SET_VAR
 * 默认值：64
 * 引入版本：v3.1.9, v3.2.5
 
+### enable_sync_materialized_view_rewrite(3.1 and later)
+
+是否启用同步物化视图自动改写。
+
+默认值： true
+
+### query_including_mv_names(3.1 and later)
+
+指定用于物化视图自动改写包含的物化视图名称，以减少相关物化视图数量，并减少优化器用于重写的时间。
+
+默认值： empty
+
+
+### query_excluding_mv_names(3.1 and later)
+
+指定用于物化视图自动改写排除的物化视图名称，以减少相关物化视图数量，并减少优化器用于重写的时间。
+
+默认值： empty
+
+### optimizer_materialized_view_timelimit 
+
+在一个Query改写中，指定一个物化视图自动改写规则最大耗时时间，超过该时间后，不会再使用改规则进行自动改写。
+
+默认值： 1000(ms)
+
+### enable_materialized_view_text_match_rewrite
+
+是否启用基于文本的物化视图重写。如果设置为true，则优化器将比较查询和创建的物化视图，如果物化视图的定义查询AST树与输入查询或其子查询相同，则将进行重写。
+
+默认值： true
+
+### materialized_view_subuqery_text_match_max_count
+
+指定检查一个查询中，递归匹配子查询与定义的物化视图匹配的最大次数。
+
+默认值： 4
+
+### enable_force_rule_based_mv_rewrite(3.3 and later)
+
+* Description: Whether to rewrite input query in optimizer's CRO phase even for queries with multi tables.
+默认值： true
+
+### enable_view_based_mv_rewrite(3.2 and later)
+
+* Description: Whether to enable view based rewrite or not. If true, treat logical view as unified node to rewrite rather than inlining it to be better for rewrite.
+默认值： false
+* Introduced in: v3.1.9, v3.2.5
+
+### enable_materialized_view_union_rewrite(2.5 and later)
+
+是否启用基于视图的重写。如果设置为true，则将逻辑视图视为统一节点进行重写，而不是内联它，以便更好地进行重写。”
+
+默认值：true
+
+### follower_query_forward_mode(2.5 and later)
+
+用于控制将查询路由到FE Leader/Follower的标志
+
+有效值:
+
+* `default`: 将查询语句路由到Leader/Follower，由Follower的回放进度决定。
+* `leader`: 将查询语句路由到Leader。
+* `follower`: 将查询语句路由到Follower。
+
+默认值：`default`
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
