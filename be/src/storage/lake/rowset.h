@@ -106,6 +106,8 @@ public:
 
     int64_t tablet_id() const { return _tablet_id; }
 
+    [[nodiscard]] int64_t version() const { return metadata().version(); }
+
 private:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
