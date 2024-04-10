@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "util/json_flattener.h"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -32,7 +34,6 @@
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/json_converter.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 
