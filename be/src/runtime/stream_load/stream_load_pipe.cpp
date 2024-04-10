@@ -34,6 +34,8 @@
 
 #include "runtime/stream_load/stream_load_pipe.h"
 
+#include "util/compression/compression_utils.h"
+
 namespace starrocks {
 
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
@@ -281,18 +283,8 @@ CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<S
 
 StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     if (_decompressor == nullptr) {
-        CompressionTypePB compression = CompressionTypePB::DEFAULT_COMPRESSION;
-        if (_compression_type == TCompressionType::GZIP) {
-            compression = CompressionTypePB::GZIP;
-        } else if (_compression_type == TCompressionType::BZIP2) {
-            compression = CompressionTypePB::BZIP2;
-        } else if (_compression_type == TCompressionType::LZ4_FRAME) {
-            compression = CompressionTypePB::LZ4_FRAME;
-        } else if (_compression_type == TCompressionType::DEFLATE) {
-            compression = CompressionTypePB::DEFLATE;
-        } else if (_compression_type == TCompressionType::ZSTD) {
-            compression = CompressionTypePB::ZSTD;
-        } else {
+        auto compression = CompressionUtils::to_compression_pb(_compression_type);
+        if (compression == CompressionTypePB::UNKNOWN_COMPRESSION) {
             return Status::NotSupported("Unsupported compression algorithm: " + std::to_string(_compression_type));
         }
         RETURN_IF_ERROR(StreamCompression::create_decompressor(compression, &_decompressor));

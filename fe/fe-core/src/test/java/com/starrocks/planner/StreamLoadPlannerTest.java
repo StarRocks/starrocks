@@ -160,7 +160,7 @@ public class StreamLoadPlannerTest {
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
-        Assert.assertEquals(TCompressionType.LZ4_FRAME streamLoadInfo.getPayloadCompressionType());
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
     }
 
     @Test
