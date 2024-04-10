@@ -602,10 +602,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
 }
 
 TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
-        // not support reload yet
-        return;
-    }
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);

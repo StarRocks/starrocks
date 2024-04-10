@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "storage/lake/tablet_metadata.h"
 #include "storage/persistent_index.h"
 
 namespace starrocks {
@@ -64,6 +65,8 @@ public:
 
     DISALLOW_COPY(LakePersistentIndex);
 
+    Status init(const PersistentIndexSstableMetaPB& sstable_meta);
+
     // batch get
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -108,6 +111,9 @@ public:
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
 
     void commit(MetaFileBuilder* builder);
+
+    Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
+                                 const MetaFileBuilder* builder);
 
 private:
     Status flush_memtable();

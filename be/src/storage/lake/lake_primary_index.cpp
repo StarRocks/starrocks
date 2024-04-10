@@ -111,7 +111,9 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
         case PersistentIndexTypePB::CLOUD_NATIVE: {
             _persistent_index = std::make_unique<LakePersistentIndex>(tablet_mgr, metadata->id());
             set_enable_persistent_index(true);
-            return Status::OK();
+            auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+            RETURN_IF_ERROR(lake_persistent_index->init(metadata->sstable_meta()));
+            return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
         default:
             return Status::InternalError("Unsupported lake_persistent_index_type " +
