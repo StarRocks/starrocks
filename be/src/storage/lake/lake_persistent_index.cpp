@@ -381,6 +381,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // If it is upgraded from old version of sr, the rowset version will be not set.
         // The generated rowset version will be treated as base_version.
         int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
+        // The data whose version is max_sstable_version in memtable may be not flushed to sstable.
+        // So rowset whose version is max_sstable_version should also be recovered.
         if (rowset_version < max_sstable_version) {
             continue;
         }
