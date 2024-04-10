@@ -18,6 +18,8 @@ package com.starrocks.scheduler;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 
 public class TaskRunHistory {
+    private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
+
     // Thread-Safe history map: QueryId -> TaskRunStatus
     // The same task-id may contain multi history task run status, so use query_id instead.
     private final Map<String, TaskRunStatus> historyTaskRunMap =
@@ -66,9 +70,17 @@ public class TaskRunHistory {
 
     public void forceGC() {
         List<TaskRunStatus> allHistory = getAllHistory();
+        long beforeSize = allHistory.size();
+        LOG.info("try to trigger force gc, size before GC:{}, task_runs_max_history_number:{}.", beforeSize,
+                Config.task_runs_max_history_number);
+        if (beforeSize <= Config.task_runs_max_history_number) {
+            return;
+        }
         int startIndex = Math.min(allHistory.size(), Config.task_runs_max_history_number);
         allHistory.subList(startIndex, allHistory.size())
                 .forEach(taskRunStatus -> removeTask(taskRunStatus.getQueryId()));
+        LOG.warn("Too much task metadata triggers forced task_run GC, " +
+                "size before GC:{}, size after GC:{}.", beforeSize, historyTaskRunMap.size());
     }
 
     public long getTaskRunCount() {
