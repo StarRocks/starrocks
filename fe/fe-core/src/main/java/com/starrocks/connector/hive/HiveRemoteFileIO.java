@@ -69,7 +69,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
-        String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
+        String path = pathKey.getPath();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
             URI uri = new Path(path).toUri();

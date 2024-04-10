@@ -62,7 +62,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
         String tableLocation = pathKey.getHudiTableLocation().orElseThrow(() ->
                 new StarRocksConnectorException("Missing hudi table base location on %s", pathKey));
 
-        String partitionPath = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
+        String partitionPath = pathKey.getPath();
         String partitionName = FSUtils.getRelativePartitionPath(new Path(tableLocation), new Path(partitionPath));
 
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
