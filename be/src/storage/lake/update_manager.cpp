@@ -52,6 +52,8 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
     _index_cache.set_capacity(update_mem_limit);
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(
+            mem_tracker, update_mem_limit * config::lake_pk_index_block_cache_limit);
 }
 
 UpdateManager::~UpdateManager() {
@@ -66,6 +68,19 @@ inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
 
 Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
     return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
+}
+
+PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
+        : _mem_tracker(mem_tracker), _cache(new_lru_cache(cache_limit)) {}
+
+void PersistentIndexBlockCache::update_memory_usage() {
+    size_t current_mem_usage = _cache->get_memory_usage();
+    if (_memory_usage > current_mem_usage) {
+        _mem_tracker->release(_memory_usage - current_mem_usage);
+    } else {
+        _mem_tracker->consume(current_mem_usage - _memory_usage);
+    }
+    _memory_usage = current_mem_usage;
 }
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
@@ -87,6 +102,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
+    _block_cache->update_memory_usage();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
         _index_cache.remove(index_entry);
@@ -170,6 +186,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (const auto& one_delete : state.auto_increment_deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
     }
+    _block_cache->update_memory_usage();
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -343,6 +360,7 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
         return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
     op(index);
+    _block_cache->update_memory_usage();
 
     return Status::OK();
 }
@@ -622,6 +640,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         delvecs.emplace_back(rssid, dv);
         compaction_state.release_segments(i);
     }
+    _block_cache->update_memory_usage();
 
     // 3. update TabletMeta and write to meta file
     for (auto&& each : delvecs) {

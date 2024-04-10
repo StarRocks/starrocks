@@ -22,6 +22,7 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -90,8 +91,12 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
     for (auto& sstable_pb : sstable_meta.sstables()) {
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
                                           opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+        if (block_cache == nullptr) {
+            return Status::InternalError("Block cache is null.");
+        }
         auto sstable = std::make_unique<PersistentIndexSstable>();
-        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
         _sstables.emplace_back(std::move(sstable));
     }
     return Status::OK();
@@ -126,7 +131,11 @@ Status LakePersistentIndex::minor_compact() {
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
     sstable_pb.set_version(_version.major_number());
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     _sstables.emplace_back(std::move(sstable));
     return Status::OK();
 }
@@ -317,7 +326,11 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto rf,
                      fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
 
     std::unordered_set<std::string> filenames;
     for (const auto& input_sstable : op_compaction.input_sstables()) {
@@ -443,6 +456,14 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         }
     }
     return Status::OK();
+}
+
+size_t LakePersistentIndex::memory_usage() const {
+    size_t mem_usage = _memtable->memory_usage();
+    if (_immutable_memtable != nullptr) {
+        mem_usage += _immutable_memtable->memory_usage();
+    }
+    return mem_usage;
 }
 
 } // namespace starrocks::lake

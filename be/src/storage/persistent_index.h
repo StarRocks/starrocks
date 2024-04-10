@@ -656,7 +656,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
-    size_t memory_usage() const { return _memory_usage.load(); }
+    virtual size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
 
