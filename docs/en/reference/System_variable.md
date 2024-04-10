@@ -211,7 +211,7 @@ Specifies the data type used for data comparison between DECIMAL data and STRING
 
 ### enable_force_rule_based_mv_rewrite(3.3 and later)
 
-* Description: Whether to rewrite input query in optimizer's CRO phase even for queries with multi tables.
+* Description: Whether to rewrite input query in optimizer's RBO phase even for queries with multi tables.
 * Default: true
 
 ### enable_view_based_mv_rewrite(3.2 and later)

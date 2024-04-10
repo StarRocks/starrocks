@@ -213,18 +213,19 @@ SELECT /*+ SET_VAR
 
 ### enable_force_rule_based_mv_rewrite(3.3 and later)
 
-* Description: Whether to rewrite input query in optimizer's CRO phase even for queries with multi tables.
+在优化器的RBO阶段(rule based optimization)是否开启多表查询的输入查询: 开启后，可以让改写更加鲁棒，但如果不能命中也可能增加优化耗时。
+
 默认值： true
 
 ### enable_view_based_mv_rewrite(3.2 and later)
 
-* Description: Whether to enable view based rewrite or not. If true, treat logical view as unified node to rewrite rather than inlining it to be better for rewrite.
+是否启用基于视图的重写。如果设置为true，则将逻辑视图视为统一节点进行重写，而不是内联它，以便更好地进行重写。
+
 默认值： false
-* Introduced in: v3.1.9, v3.2.5
 
 ### enable_materialized_view_union_rewrite(2.5 and later)
 
-是否启用基于视图的重写。如果设置为true，则将逻辑视图视为统一节点进行重写，而不是内联它，以便更好地进行重写。”
+是否启用物化视图Union Rewrite： 如果设置为true，则在物化视图的谓词不能满足查询的谓词时，尝试使用UNION ALL进行补偿。
 
 默认值：true
 
