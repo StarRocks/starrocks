@@ -219,7 +219,7 @@ public class TableFunctionTable extends Table {
                     "Use any of (uncompressed, snappy, lz4, zstd, gzip)", compressionType));
         }
 
-        if (writeSingleFile && !properties.containsKey(PROPERTY_PARTITION_BY)) {
+        if (writeSingleFile && properties.containsKey(PROPERTY_PARTITION_BY)) {
             throw new SemanticException("cannot use partition_by and single simultaneously.");
         }
 
