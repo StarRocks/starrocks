@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "connector_sink/hive_chunk_sink.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
 
@@ -27,6 +28,8 @@ public:
 
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
+
+    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
 };
@@ -42,9 +45,16 @@ public:
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
+    void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
+
+    friend class HiveDataSource;
+
 protected:
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
+    int64_t _max_file_length = 0;
+    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 
 class HiveDataSource final : public DataSource {
@@ -58,7 +68,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
-        return _provider->_scan_node->get_lazy_column_coalesce_counter();
+        return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
     }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
 
@@ -68,10 +78,14 @@ public:
     int64_t cpu_time_spent() const override;
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
+    bool can_estimate_mem_usage() const override { return true; }
+
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
+    void _init_chunk(ChunkPtr* chunk, size_t n) override;
 
 private:
     const HiveDataSourceProvider* _provider;
-    const THdfsScanRange _scan_range;
+    THdfsScanRange _scan_range;
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
@@ -87,6 +101,7 @@ private:
     HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
     // for hiveTable/fileTable with avro/rcfile/sequence format
     HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
+    HdfsScanner* _create_odps_jni_scanner(const FSOptions& options);
     Status _check_all_slots_nullable();
 
     // =====================================
@@ -95,8 +110,11 @@ private:
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
+    bool _enable_datacache_aync_populate_mode = false;
+    bool _enable_datacache_io_adaptor = false;
     bool _enable_dynamic_prune_scan_range = true;
     bool _use_file_metacache = false;
+    bool _enable_split_tasks = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
@@ -122,7 +140,7 @@ private:
     bool _no_data = false;
 
     int _min_max_tuple_id = 0;
-    TupleDescriptor* _min_max_tuple_desc = nullptr;
+    const TupleDescriptor* _min_max_tuple_desc = nullptr;
 
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
@@ -130,6 +148,12 @@ private:
 
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
+
+    // iceberg equality delete column slots.
+    std::vector<SlotDescriptor*> _equality_delete_slots;
+
+    // iceberg equality delete column tuple desc.
+    TupleDescriptor* _delete_column_tuple_desc;
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;

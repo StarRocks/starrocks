@@ -89,11 +89,10 @@ public class StatisticsCalculatorTest {
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
 
         starRocksAssert = new StarRocksAssert(connectContext);
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
 
         String dbName = "statistics_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
-        FeConstants.runningUnitTest = true;
     }
 
     @Before
@@ -339,8 +338,6 @@ public class StatisticsCalculatorTest {
 
     @Test
     public void testLogicalOlapTableEmptyPartition(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        FeConstants.runningUnitTest = false;
-
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getDb("statistics_test").getTable("test_all_type");
@@ -394,12 +391,12 @@ public class StatisticsCalculatorTest {
         ColumnStatistic columnStatistic = expressionContext.getStatistics().getColumnStatistic(idDate);
         Assert.assertEquals(30, columnStatistic.getDistinctValuesCount(), 0.001);
 
-        FeConstants.runningUnitTest = true;
     }
 
     @Test
     public void testLogicalOlapTableScanPartitionPrune1(@Mocked CachedStatisticStorage cachedStatisticStorage)
             throws Exception {
+        FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -489,11 +486,13 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 1, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
         Assert.assertEquals(20, columnStatistic.getDistinctValuesCount(), 0.001);
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testLogicalOlapTableScanPartitionPrune2(@Mocked CachedStatisticStorage cachedStatisticStorage)
             throws Exception {
+        FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -581,6 +580,7 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 26, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
         Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

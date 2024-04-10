@@ -15,6 +15,7 @@ insert into t0 values (null, null, null, null);
 -- !result
 [UC] analyze full table t0;
 -- result:
+test_db_d0bb90d29d5011eeaa6400163e04d4c2.t0	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('c0', 't0')
 -- result:

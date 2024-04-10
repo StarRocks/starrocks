@@ -19,51 +19,47 @@
 
 namespace starrocks::pipeline {
 
+void SourceOperatorFactory::adjust_dop() {
+    const size_t max_parent_dop = std::accumulate(
+            _upstream_sources.begin(), _upstream_sources.end(), static_cast<size_t>(0),
+            [](size_t max_dop, const auto* parent) { return std::max(max_dop, parent->degree_of_parallelism()); });
+
+    if (max_parent_dop > 0 && max_parent_dop < _degree_of_parallelism) {
+        _degree_of_parallelism = max_parent_dop;
+    }
+}
+
 void SourceOperatorFactory::add_group_dependent_pipeline(const Pipeline* dependent_op) {
-    _group_leader->_group_dependent_pipelines.emplace_back(dependent_op);
+    group_leader()->_group_dependent_pipelines.emplace_back(dependent_op);
 }
 const std::vector<const Pipeline*>& SourceOperatorFactory::group_dependent_pipelines() const {
-    return _group_leader->_group_dependent_pipelines;
+    return group_leader()->_group_dependent_pipelines;
 }
 
-void SourceOperatorFactory::set_group_leader(SourceOperatorFactory* parent) {
-    if (this == parent) {
-        return;
+void SourceOperatorFactory::add_upstream_source(SourceOperatorFactory* parent) {
+    _upstream_sources.emplace_back(parent);
+    if (_group_parent == this) { // Set the group parent once when adding the first upstream source.
+        _group_parent = parent->group_leader();
     }
-    _group_leader = parent->group_leader();
-}
-SourceOperatorFactory* SourceOperatorFactory::group_leader() {
-    return _group_leader;
 }
 
-bool SourceOperatorFactory::is_adaptive_group_active() const {
-    if (_group_leader != this) {
-        return _group_leader->is_adaptive_group_active();
+SourceOperatorFactory* SourceOperatorFactory::group_leader() const {
+    if (_group_parent != this) {
+        _group_parent = _group_parent->group_leader();
     }
+    return _group_parent;
+}
 
-    if (adaptive_state() != AdaptiveState::ACTIVE) {
-        return false;
+void SourceOperatorFactory::union_group(SourceOperatorFactory* other_group) {
+    auto* group_leader = this->group_leader();
+    auto* other_group_leader = other_group->group_leader();
+    if (group_leader != other_group_leader) {
+        other_group_leader->_group_parent = group_leader;
     }
+}
 
-    const auto& pipelines = _group_dependent_pipelines;
-    if (!_group_dependent_pipelines_ready) {
-        _group_dependent_pipelines_ready = std::all_of(pipelines.begin(), pipelines.end(), [](const auto& pipeline) {
-            return pipeline->source_operator_factory()->is_adaptive_group_active();
-        });
-        if (!_group_dependent_pipelines_ready) {
-            return false;
-        }
-    }
-
-    _group_dependent_pipelines_finished = std::all_of(pipelines.begin(), pipelines.end(), [](const auto& pipeline) {
-        const auto& drivers = pipeline->drivers();
-        if (drivers.empty()) {
-            return false;
-        }
-        return std::all_of(drivers.begin(), drivers.end(),
-                           [](const auto& driver) { return driver->sink_operator()->is_finished(); });
-    });
-    return _group_dependent_pipelines_finished;
+bool SourceOperatorFactory::is_adaptive_group_initial_active() const {
+    return group_leader()->adaptive_initial_state() == AdaptiveState::ACTIVE;
 }
 
 } // namespace starrocks::pipeline

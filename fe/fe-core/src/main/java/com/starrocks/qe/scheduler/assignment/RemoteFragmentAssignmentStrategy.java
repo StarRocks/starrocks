@@ -16,19 +16,25 @@ package com.starrocks.qe.scheduler.assignment;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.TINY_SCALE_ROWS_LIMIT;
 
 /**
  * The assignment strategy for fragments whose left most node is not a scan node.
@@ -38,6 +44,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
     private final ConnectContext connectContext;
     private final WorkerProvider workerProvider;
     private final boolean isGatherOutput;
+    private final boolean usePipeline;
     private final boolean enableDopAdaption;
 
     private final Random random;
@@ -46,6 +53,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
                                             boolean usePipeline, boolean isGatherOutput, Random random) {
         this.connectContext = connectContext;
         this.workerProvider = workerProvider;
+        this.usePipeline = usePipeline;
         this.enableDopAdaption = usePipeline && connectContext.getSessionVariable().isEnablePipelineAdaptiveDop();
         this.isGatherOutput = isGatherOutput;
         this.random = random;
@@ -96,7 +104,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
 
         List<Long> selectedComputedNodes = workerProvider.selectAllComputeNodes();
         if (workerProvider.isPreferComputeNode() && !selectedComputedNodes.isEmpty()) {
-            workerIdSet.addAll(selectedComputedNodes);
+            workerIdSet = adaptiveChooseNodes(fragment, selectedComputedNodes, Sets.newHashSet(selectedComputedNodes));
             // make olapScan maxParallelism equals prefer compute node number
             maxParallelism = workerIdSet.size() * fragment.getParallelExecNum();
         } else if (fragment.isUnionFragment() && isGatherOutput) {
@@ -128,9 +136,17 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
             }
 
             ExecutionFragment maxFragment = execFragment.getChild(maxIndex);
-            maxFragment.getInstances().stream()
+            Set<Long> childUsedHost = maxFragment.getInstances().stream()
                     .map(FragmentInstance::getWorkerId)
-                    .forEach(workerIdSet::add);
+                    .collect(Collectors.toSet());
+            workerIdSet = adaptiveChooseNodes(fragment, workerProvider.getAllAvailableNodes(), childUsedHost);
+
+            // The adaptive choose nodes process may change the selected nodes number.
+            // When enable pipeline engine but dop is not 0, We have to change the maxParallelism value
+            // to ensure it keeps equal with the size of workerIdSet.
+            if (usePipeline) {
+                maxParallelism = workerIdSet.size();
+            }
         }
 
         if (enableDopAdaption) {
@@ -166,4 +182,56 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         // TODO: switch to unpartitioned/coord execution if our input fragment
         // is executed that way (could have been downgraded from distributed)
     }
+
+
+    private Set<Long> adaptiveChooseNodes(PlanFragment fragment, List<Long> candidates,
+                                           Set<Long> childUsedHosts) {
+        List<Long> childHosts = Lists.newArrayList(childUsedHosts);
+
+        // sometimes we may reverse the fragment order like SHUFFLE_HASH_BUCKET plan, so we need sort
+        // the list to ensure the most left child is at the 0 index position.
+        List<PlanFragment> sortedFragments = fragment.getChildren().stream()
+                .sorted(Comparator.comparing(e -> e.getPlanRoot().getId().asInt()))
+                .collect(Collectors.toList());
+
+        long maxOutputOfRightChild = sortedFragments.stream().skip(1)
+                .map(e -> e.getPlanRoot().getCardinality()).reduce(Long::max)
+                .orElse(fragment.getChild(0).getPlanRoot().getCardinality());
+        long outputOfMostLeftChild = sortedFragments.get(0).getPlanRoot().getCardinality();
+
+        long nodeNums = getOptimalNodeNums(outputOfMostLeftChild, maxOutputOfRightChild, fragment.getPipelineDop(),
+                candidates.size());
+
+        SessionVariableConstants.ChooseInstancesMode mode = connectContext.getSessionVariable()
+                .getChooseExecuteInstancesMode();
+        if (mode.enableIncreaseInstance() && nodeNums > childUsedHosts.size()) {
+            for (Long id : candidates) {
+                if (!childUsedHosts.contains(id)) {
+                    childHosts.add(id);
+                    workerProvider.selectWorkerUnchecked(id);
+                    if (childHosts.size() == nodeNums) {
+                        break;
+                    }
+                }
+            }
+            return Sets.newHashSet(childHosts);
+        } else if (mode.enableDecreaseInstance() && nodeNums < childUsedHosts.size()
+                && candidates.size() >= Config.adaptive_choose_instances_threshold) {
+            Collections.shuffle(childHosts, random);
+            return childHosts.stream().limit(nodeNums).collect(Collectors.toSet());
+        } else {
+            return Sets.newHashSet(childHosts);
+        }
+    }
+
+    public static long getOptimalNodeNums(long outputOfMostLeftChild, long maxOutputOfRightChild, int dop, int candidateSize) {
+        long baseNodeNums = (long) Math.ceil((double) maxOutputOfRightChild / TINY_SCALE_ROWS_LIMIT / dop);
+        double base = Math.max(Math.E, baseNodeNums);
+
+        long amplifyFactor = Math.round(Math.max(1,
+                Math.log(outputOfMostLeftChild / TINY_SCALE_ROWS_LIMIT / dop) / Math.log(base)));
+
+        return Math.min(amplifyFactor * baseNodeNums, candidateSize);
+    }
+
 }

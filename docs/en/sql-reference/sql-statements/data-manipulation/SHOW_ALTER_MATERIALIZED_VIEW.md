@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the building status of synchronous materialized views.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

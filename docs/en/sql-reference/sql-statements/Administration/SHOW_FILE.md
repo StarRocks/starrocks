@@ -6,6 +6,12 @@ displayed_sidebar: "English"
 
 You can execute the SHOW FILE statement to view the information about a file stored in a database.
 
+:::tip
+
+Users with any privilege on the database to which a file belongs can perform this operation. If a file belongs to a database, all users that have access to this database can use this file.
+
+:::
+
 ## Syntax
 
 ```SQL

@@ -15,8 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -38,16 +36,13 @@ public class DescribeStmtTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE sales_records(\n" +
@@ -80,7 +75,7 @@ public class DescribeStmtTest {
         String dropSQL = "drop table sales_records";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }
@@ -91,8 +86,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -118,8 +112,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());
@@ -146,8 +139,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -172,8 +164,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -198,8 +189,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -224,8 +214,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());

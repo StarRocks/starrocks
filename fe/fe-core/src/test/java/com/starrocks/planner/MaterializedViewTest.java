@@ -16,29 +16,44 @@ package com.starrocks.planner;
 
 import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
+import com.starrocks.backup.Status;
+import com.starrocks.backup.mv.MVRestoreUpdater;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.apache.parquet.Strings;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-        Config.default_replication_num = 1;
+
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("depts_null");
+        starRocksAssert.useTable("locations");
+        starRocksAssert.useTable("emps");
+        starRocksAssert.useTable("emps_null");
+        starRocksAssert.useTable("emps_bigint");
+        starRocksAssert.useTable("emps_no_constraint");
+        starRocksAssert.useTable("dependents");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1223,8 +1238,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    // TODO: union all support
     public void testJoinAggregateMaterializationNoAggregateFuncs7() {
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
@@ -1261,8 +1274,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    // TODO: union all support
     public void testJoinAggregateMaterializationNoAggregateFuncs9() {
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
@@ -1308,7 +1319,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
     public void testJoinAggregateMaterializationAggregateFuncs2() {
         testRewriteOK("select empid, emps.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1791,7 +1801,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggJoinViewDelta() {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String mv = "SELECT" +
                 " `LO_ORDERKEY` as col1, C_CUSTKEY, S_SUPPKEY, P_PARTKEY," +
                 " sum(LO_QUANTITY) as total_quantity, sum(LO_ORDTOTALPRICE) as total_price, count(*) as num" +
@@ -2155,6 +2164,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testViewDeltaJoinUKFK15() {
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(0);
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteFail(mv, query);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
+    }
+
+    @Test
     public void testViewDeltaJoinUKFKInMV1() {
         String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
                 + "join dependents using (empid)";
@@ -2239,6 +2263,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, query, constraint).
                 contains("0:OlapScanNode\n" +
                         "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV7() {
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(1);
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid; depts.deptno\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid);" +
+                "emps_no_constraint(deptno) references depts(deptno)\" ";
+        testRewriteFail(mv, query, constraint);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
     }
 
     @Test
@@ -2709,6 +2750,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testArrayAggDistinctWithRollup() {
+        String mv = "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;")
+                .notContain("array_unique_agg");
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id")
+                .contains("array_unique_agg");
+        testRewriteOK(mv, "select array_distinct(array_agg(tag_id)) from user_tags")
+                .contains("array_unique_agg");
+    }
+
+    @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2755,6 +2807,92 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteFail(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
         testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
         testRewriteFail(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount7() {
+        String mv = "select user_id, time, bitmap_agg(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_agg(tag_id)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id) x from user_tags group by user_id, time;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount8() {
+        String mv = "select user_id, time, bitmap_agg(tag_id % 10) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
+        // bitmap_agg
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id % 10) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id % 10) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testStrColumnCountDistinctToBitmapCount1() {
+        {
+            String mv = "select user_id, bitmap_union(bitmap_hash(user_name)) from user_tags group by user_id;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+
+        {
+            String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)) from user_tags group by user_id, time;";
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, time, bitmap_union(bitmap_hash(concat(user_name, \"|\"))) from user_tags group by user_id, time;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(concat(user_name, \"|\"))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(concat(user_name, \"|\")))) x from user_tags group by user_id;");
+            // rewrite count distinct to bitmap_count(bitmap_union(bitmap_hash(x)));
+            testRewriteOK(mv, "select user_id, count(distinct concat(user_name, \"|\")) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, tag_id, user_name from user_tags where user_id > 10;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags  where user_id > 10 group by user_id;");
+        }
+        {
+            String mv = "select user_id, tag_id, user_name from user_tags;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, count(user_name) from user_tags group by user_id;";
+            testRewriteFail(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteFail(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+    }
+
+    @Test
+    public void testStrColumnCountDistinctToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"a\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"b\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"c\"))) from user_tags group by user_id, time;";
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
+                "from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        testRewriteOK(mv, "select user_id, time, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        connectContext.getSessionVariable().setCboCteReuse(true);
     }
 
     @Test
@@ -2936,7 +3074,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            this.setTracLogModule("MV");
             String mv = "SELECT count(lo_linenumber)\n" +
                     "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
                     "WHERE `c_name` != 'name'; ";
@@ -3756,33 +3893,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testNestedAggregateBelowJoin2() throws Exception {
-        {
-            String mv1 = "create materialized view mv1 \n" +
-                    "distributed by random \n" +
-                    "refresh async\n" +
-                    "as select empid, deptno, locationid, \n" +
-                    " sum(salary) as total, count(salary)  as cnt\n" +
-                    " from emps group by empid, deptno, locationid ";
-            String mv2 = "create materialized view mv2 \n" +
-                    "distributed by random \n" +
-                    "refresh async\n" +
-                    "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
-                    "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
-                    "on t.locationid = locations.locationid) t2\n" +
-                    "group by t2.locationid, t2.empid, t2.deptno";
-            starRocksAssert.withMaterializedView(mv1);
-            starRocksAssert.withMaterializedView(mv2);
+        String mv1 = "create materialized view mv1 \n" +
+                "distributed by random \n" +
+                "refresh async\n" +
+                "as select empid, deptno, locationid, \n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno, locationid ";
+        String mv2 = "create materialized view mv2 \n" +
+                "distributed by random \n" +
+                "refresh async\n" +
+                "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
+                "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
+                "on t.locationid = locations.locationid) t2\n" +
+                "group by t2.locationid, t2.empid, t2.deptno";
+        starRocksAssert.withMaterializedView(mv1);
+        starRocksAssert.withMaterializedView(mv2);
 
-            sql("select sum(total) as sum, t.locationid  from \n" +
-                    "(select locationid, \n" +
-                    " sum(salary) as total, count(salary)  as cnt\n" +
-                    " from emps where empid = 2 and deptno = 10 group by locationid) t join locations \n" +
-                    "on t.locationid = locations.locationid\n" +
-                    "group by t.locationid")
-                    .match("mv2");
-            starRocksAssert.dropMaterializedView("mv1");
-            starRocksAssert.dropMaterializedView("mv2");
-        }
+        sql("select sum(total) as sum, t.locationid  from \n" +
+                "(select locationid, \n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps where empid = 2 and deptno = 10 group by locationid) t join locations \n" +
+                "on t.locationid = locations.locationid\n" +
+                "group by t.locationid")
+                .match("mv2");
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropMaterializedView("mv2");
     }
 
     @Test
@@ -5150,15 +5285,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
         PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
 
-        {
-            testRewriteFail(mv, query);
-        }
-
         // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+        testRewriteOK(mv, query);
+
         {
-            this.setTracLogModule("MV");
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("UNION");
         }
@@ -5226,5 +5358,83 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 // ignore
             }
         });
+    }
+
+    @Test
+    public void testMvRestoreUpdater1() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT *  FROM lineorder", mvName);
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<Status, Boolean> result = MVRestoreUpdater.checkMvDefinedQuery(mvTable, Maps.newHashMap(), Pair.create("", ""));
+                    Assert.assertTrue(result.first.ok());
+                });
+
+    }
+
+    @Test
+    public void testMvRestoreUpdater2() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT * FROM lineorder", mvName);
+
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<String, String> newDefinedQueries = Pair.create("", "");
+                    Map<TableName, TableName> remoteToLocalTableName = Maps.newHashMap();
+                    remoteToLocalTableName.put(TableName.fromString("test.lineorder"),
+                            TableName.fromString("test.lineorder"));
+                    boolean result = MVRestoreUpdater.renewMvBaseTableNames(mvTable,
+                            remoteToLocalTableName, connectContext, newDefinedQueries);
+                    Assert.assertTrue(result);
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.first));
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
+                });
+
+    }
+
+    @Test
+    public void testAggregateWithHave() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1";
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 10");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid having sum(salary) > 10");
+    }
+
+    @Test
+    public void testMultiLeftOuterJoin() {
+        {
+            String mv = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and t1a != 'xxx'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("t1a != 'xxx'");
+        }
+
+        {
+            String mv = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and v3 = 1";
+            testRewriteOK(mv, query);
+        }
     }
 }

@@ -10,16 +10,18 @@ Modifies an existing table, including:
 
 - [Rename table, partition, index](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
-- [Atomic swap](#swap)
-- [Add/delete partitions and modify partition attributes](#modify-partition)
-- [Schema change](#schema-change)
+- [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
+- [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
+- [Modify columns (add/delete columns and change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
+- [Modify table properties](#modify-table-properties)
+- [Atomic swap](#swap)
 - [Manual data version compaction](#manual-compaction-from-31)
 
-> **NOTE**
->
-> This operation requires the ALTER privilege on the destination table.
+:::tip
+This operation requires the ALTER privilege on the destination table.
+:::
 
 ## Syntax
 
@@ -28,23 +30,26 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
+`alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
-- rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
+- rename: renames a table, rollup index, or partition.
 - comment: modifies the table comment (supported from **v3.1 onwards**).
-- swap: atomic exchange of two tables.
 - partition: modifies partition properties, drops a partition, or adds a partition.
-- schema change: adds, drops, or reorders columns, or modifies column type.
-- rollup: creates or drops a rollup index.
-- index: modifies index (only Bitmap index can be modified).
-- compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
+- bucket: modifies the bucketing method and number of buckets.
+- column: adds, drops, or reorders columns, or modifies column type.
+- rollup index: creates or drops a rollup index.
+- bitmap index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
+- compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
-:::note
+## Limits and usage notes
 
-- Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
-- Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
-- Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
-:::
+- Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
+- Column names cannot be modified.
+- Column comments cannot be modified.
+- One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
+- Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](../data-definition/CANCEL_ALTER_TABLE.md) command to cancel the operation.
+- Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Rename
 
@@ -78,6 +83,10 @@ Syntax:
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
+:::tip
+Currently, column comments cannot be modified.
+:::
+
 ### Modify partition
 
 #### Add a partition
@@ -103,7 +112,7 @@ Note:
 2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
 3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
 4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
+5. The user can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
 
 #### Drop a partition
 
@@ -121,8 +130,8 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 Note:
 
 1. Keep at least one partition for partitioned tables.
-2. After executing DROP PARTITION for a while, the dropped partition can be recovered by the RECOVER statement. See the RECOVER statement for details.
-3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally this operation is not recommended.
+2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
+3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally, this operation is not recommended.
 
 #### Add a temporary partition
 
@@ -135,7 +144,7 @@ partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
 ```
 
-#### Use a temporary partition to replace current partition
+#### Use a temporary partition to replace the current partition
 
 Syntax:
 
@@ -163,8 +172,8 @@ DROP TEMPORARY PARTITION <partition_name>
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
-        SET ("key" = "value", ...);
+MODIFY PARTITION { <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) | (*) }
+SET ("key" = "value", ...);
 ```
 
 **Usages**
@@ -179,11 +188,117 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 - Execute `SHOW PARTITIONS FROM <tbl_name>` to view the partition properties after modification.
 
-### Schema change
+### Modify the bucketing method and number of buckets (from v3.2)
 
-Schema change supports the following modifications.
+Syntax:
 
-#### Add a column to specified location of specified index
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+[ partition_names ]
+[ distribution_desc ]
+
+partition_names ::= 
+    (PARTITION | PARTITIONS) ( <partition_name> [, <partition_name> ...] )
+
+distribution_desc ::=
+    DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
+    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
+```
+
+Example:
+
+For example, the original table is a Duplicate Key table where hash bucketing is used and the number of buckets is automatically set by StarRocks.
+
+```SQL
+CREATE TABLE IF NOT EXISTS details (
+    event_time DATETIME NOT NULL COMMENT "datetime of event",
+    event_type INT NOT NULL COMMENT "type of event",
+    user_id INT COMMENT "id of user",
+    device_code INT COMMENT "device code",
+    channel INT COMMENT ""
+)
+DUPLICATE KEY(event_time, event_type)
+PARTITION BY date_trunc('day', event_time)
+DISTRIBUTED BY HASH(user_id);
+
+-- Insert data of several days
+INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+-- Data of November 26th
+('2023-11-26 08:00:00', 1, 101, 12345, 2),
+('2023-11-26 09:15:00', 2, 102, 54321, 3),
+('2023-11-26 10:30:00', 1, 103, 98765, 1),
+-- Data of November 27th
+('2023-11-27 08:30:00', 1, 104, 11111, 2),
+('2023-11-27 09:45:00', 2, 105, 22222, 3),
+('2023-11-27 11:00:00', 1, 106, 33333, 1),
+-- Data of November 28th
+('2023-11-28 08:00:00', 1, 107, 44444, 2),
+('2023-11-28 09:15:00', 2, 108, 55555, 3),
+('2023-11-28 10:30:00', 1, 109, 66666, 1);
+```
+
+#### Modify the bucketing method only
+
+> **NOTICE**
+>
+> - The modification is applied to all partitions in the table and cannot be applied to specific partitions only.
+> - Although only the bucketing method needs to be modified, the number of buckets still needs to be specified in the command using `BUCKETS <num>`. If `BUCKETS <num>` is not specified, it means that the number of buckets is automatically determined by StarRocks.
+
+- The bucketing method is modified to random bucketing from hash bucketing and the number of buckets remains automatically set by StarRocks.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY RANDOM;
+  ```
+
+- The keys for hash bucketing are modified to `user_id, event_time` from `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
+  ```
+
+#### Modify the number of buckets only
+
+> **NOTICE**
+>
+> Although only the number of buckets needs to be modified, the bucketing method still needs to be specified in the command, for example, `HASH(user_id)`.
+
+- Modify the number of buckets for all partitions to 10 from being automatically set by StarRocks.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+  ```
+
+- Modify the number of buckets for specified partitions to 15 from being automatically set by StarRocks.
+
+  ```SQL
+  ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
+  ```
+
+  > **NOTE**
+  >
+  > Partition names can be viewed by executing `SHOW PARTITIONS FROM <table_name>;`.
+
+#### Modify both the bucketing method and the number of buckets
+
+> **NOTICE**
+>
+> The modification is applied to all partitions in the table and cannot be applied to specific partitions only.
+
+- Modify the bucketing method from hash bucketing to random bucketing, and change the number of buckets to 10 from being automatically set by StarRocks.
+
+   ```SQL
+   ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+   ```
+
+- Modify the key for hash bucketing, and change the number of buckets to 10 from being automatically set by StarRocks. The key used for hashing bucketing is modified to `user_id, event_time` from the original `event_time, event_type`. The number of buckets is modified to 10 from automatically set by StarRocks.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
+  ``
+
+### Modify columns (add/delete columns, change the order of columns)
+
+#### Add a column to the specified location of the specified index
 
 Syntax:
 
@@ -218,19 +333,31 @@ Syntax:
 
   ```sql
   ALTER TABLE [<db_name>.]<tbl_name>
-  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
-  ADD COLUMN (column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
+  ADD COLUMN column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER column_name,
+  ADD COLUMN column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER column_name
+  [, ...]
   [TO rollup_index_name]
   [PROPERTIES ("key"="value", ...)]
   ```
 
 Note:
 
-1. If you add a value column to an aggregate table, you need to specify `agg_type`.
+1. If you add a value column to an Aggregate table, you need to specify `agg_type`.
 
-2. If you add a key column to a non-aggregate table, you need to specify the KEY keyword.
+2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword.
 
 3. You cannot add a column that already exists in the base index to the rollup index. (You can create another rollup index if needed.)
+
+#### Add a generated column (from v3.1)
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+```
+
+You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
 #### Drop a column from specified index
 
@@ -263,13 +390,13 @@ Note:
 
 1. If you modify the value column in aggregation models, you need to specify agg_type.
 2. If you modify the key column in non-aggregation models, you need to specify the KEY keyword.
-3. Only the type of column can be modified. The other properties of the column remain as they are currently. (i.e. other properties need to be explicitly written in the statement according to the original property, see example 8).
+3. Only the type of column can be modified. The other properties of the column remain as they are currently. (i.e. other properties need to be explicitly written in the statement according to the original property, see example 8 in the [column](#column) part).
 4. The partition column cannot be modified.
 5. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
    - Convert TINYINT/SMALLINT/INT/BIGINT to TINYINT/SMALLINT/INT/BIGINT/DOUBLE.
-   - Convert TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
-   - Convert VARCHAR to TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
+   - Convert TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
+   - Convert VARCHAR to TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
    - Convert VARCHAR to DATE (currently support six formats: "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d")
    - Convert DATETIME to DATE(only year-month-day information is retained, i.e.  `2019-12-09 21:47:05` `<-->` `2019-12-09`)
    - Convert DATE to DATETIME (set hour, minute, second to zero, For example: `2019-12-09` `<-->` `2019-12-09 00:00:00`)
@@ -291,42 +418,49 @@ ORDER BY (column_name1, column_name2, ...)
 
 Note:
 
-1. All columns in the index must be written.
-2. The value column is listed after the key column.
+- All columns in the index must be written.
+- The value column is listed after the key column.
 
-#### Add a generated column (from v3.1)
+#### Modify columns of the sort key in a Primary Key table
 
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
-```
-
-You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
-
-#### Modify table properties
-
-Currently, StarRocks supports modifying the following table properties:
-
-- `replication_num`
-- `default.replication_num`
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
-- Dynamic partitioning related properties
-- `enable_persistent_index`
-- `bloom_filter_columns`
-- `colocate_with`
+<!--Supported Versions-->
 
 Syntax:
 
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+[ order_desc ]
+
+order_desc ::=
+    ORDER BY <column_name> [, <column_name> ...]
 ```
 
-Note:
-You can also modify the properties by merging into the above schema change operation. See the following examples.
+Example:
+
+For example, the original table is a Primary Key table where the sort key and  the primary key are coupled, which is `dt, order_id`.
+
+```SQL
+create table orders (
+    dt date NOT NULL,
+    order_id bigint NOT NULL,
+    user_id int NOT NULL,
+    merchant_id int NOT NULL,
+    good_id int NOT NULL,
+    good_name string NOT NULL,
+    price int NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+    state tinyint NOT NULL
+) PRIMARY KEY (dt, order_id)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(order_id);
+```
+
+Decouple the sort key from the primary key, and modify the sort key to `dt, revenue, state`.
+
+```SQL
+ALTER TABLE orders ORDER BY (dt, revenue, state);
+```
 
 ### Modify rollup index
 
@@ -415,7 +549,7 @@ Bitmap index supports the following modifications:
 Syntax:
 
 ```sql
- ALTER TABLE [<db_name>.]<tbl_name>
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
@@ -426,13 +560,37 @@ Note:
 2. A BITMAP index is created only in a single column.
 ```
 
-#### Drop an index
+#### Drop an bitmap index
 
 Syntax:
 
 ```sql
 DROP INDEX index_name;
 ```
+
+### Modify table properties
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
+```
+
+Currently, StarRocks supports modifying the following table properties:
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
+- `bucket_size` (supported since 3.2)
+
+Note:
+You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
 
 ### Swap
 
@@ -458,7 +616,13 @@ Starting from v3.1, StarRocks offers a SQL interface for users to manually perfo
 
 Syntax:
 
-```sql
+```SQL
+ALTER TABLE <tbl_name> [ BASE | CUMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+```
+
+That is:
+
+```SQL
 -- Perform compaction on the entire table.
 ALTER TABLE <tbl_name> COMPACT
 
@@ -564,9 +728,9 @@ The `be_compactions` table in the `information_schema` database records compacti
     ADD PARTITION p1 VALUES [("2014-01-01"), ("2014-02-01"));
     ```
 
-### Rollup
+### Rollup index
 
-1. Create an index `example_rollup_index` based on the base index (k1,k2,k3,v1,v2). Column-based storage is used.
+1. Create an rollup index `example_rollup_index` based on the base index (k1,k2,k3,v1,v2). Column-based storage is used.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -597,7 +761,7 @@ The `be_compactions` table in the `information_schema` database records compacti
     DROP ROLLUP example_rollup_index2;
     ```
 
-### Schema Change
+### Column
 
 1. Add a key column `new_col` (non-aggregate column) after the `col1` column of `example_rollup_index`.
 
@@ -693,7 +857,7 @@ The `be_compactions` table in the `information_schema` database records compacti
      SET ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-     This operation can also be merged into the above schema change operation (note that the syntax of multiple clauses is slightly different).
+     This operation can also be merged into the above column operation (note that the syntax of multiple clauses is slightly different).
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -701,21 +865,16 @@ The `be_compactions` table in the `information_schema` database records compacti
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-13. Alter the Colocate property of the table.
+### Table property
+
+1. Alter the Colocate property of the table.
 
      ```sql
      ALTER TABLE example_db.my_table
      SET ("colocate_with" = "t1");
      ```
 
-14. Alter the bucketing mode of the table from Random Distribution to Hash Distribution.
-
-     ```sql
-     ALTER TABLE example_db.my_table
-     SET ("distribution_type" = "hash");
-     ```
-
-15. Alter the dynamic partition property of the table.
+2. Alter the dynamic partition property of the table.
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -755,7 +914,7 @@ The `be_compactions` table in the `information_schema` database records compacti
     ALTER TABLE example_table RENAME PARTITION p1 p2;
     ```
 
-### Index
+### Bitmap index
 
 1. Create a bitmap index for column `siteid` in `table1`.
 
@@ -779,7 +938,7 @@ Atomic swap between `table1` and `table2`.
 ALTER TABLE table1 SWAP WITH table2
 ```
 
-### Example of manual compaction
+### Manual compaction
 
 ```sql
 CREATE TABLE compaction_test( 

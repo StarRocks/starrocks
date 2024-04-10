@@ -54,12 +54,12 @@ This algorithm de-duplicates col2 of db0.table0.
 
 The above algorithm has a very low error rate when the data volume is large.
 
-This is the core idea of the HLL algorithm. Please refer to the [HyperLogLog paper](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf) if you are interested.
+This is the core idea of the HLL algorithm. Please refer to the [HyperLogLog paper](https://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf) if you are interested.
 
 ### How to use HyperLogLog
 
 1. To use HyperLogLog de-duplication, you need to set the target indicator column type to `HLL` and the aggregation function to `HLL_UNION` in the table creation statement.
-2. Currently, only the aggregation model supports HLL as indicator column type.
+2. Currently, only the Aggregate table supports HLL as indicator column type.
 3. When using `count distinct` on columns of the HLL type, StarRocks will automatically convert it to the `HLL_UNION_AGG` calculation.
 
 #### Example

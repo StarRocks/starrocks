@@ -44,6 +44,7 @@ struct OlapTableColumnParam {
 struct OlapTableIndexSchema {
     int64_t index_id;
     std::vector<SlotDescriptor*> slots;
+    int64_t schema_id;
     int32_t schema_hash;
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;

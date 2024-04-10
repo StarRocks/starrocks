@@ -16,6 +16,7 @@
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -43,6 +44,7 @@ struct ScannerCounter {
     int64_t init_chunk_ns = 0;
 
     int64_t file_read_ns = 0;
+    int64_t file_read_count = 0;
 };
 
 class FileScanner {
@@ -61,12 +63,22 @@ public:
 
     virtual Status get_schema(std::vector<SlotDescriptor>* schema) { return Status::NotSupported("not implemented"); }
 
+    static Status sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
+                                std::vector<SlotDescriptor>* schema);
+
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
                                      std::shared_ptr<RandomAccessFile>* file);
 
     Status create_sequential_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                   const TBrokerScanRangeParams& params, std::shared_ptr<SequentialFile>* file);
+
+    // only for test
+    RuntimeState* TEST_runtime_state() { return _state; }
+    ScannerCounter* TEST_scanner_counter() { return _counter; }
+
+    static void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                             std::vector<SlotDescriptor>* output);
 
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,

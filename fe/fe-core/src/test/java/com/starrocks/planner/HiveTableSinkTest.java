@@ -111,13 +111,13 @@ public class HiveTableSinkTest {
         Assert.assertEquals("parquet", tHiveTableSink.getFile_format());
         Assert.assertEquals("c1", tHiveTableSink.getData_column_names().get(0));
         Assert.assertEquals("p1", tHiveTableSink.getPartition_column_names().get(0));
-        Assert.assertEquals(TCompressionType.GZIP, tHiveTableSink.getCompression_type());
+        Assert.assertEquals(TCompressionType.NO_COMPRESSION, tHiveTableSink.getCompression_type());
         Assert.assertTrue(tHiveTableSink.is_static_partition_sink);
         Assert.assertEquals(TCloudType.DEFAULT, tHiveTableSink.getCloud_configuration().cloud_type);
 
-        builder.setStorageFormat(HiveStorageFormat.ORC);
+        builder.setStorageFormat(HiveStorageFormat.AVRO);
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Writing to hive table in [ORC] format is not supported",
+                "Writing to hive table in [AVRO] format is not supported",
                 () ->new HiveTableSink(builder.build(), desc, true, new SessionVariable()));
     }
 }

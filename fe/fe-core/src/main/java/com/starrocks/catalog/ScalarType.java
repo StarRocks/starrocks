@@ -69,7 +69,6 @@ public class ScalarType extends Type implements Cloneable {
     public static final int DEFAULT_SCALE = 0; // SQL standard
     // Longest supported VARCHAR and CHAR, chosen to match Hive.
     public static final int DEFAULT_STRING_LENGTH = 65533;
-    public static final int OLAP_MAX_VARCHAR_LENGTH = 1048576;
     // 1GB for each line, it's enough
     public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
     public static final int MAX_CHAR_LENGTH = 255;
@@ -227,7 +226,8 @@ public class ScalarType extends Type implements Cloneable {
                 ctx.getSessionVariable().getLargeDecimalUnderlyingType().equals(SessionVariableConstants.PANIC)) {
             Preconditions.checkArgument(0 <= precision &&
                             precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
-                    "DECIMAL's precision should range from 1 to 38");
+                    "DECIMAL's precision should range from 1 to %s",
+                    PrimitiveType.getMaxPrecisionOfDecimal(type));
             Preconditions.checkArgument(0 <= scale && scale <= precision,
                     "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
         }
@@ -305,6 +305,10 @@ public class ScalarType extends Type implements Cloneable {
         }
     }
 
+    public static int getOlapMaxVarcharLength() {
+        return Config.max_varchar_length;
+    }
+
     public static ScalarType createDefaultString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
         return stringType;
@@ -316,7 +320,7 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createOlapMaxVarcharType() {
-        ScalarType stringType = ScalarType.createVarcharType(ScalarType.OLAP_MAX_VARCHAR_LENGTH);
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
         return stringType;
     }
 
@@ -577,13 +581,10 @@ public class ScalarType extends Type implements Cloneable {
                 }
                 break;
             case DECIMALV2:
-                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
-                break;
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
-                stringBuilder.append(type.toString().toLowerCase()).append("(").append(precision).append(", ")
-                        .append(scale).append(")");
+                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
                 break;
             case BOOLEAN:
                 return "boolean";
@@ -875,5 +876,25 @@ public class ScalarType extends Type implements Cloneable {
             default:
                 return toSql();
         }
+    }
+
+    @Override
+    protected String toTypeString(int depth) {
+        StringBuilder stringBuilder = new StringBuilder();
+        switch (type) {
+            case DECIMALV2:
+                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
+                break;
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                stringBuilder.append(type.toString().toLowerCase()).append("(").append(precision).append(", ")
+                        .append(scale).append(")");
+                break;
+            default:
+                stringBuilder.append(type.toString().toLowerCase());
+                break;
+        }
+        return stringBuilder.toString();
     }
 }

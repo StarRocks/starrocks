@@ -18,12 +18,8 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
-
 public abstract class DmlStmt extends StatementBase {
-
-    private Map<String, String> optHints;
-
+    private long txnId;
     protected DmlStmt(NodePosition pos) {
         super(pos);
     }
@@ -35,11 +31,11 @@ public abstract class DmlStmt extends StatementBase {
 
     public abstract TableName getTableName();
 
-    public Map<String, String> getOptHints() {
-        return optHints;
+    public long getTxnId() {
+        return txnId;
     }
 
-    public void setOptHints(Map<String, String> optHints) {
-        this.optHints = optHints;
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 }

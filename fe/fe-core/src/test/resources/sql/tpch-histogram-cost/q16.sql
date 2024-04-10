@@ -1,34 +1,3 @@
-[sql]
-select
-    p_brand,
-    p_type,
-    p_size,
-    count(distinct ps_suppkey) as supplier_cnt
-from
-    partsupp,
-    part
-where
-        p_partkey = ps_partkey
-  and p_brand <> 'Brand#43'
-  and p_type not like 'PROMO BURNISHED%'
-  and p_size in (31, 43, 9, 6, 18, 11, 25, 1)
-  and ps_suppkey not in (
-    select
-        s_suppkey
-    from
-        supplier
-    where
-            s_comment like '%Customer%Complaints%'
-)
-group by
-    p_brand,
-    p_type,
-    p_size
-order by
-    supplier_cnt desc,
-    p_brand,
-    p_type,
-    p_size ;
 [fragment statistics]
 PLAN FRAGMENT 0(F06)
 Output Exprs:10: P_BRAND | 11: P_TYPE | 12: P_SIZE | 26: count
@@ -39,9 +8,9 @@ RESULT SINK
 distribution type: GATHER
 cardinality: 7119
 column statistics:
-* P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-* P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+* P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+* P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 * count-->[0.0, 6914952.0, 0.0, 8.0, 7119.140625] ESTIMATE
 
 PLAN FRAGMENT 1(F05)
@@ -55,9 +24,9 @@ OutPut Exchange Id: 15
 |  offset: 0
 |  cardinality: 7119
 |  column statistics:
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |  * count-->[0.0, 6914952.0, 0.0, 8.0, 7119.140625] ESTIMATE
 |
 13:AGGREGATE (update finalize)
@@ -65,9 +34,9 @@ OutPut Exchange Id: 15
 |  group by: [10: P_BRAND, VARCHAR, false], [11: P_TYPE, VARCHAR, false], [12: P_SIZE, INT, false]
 |  cardinality: 7119
 |  column statistics:
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |  * count-->[0.0, 6914952.0, 0.0, 8.0, 7119.140625] ESTIMATE
 |
 12:AGGREGATE (merge serialize)
@@ -75,9 +44,9 @@ OutPut Exchange Id: 15
 |  cardinality: 6914952
 |  column statistics:
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 250000.0] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |
 11:EXCHANGE
 distribution type: SHUFFLE
@@ -96,9 +65,9 @@ OutPut Exchange Id: 11
 |  cardinality: 6914952
 |  column statistics:
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 250000.0] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |
 9:Project
 |  output columns:
@@ -109,9 +78,9 @@ OutPut Exchange Id: 11
 |  cardinality: 6914952
 |  column statistics:
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 250000.0] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |
 8:HASH JOIN
 |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)
@@ -120,9 +89,9 @@ OutPut Exchange Id: 11
 |  cardinality: 6914952
 |  column statistics:
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 250000.0] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
 |
 |----7:EXCHANGE
@@ -138,9 +107,9 @@ OutPut Exchange Id: 11
 |  cardinality: 9219936
 |  column statistics:
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |
 3:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -153,9 +122,9 @@ OutPut Exchange Id: 11
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2304984.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2304984.0] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+|  * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+|  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 |
 |----2:EXCHANGE
 |       distribution type: SHUFFLE
@@ -213,7 +182,7 @@ actualRows=0, avgRowSize=47.0
 cardinality: 2304984
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2304984.0] ESTIMATE
-* P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
-* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-* P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+* P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+* P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 [end]

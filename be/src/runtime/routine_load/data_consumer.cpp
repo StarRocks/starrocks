@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "fmt/format.h"
 #include "gutil/strings/split.h"
 #include "runtime/small_file_mgr.h"
 #include "service/backend_options.h"
@@ -125,7 +126,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
             Status st = ctx->exec_env()->small_file_mgr()->get_file(file_id, parts[2], &file_path);
             if (!st.ok()) {
                 std::stringstream ss;
-                ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.get_error_msg();
+                ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.message();
                 return Status::InternalError(ss.str());
             }
             RETURN_IF_ERROR(set_conf(item.first, file_path));
@@ -182,7 +183,8 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
     RdKafka::ErrorCode err = _k_consumer->assign(topic_partitions);
     if (err) {
         LOG(WARNING) << "failed to assign topic partitions: " << ctx->brief(true) << ", err: " << RdKafka::err2str(err);
-        return Status::InternalError("failed to assign topic partitions");
+        return Status::InternalError(fmt::format("failed to assign partitions of topic: {}, err: {}, {}", topic,
+                                                 RdKafka::err2str(err), _k_event_cb.get_error_msg()));
     }
 
     return Status::OK();
@@ -239,9 +241,14 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         case RdKafka::ERR_OFFSET_OUT_OF_RANGE: {
             done = true;
             std::stringstream ss;
-            ss << msg->errstr() << ", partition " << msg->partition() << " offset " << msg->offset() << " has no data";
+            ss << msg->errstr() << ", this is no data in partition: " << msg->partition()
+               << " at offset: " << msg->offset();
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << ss.str();
-            st = Status::InternalError(ss.str());
+            auto alter_doc_url =
+                    "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD";
+            st = Status::InternalError(fmt::format(
+                    "{}. you can modify kafka_offsets by alter routine load, then resume the job. refer to {}",
+                    ss.str(), alter_doc_url));
             break;
         }
         case RdKafka::ERR__PARTITION_EOF: {
@@ -302,9 +309,10 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
         if (err != RdKafka::ERR_NO_ERROR) {
-            LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
+            LOG(WARNING) << "failed to get offset of partition: " << p_id << " in topic: " << _topic
                          << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError("failed to query watermark offset, err: " + RdKafka::err2str(err));
+            return Status::InternalError(fmt::format("failed to get offset of partition: {} in topic: {}, err: {}, {}",
+                                                     p_id, _topic, RdKafka::err2str(err), _k_event_cb.get_error_msg()));
         }
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
@@ -334,10 +342,11 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
 
     // get topic metadata
     RdKafka::Metadata* metadata = nullptr;
-    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata, timeout);
+    RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
-        ss << "failed to get partition meta: " << RdKafka::err2str(err);
+        ss << "failed to get kafka topic: " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
+           << _k_event_cb.get_error_msg();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -351,9 +360,12 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
             continue;
         }
 
-        if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
+        if ((*it)->err() == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART) {
+            LOG(WARNING) << "unknown topic: " << _topic;
+            return Status::InternalError(fmt::format("unknown topic: {}", _topic));
+        } else if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
             std::stringstream ss;
-            ss << "error: " << err2str((*it)->err());
+            ss << "err: " << err2str((*it)->err());
             if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE) {
                 ss << ", try again";
             }
@@ -368,7 +380,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     }
 
     if (partition_ids->empty()) {
-        return Status::InternalError("no partition in this topic");
+        return Status::InternalError(fmt::format("there is no partition in topic: {}", _topic));
     }
 
     return Status::OK();
@@ -390,6 +402,7 @@ Status KafkaDataConsumer::reset() {
     _cancelled = false;
     _k_consumer->unassign();
     _non_eof_partition_count = 0;
+    _k_event_cb.reset_error_msg();
     return Status::OK();
 }
 
@@ -442,6 +455,14 @@ Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
         }
 
         _custom_properties.emplace(item.first, item.second);
+    }
+
+    std::string log_file_path = config::sys_log_dir + "/pulsar-cpp-client.log";
+    if (config::pulsar_client_log_level >= 0 && config::pulsar_client_log_level <= 3) {
+        config.setLogger(new pulsar::FileLoggerFactory(
+                static_cast<pulsar::Logger::Level>(config::pulsar_client_log_level), log_file_path));
+    } else {
+        config.setLogger(new pulsar::FileLoggerFactory(pulsar::Logger::Level::LEVEL_WARN, log_file_path));
     }
 
     _p_client = new pulsar::Client(_service_url, config);

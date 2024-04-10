@@ -16,7 +16,7 @@ Release date: April 21, 2023
 - Optimized the accuracy of thread dump. [#16748](https://github.com/StarRocks/starrocks/pull/16748)
 - Optimized load efficiency by triggering metadata compaction before loading. [#19347](https://github.com/StarRocks/starrocks/pull/19347)
 - Optimized the Stream Load planner timeout. [#18992](https://github.com/StarRocks/starrocks/pull/18992/files)
-- Optimized the Unique key table performance by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+- Optimized the Unique Key table performance by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
 
 ### Bug Fixes
 
@@ -179,30 +179,30 @@ Release date: October 20, 2022
 
 ### New Features
 
-- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [table types](../table_design/table_types/table_types.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
+- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [table types](https://docs.starrocks.io/docs/table_design/table_types/table_types/). For more information, see [Materialized View](https://docs.starrocks.io/docs/using_starrocks/Materialized_view/).
 
-- Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](../loading/InsertInto.md).
+- Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](https://docs.starrocks.io/docs/loading/InsertInto/).
 
-- [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](../deployment/sr_operator.md).
+- [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](https://docs.starrocks.io/docs/deployment/sr_operator/).
 
-- Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
+- Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SELECT/).
 
-- Supports creating Iceberg catalogs and Hudi catalogs, which allow direct queries on data from Apache Iceberg and Apache Hudi. For more information, see [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
+- Supports creating Iceberg catalogs and Hudi catalogs, which allow direct queries on data from Apache Iceberg and Apache Hudi. For more information, see [Iceberg catalog](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/) and [Hudi catalog](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/).
 
-- Supports querying ARRAY-type columns from Apache Hive™ tables in CSV format. For more information, see [External table](../data_source/External_table.md).
+- Supports querying ARRAY-type columns from Apache Hive™ tables in CSV format. For more information, see [External table](https://docs.starrocks.io/docs/data_source/External_table/).
 
-- Supports viewing the schema of external data via DESC. For more information, see [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md).
+- Supports viewing the schema of external data via DESC. For more information, see [DESC](https://docs.starrocks.io/docs/sql-reference/sql-statements/Utility/DESCRIBE/).
 
-- Supports granting a specific role or IMPERSONATE permission to a user via GRANT and revoking them via REVOKE, and supports executing an SQL statement with IMPERSONATE permission via  EXECUTE AS. For more information, see [GRANT](../sql-reference/sql-statements/account-management/GRANT.md), [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md), and [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE_AS.md).
+- Supports granting a specific role or IMPERSONATE permission to a user via GRANT and revoking them via REVOKE, and supports executing an SQL statement with IMPERSONATE permission via  EXECUTE AS. For more information, see [GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/), [REVOKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/REVOKE/), and [EXECUTE AS](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/EXECUTE_AS/).
 
-- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
+- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](https://docs.starrocks.io/docs/administration/enable_fqdn/).
 
-- flink-connector-starrocks supports Primary Key table partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+- flink-connector-starrocks supports Primary Key table partial update. For more information, see [Load data by using flink-connector-starrocks](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/).
 
 - Provides the following new functions:
 
-  - array_contains_all: checks whether a specific array is a subset of another. For more information, see [array_contains_all](../sql-reference/sql-functions/array-functions/array_contains_all.md).
-  - percentile_cont: calculates the percentile value with linear interpolation. For more information, see [percentile_cont](../sql-reference/sql-functions/aggregate-functions/percentile_cont.md).
+  - array_contains_all: checks whether a specific array is a subset of another. For more information, see [array_contains_all](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_contains_all/).
+  - percentile_cont: calculates the percentile value with linear interpolation. For more information, see [percentile_cont](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/percentile_cont/).
 
 ### Improvements
 
@@ -217,9 +217,9 @@ Release date: October 20, 2022
 
 - Optimized the performance of Cross Join by supporting predicate pushdown.
 
-- Histograms are added to CBO statistics. Full statistics collection is further optimized. For more information, see [Gather CBO statistics](../using_starrocks/Cost_based_optimizer.md).
+- Histograms are added to CBO statistics. Full statistics collection is further optimized. For more information, see [Gather CBO statistics](https://docs.starrocks.io/docs/using_starrocks/Cost_based_optimizer/).
 
-- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Determine the number of buckets](../table_design/Data_distribution.md#how-to-determine-the-number-of-buckets).
+- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Determine the number of buckets](https://docs.starrocks.io/docs/2.4/table_design/Data_distribution/#determine-the-number-of-tablets).
 
 - Supports querying compressed TXT files in Apache Hive.
 
@@ -231,9 +231,9 @@ Release date: October 20, 2022
 
 - Functions:
 
-  - You can use multiple COUNT(DISTINCT) in one statement. For more information, see [count](../sql-reference/sql-functions/aggregate-functions/count.md).
-  - Window functions min() and max() support sliding windows. For more information, see [Window functions](../sql-reference/sql-functions/Window_function.md).
-  - Optimized the performance of the window_funnel function. For more information, see [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md).
+  - You can use multiple COUNT(DISTINCT) in one statement. For more information, see [count](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/count/).
+  - Window functions min() and max() support sliding windows. For more information, see [Window functions](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/).
+  - Optimized the performance of the window_funnel function. For more information, see [window_funnel](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/window_funnel/).
 
 ### Bug Fixes
 

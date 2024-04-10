@@ -136,7 +136,7 @@ public class BackupHandlerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
             }
@@ -531,6 +531,13 @@ public class BackupHandlerTest {
         TSnapshotRequest requestSnapshot = snapshotTask1.toThrift();
 
         // drop repo
+        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getDdlStmtExecutor();
+                result = ddlStmtExecutor;
+            }
+        };
         DDLStmtExecutor.execute(new DropRepositoryStmt("repo"), new ConnectContext());
     }
 

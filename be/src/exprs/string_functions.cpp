@@ -14,12 +14,10 @@
 
 #include "exprs/string_functions.h"
 
-#include <hs/hs.h>
 #ifdef __x86_64__
 #include <immintrin.h>
 #include <mmintrin.h>
 #endif
-#include <re2/re2.h>
 
 #include <algorithm>
 #include <cctype>
@@ -44,10 +42,9 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/large_int_value.h"
+#include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
-#include "util/phmap/phmap.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
@@ -366,14 +363,14 @@ Status StringFunctions::concat_prepare(FunctionContext* context, FunctionContext
     // size of concatenation of tail columns(i.e. columns except the 1st one)
     // must not exceeds SIZE_LIMIT, otherwise the result is oversize in which
     // case NULL is returned according to mysql.
-    raw::make_room(&tail, OLAP_STRING_MAX_LENGTH);
+    raw::make_room(&tail, get_olap_string_max_length());
     auto* tail_begin = (uint8_t*)tail.data();
     size_t tail_off = 0;
 
     for (auto i = 1; i < num_args; ++i) {
         auto const_arg = context->get_constant_column(i);
         auto s = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_arg);
-        if (tail_off + s.size > OLAP_STRING_MAX_LENGTH) {
+        if (tail_off + s.size > get_olap_string_max_length()) {
             //oversize
             state->is_oversize = true;
             break;
@@ -797,7 +794,7 @@ public:
         size_t dst_off = 0;
         for (auto i = 0; i < num_rows; ++i) {
             auto len = len_array[i];
-            if (UNLIKELY((uint32_t)len > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY((uint32_t)len > get_olap_string_max_length())) {
                 dst_offsets[i + 1] = dst_off;
                 has_null = true;
                 nulls[i] = 1;
@@ -892,11 +889,11 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
         size_t reserved = static_cast<size_t>(times) * src_offsets.back();
-        if (reserved > OLAP_STRING_MAX_LENGTH * num_rows) {
+        if (reserved > get_olap_string_max_length() * num_rows) {
             reserved = 0;
             for (int i = 0; i < num_rows; ++i) {
                 size_t slice_sz = src_offsets[i + 1] - src_offsets[i];
-                if (slice_sz * times < OLAP_STRING_MAX_LENGTH) {
+                if (slice_sz * times < get_olap_string_max_length()) {
                     reserved += slice_sz * times;
                 }
             }
@@ -914,7 +911,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         }
         // if result exceed STRING_MAX_LENGTH
         // return null
-        if (s.size * times > OLAP_STRING_MAX_LENGTH) {
+        if (s.size * times > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -968,7 +965,7 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
         auto s = str_viewer.value(i);
         int32_t n = times_viewer.value(i);
 
-        if (s.size * n > OLAP_STRING_MAX_LENGTH) {
+        if (s.size * n > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -1086,7 +1083,7 @@ static inline void build_translate_map(const Slice& from_str, const Slice& to_st
  * @param utf8_map the UTF-8 map.
  * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
  * @return [is_null, num_bytes].
- * - `is_null` will be true, if the number of translated chars exceeds `OLAP_STRING_MAX_LENGTH`.
+ * - `is_null` will be true, if the number of translated chars exceeds `get_olap_string_max_length()`.
  * - `num_bytes`: the number of translated chars.
  */
 static inline std::pair<bool, size_t> translate_string_with_utf8_map(
@@ -1104,7 +1101,7 @@ static inline std::pair<bool, size_t> translate_string_with_utf8_map(
             continue;
         }
 
-        if (num_bytes + dst_utf_char.size > OLAP_STRING_MAX_LENGTH) {
+        if (num_bytes + dst_utf_char.size > get_olap_string_max_length()) {
             return {true, 0};
         }
         strings::memcpy_inlined(dst + num_bytes, dst_utf_char.data, dst_utf_char.size);
@@ -1230,7 +1227,7 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
  * @param src the source column, which may be de-wrapped from NullableColumn.
  * @param state stores the UTF-8 map.
  * @return the translated column, which may be a nullable BinaryColumn.
- *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ *  The row will be null, if it exceeds get_olap_string_max_length() after translated.
  */
 static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
                                                                       const TranslateState* state) {
@@ -1269,7 +1266,7 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
         src_encoded_values.reserve(s.size);
         encode_utf8_chars(s, &src_encoded_values);
 
-        dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, OLAP_STRING_MAX_LENGTH));
+        dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, get_olap_string_max_length()));
         uint8_t* dst_begin = dst_bytes.data() + dst_offset;
 
         const auto [is_null, num_row_bytes] = translate_string_with_utf8_map(src_encoded_values, utf8_map, dst_begin);
@@ -1297,7 +1294,7 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
  * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
  * @param state useless, `state` is useful only for the constant `from_string`, `to_string` for now.
  * @return the translated column, which may be a nullable BinaryColumn.
- *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ *  The row will be null, if it exceeds get_olap_string_max_length() after translated.
  */
 ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const TranslateState* state) {
     DCHECK(state == nullptr || !state->is_from_and_to_const);
@@ -1352,7 +1349,7 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
             src_encoded_values.reserve(src.size);
             encode_utf8_chars(src, &src_encoded_values);
 
-            dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, OLAP_STRING_MAX_LENGTH));
+            dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, get_olap_string_max_length()));
             uint8_t* dst_begin = dst_bytes.data() + dst_offset;
 
             const auto [is_null, num_row_bytes] =
@@ -1438,7 +1435,7 @@ enum PadType { PAD_TYPE_LEFT, PAD_TYPE_RIGHT };
 template <PadType pad_type>
 static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, BinaryColumn* src, const uint8_t* fill,
                                               const size_t fill_size, const size_t len) {
-    DCHECK(0 < len && len <= OLAP_STRING_MAX_LENGTH);
+    DCHECK(0 < len && len <= get_olap_string_max_length());
     DCHECK(fill_size > 0);
 
     const auto num_rows = src->size();
@@ -1548,7 +1545,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, BinaryColumn* src
 
         size_t dst_slice_size = s.size + fill_times * fill_size + fill_rest;
         // oversize
-        if (dst_slice_size > OLAP_STRING_MAX_LENGTH) {
+        if (dst_slice_size > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -1586,7 +1583,7 @@ static inline ColumnPtr pad_const_not_null(const Columns& columns, BinaryColumn*
     auto fill = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[2]);
 
     // illegal length  or too-big length, return NULL
-    if (len < 0 || len > OLAP_STRING_MAX_LENGTH) {
+    if (len < 0 || len > get_olap_string_max_length()) {
         return ColumnHelper::create_const_null_column(columns[1]->size());
     }
     // len == 0, return empty string
@@ -1658,8 +1655,8 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         }
 
         int len = len_viewer.value(i);
-        // NULL if len < 0 || len > OLAP_STRING_MAX_LENGTH
-        if ((uint32)len > OLAP_STRING_MAX_LENGTH) {
+        // NULL if len < 0 || len > get_olap_string_max_length()
+        if ((uint32)len > get_olap_string_max_length()) {
             has_null = true;
             dst_offsets[i + 1] = dst_off;
             dst_nulls[i] = 1;
@@ -1719,7 +1716,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         const size_t dst_slice_size = str.size + fill->size * fill_times + fill_rest;
 
         // result is oversize, return NULL
-        if (dst_slice_size > OLAP_STRING_MAX_LENGTH) {
+        if (dst_slice_size > get_olap_string_max_length()) {
             has_null = true;
             dst_offsets[i + 1] = dst_off;
             dst_nulls[i] = 1;
@@ -2461,8 +2458,7 @@ static inline std::string unhex_4chars(Slice s) {
     }
     return ret;
 }
-#endif
-
+#else
 static inline char hexdigit_1char(char ch) {
     if (int value = ch - '0'; value >= 0 && value <= ('9' - '0')) {
         return value;
@@ -2500,6 +2496,7 @@ static inline std::string unhex_1char(Slice str) {
     }
     return ret;
 }
+#endif
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
 #ifdef __AVX2__
@@ -2583,7 +2580,7 @@ std::string StringFunctions::url_decode_func(const std::string& value) {
     if (status.ok()) {
         return ret;
     } else {
-        throw std::runtime_error(status.get_error_msg());
+        throw std::runtime_error(std::string(status.message()));
     }
 }
 
@@ -2676,7 +2673,7 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColu
     for (int i = 0; i < num_rows; ++i) {
         auto s = src->get_slice(i);
         const auto dst_slice_size = s.size + tail_size;
-        if (LIKELY(dst_slice_size <= OLAP_STRING_MAX_LENGTH)) {
+        if (LIKELY(dst_slice_size <= get_olap_string_max_length())) {
             dst_off += dst_slice_size;
             dst_offsets[i + 1] = dst_off;
         } else {
@@ -2694,7 +2691,7 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColu
     for (int i = 0; i < num_rows; ++i) {
         auto s = src->get_slice(i);
         const auto dst_slice_size = s.size + tail_size;
-        if (LIKELY(dst_slice_size <= OLAP_STRING_MAX_LENGTH)) {
+        if (LIKELY(dst_slice_size <= get_olap_string_max_length())) {
             strings::memcpy_inlined(dst_begin + dst_off, s.data, s.size);
             dst_off += s.size;
             strings::memcpy_inlined(dst_begin + dst_off, tail_begin, tail_size);
@@ -2743,7 +2740,7 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
         bool oversize = false;
         for (auto& view : list) {
             auto v = view.value(i);
-            if (UNLIKELY(dst_slice_len + v.size > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY(dst_slice_len + v.size > get_olap_string_max_length())) {
                 oversize = true;
                 break;
             }
@@ -2797,7 +2794,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
         bool oversize = false;
         for (auto& view : list) {
             auto v = view.value(i);
-            if (UNLIKELY(dst_slice_len + v.size > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY(dst_slice_len + v.size > get_olap_string_max_length())) {
                 oversize = true;
                 break;
             }
@@ -2867,7 +2864,7 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
                 continue;
             }
             auto v = view.value(i);
-            if (UNLIKELY(dst_slice_size + v.size > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY(dst_slice_size + v.size > get_olap_string_max_length())) {
                 oversize = true;
                 break;
             }
@@ -2913,7 +2910,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     const auto sep_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.begin() + 1);
     const auto rest_size = ColumnHelper::compute_bytes_size(columns.begin() + 1, columns.end());
     // need extra SIZE_LIMIT bytes of space for rewinding the appended separator.
-    const auto dst_bytes_max_size = rest_size + sep_size * (column_num - 2) + OLAP_STRING_MAX_LENGTH;
+    const auto dst_bytes_max_size = rest_size + sep_size * (column_num - 2) + get_olap_string_max_length();
 
     ColumnViewer<TYPE_VARCHAR> sep_viewer(columns[0]);
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
@@ -2955,7 +2952,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
             dst_slice_size += sep.size;
         }
         // return NULL for oversize
-        if (UNLIKELY(dst_slice_size > OLAP_STRING_MAX_LENGTH + sep.size)) {
+        if (UNLIKELY(dst_slice_size > get_olap_string_max_length() + sep.size)) {
             builder.rewind(dst_slice_size);
             builder.set_null(i);
         } else if (LIKELY(dst_slice_size > 0)) {
@@ -3029,61 +3026,6 @@ int StringFunctions::index_of(const char* source, int source_count, const char* 
     }
     return -1;
 }
-
-struct StringFunctionsState {
-    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
-                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
-                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
-
-    std::string pattern;
-    std::unique_ptr<re2::RE2> regex;
-    std::unique_ptr<re2::RE2::Options> options;
-    bool const_pattern{false};
-    DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
-
-    bool use_hyperscan = false;
-    int size_of_pattern = -1;
-
-    // a pointer to the generated database that responsible for parsed expression.
-    hs_database_t* database = nullptr;
-    // a type containing error details that is returned by the compile calls on failure.
-    hs_compile_error_t* compile_err = nullptr;
-    // A Hyperscan scratch space, Used to call hs_scan,
-    // one scratch space per thread, or concurrent caller, is required
-    hs_scratch_t* scratch = nullptr;
-
-    StringFunctionsState() : regex(), options() {}
-
-    // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
-    re2::RE2* get_or_prepare_regex() {
-        DCHECK(const_pattern);
-        int32_t driver_id = CurrentThread::current().get_driver_id();
-        if (driver_id == 0) {
-            return regex.get();
-        }
-        re2::RE2* res = nullptr;
-        driver_regex_map.lazy_emplace_l(
-                driver_id, [&](auto& value) { res = value.get(); },
-                [&](auto build) {
-                    auto regex = std::make_unique<re2::RE2>(pattern, *options);
-                    DCHECK(regex->ok());
-                    res = regex.get();
-                    build(driver_id, std::move(regex));
-                });
-        DCHECK(!!res);
-        return res;
-    }
-
-    ~StringFunctionsState() {
-        if (scratch != nullptr) {
-            hs_free_scratch(scratch);
-        }
-
-        if (database != nullptr) {
-            hs_free_database(database);
-        }
-    }
-};
 
 Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern, StringFunctionsState* state,
                                                      FunctionContext* context, const Slice& slice) {
@@ -3329,7 +3271,7 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
 
         nl_col->append(0);
         auto group = group_viewer.value(row);
-        if (group < 0) {
+        if (group <= 0) {
             offset_col->append(index);
             continue;
         }
@@ -3384,7 +3326,7 @@ static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Colu
 
         nl_col->append(0);
         auto group = group_viewer.value(row);
-        if (group < 0) {
+        if (group <= 0) {
             offset_col->append(index);
             continue;
         }
@@ -3441,7 +3383,7 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
 
     uint64_t index = 0;
     int max_matches = 1 + const_re->NumberOfCapturingGroups();
-    if (group < 0 || group >= max_matches) {
+    if (group <= 0 || group >= max_matches) {
         offset_col->append_value_multiple_times(&index, size);
         auto array = ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(0, 0)), offset_col);
 
@@ -3558,7 +3500,146 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, StringFunctionsState* state,
+                                                  const std::string& rpl_value) {
+    hs_scratch_t* scratch = nullptr;
+    hs_error_t status;
+    if ((status = hs_clone_scratch(state->scratch, &scratch) != HS_SUCCESS)) {
+        return Status::InternalError(strings::Substitute("Unable to clone scratch space. status: $0", status));
+    }
+
+    DeferOp op([&] {
+        if (scratch != nullptr) {
+            hs_error_t st;
+            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+                LOG(ERROR) << "free scratch space failure. status: " << st;
+            }
+        }
+    });
+
+    MatchInfoChain match_info_chain;
+    match_info_chain.info_chain.reserve(src->size());
+
+    auto src_value_size = src->get_bytes().size();
+    const char* data = (src_value_size) ? reinterpret_cast<const char*>(src->get_bytes().data())
+                                        : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
+
+    auto st = hs_scan(
+            // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
+            state->database, data, src_value_size, 0, scratch,
+            [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void* ctx) -> int {
+                auto* value = (MatchInfoChain*)ctx;
+                if (value->info_chain.empty()) {
+                    value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                } else if (value->info_chain.back().from == from) {
+                    value->info_chain.back().to = to;
+                } else if (value->info_chain.back().to <= from) {
+                    value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                }
+                return 0;
+            },
+            &match_info_chain);
+    DCHECK(st == HS_SUCCESS || st == HS_SCAN_TERMINATED) << " status: " << st;
+
+    // filter those match that cross rows
+    const auto num_rows = src->size();
+    const auto& src_offsets = src->get_offset();
+    size_t row_index = 0;
+
+    MatchInfoChain match_info_chain_in_one_row;
+    for (const auto& info : match_info_chain.info_chain) {
+        while (row_index < num_rows && src_offsets[row_index + 1] <= info.from) {
+            row_index++;
+        }
+        if (row_index < num_rows && src_offsets[row_index + 1] >= info.to) {
+            match_info_chain_in_one_row.info_chain.emplace_back(info);
+        }
+    }
+
+    // no match in row
+    if (match_info_chain_in_one_row.info_chain.empty()) {
+        return src->clone_shared();
+    }
+
+    auto data_count = [&]() {
+        size_t res = 0;
+        size_t last_to = 0;
+        for (const auto& info : match_info_chain_in_one_row.info_chain) {
+            res += info.from - last_to;
+            last_to = info.to;
+        }
+        res += match_info_chain_in_one_row.info_chain.size() * rpl_value.size();
+        res += src_value_size - last_to;
+        return res;
+    };
+
+    auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
+    auto& dst_offsets = dst->get_offset();
+    auto& dst_bytes = dst->get_bytes();
+
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_bytes.reserve(data_count());
+
+    // copy data
+    char* cursor = reinterpret_cast<char*>(dst_bytes.data());
+    size_t last_to = 0;
+    for (const auto& info : match_info_chain_in_one_row.info_chain) {
+        strings::memcpy_inlined(cursor, data + last_to, info.from - last_to);
+        cursor += info.from - last_to;
+        strings::memcpy_inlined(cursor, rpl_value.data(), rpl_value.size());
+        cursor += rpl_value.size();
+        last_to = info.to;
+    }
+    strings::memcpy_inlined(cursor, data + last_to, src_value_size - last_to);
+
+    // split offset
+    size_t match_index = 0;
+    dst_offsets[0] = 0;
+    size_t match_size = match_info_chain_in_one_row.info_chain.size();
+    for (size_t i = 0; i < num_rows; i++) {
+        size_t from = src_offsets[i];
+        size_t to = src_offsets[i + 1];
+        size_t dis = to - from;
+        DCHECK(match_index == match_size || match_info_chain_in_one_row.info_chain[match_index].to > from);
+        while (match_index < match_size && match_info_chain_in_one_row.info_chain[match_index].from >= from &&
+               match_info_chain_in_one_row.info_chain[match_index].to <= to) {
+            dis -= match_info_chain_in_one_row.info_chain[match_index].to -
+                   match_info_chain_in_one_row.info_chain[match_index].from;
+            dis += rpl_value.size();
+            match_index++;
+        }
+        dst_offsets[i + 1] = dst_offsets[i] + dis;
+    }
+    DCHECK(match_index == match_size);
+    DCHECK(dst_offsets.back() == data_count());
+
+    // resize dst_bytes
+    dst_bytes.resize(dst_offsets.back());
+
+    return dst;
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(StringFunctionsState* state,
+                                                                      const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns[0]->size() == 0) {
+        return ColumnHelper::create_const_null_column(0);
+    }
+    const auto binary = ColumnHelper::get_binary_column(columns[0].get());
+    auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    std::string rpl_value = rpl_viewer.value(0).to_string();
+    ASSIGN_OR_RETURN(auto res, hyperscan_vec_evaluate(binary, state, rpl_value));
+    if (columns[0]->is_nullable()) {
+        return NullableColumn::create(
+                std::move(res), std::static_pointer_cast<NullColumn>(
+                                        down_cast<NullableColumn*>(columns[0].get())->null_column()->clone_shared()));
+    } else if (columns[0]->is_constant()) {
+        return ConstColumn::create(std::move(res), columns[0]->size());
+    }
+    return res;
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
@@ -3636,7 +3717,11 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
     if (state->const_pattern) {
         if (state->use_hyperscan) {
-            return regexp_replace_use_hyperscan(state, columns);
+            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec()) {
+                return regexp_replace_use_hyperscan_vec(state, columns);
+            } else {
+                return regexp_replace_use_hyperscan(state, columns);
+            }
         } else {
             re2::RE2* const_re = state->get_or_prepare_regex();
             return regexp_replace_const(const_re, columns);
@@ -4173,5 +4258,12 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionCo
         return url_extract_parameter_general(columns);
     }
 }
+// crc32
+DEFINE_UNARY_FN_WITH_IMPL(crc32Impl, str) {
+    return static_cast<uint32_t>(crc32_z(0L, (const unsigned char*)str.data, str.size));
+}
 
+StatusOr<ColumnPtr> StringFunctions::crc32(FunctionContext* context, const Columns& columns) {
+    return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
+}
 } // namespace starrocks

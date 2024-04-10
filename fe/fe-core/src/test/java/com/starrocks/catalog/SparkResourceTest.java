@@ -38,9 +38,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.utframe.UtFrameUtils;
@@ -79,8 +79,7 @@ public class SparkResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                             @Injectable Auth auth)
+    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
             throws UserException {
         new Expectations() {
             {
@@ -88,6 +87,14 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 
@@ -150,8 +157,8 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                                            @Injectable Auth auth) throws UserException {
+    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws UserException {
         // master: yarn, deploy_mode: cluster
         // yarn resource manager ha
         properties.put("spark.master", "yarn");
@@ -162,13 +169,20 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm3", "host3");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         Resource.fromStmt(stmt);
     }
 
     @Test
-    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                           @Injectable Auth auth)
+    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
             throws UserException {
         new Expectations() {
             {
@@ -176,6 +190,14 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 
@@ -201,8 +223,7 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                             @Injectable Auth auth)
+    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
             throws UserException {
         new Expectations() {
             {
@@ -210,6 +231,14 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = false;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 

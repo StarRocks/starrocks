@@ -35,9 +35,12 @@
 package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.starrocks.common.Config;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
@@ -45,24 +48,41 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
 
 public class RestBaseAction extends BaseAction {
-    protected static final String CATALOG_KEY = "catalog";
 
+    private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
+
+    protected static final String CATALOG_KEY = "catalog";
     protected static final String DB_KEY = "db";
     protected static final String TABLE_KEY = "table";
     protected static final String LABEL_KEY = "label";
-    private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
+    protected static final String WAREHOUSE_KEY = "warehouse";
+
+    protected static final String PAGE_NUM_KEY = "page_num";
+    protected static final String PAGE_SIZE_KEY = "page_size";
+
+    protected static final int DEFAULT_PAGE_NUM = 0;
+    protected static final int DEFAULT_PAGE_SIZE = 100;
+
+    protected static final String JSON_CONTENT_TYPE = "application/json; charset=UTF-8";
+    protected static ObjectMapper mapper = new ObjectMapper();
 
     public RestBaseAction(ActionController controller) {
         super(controller);
@@ -70,15 +90,13 @@ public class RestBaseAction extends BaseAction {
 
     @Override
     public void handleRequest(BaseRequest request) {
-        LOG.info("receive http request. url={}", request.getRequest().uri());
-        long startTime = System.currentTimeMillis();
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
         } catch (AccessDeniedException accessDeniedException) {
-            LOG.warn("fail to process url: {}", request.getRequest().uri(), accessDeniedException);
+            LOG.warn("failed to process url: {}", request.getRequest().uri(), accessDeniedException);
             response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
-            response.appendContent(new RestBaseResult(accessDeniedException.getMessage()).toJson());
+            response.appendContent(new RestBaseResult(getErrorRespWhenUnauthorized(accessDeniedException)).toJson());
             writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
         } catch (DdlException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
@@ -92,11 +110,24 @@ public class RestBaseAction extends BaseAction {
             response.appendContent(new RestBaseResult(msg).toJson());
             writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
-        long endTime = System.currentTimeMillis();
-        long elapsedTime = endTime - startTime;
-        if (elapsedTime > Config.http_slow_request_threshold_ms) {
-            LOG.warn("Execution uri={} time exceeded {} ms and took {} ms.", request.getRequest().uri(),
-                    Config.http_slow_request_threshold_ms, elapsedTime);
+    }
+
+    @VisibleForTesting
+    public String getErrorRespWhenUnauthorized(AccessDeniedException accessDeniedException) {
+        if (Strings.isNullOrEmpty(accessDeniedException.getMessage())) {
+            ConnectContext context = ConnectContext.get();
+            if (context != null) {
+                AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(context.getCurrentRoleIds());
+                List<String> inactivatedRoles =
+                        authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
+                return "Access denied for user " + userIdentity  + ". " +
+                        String.format(ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT, activatedRoles, inactivatedRoles);
+            }
+            return "Access denied.";
+        } else {
+            return accessDeniedException.getMessage();
         }
     }
 
@@ -105,7 +136,7 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx's lifetime is same as the channel
+        // ctx lifetime is the same as the channel
         HttpConnectContext ctx = request.getConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
@@ -126,21 +157,30 @@ public class RestBaseAction extends BaseAction {
     }
 
     public void sendResult(BaseRequest request, BaseResponse response, RestBaseResult result) {
-        response.appendContent(result.toJson());
-        writeResponse(request, response, HttpResponseStatus.OK);
+        sendResult(request, response, HttpResponseStatus.OK, result);
     }
 
     public void sendResult(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
-        writeResponse(request, response, status);
+        sendResult(request, response, status, null);
     }
 
     public void sendResult(BaseRequest request, BaseResponse response) {
-        writeResponse(request, response, HttpResponseStatus.OK);
+        sendResult(request, response, HttpResponseStatus.OK);
+    }
+
+    public void sendResult(BaseRequest request,
+                           BaseResponse response,
+                           HttpResponseStatus status,
+                           RestBaseResult result) {
+        if (null != result) {
+            response.setContentType(JSON_CONTENT_TYPE);
+            response.appendContent(result.toJson());
+        }
+        writeResponse(request, response, status);
     }
 
     public void sendResultByJson(BaseRequest request, BaseResponse response, Object obj) {
         String result = "";
-        ObjectMapper mapper = new ObjectMapper();
         try {
             result = mapper.writeValueAsString(obj);
         } catch (Exception e) {
@@ -148,7 +188,7 @@ public class RestBaseAction extends BaseAction {
         }
 
         // send result
-        response.setContentType("application/json");
+        response.setContentType(JSON_CONTENT_TYPE);
         response.getContent().append(result);
         sendResult(request, response);
     }
@@ -156,8 +196,8 @@ public class RestBaseAction extends BaseAction {
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
-        URI urlObj = null;
-        URI resultUriObj = null;
+        URI urlObj;
+        URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
             resultUriObj = new URI("http", null, addr.getHostname(),
@@ -175,9 +215,77 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
-        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;
     }
+
+    /**
+     * Get single parameter value.
+     *
+     * @param request       http request
+     * @param paramName     parameter name
+     * @param typeConverter convert the String parameter value to target type
+     * @return parameter value, or {@code null} if missing
+     */
+    protected static <T> T getSingleParameter(BaseRequest request,
+                                              String paramName,
+                                              Function<String, T> typeConverter) {
+        return getSingleParameterOrDefault(request, paramName, null, typeConverter);
+    }
+
+    /**
+     * Get single parameter value.
+     *
+     * @param request       http request
+     * @param paramName     parameter name
+     * @param typeConverter convert the String parameter value to target type
+     * @return parameter value
+     * @throws StarRocksHttpException if parameter is missing
+     */
+    protected static <T> T getSingleParameterRequired(BaseRequest request,
+                                                      String paramName,
+                                                      Function<String, T> typeConverter) {
+        String value = request.getSingleParameter(paramName);
+        if (null == value) {
+            throw new StarRocksHttpException(
+                    HttpResponseStatus.BAD_REQUEST,
+                    String.format("Missing parameter %s", paramName)
+            );
+        }
+        return typeConverter.apply(value);
+    }
+
+    /**
+     * Get single parameter value.
+     *
+     * @param request       http request
+     * @param paramName     parameter name
+     * @param defaultValue  default parameter value if missing
+     * @param typeConverter convert the String parameter value to target type
+     * @return parameter value, or {@code defaultValue} if missing
+     */
+    protected static <T> T getSingleParameterOrDefault(BaseRequest request,
+                                                       String paramName,
+                                                       T defaultValue,
+                                                       Function<String, T> typeConverter) {
+        String value = request.getSingleParameter(paramName);
+        return Optional.ofNullable(value).map(typeConverter).orElse(defaultValue);
+    }
+
+    protected static int getPageNum(BaseRequest request) {
+        return getSingleParameterOrDefault(request, PAGE_NUM_KEY, DEFAULT_PAGE_NUM, value -> {
+            int pn = NumberUtils.toInt(value, DEFAULT_PAGE_NUM);
+            return pn <= 0 ? DEFAULT_PAGE_NUM : pn;
+        });
+    }
+
+    protected static int getPageSize(BaseRequest request) {
+        return getSingleParameterOrDefault(request, PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE, value -> {
+            int ps = NumberUtils.toInt(value, DEFAULT_PAGE_SIZE);
+            return ps <= 0 ? DEFAULT_PAGE_SIZE : ps;
+        });
+    }
+
 }

@@ -240,7 +240,7 @@ This section explains how to update only a few specified columns in a table that
 
 > **NOTE**
 >
-> Currently, only primary key tables support partial updates.
+> Currently, only Primary Key tables support partial updates.
 
 ### `AUTO_INCREMENT` column is primary key
 

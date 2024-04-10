@@ -21,7 +21,6 @@
 namespace starrocks {
 
 struct MergeConfig {
-    size_t chunk_size;
     CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
 };
 

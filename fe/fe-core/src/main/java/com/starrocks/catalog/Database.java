@@ -42,7 +42,6 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -52,9 +51,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.LogUtil;
-import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -75,7 +74,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -115,9 +114,7 @@ public class Database extends MetaObject implements Writable {
     // catalogName is set if the database comes from an external catalog
     private String catalogName;
 
-    private QueryableReentrantReadWriteLock rwLock;
-
-    private long lastSlowLockLogTime = 0;
+    private final QueryableReentrantReadWriteLock rwLock;
 
     // This param is used to make sure db not dropped when leader node writes wal,
     // so this param does not need to be persistent,
@@ -150,95 +147,13 @@ public class Database extends MetaObject implements Writable {
         this.location = location;
     }
 
-    private String getOwnerInfo(Thread owner) {
-        if (owner == null) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("owner id: ").append(owner.getId()).append(", owner name: ")
-                .append(owner.getName()).append(", owner stack: ").append(Util.dumpThread(owner, 50));
-        return sb.toString();
-    }
-
-    private void logSlowLockEventIfNeeded(long startMs, String type, String threadDump) {
-        long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        if (endMs - startMs > Config.slow_lock_threshold_ms &&
-                endMs > lastSlowLockLogTime + Config.slow_lock_log_every_ms) {
-            lastSlowLockLogTime = endMs;
-            LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
-                            "former {}, current stack trace: {}", type, id, fullQualifiedName, endMs - startMs,
-                    threadDump, LogUtil.getCurrentStackTrace());
-        }
-    }
-
-    private void logTryLockFailureEvent(String type, String threadDump) {
-        LOG.warn("try db lock failed. type: {}, current {}", type, threadDump);
-    }
-
-    public void readLock() {
-        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.sharedLock();
-        logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
-    }
-
-    public boolean tryReadLock(long timeout, TimeUnit unit) {
-        try {
-            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.trySharedLock(timeout, unit)) {
-                logTryLockFailureEvent("readLock", threadDump);
-                return false;
-            }
-            logSlowLockEventIfNeeded(startMs, "tryReadLock", threadDump);
-            return true;
-        } catch (InterruptedException e) {
-            LOG.warn("failed to try read lock at db[" + id + "]", e);
-            return false;
-        }
-    }
-
-    public void readUnlock() {
-        this.rwLock.sharedUnlock();
-    }
-
-    public boolean isReadLockHeldByCurrentThread() {
-        return this.rwLock.isReadLockHeldByCurrentThread();
-    }
-
-    public void writeLock() {
-        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.exclusiveLock();
-        logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
-    }
-
-    public boolean tryWriteLock(long timeout, TimeUnit unit) {
-        try {
-            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.tryExclusiveLock(timeout, unit)) {
-                logTryLockFailureEvent("writeLock", threadDump);
-                return false;
-            }
-            logSlowLockEventIfNeeded(startMs, "tryWriteLock", threadDump);
-            return true;
-        } catch (InterruptedException e) {
-            LOG.warn("failed to try write lock at db[" + id + "]", e);
-            return false;
-        }
-    }
-
-    public void writeUnlock() {
-        this.rwLock.exclusiveUnlock();
-    }
-
-    public boolean isWriteLockHeldByCurrentThread() {
-        return this.rwLock.isWriteLockHeldByCurrentThread();
-    }
-
-    public QueryableReentrantReadWriteLock getLock() {
-        return this.rwLock;
+    /**
+     * Database rwLock will be deleted later, please do not use this interface directly.
+     * Use Locker.lockDatabase to obtain db lock
+     */
+    @Deprecated
+    public QueryableReentrantReadWriteLock getRwLock() {
+        return rwLock;
     }
 
     public long getId() {
@@ -248,7 +163,9 @@ public class Database extends MetaObject implements Writable {
     /**
      * Get the unique id of database in string format, since we already ensure
      * the uniqueness of id for internal database, we just convert it to string
-     * and return, for external database it's up to the implementation of connector.
+     * and return.
+     * Note: for external database, we use database name as the privilege entry
+     * id, not the uuid returned by this interface.
      *
      * @return unique id of database in string format
      */
@@ -276,35 +193,16 @@ public class Database extends MetaObject implements Writable {
         return this;
     }
 
-    public void setNameWithLock(String newName) {
-        writeLock();
-        try {
-            this.fullQualifiedName = newName;
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    public void setDataQuotaWithLock(long newQuota) {
+    public void setDataQuota(long newQuota) {
         Preconditions.checkArgument(newQuota >= 0L);
         LOG.info("database[{}] set quota from {} to {}", fullQualifiedName, dataQuotaBytes, newQuota);
-        writeLock();
-        try {
-            this.dataQuotaBytes = newQuota;
-        } finally {
-            writeUnlock();
-        }
+        this.dataQuotaBytes = newQuota;
     }
 
-    public void setReplicaQuotaWithLock(long newQuota) {
+    public void setReplicaQuota(long newQuota) {
         Preconditions.checkArgument(newQuota >= 0L);
         LOG.info("database[{}] set replica quota from {} to {}", fullQualifiedName, replicaQuotaSize, newQuota);
-        writeLock();
-        try {
-            this.replicaQuotaSize = newQuota;
-        } finally {
-            writeUnlock();
-        }
+        this.replicaQuotaSize = newQuota;
     }
 
     public long getDataQuota() {
@@ -317,7 +215,8 @@ public class Database extends MetaObject implements Writable {
 
     public long getUsedDataQuotaWithLock() {
         long usedDataQuota = 0;
-        readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(this, LockType.READ);
         try {
             for (Table table : this.idToTable.values()) {
                 if (!table.isOlapTableOrMaterializedView()) {
@@ -329,27 +228,7 @@ public class Database extends MetaObject implements Writable {
             }
             return usedDataQuota;
         } finally {
-            readUnlock();
-        }
-    }
-
-    public long getReplicaQuotaLeftWithLock() {
-        long usedReplicaQuota = 0;
-        readLock();
-        try {
-            for (Table table : this.idToTable.values()) {
-                if (!table.isOlapTableOrMaterializedView()) {
-                    continue;
-                }
-
-                OlapTable olapTable = (OlapTable) table;
-                usedReplicaQuota = usedReplicaQuota + olapTable.getReplicaCount();
-            }
-
-            long leftReplicaQuota = replicaQuotaSize - usedReplicaQuota;
-            return Math.max(leftReplicaQuota, 0L);
-        } finally {
-            readUnlock();
+            locker.unLockDatabase(this, LockType.READ);
         }
     }
 
@@ -367,18 +246,34 @@ public class Database extends MetaObject implements Writable {
         LOG.info("database[{}] data quota: left bytes: {} / total: {}",
                 fullQualifiedName, readableLeftQuota, readableQuota);
 
-        if (leftDataQuota <= 0L) {
+        if (leftDataQuota == 0L) {
             throw new DdlException("Database[" + fullQualifiedName
                     + "] data size exceeds quota[" + readableQuota + "]");
         }
     }
 
     public void checkReplicaQuota() throws DdlException {
-        long leftReplicaQuota = getReplicaQuotaLeftWithLock();
+        long usedReplicaQuota = 0;
+        Locker locker = new Locker();
+        locker.lockDatabase(this, LockType.READ);
+        try {
+            for (Table table : this.idToTable.values()) {
+                if (!table.isOlapTableOrMaterializedView()) {
+                    continue;
+                }
+
+                OlapTable olapTable = (OlapTable) table;
+                usedReplicaQuota = usedReplicaQuota + olapTable.getReplicaCount();
+            }
+        } finally {
+            locker.unLockDatabase(this, LockType.READ);
+        }
+
+        long leftReplicaQuota = Math.max(replicaQuotaSize - usedReplicaQuota, 0L);
         LOG.info("database[{}] replica quota: left number: {} / total: {}",
                 fullQualifiedName, leftReplicaQuota, replicaQuotaSize);
 
-        if (leftReplicaQuota <= 0L) {
+        if (leftReplicaQuota == 0L) {
             throw new DdlException("Database[" + fullQualifiedName
                     + "] replica number exceeds quota[" + replicaQuotaSize + "]");
         }
@@ -405,8 +300,8 @@ public class Database extends MetaObject implements Writable {
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
-        Runnable runnable;
-        writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(this, LockType.WRITE);
         try {
             table = getTable(tableName);
             if (table == null && isSetIfExists) {
@@ -416,75 +311,69 @@ public class Database extends MetaObject implements Writable {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                 return;
             }
-            if (!isForce && GlobalStateMgr.getCurrentGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
+            if (!isForce &&
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
                 throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
                         "The table [" + table.getName() +
                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
                         " please use \"DROP TABLE <table> FORCE\".");
             }
-            runnable = unprotectDropTable(table.getId(), isForce, false);
+            unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
             GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
         } finally {
-            writeUnlock();
+            locker.unLockDatabase(this, LockType.WRITE);
         }
 
-        if (runnable != null) {
-            runnable.run();
+        if (isForce) {
+            table.delete(getId(), false);
         }
-        LOG.info("finished dropping table: {}, type:{} from db: {}, is force: {}", tableName, table.getType(), fullQualifiedName,
-                isForce);
+
+        LOG.info("Finished log drop table '{}' from database '{}'. tableId: {} tableType: {} force: {}",
+                tableName, fullQualifiedName, table.getId(), table.getType(), isForce);
     }
 
-    public Runnable unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {
-        Runnable runnable;
-        Table table = getTable(tableId);
-        // delete from db meta
-        if (table == null) {
-            return null;
-        }
-
-        if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
-            if (!isReplay) {
-                ((OlapTable) table).sendDropAutoIncrementMapTask();
+    /**
+     * Drop a table from this database.
+     *
+     * <p>
+     * Note: Prefer to modify {@link Table#onDrop(Database, boolean, boolean)} and
+     * {@link Table#delete(long, boolean)} rather than this function.
+     *
+     * @param tableId the id of the table to be dropped
+     * @param isForceDrop is this a force drop
+     * @param isReplay is this a log replay operation
+     * @return The dropped table
+     */
+    public Table unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {
+        Table table = dropTable(tableId);
+        if (table != null) {
+            table.onDrop(this, isForceDrop, isReplay);
+            if (!isForceDrop) {
+                GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table, true);
             }
+            LOG.info("Finished drop table '{}' from database '{}'. tableId: {} force: {} replay: {}",
+                    table.getName(), getOriginName(), tableId, isForceDrop, isReplay);
         }
-
-        table.onDrop(this, isForceDrop, isReplay);
-
-        dropTable(table.getName());
-
-        if (!isForceDrop) {
-            Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
-            runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
-        } else {
-            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
-            runnable = table.delete(isReplay);
-        }
-
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(), tableId);
-        return runnable;
+        return table;
     }
 
-    public void dropTableWithLock(String tableName) {
-        writeLock();
-        try {
-            Table table = this.nameToTable.get(tableName);
-            if (table != null) {
-                this.nameToTable.remove(tableName);
-                this.idToTable.remove(table.getId());
-            }
-        } finally {
-            writeUnlock();
+    public Table dropTable(long tableId) {
+        Table table = this.idToTable.get(tableId);
+        if (table != null) {
+            this.nameToTable.remove(table.getName());
+            this.idToTable.remove(tableId);
         }
+        return table;
     }
 
-    public void dropTable(String tableName) {
+    public Table dropTable(String tableName) {
         Table table = this.nameToTable.get(tableName);
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
         }
+        return table;
     }
 
     public List<Table> getTables() {
@@ -506,21 +395,19 @@ public class Database extends MetaObject implements Writable {
     }
 
     public List<MaterializedView> getMaterializedViews() {
-        List<MaterializedView> materializedViews = new ArrayList<>();
-        for (Table table : idToTable.values()) {
-            if (table.isMaterializedView()) {
-                materializedViews.add((MaterializedView) table);
-            }
-        }
-        return materializedViews;
+        return idToTable.values().stream()
+                .filter(Table::isMaterializedView)
+                .map(x -> (MaterializedView) x)
+                .collect(Collectors.toList());
     }
 
     public Set<String> getTableNamesViewWithLock() {
-        readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(this, LockType.READ);
         try {
             return Collections.unmodifiableSet(this.nameToTable.keySet());
         } finally {
-            readUnlock();
+            locker.unLockDatabase(this, LockType.READ);
         }
     }
 
@@ -533,10 +420,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Table getTable(String tableName) {
-        if (nameToTable.containsKey(tableName)) {
-            return nameToTable.get(tableName);
-        }
-        return null;
+        return nameToTable.get(tableName);
     }
 
     public Optional<Table> mayGetTable(String tableName) {
@@ -564,12 +448,13 @@ public class Database extends MetaObject implements Writable {
 
     /**
      * This is a thread-safe method when idToTable is a concurrent hash map
-     *
-     * @param tableId
-     * @return
      */
     public Table getTable(long tableId) {
         return idToTable.get(tableId);
+    }
+
+    public Optional<Table> mayGetTable(long tableId) {
+        return Optional.ofNullable(getTable(tableId));
     }
 
     public static Database read(DataInput in) throws IOException {

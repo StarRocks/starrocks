@@ -11,6 +11,7 @@ displayed_sidebar: "Chinese"
 > **注意**
 >
 > 您只能通过该命令手动刷新刷新方式为 ASYNC 或 MANUAL 的异步物化视图。您可以通过 [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW_MATERIALIZED_VIEW.md) 查看物化视图的刷新方式。
+> 该操作需要对应物化视图的 REFRESH 权限。
 
 ## 语法
 

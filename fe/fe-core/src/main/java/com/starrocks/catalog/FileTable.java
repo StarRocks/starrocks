@@ -25,6 +25,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
@@ -53,6 +54,7 @@ public class FileTable extends Table {
     public static final String JSON_KEY_FILE_PATH = "path";
     public static final String JSON_KEY_FORMAT = "format";
     private static final String JSON_RECURSIVE_DIRECTORIES = "enable_recursive_listing";
+    private static final String JSON_ENABLE_WILDCARDS = "enable_wildcards";
     private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
 
     public static final String JSON_KEY_COLUMN_SEPARATOR = "column_separator";
@@ -63,7 +65,7 @@ public class FileTable extends Table {
     private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of(
             "parquet", RemoteFileInputFormat.PARQUET,
             "orc", RemoteFileInputFormat.ORC,
-            "text", RemoteFileInputFormat.TEXT,
+            "text", RemoteFileInputFormat.TEXTFILE,
             "avro", RemoteFileInputFormat.AVRO,
             "rctext", RemoteFileInputFormat.RCTEXT,
             "rcbinary", RemoteFileInputFormat.RCBINARY,
@@ -128,9 +130,10 @@ public class FileTable extends Table {
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
+        boolean enableWildCards = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_ENABLE_WILDCARDS, "false"));
 
         try {
-            Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey);
+            Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey, enableWildCards);
             if (result.isEmpty()) {
                 throw new DdlException("No file exists for FileTable: " + this.getName());
             }
@@ -154,7 +157,7 @@ public class FileTable extends Table {
 
         RemoteFileInputFormat format = getFileFormat();
         TextFileFormatDesc textFileFormatDesc = null;
-        if (format.equals(RemoteFileInputFormat.TEXT)) {
+        if (format.equals(RemoteFileInputFormat.TEXTFILE)) {
             textFileFormatDesc = new TextFileFormatDesc(
                     fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
                     fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),
@@ -203,6 +206,7 @@ public class FileTable extends Table {
 
         tFileTable.setHive_column_names(columnNames);
         tFileTable.setHive_column_types(columnTypes);
+        tFileTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         return tTableDescriptor;
     }

@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.compaction;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -37,13 +39,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class CompactionMgr {
+public class CompactionMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CompactionMgr.class);
 
     @SerializedName(value = "partitionStatisticsHashMap")
@@ -72,10 +75,14 @@ public class CompactionMgr {
         sorter = (Sorter) sorterClazz.getConstructor().newInstance();
     }
 
+    public void setCompactionScheduler(CompactionScheduler compactionScheduler) {
+        this.compactionScheduler = compactionScheduler;
+    }
+
     public void start() {
         if (compactionScheduler == null) {
-            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentSystemInfo(),
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
             compactionScheduler.start();
         }
     }
@@ -90,8 +97,7 @@ public class CompactionMgr {
             v.setCurrentVersion(currentVersion);
             v.setCompactionScore(compactionScore);
             if (v.getCompactionVersion() == null) {
-                // Set version-1 as last compaction version
-                v.setCompactionVersion(new PartitionVersion(version - 1, versionTime));
+                v.setCompactionVersion(new PartitionVersion(0, versionTime));
             }
             return v;
         });
@@ -143,6 +149,11 @@ public class CompactionMgr {
         return partitionStatisticsHashMap.get(identifier);
     }
 
+    public double getMaxCompactionScore() {
+        return partitionStatisticsHashMap.values().stream().mapToDouble(stat -> stat.getCompactionScore().getMax())
+                .max().orElse(0);
+    }
+
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
             // FE's follower nodes may have a different timestamp with the leader node.
@@ -156,6 +167,11 @@ public class CompactionMgr {
 
     void removePartition(PartitionIdentifier partition) {
         partitionStatisticsHashMap.remove(partition);
+    }
+
+    @VisibleForTesting
+    public void clearPartitions() {
+        partitionStatisticsHashMap.clear();
     }
 
     public long saveCompactionManager(DataOutput out, long checksum) throws IOException {
@@ -182,6 +198,10 @@ public class CompactionMgr {
         compactionScheduler.cancelCompaction(txnId);
     }
 
+    public boolean existCompaction(long txnId) {
+        return compactionScheduler.existCompaction(txnId);
+    }
+
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
         String json = Text.readString(in);
         CompactionMgr compactionManager = GsonUtils.GSON.fromJson(json, CompactionMgr.class);
@@ -206,5 +226,22 @@ public class CompactionMgr {
 
     public long getPartitionStatsCount() {
         return partitionStatisticsHashMap.size();
+    }
+
+    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            return v;
+        });
+        LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("PartitionStats", (long) partitionStatisticsHashMap.size());
     }
 }

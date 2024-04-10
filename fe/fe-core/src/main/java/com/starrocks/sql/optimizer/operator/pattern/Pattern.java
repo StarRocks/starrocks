@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.operator.pattern;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -28,7 +28,7 @@ import java.util.List;
  * Pattern is used in rules as a placeholder for group
  */
 public class Pattern {
-    public static final ImmutableList<OperatorType> ALL_SCAN_TYPES = ImmutableList.<OperatorType>builder()
+    public static final ImmutableSet<OperatorType> ALL_SCAN_TYPES = ImmutableSet.<OperatorType>builder()
             .add(OperatorType.LOGICAL_OLAP_SCAN)
             .add(OperatorType.LOGICAL_HIVE_SCAN)
             .add(OperatorType.LOGICAL_ICEBERG_SCAN)
@@ -40,6 +40,7 @@ public class Pattern {
             .add(OperatorType.LOGICAL_META_SCAN)
             .add(OperatorType.LOGICAL_JDBC_SCAN)
             .add(OperatorType.LOGICAL_BINLOG_SCAN)
+            .add(OperatorType.LOGICAL_VIEW_SCAN)
             .build();
 
     private final OperatorType opType;
@@ -93,6 +94,10 @@ public class Pattern {
         return OperatorType.PATTERN_MULTIJOIN.equals(opType);
     }
 
+    public static boolean isScanOperator(OperatorType operatorType) {
+        return ALL_SCAN_TYPES.contains(operatorType);
+    }
+
     public boolean matchWithoutChild(GroupExpression expression) {
         if (expression == null) {
             return false;
@@ -133,6 +138,10 @@ public class Pattern {
         }
 
         if (isPatternScan() && ALL_SCAN_TYPES.contains(expression.getOp().getOpType())) {
+            return true;
+        }
+
+        if (isPatternMultiJoin() && isMultiJoin(expression.getOp().getOpType())) {
             return true;
         }
 

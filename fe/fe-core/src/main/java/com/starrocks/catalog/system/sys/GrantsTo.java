@@ -466,7 +466,7 @@ public class GrantsTo {
                 }
 
                 if (objectType.equals(ObjectType.VIEW)) {
-                    if (table.isView()) {
+                    if (table.isOlapView()) {
                         objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
                     }
                 } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW)) {
@@ -474,7 +474,7 @@ public class GrantsTo {
                         objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
                     }
                 } else {
-                    if (!table.isView() && !table.isMaterializedView()) {
+                    if (!table.isOlapView() && !table.isMaterializedView()) {
                         objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
                     }
                 }

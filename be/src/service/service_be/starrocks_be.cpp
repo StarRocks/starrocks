@@ -24,7 +24,6 @@
 #include "block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
-#include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
@@ -108,8 +107,9 @@ Status init_datacache(GlobalEnv* global_env) {
         cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
         cache_options.enable_checksum = config::datacache_checksum_enable;
         cache_options.enable_direct_io = config::datacache_direct_io_enable;
-        cache_options.enable_cache_adaptor = starrocks::config::datacache_adaptor_enable;
+        cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
         cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
+        cache_options.scheduler_threads_per_cpu = starrocks::config::datacache_scheduler_threads_per_cpu;
         cache_options.engine = config::datacache_engine;
         return cache->init(cache_options);
     }
@@ -171,7 +171,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #ifdef USE_STAROS
     init_staros_worker();
-    LOG(INFO) << process_name << " start step" << start_step++ << ": staros worker init successfully";
+    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
 
     if (!init_datacache(global_env).ok()) {
@@ -213,7 +213,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         options.num_threads = config::brpc_num_threads;
     }
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
-    const auto service_name = "starrocks.lake.LakeService";
+    const auto service_name = "starrocks.LakeService";
     const auto methods = {
             "abort_txn",     "abort_compaction", "compact",         "drop_table",          "delete_data",
             "delete_tablet", "get_tablet_stats", "publish_version", "publish_log_version", "publish_log_version_batch",
@@ -221,8 +221,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
-
-    if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
+    int brpc_port = config::brpc_port;
+    butil::EndPoint point;
+    if (butil::str2endpoint(BackendOptions::get_service_bind_address(), brpc_port, &point) < 0) {
+        LOG(ERROR) << "Fail to convert address. Please check your backend config.";
+        shutdown_logging();
+        exit(1);
+    }
+    LOG(INFO) << "BRPC server bind to host: " << BackendOptions::get_service_bind_address() << ", port: " << brpc_port;
+    if (auto ret = brpc_server->Start(point, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();
         exit(1);
@@ -277,19 +284,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc_server->Stop(0);
     thrift_server->stop();
 
-    http_server->join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
-
-    brpc_server->Join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
-
-    thrift_server->join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
-
-    http_server.reset();
-    brpc_server.reset();
-    thrift_server.reset();
-
     daemon->stop();
     daemon.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": daemon threads exit successfully";
@@ -312,7 +306,21 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
 #endif
 
+    http_server->join();
+    http_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
+
+    brpc_server->Join();
+    brpc_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
+
+    thrift_server->join();
+    thrift_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
+
     exec_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
+
     delete storage_engine;
 
     // Unbind with MemTracker

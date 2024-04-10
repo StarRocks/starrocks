@@ -14,18 +14,15 @@
 
 #pragma once
 
+#include <exec/hdfs_scanner.h>
+
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
-#include "column/column_helper.h"
-#include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/orc/orc_mapping.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptors.h"
-#include "runtime/types.h"
 namespace starrocks {
 
 class RandomAccessFile;
@@ -63,29 +60,28 @@ public:
 
     uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
 
-    void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) override;
     void read(void* buf, uint64_t length, uint64_t offset) override;
 
     const std::string& getName() const override;
 
-    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
-    void clearIORanges() override;
+    void set_lazy_column_coalesce_counter(std::atomic<int32_t>* lazy_column_coalesce_counter) {
+        _lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    }
+    void set_app_stats(HdfsScanStats* stats) { _app_stats = stats; }
+    bool isIOCoalesceEnabled() const override { return config::orc_coalesce_read_enable; }
+    bool isIOAdaptiveCoalesceEnabled() const override { return config::io_coalesce_adaptive_lazy_active; }
+    bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const override;
+    void releaseToOffset(const int64_t offset) override;
     void setIORanges(std::vector<IORange>& io_ranges) override;
-    void setStripes(std::vector<StripeInformation>&& stripes);
+    Status setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
+                       const bool coalesce_active_lazy_column = true);
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() override;
 
 private:
-    void doRead(void* buf, uint64_t length, uint64_t offset);
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length);
-    uint64_t computeCacheFullStripeSize(uint64_t offset, uint64_t length);
-
     RandomAccessFile* _file;
     uint64_t _length;
-    std::vector<char> _cache_buffer;
-    uint64_t _cache_offset;
     io::SharedBufferedInputStream* _sb_stream;
-
-    bool _tiny_stripe_read = false;
-    uint64_t _last_stripe_index = 0;
-    std::vector<StripeInformation> _stripes;
+    std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
+    HdfsScanStats* _app_stats = nullptr;
 };
 } // namespace starrocks

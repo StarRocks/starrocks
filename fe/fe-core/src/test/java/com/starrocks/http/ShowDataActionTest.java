@@ -42,7 +42,8 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
         expectedSize = table.getDataSize();
 
         // inject our test db
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getFullNameToDb();
         fullNameToDb.put(SHOW_DATA_DB_NAME, db);
     }
 

@@ -17,7 +17,6 @@ package com.starrocks.paimon.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
-import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
@@ -35,18 +34,14 @@ import org.apache.paimon.utils.InternalRowUtils;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class PaimonSplitScanner extends ConnectorScanner {
 
     private static final Logger LOG = LogManager.getLogger(PaimonSplitScanner.class);
-    private final String databaseName;
-    private final String tableName;
     private final String splitInfo;
     private final String predicateInfo;
-    private final Map<String, String> paimonOptions = new HashMap<>();
     private final String[] requiredFields;
     private final String encodedTable;
     private ColumnType[] requiredTypes;
@@ -57,32 +52,17 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String[] nestedFields;
 
+    private String timeZone;
+
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
-        this.databaseName = params.get("database_name");
-        this.tableName = params.get("table_name");
         this.requiredFields = params.get("required_fields").split(",");
         this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
         this.encodedTable = params.get("native_table");
-
-        ScannerHelper.parseOptions(params.get("paimon_options"), kv -> {
-            paimonOptions.put(kv[0], kv[1]);
-            return null;
-        }, t -> {
-            LOG.warn("Invalid paimon scanner option argument: " + t);
-            return null;
-        });
-        ScannerHelper.parseFSOptionsProps(params.get("fs_options_props"), kv -> {
-            // see org.apache.paimon.utils.HadoopUtils.CONFIG_PREFIXES ["hadoop."]
-            paimonOptions.put("hadoop." + kv[0], kv[1]);
-            return null;
-        }, t -> {
-            LOG.warn("Invalid paimon scanner fs options props argument: " + t);
-            return null;
-        });
         this.classLoader = this.getClass().getClassLoader();
+        this.timeZone = params.get("time_zone");
     }
 
     private void parseRequiredTypes() {
@@ -114,7 +94,6 @@ public class PaimonSplitScanner extends ConnectorScanner {
     }
 
     private void initReader() throws IOException {
-
         ReadBuilder readBuilder = table.newReadBuilder();
         RowType rowType = table.rowType();
         List<String> fieldNames = PaimonScannerUtils.fieldNames(rowType);
@@ -123,7 +102,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
-        RecordReader<InternalRow> reader = readBuilder.newRead().createReader(split);
+        RecordReader<InternalRow> reader = readBuilder.newRead().executeFilter().createReader(split);
         iterator = new RecordReaderIterator<>(reader);
     }
 
@@ -169,7 +148,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i]);
+                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i], timeZone);
                         appendData(i, fieldValue);
                     }
                 }
@@ -187,15 +166,6 @@ public class PaimonSplitScanner extends ConnectorScanner {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("paimon_options: ");
-        sb.append(paimonOptions);
-        sb.append("\n");
-        sb.append("databaseName: ");
-        sb.append(databaseName);
-        sb.append("\n");
-        sb.append("tableName: ");
-        sb.append(tableName);
-        sb.append("\n");
         sb.append("splitInfo: ");
         sb.append(splitInfo);
         sb.append("\n");

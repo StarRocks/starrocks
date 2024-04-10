@@ -138,6 +138,12 @@ public class AstToSQLBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             SelectList selectList = stmt.getSelectList();
             sqlBuilder.append("SELECT ");
+
+            // add hint
+            if (selectList.getHintNodes() != null) {
+                sqlBuilder.append(extractHintStr(selectList.getHintNodes()));
+            }
+
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
             }
@@ -363,6 +369,13 @@ public class AstToSQLBuilder {
         public String visitInsertStatement(InsertStmt insert, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("INSERT ");
+
+            // add hint
+            if (insert.getHintNodes() != null) {
+                sb.append(extractHintStr(insert.getHintNodes()));
+            }
+
+
             if (insert.isOverwrite()) {
                 sb.append("OVERWRITE ");
             } else {

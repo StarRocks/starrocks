@@ -468,6 +468,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         {
             // output default values for build-columns as placeholder.
             SCOPED_TIMER(_probe_state->output_build_column_timer);
+            if (_table_items->mor_reader_mode) {
+                return;
+            }
+
             if (!_table_items->with_other_conjunct) {
                 _build_default_output(chunk, _probe_state->count);
             } else {
@@ -664,6 +668,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, Chun
     if (!_probe_state->has_remain) {
         _probe_state->probe_row_count = (*probe_chunk)->num_rows();
         _probe_state->active_coroutines = state->query_options().interleaving_group_size;
+        // disable adaptively interleaving if the ht may encounter seriously cache misses.
         if (state->query_options().interleaving_group_size > 0 && !_table_items->ht_cache_miss_serious()) {
             _probe_state->active_coroutines = 0;
         }
@@ -1403,7 +1408,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
         _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
         match_count = 1;
     }
@@ -1418,7 +1422,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 if (_probe_state->build_match_index[build_index] == 0) {
-                    _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
                     _probe_state->build_match_index[build_index] = 1;
                     match_count++;
@@ -1448,7 +1451,6 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_prob
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 if (_probe_state->build_match_index[build_index] == 0) {
                     COWAIT_IF_CHUNK_FULL()
-                    _probe_state->probe_index[_probe_state->match_count] = i;
                     _probe_state->build_index[_probe_state->match_count] = build_index;
                     _probe_state->build_match_index[build_index] = 1;
                     _probe_state->match_count++;

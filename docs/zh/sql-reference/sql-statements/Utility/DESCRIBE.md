@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 您可以使用该语句进行如下操作：
 
-- 查看 StarRocks 表结构、[排序键](../../../table_design/Sort_key.md) (Sort Key) 类型和[物化视图](../../../using_starrocks/Materialized_view.md)。
+- 查看 StarRocks 表结构、[排序键](../../../table_design/indexes/Prefix_index_sort_key.md) (Sort Key) 类型和[物化视图](../../../using_starrocks/Materialized_view.md)。
 - 查看外部数据源（如 Apache Hive™）中的表结构。仅 StarRocks 2.4 及以上版本支持该操作。
 
 ## 语法

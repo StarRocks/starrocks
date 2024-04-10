@@ -22,6 +22,8 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/query_cache/cache_manager.h"
@@ -35,9 +37,13 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
 struct QueryCacheTest : public ::testing::Test {
     RuntimeState state;
+    std::unique_ptr<pipeline::QueryContext> query_ctx = std::make_unique<pipeline::QueryContext>();
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
+
+    void SetUp() override { state.set_query_ctx(query_ctx.get()); }
 };
 
 TEST_F(QueryCacheTest, testLaneArbiter) {
@@ -231,7 +237,7 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     Tasks tasks;
     tasks.resize(dop);
     for (auto i = 0; i < dop; ++i) {
-        pipeline::Pipeline pipeline(0, opFactories);
+        pipeline::Pipeline pipeline(0, opFactories, nullptr);
         auto upstream_operators = pipeline.create_operators(dop, i);
         auto downstream_operator = reduce_source->create(dop, i);
         tasks[i].upstream = std::move(upstream_operators);
@@ -259,12 +265,10 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         tasks[k].cache_operator->set_multilane_operators(std::move(multilane_operators));
 
         for (auto& i : upstream) {
-            auto st = i->prepare(state);
-            st.permit_unchecked_error();
+            (void)i->prepare(state);
         }
 
-        auto st = tasks[k].downstream->prepare(state);
-        st.permit_unchecked_error();
+        (void)tasks[k].downstream->prepare(state);
     }
     return tasks;
 }

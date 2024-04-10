@@ -40,15 +40,16 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
@@ -106,7 +107,7 @@ public class GetDdlStmtAction extends RestBaseAction {
                 throw new DdlException("Table[" + tableName + "] does not exist");
             }
 
-            GlobalStateMgr.getDdlStmt(table, createTableStmt, addPartitionStmt, createRollupStmt, true,
+            AstToStringBuilder.getDdlStmt(table, createTableStmt, addPartitionStmt, createRollupStmt, true,
                     false /* show password */);
 
         } finally {

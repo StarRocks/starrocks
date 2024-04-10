@@ -17,6 +17,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "column/object_column.h"
 #include "column/schema.h"
 #include "common/status.h"
 #include "gutil/endian.h"
@@ -37,7 +38,9 @@ Status RowStoreEncoderSimple::encode_columns_to_full_row_column(const Schema& sc
     size_t num_value_cols = columns.size();
     int num_key_cols = schema.num_key_fields();
 
-    //TODO prevent stack variables oom when column size is large
+    // TODO prevent stack variables oom when column size is large
+    // TODO slice length stored twice , 1st offsets array. 2st slice object. need reduce this
+    // TODO remove column separator
     std::vector<int32_t> offsets;
     std::string header;
     std::string null_bitmap_str;
@@ -143,8 +146,36 @@ Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& 
             assert(cur_read_idx < offsets.size());
             auto s_offset = reinterpret_cast<const uint8_t*>(s.data);
             int32_t col_length = offsets[idx];
-            Slice slice(s.data, col_length);
-            dest_column->deserialize_and_append(s_offset);
+            // char(n) need strip trailing '\x00'
+            auto t = schema.field(j)->type()->type();
+            if (t == TYPE_CHAR) {
+                // slice : 0x0 (column separator) + col length (4) + char(n) value
+                auto char_start = s.data + 1 + 4;
+                Slice slice(char_start, strnlen(char_start, col_length));
+                dest_column->append_datum(slice);
+            } else if (t == TYPE_HLL) {
+                ObjectColumn<HyperLogLog>* object_column = down_cast<ObjectColumn<HyperLogLog>*>(dest_column);
+                Slice slice(s.data, col_length);
+                if (!object_column->deserialize_and_append(slice)) {
+                    return Status::InternalError("deserialize_and_append failed");
+                }
+            } else if (t == TYPE_PERCENTILE) {
+                ObjectColumn<PercentileValue>* object_column = down_cast<ObjectColumn<PercentileValue>*>(dest_column);
+                Slice slice(s.data, col_length);
+                if (!object_column->deserialize_and_append(slice)) {
+                    return Status::InternalError("deserialize_and_append failed");
+                }
+            } else if (t == TYPE_OBJECT) {
+                ObjectColumn<BitmapValue>* object_column = down_cast<ObjectColumn<BitmapValue>*>(dest_column);
+                Slice slice(s.data, col_length);
+                if (!object_column->deserialize_and_append(slice)) {
+                    return Status::InternalError("deserialize_and_append failed");
+                }
+            } else {
+                Slice slice(s.data, col_length);
+                auto pos = dest_column->deserialize_and_append(s_offset);
+                DCHECK_EQ(pos, s_offset + col_length);
+            }
             s.remove_prefix(col_length);
             cur_read_idx++;
         }
@@ -154,7 +185,7 @@ Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& 
 
 // encode bitmap<column_num>
 void RowStoreEncoderSimple::encode_null_bitmap(BitmapValue& null_bitmap, std::string* dest) {
-    size_t len = null_bitmap.getSizeInBytes();
+    size_t len = null_bitmap.get_size_in_bytes();
     encode_integral<size_t>(len, dest);
     std::string bitmap_value;
     bitmap_value.reserve(len);

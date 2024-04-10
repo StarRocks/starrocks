@@ -19,7 +19,7 @@ Displays tablet related information.
 ```sql
 SHOW TABLET
 FROM [<db_name>.]<table_name>
-[PARTITION(<partition_name>, ...]
+[PARTITION(<partition_name>, ...)]
 [
 WHERE [version = <version_number>] 
     [[AND] backendid = <backend_id>] 

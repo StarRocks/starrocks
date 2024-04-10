@@ -15,14 +15,13 @@
 
 package com.starrocks.sql.optimizer.rule.mv;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -31,19 +30,14 @@ import org.junit.Test;
 
 public class MaterializedViewPlanTest extends PlanTestBase {
 
-    private boolean enableExperimentMV = false;
-
     @Before
     public void before() {
         connectContext.getSessionVariable().setEnableIncrementalRefreshMv(true);
-        enableExperimentMV = Config.enable_experimental_mv;
-        Config.enable_experimental_mv = true;
     }
 
     @After
     public void after() {
         connectContext.getSessionVariable().setEnableIncrementalRefreshMv(false);
-        Config.enable_experimental_mv = enableExperimentMV;
     }
 
     @Test
@@ -76,7 +70,7 @@ public class MaterializedViewPlanTest extends PlanTestBase {
                 "'binlog_enable' = 'false', 'binlog_ttl_second' = '100', 'binlog_max_size' = '100');";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.
                 parseStmtWithNewParser(createTableStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
         connectContext.getSessionVariable().setMVPlanner(true);
         String sql = "select * from binlog_test [_BINLOG_]";

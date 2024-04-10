@@ -1,6 +1,13 @@
-# Continuously load data from AutoMQ Kafka.md
+---
+displayed_sidebar: "English"
+description: Cloud based Kafka from AutoMQ
+---
 
-[AutoMQ for Kafka](https://docs.automq.com/zh/docs/automq-s3kafka/YUzOwI7AgiNIgDk1GJAcu6Uanog) is a cloud-native version of Kafka redesigned for cloud environments.
+# AutoMQ Kafka
+
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+
+[AutoMQ for Kafka](https://www.automq.com/docs) is a cloud-native version of Kafka redesigned for cloud environments.
 AutoMQ Kafka is [open source](https://github.com/AutoMQ/automq-for-kafka) and fully compatible with the Kafka protocol, fully leveraging cloud benefits.
 Compared to self-managed Apache Kafka, AutoMQ Kafka, with its cloud-native architecture, offers features like capacity auto scaling, self-balancing of network traffic, move partition in seconds. These features contribute to a significantly lower Total Cost of Ownership (TCO) for users.
 
@@ -11,9 +18,9 @@ For an understanding of the basic principles of Routine Load, refer to the secti
 
 ### Prepare StarRocks and test data
 
-Ensure you have a running StarRocks cluster. For demonstration purposes, this article follow the [deployment guide](https://docs.starrocks.io/zh/docs/3.0/quick_start/deploy_with_docker/) to install a StarRocks cluster on a Linux machine via Docker.
+Ensure you have a running StarRocks cluster. For demonstration purposes, this article follow the [deployment guide](../quick_start/shared-nothing.md) to install a StarRocks cluster on a Linux machine via Docker.
 
-Creating a database and test table with the primary key model:
+Creating a database and a Primary Key table for testing:
 
 ```sql
 create database automq_db;
@@ -25,14 +32,15 @@ create table users (
 ) PRIMARY KEY (id)
 DISTRIBUTED BY HASH(id)
 PROPERTIES (
-  "replication_num" = "1",
   "enable_persistent_index" = "true"
 );
 ```
 
+<Replicanum />
+
 ## Prepare AutoMQ Kafka and test data
 
-To prepare your AutoMQ Kafka environment and test data, follow the AutoMQ [Quick Start](https://docs.automq.com/docs/automq-s3kafka/VKpxwOPvciZmjGkHk5hcTz43nde) guide to deploy your AutoMQ Kafka cluster. Ensure that StarRocks can directly connect to your AutoMQ Kafka server.
+To prepare your AutoMQ Kafka environment and test data, follow the AutoMQ [Quick Start](https://www.automq.com/docs) guide to deploy your AutoMQ Kafka cluster. Ensure that StarRocks can directly connect to your AutoMQ Kafka server.
 
 To quickly create a topic named `example_topic` in AutoMQ Kafka and write a test JSON data into it, follow these steps:
 
@@ -114,7 +122,7 @@ Specify the data format as JSON in the "format" = "json" of the PROPERTIES claus
 
 #### Data Extraction and Transformation
 
-To specify the mapping and transformation relationship between the source data and the target table, configure the COLUMNS and jsonpaths parameters. The column names in COLUMNS correspond to the column names of the target table, and their order corresponds to the column order in the source data. The jsonpaths parameter is used to extract the required field data from JSON data, similar to newly generated CSV data. Then the COLUMNS parameter temporarily names the fields in jsonpaths in order. For more explanations on data transformation, please see [Data Transformation during Import](https://docs.starrocks.io/zh/docs/3.0/loading/Etl_in_loading/).
+To specify the mapping and transformation relationship between the source data and the target table, configure the COLUMNS and jsonpaths parameters. The column names in COLUMNS correspond to the column names of the target table, and their order corresponds to the column order in the source data. The jsonpaths parameter is used to extract the required field data from JSON data, similar to newly generated CSV data. Then the COLUMNS parameter temporarily names the fields in jsonpaths in order. For more explanations on data transformation, please see [Data Transformation during Import](./Etl_in_loading.md).
 > Note: If each JSON object per line has key names and quantities (order is not required) that correspond to the columns of the target table, there is no need to configure COLUMNS.
 
 ## Verifying Data Import
@@ -122,7 +130,7 @@ To specify the mapping and transformation relationship between the source data a
 First, we check the Routine Load import job and confirm the Routine Load import task status is in RUNNING status.
 
 ```sql
-show routine load\G;
+show routine load\G
 ```
 
 Then, querying the corresponding table in the StarRocks database, we can observe that the data has been successfully imported.

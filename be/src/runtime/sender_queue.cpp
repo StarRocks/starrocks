@@ -536,7 +536,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
 void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     {
         std::lock_guard<Mutex> l(_lock);
-        if (_sender_eos_set.find(be_number) != _sender_eos_set.end()) {
+        if (UNLIKELY(_sender_eos_set.find(be_number) != _sender_eos_set.end())) {
+            LOG(ERROR) << "More than one EOS from " << be_number << " in fragment "
+                       << print_id(_recvr->fragment_instance_id()) << " on node " << _recvr->dest_node_id();
             return;
         }
         _sender_eos_set.insert(be_number);
@@ -545,6 +547,7 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
               << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
               << " be_number=" << be_number;
+    DCHECK(_num_remaining_senders >= 0);
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
@@ -576,7 +579,6 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             }
         }
     }
-
     for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
@@ -698,6 +700,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {
+        VLOG_ROW << print_id(request.finst_id()) << " adds chunks to "
+                 << (_is_cancelled ? "cancelled queue" : "ended queue");
         return Status::OK();
     }
 

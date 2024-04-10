@@ -93,7 +93,6 @@ protected:
         opts.read_file = rfile.get();
         opts.use_page_cache = false;
         opts.kept_in_memory = false;
-        opts.skip_fill_data_cache = false;
         OlapReaderStatistics stats;
         opts.stats = &stats;
         ZoneMapIndexReader column_zone_map;
@@ -148,7 +147,6 @@ void ColumnZoneMapTest::load_zone_map(ZoneMapIndexReader& reader, ColumnIndexMet
     opts.read_file = rfile.get();
     opts.use_page_cache = false;
     opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     ASSERT_TRUE(reader.load(opts, meta.zone_map_index()).value());

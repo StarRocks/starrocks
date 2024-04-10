@@ -32,6 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <aws/core/Aws.h>
 #include <gflags/gflags.h>
 
 #include <iostream>
@@ -42,6 +43,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
+#include "fs/fs_s3.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -54,9 +56,11 @@
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
+#include "storage/lake/vacuum.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
+#include "storage/primary_key_dump.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -87,6 +91,7 @@ using starrocks::PagePointer;
 using starrocks::ColumnIteratorOptions;
 using starrocks::PageFooterPB;
 using starrocks::DeltaColumnGroupList;
+using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
@@ -103,6 +108,10 @@ DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
 DEFINE_int32(column_index, -1, "column index");
 DEFINE_int32(key_column_count, 0, "key column count");
+DEFINE_int64(expired_sec, 86400, "expired seconds");
+DEFINE_string(conf_file, "", "conf file path");
+DEFINE_string(audit_file, "", "audit file path");
+DEFINE_bool(do_delete, false, "do delete files");
 
 std::string get_usage(const std::string& progname) {
     std::stringstream ss;
@@ -132,6 +141,7 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool.sh --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=dump_segment_data --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=dump_column_size --file=/path/to/segment/file\n";
+    ss << "./meta_tool.sh --operation=print_pk_dump --file=/path/to/pk/dump/file\n";
     ss << "./meta_tool.sh --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
     ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
@@ -141,6 +151,8 @@ std::string get_usage(const std::string& progname) {
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
     ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
+    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=86400 --conf_file=path "
+          "--audit_file=path --do_delete=false\n";
     return ss.str();
 }
 
@@ -697,7 +709,7 @@ Status SegmentDump::_init() {
 
     // open segment
     size_t footer_length = 16 * 1024 * 1024;
-    auto segment_res = Segment::open(_fs, _path, 0, _tablet_schema, &footer_length, nullptr);
+    auto segment_res = Segment::open(_fs, FileInfo{_path}, 0, _tablet_schema, &footer_length, nullptr);
     if (!segment_res.ok()) {
         std::cout << "open segment failed: " << segment_res.status() << std::endl;
         return Status::InternalError("");
@@ -824,7 +836,7 @@ Status SegmentDump::calc_checksum() {
     seg_opts.stats = &stats;
     auto seg_res = _segment->new_iterator(schema, seg_opts);
     if (!seg_res.ok()) {
-        std::cout << "new segment iterator failed: " << seg_res.status().get_error_msg() << std::endl;
+        std::cout << "new segment iterator failed: " << seg_res.status().message() << std::endl;
         return seg_res.status();
     }
     auto seg_iter = std::move(seg_res.value());
@@ -1036,6 +1048,37 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "dump column size failed: " << st << std::endl;
             return -1;
         }
+    } else if (FLAGS_operation == "print_pk_dump") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for pk dump file" << std::endl;
+            return -1;
+        }
+        starrocks::PrimaryKeyDumpPB dump_pb;
+        Status st = starrocks::PrimaryKeyDump::read_deserialize_from_file(FLAGS_file, &dump_pb);
+        if (!st.ok()) {
+            std::cout << "print pk dump failed: " << st << std::endl;
+            return -1;
+        }
+        std::cout << "[pk dump] meta: " << dump_pb.Utf8DebugString() << std::endl;
+        st = starrocks::PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
+                FLAGS_file, dump_pb,
+                [&](const starrocks::Chunk& chunk) {
+                    for (int i = 0; i < chunk.num_rows(); i++) {
+                        std::cout << "pk column " << chunk.debug_row(i) << std::endl;
+                    }
+                },
+                [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {
+                    std::cout << " pk index, filename: " << filename << std::endl;
+                    for (int i = 0; i < kvs.keys_size(); i++) {
+                        std::cout << "index key " << starrocks::hexdump(kvs.keys(i).data(), kvs.keys(i).size())
+                                  << " value " << kvs.values(i) << std::endl;
+                    }
+                });
+        if (!st.ok()) {
+            std::cout << "print pk dump failed: " << st << std::endl;
+            return -1;
+        }
+
     } else if (FLAGS_operation == "dump_short_key_index") {
         starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
         if (FLAGS_file == "") {
@@ -1060,11 +1103,11 @@ int meta_tool_main(int argc, char** argv) {
         starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
         Status st = segment_dump.calc_checksum();
         if (!st.ok()) {
-            std::cout << "dump segment data failed: " << st.get_error_msg() << std::endl;
+            std::cout << "dump segment data failed: " << st.message() << std::endl;
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {
-        starrocks::lake::TabletMetadataPB metadata;
+        starrocks::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse tablet metadata\n";
             return -1;
@@ -1079,7 +1122,7 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_txn_log") {
-        starrocks::lake::TxnLogPB txn_log;
+        starrocks::TxnLogPB txn_log;
         if (!txn_log.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse txn log\n";
             return -1;
@@ -1108,6 +1151,28 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << json << '\n';
+    } else if (FLAGS_operation == "lake_datafile_gc") {
+        if (!starrocks::config::init(FLAGS_conf_file.c_str())) {
+            std::cerr << "Init config failed, conf file: " << FLAGS_conf_file << std::endl;
+            return -1;
+        }
+        if (!starrocks::init_glog("lake_datafile_gc", true)) {
+            std::cerr << "Init glog failed" << std::endl;
+            return -1;
+        }
+        if (FLAGS_expired_sec < 600) {
+            std::cerr << "expired_sec is less than 10min" << std::endl;
+            return -1;
+        }
+        Aws::SDKOptions options;
+        Aws::InitAPI(options);
+        auto status =
+                starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
+        if (!status.ok()) {
+            std::cout << status << std::endl;
+        }
+        starrocks::close_s3_clients();
+        Aws::ShutdownAPI(options);
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",

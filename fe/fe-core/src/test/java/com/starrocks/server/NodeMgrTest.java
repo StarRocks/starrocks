@@ -20,7 +20,9 @@ import com.starrocks.system.FrontendHbResponse;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.File;
 import java.net.UnknownHostException;
+import java.util.UUID;
 
 public class NodeMgrTest {
 
@@ -49,5 +51,24 @@ public class NodeMgrTest {
         Assert.assertTrue(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9020));
         Assert.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9030));
         Assert.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.2", 9020));
+    }
+
+    @Test
+    public void testRemoveClusterIdAndRoleFile() throws Exception {
+        NodeMgr nodeMgr = new NodeMgr();
+        nodeMgr.initialize(new String[0]);
+        File imageDir = new File("/tmp/starrocks_nodemgr_test_" + UUID.randomUUID());
+        imageDir.deleteOnExit();
+
+        if (!imageDir.exists() && !imageDir.mkdirs()) {
+            return;
+        }
+
+        nodeMgr.setImageDir(imageDir.getAbsolutePath());
+        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        nodeMgr.getClusterIdAndRoleOnStartup();
+        Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
+        nodeMgr.removeClusterIdAndRole();
+        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
     }
 }

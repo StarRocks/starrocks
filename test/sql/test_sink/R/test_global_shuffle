@@ -1,0 +1,43 @@
+-- name: testFilesSinkWithGlobalShuffle
+set enable_connector_sink_global_shuffle = true;
+-- result:
+[]
+-- !result
+insert into files ( 
+	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/1/", 
+	"format"="parquet", 
+	"compression" = "uncompressed"
+) 
+select 1 as k1, "A" as k2;
+-- result:
+[]
+-- !result
+insert into files ( 
+	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/2/", 
+	"format"="parquet", 
+	"compression" = "uncompressed",
+	"partition_by"="k1"
+) 
+select 2 as k1, "B" as k2;
+-- result:
+[]
+-- !result
+select * from files (
+	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/1/*",
+	"format" = "parquet"
+);
+-- result:
+1	A
+-- !result
+select * from files (
+	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/2/k1=2/*",
+	"format" = "parquet"
+);
+-- result:
+2	B
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

@@ -78,7 +78,7 @@ RunningQueryToken::~RunningQueryToken() {
 }
 
 WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
-                     size_t concurrency, WorkGroupType type)
+                     size_t concurrency, double spill_mem_limit_threshold, WorkGroupType type)
         : _name(std::move(name)),
           _id(id),
           _version(version),
@@ -86,6 +86,7 @@ WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_l
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
           _concurrency_limit(concurrency),
+          _spill_mem_limit_threshold(spill_mem_limit_threshold),
           _driver_sched_entity(this),
           _scan_sched_entity(this),
           _connector_scan_sched_entity(this) {}
@@ -130,6 +131,12 @@ WorkGroup::WorkGroup(const TWorkGroup& twg)
     if (twg.__isset.big_query_cpu_second_limit) {
         _big_query_cpu_nanos_limit = twg.big_query_cpu_second_limit * NANOS_PER_SEC;
     }
+
+    if (twg.__isset.spill_mem_limit_threshold) {
+        _spill_mem_limit_threshold = twg.spill_mem_limit_threshold;
+    } else {
+        _spill_mem_limit_threshold = 1.0;
+    }
 }
 
 TWorkGroup WorkGroup::to_thrift() const {
@@ -154,6 +161,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_big_query_mem_limit(_big_query_mem_limit);
     twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
     twg.__set_big_query_cpu_second_limit(big_query_cpu_second_limit());
+    twg.__set_spill_mem_limit_threshold(_spill_mem_limit_threshold);
     return twg;
 }
 
@@ -161,21 +169,28 @@ void WorkGroup::init() {
     _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT
                                   ? GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit()
                                   : GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
+    _spill_mem_limit_bytes = _spill_mem_limit_threshold * _memory_limit_bytes;
     _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
                                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
+
+    _connector_scan_mem_tracker = std::make_shared<MemTracker>(
+            MemTracker::RESOURCE_GROUP, _memory_limit_bytes * config::connector_scan_use_query_mem_ratio,
+            _name + "/connector_scan", GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker());
 }
 
 std::string WorkGroup::to_string() const {
     return fmt::format(
             "(id:{}, name:{}, version:{}, "
             "cpu_limit:{}, mem_limit:{}, concurrency_limit:{}, "
-            "bigquery: (cpu_second_limit:{}, mem_limit:{}, scan_rows_limit:{})"
+            "bigquery: (cpu_second_limit:{}, mem_limit:{}, scan_rows_limit:{}), "
+            "spill_mem_limit_threshold:{}"
             ")",
             _id, _name, _version, _cpu_limit, _memory_limit_bytes, _concurrency_limit, big_query_cpu_second_limit(),
-            _big_query_mem_limit, _big_query_scan_rows_limit);
+            _big_query_mem_limit, _big_query_scan_rows_limit, _spill_mem_limit_threshold);
 }
 
 void WorkGroup::incr_num_running_drivers() {
@@ -258,10 +273,12 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     auto unique_id = wg->unique_id();
     create_workgroup_unlocked(wg, write_lock);
     if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version()) {
-        return _workgroups[unique_id];
-    } else {
-        return get_default_workgroup_unlocked();
+        auto workgroup_it = _workgroups.find(unique_id);
+        if (workgroup_it != _workgroups.end()) {
+            return workgroup_it->second;
+        }
     }
+    return get_default_workgroup_unlocked();
 }
 
 void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock) {
@@ -449,14 +466,14 @@ WorkGroupPtr WorkGroupManager::get_default_workgroup() {
 WorkGroupPtr WorkGroupManager::get_default_workgroup_unlocked() {
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_VERSION, WorkGroup::DEFAULT_WG_ID);
     DCHECK(_workgroups.count(unique_id));
-    return _workgroups[unique_id];
+    return _workgroups.at(unique_id);
 }
 
 WorkGroupPtr WorkGroupManager::get_default_mv_workgroup() {
     std::shared_lock read_lock(_mutex);
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_MV_VERSION, WorkGroup::DEFAULT_MV_WG_ID);
     DCHECK(_workgroups.count(unique_id));
-    return _workgroups[unique_id];
+    return _workgroups.at(unique_id);
 }
 
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
@@ -467,11 +484,16 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
-            int128_t wg_id = *it;
+            auto id = wg_it->second->id();
+            auto version = wg_it->second->version();
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroups.erase(wg_it);
+            auto version_it = _workgroup_versions.find(id);
+            if (version_it != _workgroup_versions.end() && version_it->second <= version) {
+                _workgroup_versions.erase(version_it);
+            }
             _workgroup_expired_versions.erase(it++);
-            LOG(INFO) << "cleanup expired workgroup version:  " << (int64_t)(wg_id >> 64) << "," << (int64_t)wg_id;
+            LOG(INFO) << "cleanup expired workgroup version:  " << id << "," << version;
         } else {
             ++it;
         }
@@ -588,16 +610,18 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     // The default workgroup can use all the resources of CPU and memory,
     // so set cpu_limit to max_executor_threads and memory_limit to 100%.
     int64_t cpu_limit = ExecEnv::GetInstance()->max_executor_threads();
-    double memory_limit = 1.0;
-    auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION,
-                                                  cpu_limit, memory_limit, 0, WorkGroupType::WG_DEFAULT);
+    const double memory_limit = 1.0;
+    const double spill_mem_limit_threshold = 1.0; // not enable spill mem limit threshold
+    auto default_wg =
+            std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, cpu_limit,
+                                        memory_limit, 0, spill_mem_limit_threshold, WorkGroupType::WG_DEFAULT);
     WorkGroupManager::instance()->add_workgroup(default_wg);
 
     int64_t mv_cpu_limit = config::default_mv_resource_group_cpu_limit;
     double mv_memory_limit = config::default_mv_resource_group_memory_limit;
-    auto default_mv_wg =
-            std::make_shared<WorkGroup>("default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID, WorkGroup::DEFAULT_MV_VERSION,
-                                        mv_cpu_limit, mv_memory_limit, 0, WorkGroupType::WG_MV);
+    auto default_mv_wg = std::make_shared<WorkGroup>("default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID,
+                                                     WorkGroup::DEFAULT_MV_VERSION, mv_cpu_limit, mv_memory_limit, 0,
+                                                     spill_mem_limit_threshold, WorkGroupType::WG_MV);
     WorkGroupManager::instance()->add_workgroup(default_mv_wg);
 }
 

@@ -211,6 +211,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     private RoaringBitmap cachedUsedSlotIds = null;
 
+    // is this Expr can be used in index filter and expr filter or only index filter
+    // passed to BE storage engine
+    private boolean isIndexOnlyFilter = false;
+
     protected Expr() {
         pos = NodePosition.ZERO;
         type = Type.INVALID;
@@ -322,6 +326,14 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public void setPrintSqlInParens(boolean b) {
         printSqlInParens = b;
+    }
+
+    public boolean isIndexOnlyFilter() {
+        return isIndexOnlyFilter;
+    }
+
+    public void setIndexOnlyFilter(boolean indexOnlyFilter) {
+        isIndexOnlyFilter = indexOnlyFilter;
     }
 
     /**
@@ -844,6 +856,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
+        msg.setIs_index_only_filter(isIndexOnlyFilter());
         visitor.visit(this, msg);
         container.addToNodes(msg);
         for (Expr child : children) {
@@ -1063,6 +1076,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return isConstantImpl();
     }
 
+    public final boolean isParameter() {
+        return this instanceof Parameter;
+    }
+
     /**
      * Implements isConstant() - computes the value without using 'isConstant_'.
      */
@@ -1230,6 +1247,15 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public static Function getBuiltinFunction(String name, Type[] argTypes, Function.CompareMode mode) {
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, Type.INVALID, false);
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+    public static Function getBuiltinFunction(String name, Type[] argTypes, String[] argNames, Function.CompareMode mode) {
+        if (argNames == null) {
+            return getBuiltinFunction(name, argTypes, mode);
+        }
+        FunctionName fnName = new FunctionName(name);
+        Function searchDesc = new Function(fnName, argTypes, argNames, Type.INVALID, false);
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 

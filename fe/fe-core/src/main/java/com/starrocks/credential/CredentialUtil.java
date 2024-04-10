@@ -16,6 +16,7 @@ package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.logging.log4j.LogManager;
@@ -53,6 +54,10 @@ public class CredentialUtil {
 
         // Mask for iceberg rest catalog credential
         doMask(properties, IcebergRESTCatalog.KEY_CREDENTIAL_WITH_PREFIX);
+
+        // Mask for odps catalog credential
+        doMask(properties, OdpsProperties.ACCESS_ID);
+        doMask(properties, OdpsProperties.ACCESS_KEY);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {

@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_label: Google Cloud Storage (GCS)
+description: "本文介绍如何认证 GCS 资源"
 ---
 
 # 配置 GCS 认证信息
@@ -44,7 +46,7 @@ CREATE EXTERNAL CATALOG hive_catalog_gcs
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     StorageCredentialParams
 );
 ```

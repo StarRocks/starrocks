@@ -89,7 +89,7 @@ private:
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
     Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
     template <class Loader>
-    Status _load_cache_entry_internal(UserFunctionCacheEntryPtr& entry, Loader&& loader);
+    Status _load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
     std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
     void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
 

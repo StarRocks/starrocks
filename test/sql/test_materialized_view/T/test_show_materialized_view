@@ -1,4 +1,5 @@
 -- name: test_show_materialized_view
+set enable_rewrite_bitmap_union_to_bitamp_agg = false;
 create database test_show_materialized_view;
 use test_show_materialized_view;
 create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');

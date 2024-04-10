@@ -100,7 +100,8 @@ public:
 
 private:
     void _fail_cleanup(bool fragment_has_registed);
-    int32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
+    uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
+    uint32_t _calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     int _calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
     int _calc_query_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
 
@@ -119,11 +120,6 @@ private:
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
-
-    Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
-                                            const UnifiedExecPlanFragmentParams& request,
-                                            std::unique_ptr<starrocks::DataSink>& datasink,
-                                            const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
 
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;

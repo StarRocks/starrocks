@@ -168,7 +168,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendFe(StringBuilder buffer) {
-        List<Frontend> fes = GlobalStateMgr.getCurrentState().getFrontends(null /* all */);
+        List<Frontend> fes = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */);
         if (fes == null) {
             return;
         }
@@ -182,7 +182,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendRemovedFe(StringBuilder buffer) {
-        List<String> feNames = GlobalStateMgr.getCurrentState().getRemovedFrontendNames();
+        List<String> feNames = GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames();
         buffer.append("<h2>Removed Frontends</h2>");
         buffer.append("<pre>");
         for (String feName : feNames) {

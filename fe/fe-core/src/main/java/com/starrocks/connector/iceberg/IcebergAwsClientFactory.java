@@ -52,6 +52,8 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_IAM_
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SECRET_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_STS_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_STS_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
@@ -62,6 +64,8 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_IAM_RO
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_STS_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_STS_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
@@ -77,6 +81,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     private String s3SecretKey;
     private String s3SessionToken;
     private String s3IamRoleArn;
+    private String s3StsRegion;
+    private String s3StsEndpoint;
     private String s3ExternalId;
     private String s3Region;
     private String s3Endpoint;
@@ -87,6 +93,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     private String glueSecretKey;
     private String glueSessionToken;
     private String glueIamRoleArn;
+    private String glueStsRegion;
+    private String glueStsEndpoint;
     private String glueExternalId;
     private String glueRegion;
     private String glueEndpoint;
@@ -101,6 +109,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         s3SecretKey = properties.getOrDefault(AWS_S3_SECRET_KEY, "");
         s3SessionToken = properties.getOrDefault(AWS_S3_SESSION_TOKEN, "");
         s3IamRoleArn = properties.getOrDefault(AWS_S3_IAM_ROLE_ARN, "");
+        s3StsRegion = properties.getOrDefault(AWS_S3_STS_REGION, "");
+        s3StsEndpoint = properties.getOrDefault(AWS_S3_STS_ENDPOINT, "");
         s3ExternalId = properties.getOrDefault(AWS_S3_EXTERNAL_ID, "");
         s3Region = properties.getOrDefault(AWS_S3_REGION, "");
         s3Endpoint = properties.getOrDefault(AWS_S3_ENDPOINT, "");
@@ -114,6 +124,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         glueSecretKey = properties.getOrDefault(AWS_GLUE_SECRET_KEY, "");
         glueSessionToken = properties.getOrDefault(AWS_GLUE_SESSION_TOKEN, "");
         glueIamRoleArn = properties.getOrDefault(AWS_GLUE_IAM_ROLE_ARN, "");
+        glueStsRegion = properties.getOrDefault(AWS_GLUE_STS_REGION, "");
+        glueStsEndpoint = properties.getOrDefault(AWS_GLUE_STS_ENDPOINT, "");
         glueExternalId = properties.getOrDefault(AWS_GLUE_EXTERNAL_ID, "");
         glueRegion = properties.getOrDefault(AWS_GLUE_REGION, "");
         glueEndpoint = properties.getOrDefault(AWS_GLUE_ENDPOINT, "");
@@ -121,10 +133,15 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
     private StsAssumeRoleCredentialsProvider getAssumeRoleCredentialsProvider(AwsCredentialsProvider baseCredentials,
                                                                               String iamRoleArn, String externalId,
-                                                                              Region region) {
+                                                                              String region, String endpoint) {
         // Build sts client
         StsClientBuilder stsClientBuilder = StsClient.builder().credentialsProvider(baseCredentials);
-        stsClientBuilder.region(region);
+        if (!region.isEmpty()) {
+            stsClientBuilder.region(Region.of(region));
+        }
+        if (!endpoint.isEmpty()) {
+            stsClientBuilder.endpointOverride(URI.create(endpoint));
+        }
 
         // Build AssumeRoleRequest
         AssumeRoleRequest.Builder assumeRoleBuilder = AssumeRoleRequest.builder();
@@ -150,16 +167,14 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                         s3SecretKey, s3SessionToken);
         S3ClientBuilder s3ClientBuilder = S3Client.builder();
 
-        Region region = tryToResolveRegion(s3Region);
-
         if (!s3IamRoleArn.isEmpty()) {
             s3ClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
-                    s3IamRoleArn, s3ExternalId, region));
+                    s3IamRoleArn, s3ExternalId, s3StsRegion, s3StsEndpoint));
         } else {
             s3ClientBuilder.credentialsProvider(baseAWSCredentialsProvider);
         }
 
-        s3ClientBuilder.region(region);
+        s3ClientBuilder.region(tryToResolveRegion(s3Region));
 
         // To prevent the 's3ClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
         // 'scheme', we will add https scheme.
@@ -181,16 +196,14 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                         glueSecretKey, glueSessionToken);
         GlueClientBuilder glueClientBuilder = GlueClient.builder();
 
-        Region region = tryToResolveRegion(glueRegion);
-
         if (!glueIamRoleArn.isEmpty()) {
             glueClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
-                    glueIamRoleArn, glueExternalId, region));
+                    glueIamRoleArn, glueExternalId, glueStsRegion, glueStsEndpoint));
         } else {
             glueClientBuilder.credentialsProvider(baseAWSCredentialsProvider);
         }
 
-        glueClientBuilder.region(region);
+        glueClientBuilder.region(tryToResolveRegion(glueRegion));
 
         // To prevent the 'glueClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
         // 'scheme', we will add https scheme.

@@ -12,7 +12,6 @@ PARTITION BY date_trunc('day', event_day)
 DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -42,8 +41,7 @@ PARTITION BY RANGE(event_day)
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 1
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
 CREATE TABLE `duplicate_table_with_null1` ( `k1`  date, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY date_trunc('day', k2) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
@@ -71,8 +69,7 @@ DUPLICATE KEY(id)
 PARTITION BY (dt,province)
 DISTRIBUTED BY HASH(`id`) BUCKETS 2
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 insert overwrite t_recharge_detail PARTITION(dt='2022-04-02', province='beijing')
 select 2 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as dt from dual;
@@ -100,10 +97,9 @@ PARTITION BY (`dt`,`city`)
 DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"light_schema_change" = "true",
+"fast_schema_evolution" = "true",
 "partition_live_number" = "1",
 "compression" = "LZ4"
 );

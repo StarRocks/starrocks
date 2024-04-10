@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <vector>
 
 #include "column/column.h"
@@ -29,7 +30,9 @@ namespace starrocks {
 class RuntimeState;
 class ExprContext;
 class Expr;
+class TExpr;
 class SlotDescriptor;
+class DictMappingExpr;
 
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;
@@ -52,15 +55,18 @@ public:
         _mutable_dict_maps = dict_maps;
     }
 
-    [[nodiscard]] Status rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
-                                       const std::vector<SlotId>& target_slotids);
+    [[nodiscard]] Status init_dict_exprs(const std::map<int, TExpr>& exprs);
 
-    [[nodiscard]] Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
+    [[nodiscard]] Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
 
-    void close(RuntimeState* state) noexcept;
+    [[nodiscard]] Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs);
 
     [[nodiscard]] Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx,
                                          int32_t targetSlotId);
+
+    [[nodiscard]] Status eval_dict_expr(SlotId id);
+
+    void close() noexcept;
 
     void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
@@ -71,19 +77,22 @@ public:
                                    const std::map<int32_t, int32_t>& dict_slots_mapping,
                                    std::vector<SlotDescriptor*>* slot_descs);
 
+    static void set_output_slot_id(std::vector<ExprContext*>* pexpr_ctxs, const std::vector<SlotId>& slot_id);
+
+    static void disable_open_rewrite(const std::vector<ExprContext*>* pexpr_ctxs);
+
 private:
     void _check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    [[nodiscard]] Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
-                                            const std::vector<SlotId>& slot_ids);
-    [[nodiscard]] Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
+    [[nodiscard]] Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, const std::vector<SlotId>& slot_ids);
     [[nodiscard]] Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
                                            int32_t targetSlotId);
 
     RuntimeState* _runtime_state = nullptr;
     GlobalDictMaps* _mutable_dict_maps = nullptr;
     ObjectPool _free_pool;
+    std::unordered_map<SlotId, ExprContext*> _dict_exprs;
 };
 
 } // namespace starrocks

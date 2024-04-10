@@ -14,11 +14,12 @@
 
 #pragma once
 
+#include "exec/pipeline/scan/morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
-#include "storage/lake/tablet.h"
 #include "storage/tablet_reader_params.h"
+#include "types_fwd.h"
 
 namespace starrocks {
 class OlapTuple;
@@ -30,10 +31,14 @@ struct RowSourceMask;
 class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;
+class Segment;
+class TabletSchema;
+class TabletMetadataPB;
 
 namespace lake {
 
 class Rowset;
+class TabletManager;
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -49,10 +54,13 @@ class TabletReader final : public ChunkIterator {
     using TabletReaderParams = starrocks::TabletReaderParams;
 
 public:
-    TabletReader(Tablet tablet, int64_t version, Schema schema);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
-                 RowSourceMaskBuffer* mask_buffer);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 bool need_split, bool could_split_physically);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -68,6 +76,8 @@ public:
     OlapReaderStatistics* mutable_stats() { return &_stats; }
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
+
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
 
 protected:
     Status do_get_next(Chunk* chunk) override;
@@ -94,14 +104,14 @@ private:
                                    const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
                                    MemPool* mempool);
 
-    Tablet _tablet;
-    int64_t _version;
+    TabletManager* _tablet_mgr;
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
     std::shared_ptr<const TabletSchema> _tablet_schema;
 
     // _rowsets is specified in the constructor when compaction
     bool _rowsets_inited = false;
     std::vector<RowsetPtr> _rowsets;
+    std::vector<SegmentSharedPtr> _segments;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     PredicateMap _pushdown_predicates;
@@ -117,6 +127,11 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+
+    // used for table internal parallel
+    bool _need_split = false;
+    bool _could_split_physically = false;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace lake

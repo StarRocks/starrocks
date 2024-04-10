@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -95,6 +96,14 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalTableScan(LogicalScanOperator node, Void context) {
         return "LogicalScanOperator" + " {" +
                 "table='" + node.getTable().getId() + '\'' +
+                ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
+                '}';
+    }
+
+    @Override
+    public String visitLogicalViewScan(LogicalViewScanOperator node, Void context) {
+        return "LogicalViewScanOperator" + " {" +
+                "table='" + node.getTable().getName() + '\'' +
                 ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
                 '}';
     }
@@ -191,7 +200,10 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalAggregation(LogicalAggregationOperator node, Void context) {
         return "LogicalAggregation" + " {type=" + node.getType() +
                 " ,aggregations=" + node.getAggregations() +
-                " ,groupKeys=" + node.getGroupingKeys() + "}";
+                " ,groupKeys=" + node.getGroupingKeys() +
+                " ,projection=" + node.getProjection() +
+                " ,predicate=" + node.getPredicate() +
+                "}";
     }
 
     @Override

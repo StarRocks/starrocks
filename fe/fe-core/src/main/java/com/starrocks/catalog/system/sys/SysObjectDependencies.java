@@ -32,6 +32,8 @@ import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -39,6 +41,9 @@ import java.util.Optional;
 public class SysObjectDependencies {
 
     public static final String NAME = "object_dependencies";
+
+    private static final Logger LOG = LogManager.getLogger(SysObjectDependencies.class);
+
 
     public static SystemTable create() {
         return new SystemTable(SystemId.OBJECT_DEPENDENCIES, NAME, Table.TableType.SCHEMA,
@@ -70,11 +75,15 @@ public class SysObjectDependencies {
         }
 
         // list dependencies of mv
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb().values();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             String catalog = Optional.ofNullable(db.getCatalogName())
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             for (Table table : db.getTables()) {
+                // If it is not a materialized view, we do not need to verify permissions
+                if (!table.isMaterializedView()) {
+                    continue;
+                }
                 // Only show tables with privilege
                 try {
                     Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
@@ -82,31 +91,47 @@ public class SysObjectDependencies {
                     continue;
                 }
 
-                if (table.isMaterializedView()) {
-                    MaterializedView mv = (MaterializedView) table;
-                    for (BaseTableInfo refObj : CollectionUtils.emptyIfNull(mv.getBaseTableInfos())) {
-                        TObjectDependencyItem item = new TObjectDependencyItem();
-                        item.setObject_id(mv.getId());
-                        item.setObject_name(mv.getName());
-                        item.setDatabase(db.getFullName());
-                        item.setCatalog(catalog);
-                        item.setObject_type(mv.getType().toString());
+                MaterializedView mv = (MaterializedView) table;
+                for (BaseTableInfo refObj : CollectionUtils.emptyIfNull(mv.getBaseTableInfos())) {
+                    TObjectDependencyItem item = new TObjectDependencyItem();
+                    item.setObject_id(mv.getId());
+                    item.setObject_name(mv.getName());
+                    item.setDatabase(db.getFullName());
+                    item.setCatalog(catalog);
+                    item.setObject_type(mv.getType().toString());
 
-                        item.setRef_object_id(refObj.getTableId());
-                        item.setRef_object_name(refObj.getTableName());
-                        item.setRef_database(refObj.getDbName());
-                        item.setRef_catalog(refObj.getCatalogName());
-                        item.setRef_object_type(Optional.ofNullable(refObj.getTable())
-                                .map(x -> x.getType().toString())
-                                .orElse("UNKNOWN"));
+                    item.setRef_object_id(refObj.getTableId());
+                    item.setRef_object_name(refObj.getTableName());
+                    item.setRef_database(refObj.getDbName());
+                    item.setRef_catalog(refObj.getCatalogName());
+                    item.setRef_object_type(getRefObjectType(refObj, mv.getName()));
 
-                        response.addToItems(item);
-                    }
+                    response.addToItems(item);
                 }
             }
         }
 
         return response;
+    }
+
+    /**
+     * We may not be able to obtain the base table information when external catalog is unavailable
+     *
+     * @param refObj Base tables for materialized views
+     * @param mvName materialized view name
+     * @return base table type
+     */
+    private static String getRefObjectType(BaseTableInfo refObj, String mvName) {
+        String refObjType = "UNKNOWN";
+        try {
+            refObjType = refObj.mayGetTable()
+                    .map(x -> x.getType().toString())
+                    .orElse("UNKNOWN");
+        } catch (Exception e) {
+            LOG.error("can not get table type error, mv name : {}, error-msg : {}",
+                    mvName, e.getMessage(), e);
+        }
+        return refObjType;
     }
 
 }

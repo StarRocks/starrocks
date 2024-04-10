@@ -8,6 +8,13 @@ File external table is a special type of external table. It allows you to direct
 
 This feature is supported from StarRocks v2.5.
 
+:::note
+
+- From v3.1 onwards, StarRocks supports directly loading data from files on cloud storage using the [INSERT](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) command and the [FILES](../sql-reference/sql-functions/table-functions/files.md) function, thereby you do not need to create an external catalog or file external table first. Besides, FILES() can automatically infer the table schema of the files, greatly simplifying the process of data loading.
+- The File External Table feature was designed to help with loading data into StarRocks, NOT to perform efficient queries against external systems as a normal operation. A more performant solution would be to load the data into StarRocks.
+
+:::
+
 ## Limits
 
 - File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query catalogs created in the cluster.
@@ -69,13 +76,15 @@ A set of parameters for accessing the target data file.
 "path" = "<file_path>",
 "format" = "<file_format>"
 "enable_recursive_listing" = "{ true | false }"
+"enable_wildcards" = "{ true | false }"
 ```
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
 | path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3 or other S3-compatible storage system, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
 | format                   | Yes      | The format of the data file. Valid values: `parquet`, `orc`, `avro`, `rctext` or `rcbinary`, and `sequence`. |
-| enable_recursive_listing | No       | Specifies whether to recursively transverse all files under the current path. Default value: `false`. |
+| enable_recursive_listing | No       | Specifies whether to recursively transverse all files under the current path. Default value: `true`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
+| enable_wildcards         | No       | Whether to support using wildcards (`*`) in `path`. Default value: `false`. For example, `2024-07-*` is to match all files with the `2024-07-` prefix. This parameter is supported from v3.1.9. |
 
 #### StorageCredentialParams (Optional)
 

@@ -36,14 +36,6 @@
 
 #include <utility>
 
-#include "gutil/strings/substitute.h"
-#include "util/debug_util.h"
-#include "util/mem_info.h"
-#include "util/pretty_printer.h"
-#include "util/stack_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/uid_util.h"
-
 namespace starrocks {
 
 const std::string MemTracker::PEAK_MEMORY_USAGE = "PeakMemoryUsage";

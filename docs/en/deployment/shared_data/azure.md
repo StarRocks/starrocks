@@ -30,7 +30,7 @@ Before starting the cluster configure the FEs and CNs. An example configuration 
 ### Example FE configuration for Azure Blob Storage
 
 The example shared-data additions for your `fe.conf` can be added to the `fe.conf` file on each
-of your FE nodes. 
+of your FE nodes.
 
   ```Properties
   run_mode = shared_data
@@ -68,10 +68,9 @@ of your FE nodes.
 
 ### All FE parameters related to shared-storage with Azure Blob Storage
 
-
 #### run_mode
 
-The running mode of the StarRocks cluster. Valid values: 
+The running mode of the StarRocks cluster. Valid values:
 
 - `shared_data`
 - `shared_nothing` (Default).
@@ -93,7 +92,7 @@ The cloud-native meta service RPC port.
 Whether to allow StarRocks to create the default storage volume by using the object storage-related properties specified in the FE configuration file. Valid values:
 
 - `true` (Default) If you specify this item as `true` when creating a new shared-data cluster, StarRocks creates the built-in storage volume `builtin_storage_volume` using the object storage-related properties in the FE configuration file, and sets it as the default storage volume. However, if you have not specified the object storage-related properties, StarRocks fails to start.
-- `false` If you specify this item as `false` when creating a new shared-data cluster, StarRocks starts directly without creating the built-in storage volume. You must manually create a storage volume and set it as the default storage volume before creating any object in StarRocks. For more information, see [Create the default storage volume](#create-default-storage-volume).
+- `false` If you specify this item as `false` when creating a new shared-data cluster, StarRocks starts directly without creating the built-in storage volume. You must manually create a storage volume and set it as the default storage volume before creating any object in StarRocks. For more information, see [Create the default storage volume](#use-your-shared-data-starrocks-cluster).
 
 Supported from v3.1.0.
 

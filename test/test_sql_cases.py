@@ -36,6 +36,7 @@ from cup import log
 from lib import sr_sql_lib
 from lib import choose_cases
 from lib import sql_annotation
+from lib.sr_sql_lib import self_print
 
 # model: run case model, True => Record mode
 #    - t: run sql and save result into r dir
@@ -161,7 +162,7 @@ Start to run: %s
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
-                print("[SHELL]: %s" % sql)
+                self_print("[SHELL]: %s" % sql)
 
                 log.info("[%s] SHELL: %s" % (sql_id, sql))
                 actual_res = self.execute_shell(sql)
@@ -175,7 +176,7 @@ Start to run: %s
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
-                print("[FUNCTION]: %s" % sql)
+                self_print("[FUNCTION]: %s" % sql)
 
                 log.info("[%s] FUNCTION: %s" % (sql_id, sql))
                 actual_res = eval("self.%s" % sql)
@@ -195,7 +196,7 @@ Start to run: %s
                 var, sql = self.analyse_var(sql)
 
                 actual_res = self.execute_sql(sql)
-                print("[SQL]: %s" % sql)
+                self_print("[SQL]: %s" % sql)
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)

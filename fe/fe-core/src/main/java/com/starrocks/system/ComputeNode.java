@@ -23,11 +23,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DnsCache;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import org.apache.logging.log4j.LogManager;
@@ -40,6 +42,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -103,10 +106,17 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
 
+    @SerializedName("workerGroupId")
+    private long workerGroupId = 0;
+
+    @SerializedName("warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     // Indicate there is whether storage_path or not with CN node
     // It must be true for Backend
     @SerializedName("isSetStoragePath")
     private volatile boolean isSetStoragePath = false;
+
+    private volatile DataCacheMetrics dataCacheMetrics = null;
 
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
@@ -171,6 +181,11 @@ public class ComputeNode implements IComputable, Writable {
         return isSetStoragePath;
     }
 
+    // for test only
+    public void setIsStoragePath(boolean isSetStoragePath) {
+        this.isSetStoragePath = isSetStoragePath;
+    }
+
     public long getId() {
         return id;
     }
@@ -226,6 +241,22 @@ public class ComputeNode implements IComputable, Writable {
 
     public String getHeartbeatErrMsg() {
         return heartbeatErrMsg;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
+
+    public void setWorkerGroupId(long workerGroupId) {
+        this.workerGroupId = workerGroupId;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     // for test only
@@ -370,6 +401,10 @@ public class ComputeNode implements IComputable, Writable {
         this.lastUpdateResourceUsageMs = System.currentTimeMillis();
     }
 
+    public void updateDataCacheMetrics(DataCacheMetrics dataCacheMetrics) {
+        this.dataCacheMetrics = dataCacheMetrics;
+    }
+
     public void updateResourceGroupUsage(List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages) {
         Map<Long, ResourceGroupUsage> newGroupIdToUsage = groupAndUsages.stream().collect(Collectors.toMap(
                 groupAndUsage -> groupAndUsage.first.getId(),
@@ -492,12 +527,12 @@ public class ComputeNode implements IComputable, Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (RunMode.allowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
+            if (RunMode.isSharedDataMode() && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
             }
 
-            if (RunMode.allowCreateLakeTable() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
+            if (RunMode.isSharedDataMode() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
                 isChanged = true;
                 this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
@@ -575,6 +610,10 @@ public class ComputeNode implements IComputable, Writable {
         }
 
         return isChanged;
+    }
+
+    public Optional<DataCacheMetrics> getDataCacheMetrics() {
+        return Optional.ofNullable(dataCacheMetrics);
     }
 
     public boolean isResourceUsageFresh() {

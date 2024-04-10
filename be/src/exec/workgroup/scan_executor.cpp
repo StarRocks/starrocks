@@ -27,15 +27,15 @@ ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_
     }
 }
 
-ScanExecutor::~ScanExecutor() {
+void ScanExecutor::close() {
     _task_queue->close();
+    _thread_pool->shutdown();
 }
 
 void ScanExecutor::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 
@@ -45,8 +45,7 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 
@@ -88,6 +87,10 @@ void ScanExecutor::worker_thread() {
 
 bool ScanExecutor::submit(ScanTask task) {
     return _task_queue->try_offer(std::move(task));
+}
+
+void ScanExecutor::force_submit(ScanTask task) {
+    _task_queue->force_put(std::move(task));
 }
 
 } // namespace starrocks::workgroup

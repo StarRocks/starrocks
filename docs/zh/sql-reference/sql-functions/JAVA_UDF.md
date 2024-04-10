@@ -18,7 +18,7 @@ displayed_sidebar: "Chinese"
 
 - [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
 - 在服务器上安装 JDK 1.8。
-- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/Configuration.md)。
+- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/management/FE_configuration.md)。
 
 ## 开发并使用 UDF
 
@@ -297,7 +297,7 @@ public class WindowSumInt {
 
 方法的含义
 
-更新窗口数据。窗口函数的详细说明，请参见[窗口函数](../sql-reference/sql-functions/Window_function.md]。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
+更新窗口数据。窗口函数的详细说明，请参见[窗口函数](./Window_function.md)。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
 
 - peer_group_start：是当前分区开始的位置。<br />分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。
 - peer_group_end：当前分区结束的位置。
@@ -352,7 +352,7 @@ mvn package
 mvn deploy 
 ```
 
-您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。详细步骤参考 [通过 Python 搭建简易 http 服务器](https://blog.csdn.net/whatday/article/details/106550650)。
+您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。
 
 > **说明**
 > 步骤六中， FE 会对 UDF 所在 Jar 包进行校验并计算校验值，BE 会下载 UDF 所在 Jar 包并执行。
@@ -554,10 +554,12 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## 参数配置
 
-JVM 参数配置：在 **be/conf/hadoop_env.sh** 中配置如下环境变量，可以控制内存使用。
+JVM 参数配置：在 **be/conf/be.conf** 中配置如下参数，可以控制 JVM 的内存使用。如果使用 JDK 8，请配置 `JAVA_OPTS`。如果 JDK 版本高于 JDK 8，则配置 `JAVA_OPTS_FOR_JDK_9_AND_LATER`
 
 ```Bash
-export LIBHDFS_OPTS="-Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
+JAVA_OPTS="-Xmx12G"
+
+JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
 ## FAQ

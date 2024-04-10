@@ -74,7 +74,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
    > **说明**
    >
-   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
 
    a. 创建一张名为 `table1` 的表，包含 `user_id`、`event_date` 和 `event_type` 三列，如下所示：
 
@@ -162,7 +162,7 @@ LOAD LABEL test_db.label1
     COLUMNS TERMINATED BY ","
     (user_id, user_gender, event_date, event_type)
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
@@ -259,7 +259,7 @@ LOAD LABEL test_db.label2
     (user_id, user_gender, event_date, event_type)
     WHERE event_type = 1
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
@@ -352,7 +352,7 @@ LOAD LABEL test_db.label3
     (date)
     SET(year=year(date), month=month(date), day=day(date))
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**
@@ -432,7 +432,7 @@ LOAD LABEL test_db.label4
     COLUMNS FROM PATH AS (date)
     SET(event_date = date)
 )
-WITH BROKER
+WITH BROKER;
 ```
 
 > **说明**

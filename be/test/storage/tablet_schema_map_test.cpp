@@ -33,6 +33,7 @@ TEST(TabletSchemaMapTest, test_all) {
     c0->set_type("INT");
     c0->set_is_key(true);
     c0->set_is_nullable(true);
+    c0->set_index_length(4);
 
     TabletSchemaMap schema_map;
 
@@ -43,6 +44,7 @@ TEST(TabletSchemaMapTest, test_all) {
 
     ASSERT_FALSE(schema_map.contains(schema_pb.id()));
     auto [schema0, inserted0] = schema_map.emplace(schema_pb);
+    ASSERT_TRUE(schema0->debug_string().find(",index_length=4") != std::string::npos);
     ASSERT_TRUE(inserted0);
     ASSERT_TRUE(schema0 != nullptr);
     ASSERT_EQ(schema_pb.id(), schema0->id());

@@ -153,6 +153,7 @@ public class RollupJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
+        materializedViewHandler.clearJobs(); // Disable the execution of job in background thread
 
         // runPendingJob
         rollupJob.runPendingJob();
@@ -166,8 +167,7 @@ public class RollupJobV2Test extends DDLTestBase {
         assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
 
         int retryCount = 0;
-        int maxRetry = 5;
-        while (retryCount < maxRetry) {
+        while (!rollupJob.getJobState().isFinalState()) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             rollupJob.runRunningJob();
             if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
@@ -280,5 +280,20 @@ public class RollupJobV2Test extends DDLTestBase {
         Assert.assertTrue(resultColumn1.getDefineExpr() instanceof FunctionCallExpr);
         FunctionCallExpr resultFunctionCall = (FunctionCallExpr) resultColumn1.getDefineExpr();
         assertEquals("to_bitmap", resultFunctionCall.getFnName().getFunction());
+    }
+
+    @Test
+    public void testReplayPendingRollupJob() throws Exception {
+        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        ArrayList<AlterClause> alterClauses = new ArrayList<>();
+        alterClauses.add(clause);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        materializedViewHandler.process(alterClauses, db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
+        assertEquals(1, alterJobsV2.size());
+
+        RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
+        rollupJob.replay(rollupJob);
     }
 }

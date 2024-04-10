@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.authentication;
 
+import com.google.common.base.Strings;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.sql.ast.UserIdentity;
-import org.apache.parquet.Strings;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;

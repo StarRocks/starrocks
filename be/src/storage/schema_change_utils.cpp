@@ -36,7 +36,11 @@ ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSch
         : _base_schema(std::move(base_schema)),
           _base_table_column_names(base_table_column_names),
           _alter_job_type(alter_job_type) {
-    _schema_mapping.resize(new_schema->num_columns());
+    size_t num_columns = new_schema->num_columns();
+    if (num_columns > 0 && new_schema->column(num_columns - 1).name() == Schema::FULL_ROW_COLUMN) {
+        num_columns--;
+    }
+    _schema_mapping.resize(num_columns);
 }
 
 ChunkChanger::~ChunkChanger() {
@@ -244,8 +248,14 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
         }
         if (_where_expr) {
             auto filter = _execute_where_expr(base_chunk);
+            // If no filtered rows are left, return directly
+            if (SIMD::count_nonzero(filter) == 0) {
+                base_chunk->set_num_rows(0);
+                return true;
+            }
             base_chunk->filter(filter);
         }
+        DCHECK(!base_chunk->is_empty());
     }
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
@@ -544,10 +554,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
     RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
                                          where_expr, has_delete_predicates, sc_sorting, sc_directly,
                                          generated_column_idxs));
-    if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        return parse_request_for_pk(base_schema, new_schema, sc_sorting, sc_directly);
-    }
-    return Status::OK();
+    return parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
 }
 
 Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,
@@ -560,6 +567,11 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     for (int i = 0; i < new_schema->num_columns(); ++i) {
         const TabletColumn& new_column = new_schema->column(i);
         std::string column_name(new_column.name());
+        if (column_name == Schema::FULL_ROW_COLUMN) {
+            // need to regenerate full_row column
+            *sc_directly = true;
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (materialized_view_param_map.find(column_name) != materialized_view_param_map.end()) {
@@ -634,6 +646,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     int num_default_value = 0;
 
     for (int i = 0; i < new_schema->num_key_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (column_mapping->ref_column < 0) {
@@ -677,6 +692,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     }
 
     for (size_t i = 0; i < new_schema->num_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_mapping->ref_column < 0) {
             continue;
@@ -699,6 +717,14 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             } else if (new_column.has_bitmap_index() != ref_column.has_bitmap_index()) {
                 *sc_directly = true;
                 return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), GIN) !=
+                       base_schema->has_index(ref_column.unique_id(), GIN)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), NGRAMBF) !=
+                       base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
+                *sc_directly = true;
+                return Status::OK();
             }
         }
     }
@@ -714,9 +740,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     return Status::OK();
 }
 
-Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_schema,
-                                               const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
-                                               bool* sc_directly) {
+Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema,
+                                                     const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
+                                                     bool* sc_directly) {
     const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;

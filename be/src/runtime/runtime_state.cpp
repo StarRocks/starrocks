@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
@@ -75,6 +76,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
@@ -92,39 +94,48 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
-        _timestamp_ms = query_globals.timestamp_ms;
+        if (query_globals.__isset.timestamp_us) {
+            _timestamp_us = query_globals.timestamp_us;
+        } else {
+            _timestamp_us = query_globals.timestamp_ms * 1000;
+        }
     } else if (!query_globals.now_string.empty()) {
         _timezone = TimezoneUtils::default_time_zone;
         DateTimeValue dt;
         dt.from_date_str(query_globals.now_string.c_str(), query_globals.now_string.size());
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
-        _timestamp_ms = timestamp * 1000;
+        _timestamp_us = timestamp * 1000000;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;
-        _timestamp_ms = 0;
+        _timestamp_us = 0;
     }
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 }
 
 RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     _timezone = TimezoneUtils::default_time_zone;
-    _timestamp_ms = 0;
+    _timestamp_us = 0;
 }
 
 RuntimeState::~RuntimeState() {
+    // dict exprs
+    _dict_optimize_parser.close();
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -135,7 +146,6 @@ RuntimeState::~RuntimeState() {
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
     }
-    _process_status.permit_unchecked_error();
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -144,18 +154,22 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     _query_options = query_options;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
-        _timestamp_ms = query_globals.timestamp_ms;
+        if (query_globals.__isset.timestamp_us) {
+            _timestamp_us = query_globals.timestamp_us;
+        } else {
+            _timestamp_us = query_globals.timestamp_ms * 1000;
+        }
     } else if (!query_globals.now_string.empty()) {
         _timezone = TimezoneUtils::default_time_zone;
         DateTimeValue dt;
         dt.from_date_str(query_globals.now_string.c_str(), query_globals.now_string.size());
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
-        _timestamp_ms = timestamp * 1000;
+        _timestamp_us = timestamp * 1000000;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;
-        _timestamp_ms = 0;
+        _timestamp_us = 0;
     }
     if (query_globals.__isset.last_query_id) {
         _last_query_id = query_globals.last_query_id;
@@ -170,10 +184,7 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
         _query_options.max_errors = 100;
     }
 
-    // if BE was in grayscale upgrade. old BE chunk size was 4096.
-    // if FE set a zero batch_size, batch_size will be set to DEFAULT_CHUNK_SIZE
-    // (DEFAULT_CHUNK_SIZE was 2048 before version 2.0/2.1.0). which will cause overflow
-    if (_query_options.batch_size <= DEFAULT_CHUNK_SIZE) {
+    if (_query_options.batch_size <= 0) {
         _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     }
 
@@ -229,11 +240,11 @@ std::string RuntimeState::error_log() {
     return boost::algorithm::join(_error_log, "\n");
 }
 
-bool RuntimeState::log_error(const std::string& error) {
+bool RuntimeState::log_error(std::string_view error) {
     std::lock_guard<std::mutex> l(_error_log_lock);
 
     if (_error_log.size() < _query_options.max_errors) {
-        _error_log.push_back(error);
+        _error_log.emplace_back(error);
         return true;
     }
 
@@ -245,7 +256,7 @@ void RuntimeState::log_error(const Status& status) {
         return;
     }
 
-    log_error(status.get_error_msg());
+    log_error(status);
 }
 
 void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
@@ -278,14 +289,13 @@ bool RuntimeState::use_column_pool() const {
     return true;
 }
 
-Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
-                                            const std::string* msg) {
+Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size, std::string_view msg) {
     DCHECK_GE(failed_allocation_size, 0);
     {
         std::lock_guard<std::mutex> l(_process_status_lock);
         if (_process_status.ok()) {
-            if (msg != nullptr) {
-                _process_status = Status::MemoryLimitExceeded(*msg);
+            if (!msg.empty()) {
+                _process_status = Status::MemoryLimitExceeded(msg);
             } else {
                 _process_status = Status::MemoryLimitExceeded("Memory limit exceeded");
             }
@@ -374,7 +384,7 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     if (_error_log_file == nullptr) {
         Status status = create_error_log_file();
         if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.get_error_msg();
+            LOG(WARNING) << "Create error file log failed. because: " << status.message();
             if (_error_log_file != nullptr) {
                 _error_log_file->close();
                 delete _error_log_file;
@@ -416,7 +426,7 @@ void RuntimeState::append_rejected_record_to_file(const std::string& record, con
     if (_rejected_record_file == nullptr) {
         Status status = create_rejected_record_file();
         if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.get_error_msg();
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
             if (_rejected_record_file != nullptr) {
                 _rejected_record_file->close();
                 _rejected_record_file.reset();
@@ -449,8 +459,18 @@ GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
     return &_query_global_dicts;
 }
 
+DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
+    return &_dict_optimize_parser;
+}
+
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_query_global_dicts, nullptr);
+    RETURN_IF_ERROR(_build_global_dict(global_dict_list, &_query_global_dicts, nullptr));
+    _dict_optimize_parser.set_mutable_dict_maps(this, &_query_global_dicts);
+    return Status::OK();
+}
+
+Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
+    return _dict_optimize_parser.init_dict_exprs(exprs);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
@@ -481,10 +501,6 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
     return Status::OK();
 }
 
-std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
-    return _query_ctx->intermediate_query_statistic();
-}
-
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     return _query_ctx->maintained_query_recv();
 }
@@ -498,6 +514,11 @@ Status RuntimeState::reset_epoch() {
     _tablet_commit_infos.clear();
     _tablet_fail_infos.clear();
     return Status::OK();
+}
+
+bool RuntimeState::is_jit_enabled() const {
+    return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
+           _query_options.jit_level != 0;
 }
 
 } // end namespace starrocks

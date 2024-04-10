@@ -40,7 +40,7 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     auto defer_set_finishing = DeferOp([this]() {
-        _aggregator->spill_channel()->set_finishing();
+        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
         _is_finished = true;
     });
 
@@ -61,25 +61,23 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         }
     }
 
-    auto io_executor = _aggregator->spill_channel()->io_executor();
-
-    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+    auto flush_function = [this](RuntimeState* state) {
         auto& spiller = _aggregator->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+    auto set_call_back_function = [this](RuntimeState* state) {
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
     };
 
-    SpillProcessTasksBuilder task_builder(state, io_executor);
+    SpillProcessTasksBuilder task_builder(state);
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
@@ -154,7 +152,6 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     bool ht_need_expansion = _aggregator->hash_map_variant().need_expand(chunk_size);
     const size_t max_mem_usage = state->spill_mem_table_size();
 
-    auto io_executor = _aggregator->spill_channel()->io_executor();
     auto spiller = _aggregator->spiller();
 
     // goal: control buffered data memory usage, aggregate data as much as possible before spill
@@ -297,6 +294,7 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->name = "agg-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
 
     return Status::OK();
 }
@@ -305,8 +303,8 @@ OperatorPtr SpillableAggregateBlockingSinkOperatorFactory::create(int32_t degree
                                                                   int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
 
-    auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
-                                                                       driver_sequence);
+    auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(
+            aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());
     // create spiller
     auto spiller = _spill_factory->create(*_spill_options);
     // create spill process channel

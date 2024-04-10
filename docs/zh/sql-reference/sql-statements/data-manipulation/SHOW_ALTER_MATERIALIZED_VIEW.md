@@ -1,4 +1,5 @@
 ---
+keywords: ['xiugai'] 
 displayed_sidebar: "Chinese"
 ---
 
@@ -7,6 +8,12 @@ displayed_sidebar: "Chinese"
 ## 功能
 
 查看同步物化视图构建状态。
+
+:::tip
+
+该操作不需要权限。
+
+:::
 
 ## 语法
 

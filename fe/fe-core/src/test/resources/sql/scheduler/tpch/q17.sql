@@ -1,27 +1,9 @@
-[sql]
-select
-        sum(l_extendedprice) / 7.0 as avg_yearly
-from
-    lineitem,
-    part
-where
-        p_partkey = l_partkey
-  and p_brand = 'Brand#35'
-  and p_container = 'JUMBO CASE'
-  and l_quantity < (
-    select
-            0.2 * avg(l_quantity)
-    from
-        lineitem
-    where
-            l_partkey = p_partkey
-) ;
 [scheduler]
 PLAN FRAGMENT 0(F05)
   DOP: 16
   INSTANCES
     INSTANCE(0-F05#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F04)
   DOP: 16
@@ -31,10 +13,10 @@ PLAN FRAGMENT 1(F04)
       BE: 10003
     INSTANCE(2-F04#1)
       DESTINATIONS: 0-F05#0
-      BE: 10002
+      BE: 10001
     INSTANCE(3-F04#2)
       DESTINATIONS: 0-F05#0
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 2(F02)
   DOP: 16
@@ -208,4 +190,3 @@ PLAN FRAGMENT 3
      cardinality=1
      avgRowSize=24.0
 [end]
-

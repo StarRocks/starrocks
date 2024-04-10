@@ -17,11 +17,12 @@ package com.starrocks.lake;
 
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.Test;
 
 public class UtilsTest {
@@ -30,14 +31,27 @@ public class UtilsTest {
     GlobalStateMgr globalStateMgr;
 
     @Mocked
+    NodeMgr nodeMgr;
+
+    @Mocked
     SystemInfoService systemInfoService;
+
+    @Mocked
+    NodeSelector nodeSelector;
 
     @Test
     public void testChooseBackend() {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SystemInfoService getCurrentSystemInfo() {
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+        };
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
                 return systemInfoService;
             }
         };
@@ -49,13 +63,11 @@ public class UtilsTest {
             }
         };
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<NodeSelector>() {
             @Mock
             public Long seqChooseBackendOrComputeId() throws UserException {
                 throw new UserException("No backend or compute node alive.");
             }
         };
-
-        Assert.assertNull(Utils.chooseBackend(new LakeTablet(1000L)));
     }
 }

@@ -208,6 +208,7 @@ struct AggregatorParams {
     bool needs_finalize;
     bool has_outer_join_child;
     int64_t limit;
+    bool enable_pipeline_share_limit;
     TStreamingPreaggregationMode::type streaming_preaggregation_mode;
     TupleId intermediate_tuple_id;
     TupleId output_tuple_id;
@@ -380,9 +381,7 @@ public:
     const SpillProcessChannelPtr spill_channel() const { return _spill_channel; }
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
 
-    auto& io_executor() { return *spill_channel()->io_executor(); }
-
-    [[nodiscard]] Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
+    Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
 
     bool has_pending_data() const { return _spiller != nullptr && _spiller->has_pending_data(); }
     bool has_pending_restore() const { return _spiller != nullptr && !_spiller->restore_finished(); }
@@ -497,9 +496,12 @@ protected:
 
     std::shared_ptr<spill::Spiller> _spiller;
     SpillProcessChannelPtr _spill_channel;
+    bool _is_opened = false;
+    bool _is_prepared = false;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     [[nodiscard]] Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
@@ -509,8 +511,12 @@ public:
     void build_hash_set_with_selection(size_t chunk_size);
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
+    bool is_pre_cache() { return _aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE; }
+
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+
+    void _build_hash_map_with_shared_limit(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown);
 
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {
@@ -615,7 +621,9 @@ class AggregatorFactoryBase {
 public:
     using Ptr = std::shared_ptr<T>;
     AggregatorFactoryBase(const TPlanNode& tnode)
-            : _tnode(tnode), _aggregator_param(convert_to_aggregator_params(_tnode)) {}
+            : _tnode(tnode), _aggregator_param(convert_to_aggregator_params(_tnode)) {
+        _shared_limit_countdown.store(_aggregator_param->limit);
+    }
 
     Ptr get_or_create(size_t id) {
         auto it = _aggregators.find(id);
@@ -635,11 +643,14 @@ public:
     const TPlanNode& t_node() { return _tnode; }
     const AggrMode aggr_mode() { return _aggr_mode; }
 
+    std::atomic<int64_t>& get_shared_limit_countdown() { return _shared_limit_countdown; }
+
 private:
     const TPlanNode& _tnode;
     AggregatorParamsPtr _aggregator_param;
     std::unordered_map<size_t, Ptr> _aggregators;
     AggrMode _aggr_mode = AggrMode::AM_DEFAULT;
+    std::atomic<int64_t> _shared_limit_countdown;
 };
 
 using AggregatorFactory = AggregatorFactoryBase<Aggregator>;

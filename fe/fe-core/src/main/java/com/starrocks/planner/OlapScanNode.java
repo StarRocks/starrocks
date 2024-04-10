@@ -78,6 +78,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -157,6 +158,8 @@ public class OlapScanNode extends ScanNode {
     private boolean isFinalized = false;
     private boolean isSortedByKeyPerTablet = false;
     private boolean isOutputChunkByBucket = false;
+    // only used in bucket agg
+    private boolean withoutColocateRequirement = false;
     private boolean outputAscHint = true;
     private boolean sortKeyAscHint = true;
     private Optional<Boolean> partitionKeyAscHint = Optional.empty();
@@ -177,6 +180,11 @@ public class OlapScanNode extends ScanNode {
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         olapTable = (OlapTable) desc.getTable();
+    }
+
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long warehouseId) {
+        this(id, desc, planNodeName);
+        this.warehouseId = warehouseId;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -201,6 +209,14 @@ public class OlapScanNode extends ScanNode {
 
     public void setIsOutputChunkByBucket(boolean isOutputChunkByBucket) {
         this.isOutputChunkByBucket = isOutputChunkByBucket;
+    }
+
+    public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
+        this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public boolean getWithoutColocateRequirement() {
+        return this.withoutColocateRequirement;
     }
 
     public void disablePhysicalPropertyOptimize() {
@@ -395,8 +411,13 @@ public class OlapScanNode extends ScanNode {
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    expectedVersion, -1, schemaHash);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        expectedVersion, -1, schemaHash, warehouseId);
+            } else {
+                selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        expectedVersion, -1, schemaHash);
+            }
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
                 String message = String.format("Failed to get scan range, no queryable replica found in " +
@@ -416,7 +437,11 @@ public class OlapScanNode extends ScanNode {
             internalRange.setPartition_id(partition.getId());
             internalRange.setRow_count(selectedTablet.getRowCount(0));
             if (isOutputChunkByBucket) {
-                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                if (withoutColocateRequirement) {
+                    internalRange.setBucket_sequence((int) tabletId);
+                } else {
+                    internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                }
             }
 
             List<Replica> replicas = allQueryableReplicas;
@@ -425,7 +450,8 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -480,14 +506,29 @@ public class OlapScanNode extends ScanNode {
             internalRange.setPartition_id(physicalPartition.getId());
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
-                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                if (withoutColocateRequirement) {
+                    internalRange.setBucket_sequence((int) tabletId);
+                } else {
+                    internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                }
             }
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    visibleVersion, localBeId, schemaHash);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                if (computeNodeIds.isEmpty()) {
+                    throw new UserException(" no backend or compute node in warehouse " + warehouseId);
+                }
+
+                tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        visibleVersion, localBeId, schemaHash, warehouseId);
+            } else {
+                tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        visibleVersion, localBeId, schemaHash);
+            }
+
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = "";
                 if (tablet instanceof LocalTablet) {
@@ -524,18 +565,19 @@ public class OlapScanNode extends ScanNode {
                     continue;
                 }
             }
-    
+
             // TODO: Implement a more robust strategy for tablet affinity.
             if (!enableQueryTabletAffinity) {
                 Collections.shuffle(replicas);
             }
-    
+
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -615,7 +657,8 @@ public class OlapScanNode extends ScanNode {
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
-            localBeId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+            localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**
          * The tablet info could be computed only once.
@@ -939,7 +982,8 @@ public class OlapScanNode extends ScanNode {
 
     // export some tablets
     public static OlapScanNode createOlapScanNodeByLocation(
-            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList) {
+            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList,
+            long warehouseId) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
         olapScanNode.numInstances = 1;
         olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
@@ -948,6 +992,7 @@ public class OlapScanNode extends ScanNode {
         olapScanNode.totalTabletsNum = 1;
         olapScanNode.isPreAggregation = false;
         olapScanNode.isFinalized = true;
+        olapScanNode.warehouseId = warehouseId;
         olapScanNode.result.addAll(locationsList);
 
         return olapScanNode;
@@ -1273,13 +1318,44 @@ public class OlapScanNode extends ScanNode {
         return true;
     }
 
+    @Override
+    protected boolean canEliminateNull(SlotDescriptor slot) {
+        return super.canEliminateNull(slot) ||
+                prunedPartitionPredicates.stream().anyMatch(expr -> canEliminateNull(expr, slot));
+    }
+
     public void computePointScanRangeLocations() {
-        List<String> keyColumns = olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        // must order in create table
+        List<String> keyColumns = olapTable.getKeyColumnsInOrder().stream().map(Column::getName)
+                .collect(Collectors.toList());
         Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
 
         if (points.isPresent()) {
             rowStoreKeyLiterals = points.get();
-            return;
         }
+    }
+
+    public List<List<LiteralExpr>> getRowStoreKeyLiterals() {
+        return rowStoreKeyLiterals;
+    }
+
+    // clear scan node， reduce body size
+    public void clearScanNodeForThriftBuild() {
+        sortColumn = null;
+        this.selectedIndexId = -1;
+        selectedPartitionNames.clear();
+        selectedPartitionVersions.clear();
+        result.clear();
+        scanBackendIds.clear();
+        appliedDictStringColumns.clear();
+        unUsedOutputStringColumns.clear();
+        bucketSeq2locations.clear();
+        prunedPartitionPredicates.clear();
+        selectedPartitionIds.clear();
+        hintsReplicaIds.clear();
+        tabletId2BucketSeq.clear();
+        bucketExprs.clear();
+        bucketColumns.clear();
+        rowStoreKeyLiterals = Lists.newArrayList();
     }
 }

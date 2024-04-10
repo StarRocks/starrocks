@@ -83,7 +83,6 @@ public interface TxnStateChangeCallback {
 
     void replayOnVisible(TransactionState txnState);
 
-
     void beforePrepared(TransactionState txnState) throws TransactionException;
 
     void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException;

@@ -19,6 +19,7 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/driver_limiter.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -70,19 +71,16 @@ public:
     void set_data_sink(std::unique_ptr<DataSink> data_sink);
 
     size_t total_dop() const;
-    Pipelines& pipelines() { return _pipelines; }
-    void set_pipelines(Pipelines&& pipelines) { _pipelines = std::move(pipelines); }
-    size_t num_drivers() const;
 
-    bool all_pipelines_finished() const { return _num_finished_pipelines == _pipelines.size(); }
-    void count_down_pipeline(size_t val = 1);
+    bool all_execution_groups_finished() const { return _num_finished_execution_groups == _execution_groups.size(); }
+    void count_down_execution_group(size_t val = 1);
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
 
     void set_final_status(const Status& status);
 
-    [[nodiscard]] Status final_status() const {
+    Status final_status() const {
         auto* status = _final_status.load();
         return status == nullptr ? Status::OK() : *status;
     }
@@ -95,15 +93,21 @@ public:
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
-    [[nodiscard]] Status prepare_all_pipelines() {
-        for (auto& pipe : _pipelines) {
-            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get()));
-        }
-        return Status::OK();
+    void set_exec_groups(ExecutionGroups&& exec_groups);
+
+    Status prepare_all_pipelines();
+
+    template <class Func>
+    void iterate_drivers(Func&& call) {
+        iterate_pipeline([&](const Pipeline* pipeline) {
+            for (auto& driver : pipeline->drivers()) {
+                call(driver);
+            }
+        });
     }
-    [[nodiscard]] Status iterate_drivers(const std::function<Status(const DriverPtr&)>& call);
+
     void clear_all_drivers();
-    void close_all_pipelines();
+    void close_all_execution_groups();
 
     RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
 
@@ -138,15 +142,31 @@ public:
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
     void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
 
+#ifdef BE_TEST
     // for ut
     void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
     bool is_stream_test() const { return _is_stream_test; }
+#endif
 
     size_t expired_log_count() { return _expired_log_count; }
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
+    void init_jit_profile();
+
+    void update_jit_profile(int64_t time_ns);
+
+    void iterate_pipeline(const std::function<void(Pipeline*)>& call);
+    Status iterate_pipeline(const std::function<Status(Pipeline*)>& call);
+
+    Status prepare_active_drivers();
+    Status submit_active_drivers(DriverExecutor* executor);
+
+    bool enable_group_execution() const { return _enable_group_execution; }
+    void set_enable_group_execution(bool enable_group_execution) { _enable_group_execution = enable_group_execution; }
+
 private:
+    bool _enable_group_execution = false;
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
@@ -166,8 +186,8 @@ private:
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
-    Pipelines _pipelines;
-    std::atomic<size_t> _num_finished_pipelines = 0;
+    ExecutionGroups _execution_groups;
+    std::atomic<size_t> _num_finished_execution_groups = 0;
 
     RuntimeFilterHub _runtime_filter_hub;
 
@@ -187,7 +207,9 @@ private:
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
     bool _is_stream_pipeline = false;
+#ifdef BE_TEST
     bool _is_stream_test = false;
+#endif
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
@@ -195,6 +217,9 @@ private:
     size_t _expired_log_count = 0;
 
     std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
+
+    RuntimeProfile::Counter* _jit_counter = nullptr;
+    RuntimeProfile::Counter* _jit_timer = nullptr;
 };
 
 class FragmentContextManager {

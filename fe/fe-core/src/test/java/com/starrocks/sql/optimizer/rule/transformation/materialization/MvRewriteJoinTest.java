@@ -117,8 +117,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
 
     @Test
     public void testMVRewriteJoin1() throws Exception {
-        createAndRefreshMv("test", "test_partition_tbl_mv2",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -168,8 +167,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
 
     @Test
     public void testMVRewriteJoin2() throws Exception {
-        createAndRefreshMv("test", "test_partition_tbl_mv2",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -224,15 +222,13 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
 
     @Test
     public void testMvColocateJoinRewrite() throws Exception {
-        createAndRefreshMv("test", "test_partition_tbl1_colocate_mv1",
-                "CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv1\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv1\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC PROPERTIES ('colocate_with' = 'cg_1')\n" +
                         "AS SELECT v2 + 1, k1, v1, v2 FROM test_partition_tbl1;");
 
-        createAndRefreshMv("test", "test_partition_tbl1_colocate_mv2",
-                "CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC PROPERTIES ('colocate_with' = 'cg_1')\n" +

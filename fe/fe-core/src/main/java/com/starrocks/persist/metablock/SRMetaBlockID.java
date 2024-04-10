@@ -90,6 +90,10 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID STORAGE_VOLUME_MGR = new SRMetaBlockID(28);
 
+    public static final SRMetaBlockID DICTIONARY_MGR = new SRMetaBlockID(29);
+
+    public static final SRMetaBlockID REPLICATION_MGR = new SRMetaBlockID(30);
+
     @Override
     public String toString() {
         return String.valueOf(id);
@@ -100,7 +104,8 @@ public class SRMetaBlockID {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!(o instanceof SRMetaBlockID)) {
             return false;
         }
         SRMetaBlockID that = (SRMetaBlockID) o;

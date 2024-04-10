@@ -241,7 +241,7 @@ public class FragmentNormalizer {
         return null;
     }
 
-    public static class SimpleRangePredicateVisitor extends AstVisitor<String, Void> {
+    public static class SimpleRangePredicateVisitor implements AstVisitor<String, Void> {
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
             String lhs = visit(node.getChild(0), context);
@@ -421,11 +421,18 @@ public class FragmentNormalizer {
     boolean hasNonDeterministicFunctions(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr callExpr = (FunctionCallExpr) expr;
-            if (FunctionSet.nonDeterministicFunctions.contains(callExpr.getFn().functionName())) {
+            String funcName = callExpr.getFn().functionName();
+            if (FunctionSet.nonDeterministicFunctions.contains(funcName)) {
+                return true;
+            }
+            if (FunctionSet.NOW.equals(funcName)) {
+                return true;
+            }
+            if (FunctionSet.nonDeterministicTimeFunctions.contains(funcName) && callExpr.getChildren().isEmpty()) {
                 return true;
             }
         }
-        return expr.getChildren().stream().anyMatch(e -> hasNonDeterministicFunctions(e));
+        return expr.getChildren().stream().anyMatch(this::hasNonDeterministicFunctions);
     }
 
     List<Range<PartitionKey>> convertPredicateToRange(Column partitionColumn, Expr expr) {

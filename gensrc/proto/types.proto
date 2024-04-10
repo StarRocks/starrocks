@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -56,7 +56,7 @@ message PStructField {
 
 message PTypeNode {
     // TTypeNodeType(SCALAR, ARRAY, MAP, STRUCT)
-    required int32 type = 1; 
+    required int32 type = 1;
     // only set for scalar types
     optional PScalarType scalar_type = 2;
     // only used for structs; has struct_fields.size() corresponding child types
@@ -103,6 +103,30 @@ enum WriteQuorumTypePB {
     ALL = 2;
 }
 
+enum TxnTypePB {
+     TXN_NORMAL = 0;
+     TXN_REPLICATION = 1;
+ }
+
+ enum ReplicationTxnStatePB {
+     TXN_PREPARED = 0;
+     TXN_SNAPSHOTED = 1;
+     TXN_REPLICATED = 2;
+     TXN_PUBLISHED = 3;
+ }
+
+ message ReplicationTxnMetaPB {
+     optional int64 txn_id = 1;
+     optional ReplicationTxnStatePB txn_state = 2;
+     optional int64 tablet_id = 3;
+     optional int64 visible_version = 4;
+     optional string src_backend_host = 5;
+     optional int32 src_backend_port = 6;
+     optional string src_snapshot_path = 7;
+     optional int64 snapshot_version = 8;
+     optional bool incremental_snapshot = 9;
+ } 
+
 // Used to store additional information about a txn when it is finished/visible
 // It will be serialized with TransactionState
 message TxnFinishStatePB {
@@ -145,4 +169,20 @@ message BinaryPredicatePB {
 message IsNullPredicatePB {
     optional string column_name = 1;
     optional bool is_not_null = 2;
+}
+
+message IndexValueWithVerPB {
+    repeated int64 versions = 1;
+    repeated uint64 values = 2;
+}
+
+message PersistentIndexSstablePB {
+    optional int64 version = 1;
+    optional string filename = 2;
+    optional int64 filesize = 3;
+}
+
+message PersistentIndexSstableMetaPB {
+    // sstables are ordered with the smaller version on the left.
+    repeated PersistentIndexSstablePB sstables = 1;
 }

@@ -88,13 +88,15 @@ public:
 
     ParsedPage* get_current_page() { return _page.get(); }
 
+    ColumnReader* get_column_reader() override { return _reader; }
+
     bool is_nullable();
 
     int64_t element_ordinal() const override { return _element_ordinal; }
 
     // only work when all_page_dict_encoded was true.
     // used to acquire load local dict
-    int dict_size();
+    int dict_size() override;
 
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
@@ -122,11 +124,10 @@ private:
     template <typename ParseFunc>
     Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
 
+    template <LogicalType Type>
     Status _load_dict_page();
 
     bool _contains_deleted_row(uint32_t page_index) const;
-
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
     ColumnReader* _reader;
 
@@ -150,7 +151,7 @@ private:
     ordinal_t _current_ordinal = 0;
 
     // page indexes those are DEL_PARTIAL_SATISFIED
-    std::unordered_set<uint32_t> _delete_partial_satisfied_pages;
+    std::optional<std::unordered_set<uint32_t>> _delete_partial_satisfied_pages;
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;

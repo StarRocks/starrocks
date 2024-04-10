@@ -119,7 +119,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
         if (!st.ok()) {
             LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
                          << ", node=" << node->node_info()->host << ":" << node->node_info()->brpc_port
-                         << ", errmsg=" << st.get_error_msg();
+                         << ", errmsg=" << st.message();
             channel->mark_as_failed(node);
             err_st = st;
             // we only send to primary replica, if it fail whole load fail
@@ -167,14 +167,13 @@ Status TabletSinkSender::open_wait() {
             if (!st.ok()) {
                 LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                              << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
-                             << ", errmsg=" << st.get_error_msg();
+                             << ", errmsg=" << st.message();
                 err_st = st.clone_and_append(std::string(" be:") + ch->node_info()->host);
                 index_channel->mark_as_failed(ch);
             }
         });
 
-        // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-        if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+        if (index_channel->has_intolerable_failure()) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -188,49 +187,53 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
     bool intolerable_failure = false;
     for (auto& index_channel : _channels) {
         if (index_channel->has_incremental_node_channel()) {
-            // close initial node channel and wait it done
+            // try to finish initial node channel and wait it done
+            // This is added for automatic partition. We need to ensure that
+            // all data has been sent before the incremental channel is closed.
             index_channel->for_each_initial_node_channel([&index_channel, &err_st,
                                                           &intolerable_failure](NodeChannel* ch) {
                 if (!index_channel->is_failed_channel(ch)) {
-                    auto st = ch->try_close(true);
+                    auto st = ch->try_finish();
                     if (!st.ok()) {
                         LOG(WARNING) << "close initial channel failed. channel_name=" << ch->name()
-                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
                 }
             });
 
-            // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-            if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+            if (intolerable_failure) {
                 break;
             }
 
-            bool is_initial_node_channel_close_done = true;
-            index_channel->for_each_initial_node_channel([&is_initial_node_channel_close_done](NodeChannel* ch) {
-                is_initial_node_channel_close_done &= ch->is_close_done();
+            bool is_initial_node_channel_finished = true;
+            index_channel->for_each_initial_node_channel([&is_initial_node_channel_finished](NodeChannel* ch) {
+                is_initial_node_channel_finished &= ch->is_finished();
             });
 
-            // close initial node channel not finish, can not close incremental node channel
-            if (!is_initial_node_channel_close_done) {
+            // initial node channel not finish, can not close incremental node channel
+            if (!is_initial_node_channel_finished) {
                 break;
             }
 
-            // close incremental node channel
-            index_channel->for_each_incremental_node_channel([&index_channel, &err_st,
-                                                              &intolerable_failure](NodeChannel* ch) {
+            // close both initial & incremental node channel
+            index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
                 if (!index_channel->is_failed_channel(ch)) {
                     auto st = ch->try_close();
                     if (!st.ok()) {
                         LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
-                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -243,10 +246,12 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                     auto st = ch->try_close();
                     if (!st.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -256,7 +261,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
     }
 
     // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+    if (intolerable_failure) {
         return err_st;
     } else {
         return Status::OK();
@@ -290,14 +295,14 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                     if (!channel_status.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info()
-                                     << ", error_msg=" << channel_status.get_error_msg();
+                                     << ", error_msg=" << channel_status.message();
                         err_st = channel_status;
                         index_channel->mark_as_failed(ch);
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
                 // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-                if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                if (index_channel->has_intolerable_failure()) {
                     status = err_st;
                     index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }

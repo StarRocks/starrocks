@@ -18,11 +18,14 @@
 package com.starrocks.common;
 
 import com.google.common.base.Preconditions;
+import com.google.re2j.Pattern;
 import com.starrocks.transaction.TransactionStatus;
+import org.apache.commons.lang3.StringUtils;
 
 public class LabelAlreadyUsedException extends DdlException {
 
     private static final long serialVersionUID = -6798925248765094813L;
+    private static final Pattern ERROR_PATTERN = Pattern.compile(".*Label \\[.*\\] has already been used.*");
 
     // status of existing load job
     // RUNNING or FINISHED
@@ -52,6 +55,10 @@ public class LabelAlreadyUsedException extends DdlException {
 
     public LabelAlreadyUsedException(String label, String subLabel) {
         super("Sub label [" + subLabel + "] has already been used.");
+    }
+
+    public static boolean isLabelAlreadyUsed(String errorMessage) {
+        return StringUtils.isNotEmpty(errorMessage) && ERROR_PATTERN.matches(errorMessage);
     }
 
     public String getJobStatus() {

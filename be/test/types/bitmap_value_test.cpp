@@ -66,6 +66,7 @@ void BitmapValueTest::check_bitmap(BitmapDataType type, const BitmapValue& bitma
     for (auto i = start; i < end; i++) {
         ASSERT_TRUE(bitmap.contains(i));
     }
+    ASSERT_EQ(bitmap.mem_usage(), bitmap.serialize_size());
 }
 
 void BitmapValueTest::check_bitmap(BitmapDataType type, const BitmapValue& bitmap, uint64_t start_1, uint64_t end_1,
@@ -78,6 +79,7 @@ void BitmapValueTest::check_bitmap(BitmapDataType type, const BitmapValue& bitma
     for (auto i = start_2; i < end_2; i++) {
         ASSERT_TRUE(bitmap.contains(i));
     }
+    ASSERT_EQ(bitmap.mem_usage(), bitmap.serialize_size());
 }
 
 TEST_F(BitmapValueTest, copy_construct) {
@@ -96,6 +98,7 @@ TEST_F(BitmapValueTest, assign_operator) {
     bitmap_1.add(64);
     check_bitmap(BitmapDataType::BITMAP, bitmap_1, 0, 65);
     check_bitmap(BitmapDataType::BITMAP, _large_bitmap, 0, 64);
+    ASSERT_EQ(bitmap_1.mem_usage(), bitmap_1.serialize_size());
 
     BitmapValue bitmap_2 = _medium_bitmap;
     bitmap_2.add(14);
@@ -572,7 +575,7 @@ TEST_F(BitmapValueTest, bitmap_min) {
 
 TEST_F(BitmapValueTest, bitmap_serialize_deserialize) {
     // empty bitmap
-    size_t size = _empty_bitmap.getSizeInBytes();
+    size_t size = _empty_bitmap.get_size_in_bytes();
     char buf_1[size];
     _empty_bitmap.write(buf_1);
     BitmapValue bitmap_1;
@@ -581,7 +584,7 @@ TEST_F(BitmapValueTest, bitmap_serialize_deserialize) {
     check_bitmap(BitmapDataType::EMPTY, bitmap_1, 0, 0);
 
     // single bitmap
-    size = _single_bitmap.getSizeInBytes();
+    size = _single_bitmap.get_size_in_bytes();
     char buf_2[size];
     _single_bitmap.write(buf_2);
     BitmapValue bitmap_2;
@@ -590,7 +593,7 @@ TEST_F(BitmapValueTest, bitmap_serialize_deserialize) {
     check_bitmap(BitmapDataType::SINGLE, bitmap_2, 0, 1);
 
     // medium bitmap
-    size = _medium_bitmap.getSizeInBytes();
+    size = _medium_bitmap.get_size_in_bytes();
     char buf_3[size];
     _medium_bitmap.write(buf_3);
     BitmapValue bitmap_3;
@@ -599,7 +602,7 @@ TEST_F(BitmapValueTest, bitmap_serialize_deserialize) {
     check_bitmap(BitmapDataType::SET, bitmap_3, 0, 14);
 
     // large bitmap
-    size = _large_bitmap.getSizeInBytes();
+    size = _large_bitmap.get_size_in_bytes();
     char buf_4[size];
     _large_bitmap.write(buf_4);
     BitmapValue bitmap_4;
@@ -610,7 +613,7 @@ TEST_F(BitmapValueTest, bitmap_serialize_deserialize) {
 
 TEST_F(BitmapValueTest, test_valid_and_deserialize) {
     // empty bitmap
-    size_t size = _empty_bitmap.getSizeInBytes();
+    size_t size = _empty_bitmap.get_size_in_bytes();
     char buf_1[size];
     _empty_bitmap.write(buf_1);
     BitmapValue bitmap_1;
@@ -619,7 +622,7 @@ TEST_F(BitmapValueTest, test_valid_and_deserialize) {
     check_bitmap(BitmapDataType::EMPTY, bitmap_1, 0, 0);
 
     // single bitmap
-    size = _single_bitmap.getSizeInBytes();
+    size = _single_bitmap.get_size_in_bytes();
     char buf_2[size];
     _single_bitmap.write(buf_2);
     BitmapValue bitmap_2;
@@ -628,7 +631,7 @@ TEST_F(BitmapValueTest, test_valid_and_deserialize) {
     check_bitmap(BitmapDataType::SINGLE, bitmap_2, 0, 1);
 
     // medium bitmap
-    size = _medium_bitmap.getSizeInBytes();
+    size = _medium_bitmap.get_size_in_bytes();
     char buf_3[size];
     _medium_bitmap.write(buf_3);
     BitmapValue bitmap_3;
@@ -637,7 +640,7 @@ TEST_F(BitmapValueTest, test_valid_and_deserialize) {
     check_bitmap(BitmapDataType::SET, bitmap_3, 0, 14);
 
     // large bitmap
-    size = _large_bitmap.getSizeInBytes();
+    size = _large_bitmap.get_size_in_bytes();
     char buf_4[size];
     _large_bitmap.write(buf_4);
     BitmapValue bitmap_4(_large_bitmap);
@@ -671,6 +674,19 @@ TEST_F(BitmapValueTest, bitmap_to_string) {
             "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,"
             "37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63",
             _large_bitmap.to_string().c_str());
+
+    auto bitmap = std::make_unique<BitmapValue>(18446744073709551611ul);
+    ASSERT_EQ("18446744073709551611", bitmap->to_string());
+    bitmap->add(18446744073709551612ul);
+    ASSERT_EQ("18446744073709551611,18446744073709551612", bitmap->to_string());
+    for (size_t i = 0; i < 64; i++) {
+        bitmap->add(i);
+    }
+    ASSERT_EQ(
+            "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,"
+            "37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,18446744073709551611,"
+            "18446744073709551612",
+            bitmap->to_string());
 }
 
 TEST_F(BitmapValueTest, bitmap_to_array) {
@@ -695,6 +711,21 @@ TEST_F(BitmapValueTest, bitmap_to_array) {
     ASSERT_EQ(array_4.size(), 64);
     for (size_t i = 0; i < 64; i++) {
         ASSERT_EQ(array_4[i], i);
+    }
+
+    // append multi times
+    std::vector<int64_t> array_5;
+    _large_bitmap.to_array(&array_5);
+    ASSERT_EQ(array_5.size(), 64);
+
+    auto new_bitmap = gen_bitmap(100, 200);
+    new_bitmap.to_array(&array_5);
+    ASSERT_EQ(array_5.size(), 164);
+    for (size_t i = 0; i < 64; i++) {
+        ASSERT_EQ(array_5[i], i);
+    }
+    for (size_t i = 64; i < 164; i++) {
+        ASSERT_EQ(array_5[i], i + 36);
     }
 }
 
@@ -912,9 +943,78 @@ TEST_F(BitmapValueTest, subset_in_range) {
     ASSERT_EQ(ret, 0);
 }
 
+TEST_F(BitmapValueTest, next_batch) {
+    BitmapValueIter iter;
+    std::vector<uint64_t> values;
+
+    // empty
+    values.resize(5);
+    iter.reset(_empty_bitmap);
+    uint64_t ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 0);
+
+    // single
+    values.resize(5);
+    iter.reset(_single_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 1);
+    ASSERT_EQ(values[0], 0);
+
+    // set
+    values.resize(5);
+    iter.reset(_medium_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i + 5);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 10);
+    }
+
+    // bitmap
+    values.resize(30);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i + 30);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 60);
+    }
+
+    // read more then bitmap size
+    values.resize(100);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 100);
+    ASSERT_EQ(ret_size, 64);
+    for (size_t i = 0; i < 64; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+
+    // read 0
+    ret_size = iter.next_batch(values.data(), 0);
+    ASSERT_EQ(ret_size, 0);
+}
+
 std::string convert_bitmap_to_string(BitmapValue& bitmap) {
     std::string buf;
-    buf.resize(bitmap.getSizeInBytes());
+    buf.resize(bitmap.get_size_in_bytes());
     bitmap.write((char*)buf.c_str());
     return buf;
 }

@@ -262,3 +262,15 @@ PREDICATE add(1: v1, cast(4: unnest as bigint(20))) = 1
     TABLE FUNCTION (unnest)
         SCAN (columns[1: v1] predicate[null])
 [end]
+
+[sql]
+select v2, v5 from (select v2, v5 from t0 LEFT JOIN t1 on t0.v1 between t1.v4 and t1.v5 where v1 * v4 > 1 group by v2, v5 having v2 * v5 > 1)s where v2=1
+[result]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[2: v2, 5: v5]] having [null]
+    EXCHANGE SHUFFLE[2, 5]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[2: v2, 5: v5]] having [null]
+            LEFT OUTER JOIN (join-predicate [1: v1 >= 4: v4 AND 1: v1 <= 5: v5] post-join-predicate [multiply(2: v2, 5: v5) > 1 AND multiply(1: v1, 4: v4) > 1])
+                SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 1])
+                EXCHANGE BROADCAST
+                    SCAN (columns[4: v4, 5: v5] predicate[null])
+[end]

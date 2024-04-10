@@ -21,8 +21,14 @@ namespace java com.starrocks.thrift
 include "Metrics.thrift"
 
 enum TCounterAggregateType {
+    // Use sum for both be and fe phases
     SUM,
+    // Use avg for both be and fe phases
     AVG,
+    // Use sum at be phase and avg at fe phase 
+    SUM_AVG,
+    // Use avg at be phase and sum at fe phase
+    AVG_SUM,
 }
 
 enum TCounterMergeType {
@@ -74,6 +80,9 @@ struct TRuntimeProfileNode {
   
   // map from parent counter name to child counter name
   8: required map<string, set<string>> child_counters_map
+
+  // The version of this profile
+  9: optional i64 version
 }
 
 // A flattened tree of runtime profiles, obtained by an

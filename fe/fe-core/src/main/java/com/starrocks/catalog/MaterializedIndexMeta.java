@@ -51,24 +51,29 @@ import com.starrocks.thrift.TStorageType;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
+    private static final long UNINITIALIZED_SCHEMA_ID = -1;
 
     @SerializedName(value = "indexId")
     private long indexId;
     @SerializedName(value = "schema")
-    private List<Column> schema = Lists.newArrayList();
+    private List<Column> schema;
     @SerializedName(value = "sortKeyIdxes")
-    public List<Integer> sortKeyIdxes = Lists.newArrayList();
+    public List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
-    public List<Integer> sortKeyUniqueIds = Lists.newArrayList();
+    public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
-    private int schemaVersion;
+    private int schemaVersion = 0;
     @SerializedName(value = "schemaHash")
     private int schemaHash;
+    @SerializedName(value = "schemaId")
+    private long schemaId;
     @SerializedName(value = "shortKeyColumnCount")
     private short shortKeyColumnCount;
     @SerializedName(value = "storageType")
@@ -85,16 +90,23 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private boolean isColocateMVIndex = false;
 
     private Expr whereClause;
+    private Set<Long> updateSchemaBackendId;
+
+    // Default constructor will be invoked by the gson library
+    private MaterializedIndexMeta() {
+        schemaId = UNINITIALIZED_SCHEMA_ID;
+    }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatement defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
         this.indexId = indexId;
         Preconditions.checkState(schema != null);
-        Preconditions.checkState(schema.size() != 0);
+        Preconditions.checkState(!schema.isEmpty());
         this.schema = schema;
         this.schemaVersion = schemaVersion;
         this.schemaHash = schemaHash;
+        this.schemaId = indexId;
         this.shortKeyColumnCount = shortKeyColumnCount;
         Preconditions.checkState(storageType != null);
         this.storageType = storageType;
@@ -166,6 +178,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return schemaVersion;
     }
 
+    public void setSchemaId(long schemaId) {
+        this.schemaId = schemaId;
+    }
+
+    public long getSchemaId() {
+        return schemaId;
+    }
+
     public List<Column> getNonAggregatedColumns() {
         return schema.stream().filter(column -> !column.isAggregated())
                 .collect(Collectors.toList());
@@ -219,6 +239,23 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return whereClause;
     }
 
+    public boolean hasUpdateSchemaTask(Long backendId) {
+        return updateSchemaBackendId != null && updateSchemaBackendId.contains(backendId);
+    }
+
+    public void addUpdateSchemaBackend(Long backendId) {
+        if (updateSchemaBackendId == null) {
+            updateSchemaBackendId = new HashSet<>();
+        }
+        updateSchemaBackendId.add(backendId);
+    }
+
+    public void removeUpdateSchemaBackend(Long backendId) {
+        if (updateSchemaBackendId != null) {
+            updateSchemaBackendId.remove(backendId);
+        }
+    }
+
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
     @VisibleForTesting
     public void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
@@ -245,6 +282,26 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.schemaVersion = newSchemaVersion;
     }
 
+    public MaterializedIndexMeta shallowCopy() {
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta();
+        indexMeta.indexId = this.indexId;
+        indexMeta.schema = schema == null ? null : Lists.newArrayList(schema);
+        indexMeta.sortKeyIdxes = sortKeyIdxes == null ? null : Lists.newArrayList(sortKeyIdxes);
+        indexMeta.sortKeyUniqueIds = sortKeyUniqueIds == null ? null : Lists.newArrayList(sortKeyUniqueIds);
+        indexMeta.schemaVersion = this.schemaVersion;
+        indexMeta.schemaHash = this.schemaHash;
+        indexMeta.shortKeyColumnCount = this.shortKeyColumnCount;
+        indexMeta.storageType = this.storageType;
+        indexMeta.keysType = this.keysType;
+        indexMeta.defineStmt = this.defineStmt;
+        indexMeta.dbId = this.dbId;
+        indexMeta.viewDefineSql = this.viewDefineSql;
+        indexMeta.isColocateMVIndex = this.isColocateMVIndex;
+        indexMeta.whereClause = this.whereClause;
+        indexMeta.schemaId = this.schemaId;
+        return indexMeta;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof MaterializedIndexMeta)) {
@@ -255,6 +312,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             return false;
         }
         if (indexMeta.schema.size() != this.schema.size() || !indexMeta.schema.containsAll(this.schema)) {
+            return false;
+        }
+        if (indexMeta.schemaId != this.schemaId) {
             return false;
         }
         if (indexMeta.schemaVersion != this.schemaVersion) {
@@ -295,6 +355,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        if (schemaId == UNINITIALIZED_SCHEMA_ID) {
+            schemaId = indexId;
+        }
         // analyze define stmt
         if (defineStmt == null) {
             return;

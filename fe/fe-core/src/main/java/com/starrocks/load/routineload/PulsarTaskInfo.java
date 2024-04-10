@@ -52,7 +52,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
 
     public PulsarTaskInfo(long timeToExecuteMs, PulsarTaskInfo pulsarTaskInfo, Map<String, Long> initialPositions) {
         super(UUID.randomUUID(), pulsarTaskInfo.getJobId(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
-                timeToExecuteMs, pulsarTaskInfo.getBeId());
+                timeToExecuteMs, pulsarTaskInfo.getBeId(), pulsarTaskInfo.getTimeoutMs());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);
     }
@@ -81,7 +81,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         Map<String, Long> backlogNums = PulsarUtil.getBacklogNums(pulsarRoutineLoadJob.getServiceUrl(),
                 pulsarRoutineLoadJob.getTopic(), pulsarRoutineLoadJob.getSubscription(),
                 ImmutableMap.copyOf(pulsarRoutineLoadJob.getConvertedCustomProperties()),
-                partitions);
+                partitions, warehouseId);
         for (String partition : partitions) {
             Long backlogNum = backlogNums.get(partition);
             if (backlogNum != null && backlogNum > 0) {
@@ -164,6 +164,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         }
 
         return result.toString();
+    }
+
+    @Override
+    String dataSourceType() {
+        return "pulsar";
     }
 
     @Override

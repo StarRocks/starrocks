@@ -19,6 +19,7 @@ Different branches of StarRocks correspond to different development environment 
   | **Branch name** | **Image name**              |
   | --------------- | ----------------------------------- |
   | main            | starrocks/dev-env-ubuntu:latest     |
+  | branch-3.2      | starrocks/dev-env-ubuntu:3.2-latest |
   | branch-3.1      | starrocks/dev-env-ubuntu:3.1-latest |
   | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
   | branch-2.5      | starrocks/dev-env-ubuntu:2.5-latest |
@@ -28,6 +29,7 @@ Different branches of StarRocks correspond to different development environment 
   | **Branch name** | **Image name**                       |
   | --------------- | ------------------------------------ |
   | main            | starrocks/dev-env-centos7:latest     |
+  | branch-3.2      | starrocks/dev-env-centos7:3.2-latest |
   | branch-3.1      | starrocks/dev-env-centos7:3.1-latest |
   | branch-3.0      | starrocks/dev-env-centos7:3.0-latest |
   | branch-2.5      | starrocks/dev-env-centos7:2.5-latest |

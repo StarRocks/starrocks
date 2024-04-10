@@ -1,62 +1,22 @@
-[sql]
-select
-    s_name,
-    count(*) as numwait
-from
-    supplier,
-    lineitem l1,
-    orders,
-    nation
-where
-        s_suppkey = l1.l_suppkey
-  and o_orderkey = l1.l_orderkey
-  and o_orderstatus = 'F'
-  and l1.l_receiptdate > l1.l_commitdate
-  and exists (
-        select
-            *
-        from
-            lineitem l2
-        where
-                l2.l_orderkey = l1.l_orderkey
-          and l2.l_suppkey <> l1.l_suppkey
-    )
-  and not exists (
-        select
-            *
-        from
-            lineitem l3
-        where
-                l3.l_orderkey = l1.l_orderkey
-          and l3.l_suppkey <> l1.l_suppkey
-          and l3.l_receiptdate > l3.l_commitdate
-    )
-  and s_nationkey = n_nationkey
-  and n_name = 'CANADA'
-group by
-    s_name
-order by
-    numwait desc,
-    s_name limit 100;
 [scheduler]
 PLAN FRAGMENT 0(F10)
   DOP: 16
   INSTANCES
     INSTANCE(0-F10#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F09)
   DOP: 16
   INSTANCES
     INSTANCE(1-F09#0)
       DESTINATIONS: 0-F10#0
-      BE: 10003
+      BE: 10001
     INSTANCE(2-F09#1)
       DESTINATIONS: 0-F10#0
-      BE: 10002
+      BE: 10003
     INSTANCE(3-F09#2)
       DESTINATIONS: 0-F10#0
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -422,4 +382,3 @@ PLAN FRAGMENT 5
      cardinality=1
      avgRowSize=9.0
 [end]
-

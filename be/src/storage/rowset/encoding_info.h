@@ -34,11 +34,14 @@
 
 #pragma once
 
+#include <cmath>
 #include <functional>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/types.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -47,6 +50,39 @@ class TypeInfo;
 class PageBuilder;
 class PageDecoder;
 class PageBuilderOptions;
+
+inline bool enable_non_string_column_dict_encoding() {
+    double epsilon = 0.0001;
+    return std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) > epsilon;
+}
+
+// We dont make TYPE_TINYINT support dict encoding. The reason is that TYPE_TINYINT is only have
+// 256 different values, that is too small to make our speculation mechanism work. And according
+// test results, when TINY_INT column is encoded using dict, the space usage is not necessarily
+// better than bitshuffle.
+inline bool numeric_types_support_dict_encoding(LogicalType type) {
+    switch (type) {
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_LARGEINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_DECIMALV2:
+        return true;
+    default:
+        return false;
+    }
+}
+
+inline bool supports_dict_encoding(LogicalType type) {
+    if (type == TYPE_VARCHAR || type == TYPE_CHAR) {
+        return true;
+    }
+    return numeric_types_support_dict_encoding(type);
+}
 
 class EncodingInfo {
 public:

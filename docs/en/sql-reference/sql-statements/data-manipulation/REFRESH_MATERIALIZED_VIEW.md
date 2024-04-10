@@ -11,6 +11,7 @@ Manually refresh a specific asynchronous materialized view or partitions within.
 > **CAUTION**
 >
 > You can only manually refresh materialized views that adopt ASYNC or MANUAL refresh strategy. You can check the refresh strategy of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW_MATERIALIZED_VIEW.md).
+> This operation requires the REFRESH privilege on the target materialized view.
 
 ## Syntax
 
@@ -34,7 +35,7 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 
 > **CAUTION**
 >
->  When refreshing materialized views created based on the external catalogs, StarRocks refreshes all partitions in the materialized views.
+> When refreshing materialized views created based on the external catalogs, StarRocks refreshes all partitions in the materialized views.
 
 ## Examples
 

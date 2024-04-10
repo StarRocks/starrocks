@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.DataCacheInfo;
@@ -52,9 +51,11 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.validation.constraints.NotNull;
 
 /*
  * Repository of a partition's related infos
@@ -111,6 +112,10 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
 
     public boolean isRangePartition() {
         return type == PartitionType.RANGE || type == PartitionType.EXPR_RANGE || type == PartitionType.EXPR_RANGE_V2;
+    }
+
+    public boolean isListPartition() {
+        return type == PartitionType.LIST;
     }
 
     public boolean isPartitioned() {
@@ -222,8 +227,9 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return "";
     }
 
-    public List<Column> getPartitionColumns() throws NotImplementedException {
-        throw new NotImplementedException("method not implemented yet");
+    @NotNull
+    public List<Column> getPartitionColumns() {
+        return Collections.emptyList();
     }
 
     @Override
@@ -280,15 +286,15 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         buff.append("type: ").append(type.typeString).append("; ");
 
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
-            buff.append(entry.getKey()).append("is HDD: ");
+            buff.append(entry.getKey()).append(" is HDD: ");
             if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
                 buff.append(true);
             } else {
                 buff.append(false);
             }
-            buff.append("data_property: ").append(entry.getValue().toString());
-            buff.append("replica number: ").append(idToReplicationNum.get(entry.getKey()));
-            buff.append("in memory: ").append(idToInMemory.get(entry.getKey()));
+            buff.append(" data_property: ").append(entry.getValue().toString());
+            buff.append(" replica number: ").append(idToReplicationNum.get(entry.getKey()));
+            buff.append(" in memory: ").append(idToInMemory.get(entry.getKey()));
         }
 
         return buff.toString();

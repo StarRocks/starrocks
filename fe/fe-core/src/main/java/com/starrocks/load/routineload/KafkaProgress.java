@@ -43,9 +43,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
-import com.starrocks.thrift.TKafkaRLTaskProgress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,9 +78,11 @@ public class KafkaProgress extends RoutineLoadProgress {
         super(LoadDataSourceType.KAFKA);
     }
 
-    public KafkaProgress(TKafkaRLTaskProgress tKafkaRLTaskProgress) {
+    public KafkaProgress(Map<Integer, Long> partitionOffsets) {
         super(LoadDataSourceType.KAFKA);
-        this.partitionIdToOffset = tKafkaRLTaskProgress.getPartitionCmtOffset();
+        if (partitionOffsets != null) {
+            this.partitionIdToOffset = partitionOffsets;
+        }
     }
 
     public Map<Integer, Long> getPartitionIdToOffset(List<Integer> partitionIds) {
@@ -155,7 +155,8 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     // convert offset of OFFSET_END and OFFSET_BEGINNING to current offset number
-    public void convertOffset(String brokerList, String topic, Map<String, String> properties) throws UserException {
+    public void convertOffset(String brokerList, String topic, Map<String, String> properties, long warehouseId)
+            throws UserException {
         List<Integer> beginningPartitions = Lists.newArrayList();
         List<Integer> endPartitions = Lists.newArrayList();
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
@@ -171,12 +172,12 @@ public class KafkaProgress extends RoutineLoadProgress {
 
         if (beginningPartitions.size() > 0) {
             Map<Integer, Long> partOffsets = KafkaUtil
-                    .getBeginningOffsets(brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions);
+                    .getBeginningOffsets(brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions, warehouseId);
             partitionIdToOffset.putAll(partOffsets);
         }
         if (endPartitions.size() > 0) {
             Map<Integer, Long> partOffsets =
-                    KafkaUtil.getLatestOffsets(brokerList, topic, ImmutableMap.copyOf(properties), endPartitions);
+                    KafkaUtil.getLatestOffsets(brokerList, topic, ImmutableMap.copyOf(properties), endPartitions, warehouseId);
             partitionIdToOffset.putAll(partOffsets);
         }
     }
@@ -198,13 +199,11 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     @Override
-    public void update(RLTaskTxnCommitAttachment attachment) {
-        KafkaProgress newProgress = (KafkaProgress) attachment.getProgress();
+    public void update(RoutineLoadProgress progress) {
+        KafkaProgress newProgress = (KafkaProgress) progress;
         // + 1 to point to the next msg offset to be consumed
         newProgress.partitionIdToOffset.entrySet().stream()
                 .forEach(entity -> this.partitionIdToOffset.put(entity.getKey(), entity.getValue() + 1));
-        LOG.debug("update kafka progress: {}, task: {}, job: {}",
-                newProgress.toJsonString(), DebugUtil.printId(attachment.getTaskId()), attachment.getJobId());
     }
 
     @Override

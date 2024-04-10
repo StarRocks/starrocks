@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 自 3.0 版本起支持使用该语句查看 External Catalog 下的表，包括 Apache Hive™ 、Apache Iceberg、Apache Hudi、Delta Lake 表。
 
-自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 - 如果您在建表时指定了分桶数，SHOW CREATE TABLE 会显示分桶数。
 

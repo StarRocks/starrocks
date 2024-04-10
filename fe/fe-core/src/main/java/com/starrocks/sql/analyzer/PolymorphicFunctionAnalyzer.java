@@ -38,6 +38,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.starrocks.sql.analyzer.AnalyzerUtils.replaceNullType2Boolean;
+
 public class PolymorphicFunctionAnalyzer {
     private static final Logger LOGGER = LogManager.getLogger(PolymorphicFunctionAnalyzer.class);
 
@@ -66,6 +68,7 @@ public class PolymorphicFunctionAnalyzer {
         return newFn;
     }
 
+    // only works for null into array[null]/map{null:null}/struct(null)
     private static Type[] resolveArgTypes(Function fn, Type[] inputArgTypes) {
         // Use inputArgTypes length, because function may be a variable arguments
         Type[] resolvedTypes = Arrays.copyOf(inputArgTypes, inputArgTypes.length);
@@ -82,24 +85,24 @@ public class PolymorphicFunctionAnalyzer {
                 continue;
             }
 
-            // Need to make input be a valid complex type if the input is Type NULL
+            // for complex type, change NULL into Array[NULL]/Map[NULL:NULL]/Struct(NULL)
             if (declType instanceof AnyArrayType) {
-                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.BOOLEAN) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new ArrayType(inputType) : inputType;
             } else if (declType instanceof AnyMapType) {
-                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.BOOLEAN, Type.BOOLEAN) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new MapType(inputType, inputType) : inputType;
             } else if (declType instanceof AnyStructType) {
-                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.BOOLEAN)) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(inputType)) : inputType;
             } else {
                 resolvedTypes[i] = inputType;
             }
 
-            resolvedTypes[i] = AnalyzerUtils.replaceNullType2Boolean(resolvedTypes[i]);
         }
         return resolvedTypes;
     }
 
     private static Function resolveByReplacingInputs(Function fn, Type[] inputArgTypes) {
         Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
+        resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);
         if (fn instanceof ScalarFunction) {
             return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), fn.getReturnType());
         }
@@ -209,8 +212,14 @@ public class PolymorphicFunctionAnalyzer {
         if (deduce == null) {
             return null;
         }
+
         Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
         Type newRetType = deduce.apply(resolvedArgTypes);
+
+        // change null type into boolean type
+        resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);
+        newRetType = replaceNullType2Boolean(newRetType);
+
         if (fn instanceof ScalarFunction) {
             return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
         }
@@ -315,7 +324,7 @@ public class PolymorphicFunctionAnalyzer {
                     return null;
                 }
             }
-            commonType = AnalyzerUtils.replaceNullType2Boolean(commonType);
+            commonType = replaceNullType2Boolean(commonType);
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
         } else {

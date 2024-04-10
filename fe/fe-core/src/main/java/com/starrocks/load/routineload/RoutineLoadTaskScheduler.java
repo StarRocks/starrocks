@@ -79,12 +79,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private static final long BACKEND_SLOT_UPDATE_INTERVAL_MS = 10000; // 10s
     private static final long SLOT_FULL_SLEEP_MS = 10000; // 10s
-    private static final int THREAD_POOL_SIZE = 10;
 
     private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
-    private final ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private final ExecutorService threadPool = Executors.newCachedThreadPool();
 
     private long lastBackendSlotUpdateTime = -1;
 
@@ -184,14 +183,16 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         try {
             // for kafka/pulsar routine load, readyToExecute means there is new data in kafka/pulsar stream
             if (!routineLoadTaskInfo.readyToExecute()) {
-                String msg = "";
-                if (routineLoadTaskInfo instanceof KafkaTaskInfo || routineLoadTaskInfo instanceof PulsarTaskInfo) {
-                    msg = String.format("there is no new data in kafka/pulsar, wait for %d seconds to schedule again",
-                            routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
-                }
+                String msg = String.format("there is no new data in %s, wait for %d seconds to schedule again",
+                        routineLoadTaskInfo.dataSourceType(), routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
+                // The job keeps up with source.
+                routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstateStable();
                 delayPutToQueue(routineLoadTaskInfo, msg);
                 return;
             }
+            // Update the job state is the job is too slow.
+            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
+
         } catch (RoutineLoadPauseException e) {
             String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
@@ -292,7 +293,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void releaseBeSlot(RoutineLoadTaskInfo routineLoadTaskInfo) {
         // release the BE slot
-        routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+        routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
         // set beId to INVALID_BE_ID to avoid release slot repeatedly,
         // when job set to paused/cancelled, the slot will be release again if beId is not INVALID_BE_ID
         routineLoadTaskInfo.setBeId(RoutineLoadTaskInfo.INVALID_BE_ID);
@@ -321,7 +322,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(beId);
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(beId);
         if (node == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }
@@ -358,7 +359,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     // throw exception if unrecoverable errors happen.
     private boolean allocateTaskToBe(RoutineLoadTaskInfo routineLoadTaskInfo) {
         if (routineLoadTaskInfo.getPreviousBeId() != -1L) {
-            if (routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+            if (routineLoadManager.takeNodeById(routineLoadTaskInfo.getWarehouseId(),
+                    routineLoadTaskInfo.getPreviousBeId()) != -1L) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                             .add("job_id", routineLoadTaskInfo.getJobId())
@@ -372,7 +374,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot();
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId);
         if (beId < 0) {
             return false;
         }

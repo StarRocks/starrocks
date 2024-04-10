@@ -39,6 +39,11 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.DELTALAKE;
+    }
+
+    @Override
     public List<String> listDbNames() {
         return hmsOps.getAllDatabaseNames();
     }
@@ -74,6 +79,11 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             LOG.warn(e.getMessage());
             return null;
         }
+    }
+
+    @Override
+    public boolean tableExists(String dbName, String tblName) {
+        return hmsOps.tableExists(dbName, tblName);
     }
 
     @Override

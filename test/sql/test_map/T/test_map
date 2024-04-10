@@ -26,6 +26,8 @@ select map{'a':1,'b':2}['a'];
 select map{'a':NULL,'b':2}['a'];
 select map{}['a'];
 select c2["key1"] from map_top_n;
+select map{1: "a", 2: "b"}[c1] from map_top_n;
+select map{null: "a", 2: "b"}[null];
 
 -- name: testEmptyMap
 with t0 as (
@@ -46,6 +48,7 @@ from (select c1 from (values(map())) as t(c1)) t;
 select map_concat(c1, map(1,2))
 from (select c1 from (values(map())) as t(c1)) t;
 
+-- invaild map key type
 select map_concat(c1, map(map(),map()))
 from (select c1 from (values(map())) as t(c1)) t;
 

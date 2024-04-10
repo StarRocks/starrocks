@@ -15,7 +15,7 @@ jobs:
         run: |
           sudo rm -rf ../starrocks/*
 
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |

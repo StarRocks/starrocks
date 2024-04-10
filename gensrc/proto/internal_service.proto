@@ -151,6 +151,12 @@ message PTabletInfo {
     repeated int64 valid_dict_collected_version = 6;
 }
 
+message PLoadChannelProfileConfig {
+    optional bool enable_profile = 1;
+    optional int64 big_query_profile_threshold_ns = 2;
+    optional int64 runtime_profile_report_interval_ns = 3;
+}
+
 // Open a tablet writer.
 message PTabletWriterOpenRequest {
     required PUniqueId id = 1;
@@ -181,6 +187,7 @@ message PTabletWriterOpenRequest {
 
     // tablet's data size larger than this will mark as inmutable
     optional int64 immutable_tablet_size = 33 [default = 0];
+    optional PLoadChannelProfileConfig load_channel_profile_config = 34;
 };
 
 message PTabletWriterOpenResult {
@@ -248,6 +255,7 @@ message PTabletWriterAddBatchResult {
 
     repeated int64 immutable_tablet_ids = 7;
     repeated int64 immutable_partition_ids = 8;
+    optional bytes load_channel_profile = 9;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -420,6 +428,7 @@ message PKafkaLoadInfo {
     required string brokers = 1;
     required string topic = 2;
     repeated PStringPair properties = 3;
+    required int64 warehouseId = 11;
 };
 
 message PKafkaMetaProxyRequest {
@@ -469,6 +478,8 @@ message PPulsarLoadInfo {
     required string topic = 2;
     required string subscription = 3;
     repeated PStringPair properties = 4;
+
+    optional int64 warehouseId = 11;
 };
 
 message PPulsarMetaProxyRequest {
@@ -573,6 +584,40 @@ message PListFailPointResponse {
     repeated PFailPointInfo fail_points = 2;
 }
 
+message PExecShortCircuitResult {
+    optional StatusPB status = 1;
+    optional int64 affected_rows = 2;
+    optional bytes profile = 3;
+}
+
+message PExecShortCircuitRequest {
+    // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
+}
+
+enum PProcessDictionaryCacheRequestType {
+    BEGIN = 1;
+    REFRESH = 2;
+    COMMIT = 3;
+    CLEAR = 4;
+    STATISTIC = 5;
+};
+
+message PProcessDictionaryCacheRequest {
+    optional ChunkPB chunk = 1;
+    optional int64 dict_id = 2;
+    optional int64 txn_id = 3;
+    optional POlapTableSchemaParam schema = 4;
+    optional int64 memory_limit = 5;
+    optional int32 key_size = 6;
+    optional bool is_cancel = 7;
+    optional PProcessDictionaryCacheRequestType type = 8;
+};
+
+message PProcessDictionaryCacheResult {
+    optional StatusPB status = 1;
+    optional int64 dictionary_memory_usage = 2;
+};
 
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
@@ -609,7 +654,10 @@ service PInternalService {
     rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 
     rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
-    
     rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
     rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
+
+    rpc exec_short_circuit(PExecShortCircuitRequest) returns (PExecShortCircuitResult);
+
+    rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 };

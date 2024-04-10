@@ -23,6 +23,7 @@
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "testutil/assert.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -31,7 +32,7 @@ constexpr static const char* kBucketName = "starrocks-fs-s3-ut";
 
 class S3FileSystemTest : public testing::Test {
 public:
-    S3FileSystemTest() = default;
+    S3FileSystemTest() : _root_path(generate_uuid_string()) {}
     ~S3FileSystemTest() override = default;
 
     static void SetUpTestCase() {
@@ -41,19 +42,26 @@ public:
         CHECK(!config::object_storage_endpoint.empty()) << "Need set object_storage_endpoint in be_test.conf";
 
         Aws::InitAPI(_s_options);
+    }
 
+    virtual void SetUp() override {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
+        (void)fs->delete_dir_recursive(S3Path("/"));
+    }
+
+    virtual void TearDown() override {
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
         (void)fs->delete_dir_recursive(S3Path("/"));
     }
 
     static void TearDownTestCase() {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
-        (void)fs->delete_dir_recursive(S3Path("/"));
-
+        close_s3_clients();
         Aws::ShutdownAPI(_s_options);
     }
 
-    static std::string S3Path(std::string_view path) { return fmt::format("s3://{}{}", kBucketName, path); }
+    std::string S3Path(std::string_view path) { return fmt::format("s3://{}/{}{}", kBucketName, _root_path, path); }
+
+    static std::string S3Root() { return fmt::format("s3://{}", kBucketName); }
 
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
                           bool expected_is_dir = true) {
@@ -65,11 +73,12 @@ public:
     }
 
 private:
+    std::string _root_path;
     static inline Aws::SDKOptions _s_options;
 };
 
 TEST_F(S3FileSystemTest, test_write_and_read) {
-    auto uri = fmt::format("s3://{}/dir/test-object.png", kBucketName);
+    auto uri = S3Path("/dir/test-object.png");
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
@@ -91,20 +100,24 @@ TEST_F(S3FileSystemTest, test_write_and_read) {
     EXPECT_ERROR(rf->read_at(0, buf, sizeof(buf)));
 }
 
+TEST_F(S3FileSystemTest, test_root_directory) {
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
+    bool created = false;
+    auto bucket_root = S3Root();
+
+    // no need to create the bucket_root
+    ASSERT_TRUE(fs->create_dir(bucket_root).is_already_exist());
+    ASSERT_OK(fs->create_dir_if_missing(bucket_root, &created));
+    ASSERT_FALSE(created);
+    CheckIsDirectory(fs.get(), bucket_root, true, true);
+    // can't directly delete from bucket root
+    ASSERT_ERROR(fs->delete_dir(bucket_root));
+}
+
 TEST_F(S3FileSystemTest, test_directory) {
     auto now = ::time(nullptr);
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
     bool created = false;
-
-    ASSERT_TRUE(fs->create_dir(S3Path("/")).is_already_exist());
-    ASSERT_OK(fs->create_dir_if_missing(S3Path("/"), &created));
-    ASSERT_FALSE(created);
-    CheckIsDirectory(fs.get(), S3Path("/"), true, true);
-    ASSERT_OK(fs->iterate_dir(S3Path("/"), [&](std::string_view /*name*/) -> bool {
-        CHECK(false) << "root directory should be empty";
-        return true;
-    }));
-    ASSERT_ERROR(fs->delete_dir(S3Path(("/"))));
 
     //
     //  /dirname0/
@@ -263,7 +276,7 @@ TEST_F(S3FileSystemTest, test_delete_dir_recursive) {
     bool created;
     EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0"), &created));
     ASSERT_OK(fs->delete_dir_recursive(S3Path("/dirname0")));
-    EXPECT_OK(fs->iterate_dir(S3Path("/"), cb));
+    EXPECT_TRUE(fs->iterate_dir(S3Path("/"), cb).is_not_found());
     ASSERT_EQ(0, entries.size());
 
     EXPECT_OK(fs->create_dir_if_missing(S3Path("/dirname0"), &created));
@@ -289,7 +302,7 @@ TEST_F(S3FileSystemTest, test_delete_dir_recursive) {
     ASSERT_EQ(1, entries.size());
     ASSERT_EQ("dirname0x", entries[0]);
     ASSERT_OK(fs->delete_dir(S3Path("/dirname0x")));
-    ASSERT_ERROR(fs->delete_dir_recursive(S3Path("/")));
+    ASSERT_TRUE(fs->delete_dir_recursive(S3Path("/")).is_not_found());
 }
 
 TEST_F(S3FileSystemTest, test_delete_nonexist_file) {

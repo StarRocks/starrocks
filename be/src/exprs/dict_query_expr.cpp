@@ -19,6 +19,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "exec/tablet_info.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
 #include "storage/chunk_helper.h"
@@ -32,6 +33,7 @@ DictQueryExpr::DictQueryExpr(const TExprNode& node) : Expr(node), _dict_query_ex
 StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
+    bool null_if_not_found = !_dict_query_expr.strict_mode;
     for (int i = 0; i < _children.size(); ++i) {
         columns[i] = _children[i]->evaluate(context, ptr);
     }
@@ -42,21 +44,30 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
         }
     }
-    ChunkPtr key_chunk = ChunkHelper::new_chunk(_key_slots, size);
-    key_chunk->reset();
-    for (int i = 0; i < _dict_query_expr.key_fields.size(); ++i) {
-        ColumnPtr key_column = columns[1 + i];
-        key_chunk->update_column_by_index(key_column, i);
+
+    // key_columns should be columns[1] ~ columns[1 + _dict_query_expr.key_fields.size()]
+    Columns key_columns(columns.begin() + 1, columns.begin() + 1 + _dict_query_expr.key_fields.size());
+    DCHECK(_key_schema.num_fields() == key_columns.size());
+    auto key_chunk = std::make_unique<Chunk>(std::move(key_columns), std::make_shared<Schema>(_key_schema));
+    key_chunk->check_or_die();
+
+    for (size_t i = 0; i < key_chunk->num_columns(); ++i) {
+        key_chunk->set_slot_id_to_index(_key_slot_ids[i], i);
     }
 
     for (auto& column : key_chunk->columns()) {
+        // key does not support null value, return error in this case
+        if (column->has_null()) {
+            return Status::InternalError("invalid parameter : get NULL paramenter");
+        }
         if (column->is_nullable()) {
             column = ColumnHelper::update_column_nullable(false, column, column->size());
         }
     }
 
     std::vector<bool> found;
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_slot, key_chunk->num_rows());
+    ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_schema, key_chunk->num_rows());
+    value_chunk->set_slot_id_to_index(_value_slot_id, 0);
 
     Status status = _table_reader->multi_get(*key_chunk, {_dict_query_expr.value_field}, found, *value_chunk);
     if (!status.ok()) {
@@ -64,7 +75,11 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
         LOG(WARNING) << "fail to execute multi get: " << status.detailed_message();
         return status;
     }
-    res = ColumnHelper::create_column(_value_slot[0]->type(), true);
+    res = value_chunk->get_column_by_index(0)->clone_empty();
+    if (!res->is_nullable()) {
+        auto null_column = UInt8Column::create(0, 0);
+        res = NullableColumn::create(res, null_column);
+    }
 
     int res_idx = 0;
     for (int idx = 0; idx < size; ++idx) {
@@ -72,8 +87,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             res->append_datum(value_chunk->get_column_by_index(0)->get(res_idx));
             res_idx++;
         } else {
-            if (_dict_query_expr.strict_mode) {
-                return Status::NotFound("In strict mode, query failed if record not exist in dict table.");
+            if (!null_if_not_found) {
+                return Status::NotFound("query failed if record not exist in dict table.");
             }
             res->append_nulls(1);
         }
@@ -114,21 +129,39 @@ Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionCo
     _table_reader = std::make_shared<TableReader>();
     RETURN_IF_ERROR(_table_reader->init(params));
 
-    _key_slots.resize(_dict_query_expr.key_fields.size());
+    auto schema_param = std::make_shared<OlapTableSchemaParam>();
+    RETURN_IF_ERROR(schema_param->init(params.schema));
+    const auto& tcolumns = schema_param->indexes()[0]->column_param->columns;
     for (int i = 0; i < _dict_query_expr.key_fields.size(); ++i) {
-        vector<TSlotDescriptor>& slot_descs = response.schema.slot_descs;
-        for (auto& slot : slot_descs) {
-            if (slot.colName == _dict_query_expr.key_fields[i]) {
-                _key_slots[i] = state->obj_pool()->add(new SlotDescriptor(slot));
+        for (const auto& tcolumn : tcolumns) {
+            if (tcolumn->name() == _dict_query_expr.key_fields[i]) {
+                auto f = std::make_shared<Field>(ChunkHelper::convert_field(i, *tcolumn));
+                _key_schema.append(f);
             }
         }
     }
-    _value_slot.resize(1);
-    for (auto& slot : response.schema.slot_descs) {
-        if (slot.colName == _dict_query_expr.value_field) {
-            _value_slot[0] = state->obj_pool()->add(new SlotDescriptor(slot));
+
+    for (const auto& tcolumn : tcolumns) {
+        if (tcolumn->name() == _dict_query_expr.value_field) {
+            auto f = std::make_shared<Field>(ChunkHelper::convert_field(0, *tcolumn));
+            _value_schema.append(f);
+            break; /* only single column */
         }
     }
+
+    for (size_t i = 0; i < params.schema.slot_descs.size(); ++i) {
+        const auto& slot = params.schema.slot_descs[i];
+        for (const auto& field : _key_schema.fields()) {
+            if (field->name() == slot.colName) {
+                _key_slot_ids.emplace_back(slot.id);
+                break;
+            }
+        }
+        if (_dict_query_expr.value_field == slot.colName) {
+            _value_slot_id = slot.id;
+        }
+    }
+    DCHECK(_key_slot_ids.size() == _key_schema.fields().size());
 
     return Status::OK();
 }

@@ -23,7 +23,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -75,15 +74,5 @@ public class ScalarOperatorUtil {
                     ((ScalarType) argTypes[0]).getScalarScale()));
         }
         return newFn;
-    }
-
-    public static CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
-        Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
-                oldFunctionCall.getFunction(), oldFunctionCall.getChild(0).getType());
-        ScalarOperatorRewriter scalarOpRewriter = new ScalarOperatorRewriter();
-        return (CallOperator) scalarOpRewriter.rewrite(
-                new CallOperator(
-                        FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
-                        oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
     }
 }

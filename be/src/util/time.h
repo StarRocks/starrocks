@@ -160,4 +160,12 @@ inline ::timespec TimespecFromTimePoint(const std::chrono::time_point<std::chron
     return spec;
 }
 
+inline uint64_t SecondsSinceEpochFromTimePoint(const std::chrono::system_clock::time_point& tp) {
+    return std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch()).count();
+}
+
+inline uint64_t MilliSecondsSinceEpochFromTimePoint(const std::chrono::system_clock::time_point& tp) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count();
+}
+
 } // namespace starrocks

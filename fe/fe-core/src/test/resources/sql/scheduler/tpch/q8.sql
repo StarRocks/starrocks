@@ -1,47 +1,9 @@
-[sql]
-select
-    o_year,
-    sum(case
-            when nation = 'IRAN' then volume
-            else 0
-        end) / sum(volume) as mkt_share
-from
-    (
-        select
-            extract(year from o_orderdate) as o_year,
-            l_extendedprice * (1 - l_discount) as volume,
-            n2.n_name as nation
-        from
-            part,
-            supplier,
-            lineitem,
-            orders,
-            customer,
-            nation n1,
-            nation n2,
-            region
-        where
-                p_partkey = l_partkey
-          and s_suppkey = l_suppkey
-          and l_orderkey = o_orderkey
-          and o_custkey = c_custkey
-          and c_nationkey = n1.n_nationkey
-          and n1.n_regionkey = r_regionkey
-          and r_name = 'MIDDLE EAST'
-          and s_nationkey = n2.n_nationkey
-          and o_orderdate between date '1995-01-01' and date '1996-12-31'
-          and p_type = 'ECONOMY ANODIZED STEEL'
-    ) as all_nations
-group by
-    o_year
-order by
-    o_year ;
 [scheduler]
 PLAN FRAGMENT 0(F22)
   DOP: 16
   INSTANCES
     INSTANCE(0-F22#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F21)
   DOP: 16
@@ -51,10 +13,10 @@ PLAN FRAGMENT 1(F21)
       BE: 10001
     INSTANCE(2-F21#1)
       DESTINATIONS: 0-F22#0
-      BE: 10003
+      BE: 10002
     INSTANCE(3-F21#2)
       DESTINATIONS: 0-F22#0
-      BE: 10002
+      BE: 10003
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -188,13 +150,13 @@ PLAN FRAGMENT 6(F16)
   INSTANCES
     INSTANCE(14-F16#0)
       DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
-      BE: 10001
+      BE: 10002
     INSTANCE(15-F16#1)
       DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
-      BE: 10002
+      BE: 10003
     INSTANCE(16-F16#2)
       DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
-      BE: 10003
+      BE: 10001
 
 PLAN FRAGMENT 7(F14)
   DOP: 16
@@ -204,10 +166,10 @@ PLAN FRAGMENT 7(F14)
       BE: 10003
     INSTANCE(18-F14#1)
       DESTINATIONS: 14-F16#0,15-F16#1,16-F16#2
-      BE: 10002
+      BE: 10001
     INSTANCE(19-F14#2)
       DESTINATIONS: 14-F16#0,15-F16#1,16-F16#2
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 8(F12)
   DOP: 16
@@ -623,4 +585,3 @@ PLAN FRAGMENT 12
      cardinality=1
      avgRowSize=20.0
 [end]
-

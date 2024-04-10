@@ -20,12 +20,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -125,6 +127,12 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
+    void testTableExists() {
+        MockedJDBCMetadata mockedJDBCMetadata = new MockedJDBCMetadata(new HashMap<>());
+        assertTrue(mockedJDBCMetadata.tableExists("db1", "tbl1"));
+    }
+
+    @Test
     void testGetTable(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {
@@ -171,6 +179,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.truncateTable(null);
                 connectorMetadata.alterTableComment(null, null, null);
                 connectorMetadata.finishSink("test_db", "test_tbl", null);
+                connectorMetadata.abortSink("test_db", "test_tbl", null);
                 connectorMetadata.createTableLike(null);
                 connectorMetadata.createTable(null);
                 connectorMetadata.createDb("test_db");
@@ -206,6 +215,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.truncateTable(null);
         catalogConnectorMetadata.alterTableComment(null, null, null);
         catalogConnectorMetadata.finishSink("test_db", "test_tbl", null);
+        catalogConnectorMetadata.abortSink("test_db", "test_tbl", null);
         catalogConnectorMetadata.createTableLike(null);
         catalogConnectorMetadata.createTable(null);
         catalogConnectorMetadata.createDb("test_db");

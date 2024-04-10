@@ -28,7 +28,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
-#include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -68,8 +67,10 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _build_node_type(param._build_node_type),
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
-          _output_slots(param._output_slots),
-          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()) {
+          _build_output_slots(param._build_output_slots),
+          _probe_output_slots(param._probe_output_slots),
+          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
+          _mor_reader_mode(param._mor_reader_mode) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -139,7 +140,10 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
-    param->output_slots = _output_slots;
+    param->build_output_slots = _build_output_slots;
+    param->probe_output_slots = _probe_output_slots;
+    param->mor_reader_mode = _mor_reader_mode;
+
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;
@@ -178,8 +182,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
 
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
     update_build_rows(chunk->num_rows());
-    auto io_executor = spill_channel()->io_executor();
-    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller())));
+    RETURN_IF_ERROR(spiller()->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, spiller())));
     return Status::OK();
 }
 
@@ -188,8 +191,7 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
     while (!spiller()->is_full()) {
         auto chunk_st = spill_task();
         if (chunk_st.ok()) {
-            RETURN_IF_ERROR(spiller()->spill(state, chunk_st.value(), io_executor(),
-                                             TRACKER_WITH_SPILLER_GUARD(state, spiller())));
+            RETURN_IF_ERROR(spiller()->spill(state, chunk_st.value(), TRACKER_WITH_SPILLER_GUARD(state, spiller())));
         } else if (chunk_st.status().is_end_of_file()) {
             return Status::OK();
         } else {
@@ -569,6 +571,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         bool eq_null = _is_null_safes[expr_order];
         MutableJoinRuntimeFilterPtr filter = nullptr;
         auto multi_partitioned = rf_desc->layout().pipeline_level_multi_partitioned();
+        multi_partitioned |= rf_desc->num_colocate_partition() > 0;
         if (multi_partitioned) {
             LogicalType build_type = rf_desc->build_expr_type();
             filter = std::shared_ptr<JoinRuntimeFilter>(

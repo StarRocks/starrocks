@@ -17,7 +17,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,8 +25,13 @@ import java.util.List;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @Before
-    public void setUp() throws DdlException {
-        GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+    public void setUp() {
+        super.setUp();
+        try {
+            connectContext.changeCatalogDb("hive0.partitioned_db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -167,5 +171,28 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         Assert.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
         Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
+    }
+
+    @Test
+    public void testLikeInPartitionColumn() throws Exception {
+        String sql = "select * from hive0.datacache_db.single_partition_table where l_shipdate LIKE '1998-01-03'";
+        assertPlanContains(sql, "partitions=1/1");
+    }
+
+    @Test
+    public void testWithDuplicatePartition() throws Exception {
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition", "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01'",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=6",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour>0",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=0",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour > 10",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour < 10",
+                "partitions=2/2");
     }
 }

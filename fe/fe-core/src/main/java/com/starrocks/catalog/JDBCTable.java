@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
@@ -31,12 +32,13 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,7 +61,6 @@ public class JDBCTable extends Table {
     private String catalogName;
     private String dbName;
     private List<Column> partitionColumns;
-
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -176,6 +177,36 @@ public class JDBCTable extends Table {
         }
     }
 
+    private static String buildCatalogDriveName(String uri) {
+        // jdbc:postgresql://172.26.194.237:5432/db_pg_select
+        // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
+        // requirement: it should be used as local path.
+        // and there is no ':' in it to avoid be parsed into non-local filesystem.
+        String ans = uri.replaceAll("[^0-9a-zA-Z]", "_");
+
+        // currently we use this uri as part of name of download file.
+        // so if this uri is too long, we might fail to write file on BE side.
+        // so here we have to shorten it to reduce fail probability because of long file name.
+
+        final String prefix = "jdbc_";
+        try {
+            // 256bits = 32bytes = 64hex chars.
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(ans.getBytes());
+            byte[] hashBytes = digest.digest();
+            StringBuilder sb = new StringBuilder();
+            // it's for be side parsing: expect a _ in name.
+            sb.append(prefix);
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
+            }
+            ans = sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // don't update `ans`.
+        }
+        return ans;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TJDBCTable tJDBCTable = new TJDBCTable();
@@ -193,16 +224,23 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         } else {
             String uri = properties.get(JDBCResource.URI);
-            String driverName = uri.replace("//", "").replace("/", "_");
+            String driverName = buildCatalogDriveName(uri);
             tJDBCTable.setJdbc_driver_name(driverName);
             tJDBCTable.setJdbc_driver_url(properties.get(JDBCResource.DRIVER_URL));
             tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
             tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
 
             if (properties.get(JDBC_TABLENAME) != null) {
-                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI));
+                tJDBCTable.setJdbc_url(uri);
             } else {
-                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);
+                int delimiterIndex = uri.indexOf("?");
+                if (delimiterIndex > 0) {
+                    String urlPrefix = uri.substring(0, delimiterIndex);
+                    String urlSuffix = uri.substring(delimiterIndex + 1);
+                    tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                } else {
+                    tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                }
             }
             tJDBCTable.setJdbc_table(jdbcTable);
             tJDBCTable.setJdbc_user(properties.get(JDBCResource.USER));
@@ -263,6 +301,7 @@ public class JDBCTable extends Table {
         UNKNOWN,
         MYSQL,
         POSTGRES,
-        ORACLE
+        ORACLE,
+        MARIADB
     }
 }

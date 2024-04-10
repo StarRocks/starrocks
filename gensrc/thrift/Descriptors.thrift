@@ -154,6 +154,7 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
@@ -163,6 +164,10 @@ enum TSchemaTableType {
     SCH_PIPES,
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
+    SYS_FE_LOCKS,
+    SCH_BE_DATACACHE_METRICS,
+    SCH_PARTITIONS_META,
+    SYS_FE_MEMORY_USAGE,
 }
 
 enum THdfsCompression {
@@ -177,7 +182,8 @@ enum THdfsCompression {
 
 enum TIndexType {
   BITMAP,
-  GIN
+  GIN,
+  NGRAMBF
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -266,11 +272,12 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id
+    1: required i64 id // index id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
+    6: optional i64 schema_id // schema id
 }
 
 struct TOlapTableSchemaParam {
@@ -289,6 +296,20 @@ struct TOlapTableIndex {
   2: optional list<string> columns
   3: optional TIndexType index_type
   4: optional string comment
+  5: optional i64 index_id
+
+  // for GIN
+  // critical common properties shared for all type of GIN
+  6: optional map<string, string> common_properties
+
+  // properties to affect index building
+  7: optional map<string, string> index_properties
+
+  // default properties to affect index searching, can rewrite them through hint
+  8: optional map<string, string> search_properties
+
+  // properties that are different from the above three
+  9: optional map<string, string> extra_properties
 }
 
 struct TTabletLocation {
@@ -387,6 +408,12 @@ struct THdfsTable {
 
     // hive table serde_lib
     9: optional string serde_lib
+
+    // hive table serde properties
+    10: optional map<string, string> serde_properties
+
+    // timezone
+    11: optional string time_zone
 }
 
 struct TFileTable {
@@ -403,6 +430,9 @@ struct TFileTable {
     5: optional string input_format
 
     6: optional string serde_lib
+
+    // timezone
+    7: optional string time_zone
 }
 
 struct TTableFunctionTable {
@@ -423,6 +453,8 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
+
+    7: optional i64 target_max_file_size
 }
 
 struct TIcebergSchema {
@@ -471,6 +503,9 @@ struct TIcebergTable {
 
     // if serialize partition info throws exception, then use unserialized partitions
     6: optional map<i64, THdfsPartition> partitions
+
+    // Iceberg equality delete schema, used to support schema evolution
+    7: optional TIcebergSchema iceberg_equal_delete_schema
 }
 
 struct THudiTable {
@@ -503,6 +538,9 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+
+    // timezone
+    11: optional string time_zone
 }
 
 struct TPaimonTable {
@@ -510,6 +548,9 @@ struct TPaimonTable {
     1: optional string paimon_options
     // paimon table
     2: optional string paimon_native_table
+
+    // timezone
+    3: optional string time_zone
 }
 
 struct TDeltaLakeTable {

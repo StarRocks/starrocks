@@ -124,6 +124,9 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
     }
 }
 
+static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,
+                                       TStreamLoadPutResult* result);
+
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
         : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_requests_total",
@@ -136,6 +139,13 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter
 
 StreamLoadAction::~StreamLoadAction() = default;
 
+static void _send_reply(HttpRequest* req, const std::string& str) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load response: " << str;
+    }
+    HttpChannel::send_reply(req, str);
+}
+
 void StreamLoadAction::handle(HttpRequest* req) {
     auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr) {
@@ -145,14 +155,14 @@ void StreamLoadAction::handle(HttpRequest* req) {
     // status already set to fail
     if (ctx->status.ok()) {
         ctx->status = _handle(ctx);
-        if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
-            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.get_error_msg()
+        if (!ctx->status.ok() && !ctx->status.is_publish_timeout()) {
+            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.message()
                          << " " << ctx->brief();
         }
     }
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
 
-    if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
+    if (!ctx->status.ok() && !ctx->status.is_publish_timeout()) {
         if (ctx->need_rollback) {
             (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
             ctx->need_rollback = false;
@@ -163,7 +173,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
     }
 
     auto str = ctx->to_json();
-    HttpChannel::send_reply(req, str);
+    _send_reply(req, str);
 
     // update statstics
     streaming_load_requests_total.increment(1);
@@ -227,14 +237,16 @@ int StreamLoadAction::on_header(HttpRequest* req) {
                 Status::ResourceBusy(fmt::format("Stream Load exceed http cuncurrent limit {}, please try again later",
                                                  config::be_http_num_workers - 1));
         auto str = ctx->to_json();
-        HttpChannel::send_reply(req, str);
+        _send_reply(req, str);
         return -1;
     } else {
         LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db
                   << ", tbl=" << ctx->table;
     }
 
-    VLOG(1) << "streaming load request: " << req->debug_string();
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load request: " << req->debug_string();
+    }
 
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
@@ -247,7 +259,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
             ctx->body_sink->cancel(st);
         }
         auto str = ctx->to_json();
-        HttpChannel::send_reply(req, str);
+        _send_reply(req, str);
         streaming_load_current_processing.increment(-1);
         return -1;
     }
@@ -570,25 +582,22 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
     }
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
-    // plan this load
-    TNetworkAddress master_addr = get_master_address();
-#ifndef BE_TEST
     if (!http_req->header(HTTP_MAX_FILTER_RATIO).empty()) {
         ctx->max_filter_ratio = strtod(http_req->header(HTTP_MAX_FILTER_RATIO).c_str(), nullptr);
     }
 
+    // plan this load
     int64_t stream_load_put_start_time = MonotonicNanos();
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
-            master_addr.hostname, master_addr.port,
-            [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); },
-            rpc_timeout_ms));
-    ctx->stream_load_put_cost_nanos = MonotonicNanos() - stream_load_put_start_time;
-#else
-    ctx->put_result = k_stream_load_put_result;
-#endif
+    RETURN_IF_ERROR(stream_load_put_internal(request, rpc_timeout_ms, &ctx->put_result));
     Status plan_status(ctx->put_result.status);
+    if (plan_status.is_time_out()) {
+        LOG(WARNING) << "plan streaming load failed, will retry. errmsg=" << plan_status.message() << ctx->brief();
+        RETURN_IF_ERROR(stream_load_put_internal(request, rpc_timeout_ms, &ctx->put_result));
+        plan_status = Status(ctx->put_result.status);
+    }
+    ctx->stream_load_put_cost_nanos = MonotonicNanos() - stream_load_put_start_time;
     if (!plan_status.ok()) {
-        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.get_error_msg() << ctx->brief();
+        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << ctx->brief();
         return plan_status;
     }
     VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
@@ -606,6 +615,20 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
+}
+
+Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,
+                                TStreamLoadPutResult* result) {
+    TNetworkAddress master_addr = get_master_address();
+#ifndef BE_TEST
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) { client->streamLoadPut(*result, request); },
+            rpc_timeout_ms));
+#else
+    *result = k_stream_load_put_result;
+#endif
+    return Status::OK();
 }
 
 Status StreamLoadAction::_data_saved_path(HttpRequest* req, std::string* file_path) {

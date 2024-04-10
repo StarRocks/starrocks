@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# (To be deprecated) 外部表
+# 外部表
 
 StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、StarRocks、Elasticsearch、Apache Hive™、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
@@ -584,7 +584,7 @@ StarRocks 使用 Hive 资源来管理使用到的 Hive 集群相关配置，如 
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 
 -- 查看 StarRocks 中创建的资源。
@@ -760,14 +760,14 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 * BE 所在机器的**启动脚本** $BE_HOME/bin/start_be.sh 中需要配置 JAVA_HOME，要配置成 JDK 环境，不能配置成 JRE 环境，比如 `export JAVA_HOME = <JDK 的绝对路径>`。注意需要将该配置添加在 BE 启动脚本最开头，添加完成后需重启 BE。
 * Kerberos 支持
   1. 在所有的 FE/BE 机器上用 `kinit -kt keytab_path principal` 登录，该用户需要有访问 Hive 和 HDFS 的权限。kinit 命令登录是有实效性的，需要将其放入 crontab 中定期执行。
-  2. 把 Hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到 $FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到 $BE_HOME/conf 下。
-  3. 在 $FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS 选项取值里添加 -Djava.security.krb5.conf=/etc/krb5.conf，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
-  4. 在 $BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
-  5. resource 中的 uri 地址一定要使用域名，并且相应的 Hive 和 HDFS 的域名与 IP 的映射都需要配置到 /etc/hosts 中。
+  2. 把 Hadoop 集群中的 `hive-site.xml/core-site.xml/hdfs-site.xml` 放到 `$FE_HOME/conf` 下，把 `core-site.xml/hdfs-site.xml` 放到 `$BE_HOME/conf` 下。
+  3. 在 `$FE_HOME/conf/fe.conf` 文件中的 `JAVA_OPTS` 选项取值里添加 `-Djava.security.krb5.conf=/etc/krb5.conf`，其中 `/etc/krb5.conf` 是 `krb5.conf` 文件的路径，可以根据自己的系统调整。
+  4. 在 `$BE_HOME/conf/be.conf` 文件增加选项 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`，其中 `/etc/krb5.conf` 是 `krb5.conf` 文件的路径，可以根据自己的系统调整。
+  5. resource 中的 uri 地址一定要使用域名，并且相应的 Hive 和 HDFS 的域名与 IP 的映射都需要配置到 `/etc/hosts` 中。
 
 #### AWS S3/Tencent Cloud COS 支持
 
-1. 在 $FE_HOME/conf/core-site.xml 中加入如下配置：
+1. 在 `$FE_HOME/conf/core-site.xml` 中加入如下配置：
 
    ~~~xml
    <configuration>
@@ -803,7 +803,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
    * `fs.s3a.endpoint` 指定 aws 的区域
    * `fs.s3a.connection.maximum` 配置最大链接数，如果查询过程中有报错 `Timeout waiting for connection from poll`，可以适当调高该参数
 
-2. 在 $BE_HOME/conf/be.conf 中加入如下配置。
+2. 在 `$BE_HOME/conf/be.conf` 中加入如下配置。
 
    * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.s3a.access.key` 相同
    * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.s3a.secret.key` 相同
@@ -814,7 +814,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 
 #### Aliyun OSS 支持
 
-1. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
+1. 在 `$FE_HOME/conf/core-site.xml` 中加入如下配置。
 
    ~~~xml
    <configuration>
@@ -850,7 +850,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
      * 根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。
      * 您可以登录 [阿里云 OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，进入 Bucket 概览页，Bucket 域名 examplebucket.oss-cn-hangzhou.aliyuncs.com 的后缀部分 oss-cn-hangzhou.aliyuncs.com，即为该 Bucket 的外网 Endpoint。
 
-2. 在 $BE_HOME/conf/be.conf 中加入如下配置。
+2. 在 `$BE_HOME/conf/be.conf` 中加入如下配置。
 
    * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeyId` 相同
    * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeySecret` 相同
@@ -898,7 +898,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES (
    "type" = "iceberg",
    "iceberg.catalog.type" = "HIVE",
-   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083" 
 );
 ~~~
 
@@ -1067,7 +1067,7 @@ select count(*) from iceberg_tbl;
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 
@@ -1159,7 +1159,7 @@ SELECT COUNT(*) FROM hudi_tbl;
 
 ## (Deprecated) MySQL 外部表
 
-星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过 Unique/Primary 数据模型实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
+星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过更新表或者主键表实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
 
 在使用 MySQL 的数据之前，需在 StarRocks 创建外部表 (CREATE EXTERNAL TABLE)，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
 

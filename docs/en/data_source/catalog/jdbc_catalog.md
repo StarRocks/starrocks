@@ -14,8 +14,8 @@ JDBC catalogs currently support MySQL and PostgreSQL.
 
 ## Prerequisites
 
-- The FEs and BEs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
-- `JAVA_HOME` in the **$BE_HOME/bin/start_be.sh** file on each BE node is properly configured as a path in the JDK environment instead of a path in the JRE environment. For example, you can configure `export JAVA_HOME = <JDK_absolute_path>`. You must add this configuration at the beginning of the script and restart the BE for the configuration to take effect.
+- The FEs and BEs or CNs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
+- `JAVA_HOME` in the **$BE_HOME/bin/start_be.sh** file on each BE or CN node is properly configured as a path in the JDK environment instead of a path in the JRE environment. For example, you can configure `export JAVA_HOME = <JDK_absolute_path>`. You must add this configuration at the beginning of the script and restart the BE or CN for the configuration to take effect.
 
 ## Create a JDBC catalog
 
@@ -50,12 +50,12 @@ The properties of the JDBC Catalog. `PROPERTIES` must include the following para
 | user              | The username that is used to connect to the target database. |
 | password          | The password that is used to connect to the target database. |
 | jdbc_uri          | The URI that the JDBC driver uses to connect to the target database. For MySQL, the URI is in the `"jdbc:mysql://ip:port"` format. For PostgreSQL, the URI is in the `"jdbc:postgresql://ip:port/db_name"` format. For more information: [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html). |
-| driver_url        | The download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br />**NOTE**<br />You can also put the JDBC driver to any same path on the FE and BE nodes and set `driver_url` to that path, which must be in the `file:///<path>/to/the/driver` format. |
+| driver_url        | The download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br />**NOTE**<br />You can also put the JDBC driver to any same path on the FE and BE or CN nodes and set `driver_url` to that path, which must be in the `file:///<path>/to/the/driver` format. |
 | driver_class      | The class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x and earlier) and `com.mysql.cj.jdbc.Driver` (MySQL v6.x and later)</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
 
 > **NOTE**
 >
-> The FEs download the JDBC driver JAR package at the time of JDBC catalog creation, and the BEs download the JDBC driver JAR package at the time of the first query. The amount of time taken for the download varies depending on network conditions.
+> The FEs download the JDBC driver JAR package at the time of JDBC catalog creation, and the BEs or CNs download the JDBC driver JAR package at the time of the first query. The amount of time taken for the download varies depending on network conditions.
 
 ### Examples
 
@@ -114,7 +114,7 @@ DROP Catalog jdbc0;
 1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your JDBC-compatible cluster:
 
    ```SQL
-   SHOW DATABASES <catalog_name>;
+   SHOW DATABASES FROM <catalog_name>;
    ```
 
 2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:

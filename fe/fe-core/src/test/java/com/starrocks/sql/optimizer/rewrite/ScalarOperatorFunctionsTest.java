@@ -54,6 +54,7 @@ public class ScalarOperatorFunctionsTest {
 
     private static ConstantOperator O_TI_10;
     private static ConstantOperator O_SI_10;
+    private static ConstantOperator O_INT_1;
     private static ConstantOperator O_INT_10;
     private static ConstantOperator O_FLOAT_100;
     private static ConstantOperator O_DOUBLE_100;
@@ -79,6 +80,7 @@ public class ScalarOperatorFunctionsTest {
         O_DT_20150323_092355 = ConstantOperator.createDatetime(LocalDateTime.of(2015, 3, 23, 9, 23, 55));
         O_TI_10 = ConstantOperator.createTinyInt((byte) 10);
         O_SI_10 = ConstantOperator.createSmallInt((short) 10);
+        O_INT_1 = ConstantOperator.createInt(1);
         O_INT_10 = ConstantOperator.createInt(10);
         O_FLOAT_100 = ConstantOperator.createFloat(100);
         O_DOUBLE_100 = ConstantOperator.createFloat(100);
@@ -125,9 +127,21 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void quartersAdd() {
+        assertEquals("2015-06-23T09:23:55",
+                ScalarOperatorFunctions.quartersAdd(O_DT_20150323_092355, O_INT_1).getDatetime().toString());
+    }
+
+    @Test
     public void monthsAdd() {
         assertEquals("2016-01-23T09:23:55",
                 ScalarOperatorFunctions.monthsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void weeksAdd() {
+        assertEquals("2015-06-01T09:23:55",
+                ScalarOperatorFunctions.weeksAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
     }
 
     @Test
@@ -152,6 +166,12 @@ public class ScalarOperatorFunctionsTest {
     public void secondsAdd() {
         assertEquals("2015-03-23T09:24:05",
                 ScalarOperatorFunctions.secondsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void millisecondsAdd() {
+        assertEquals("2015-03-23T09:23:55.010",
+                ScalarOperatorFunctions.millisecondsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
     }
 
     @Test
@@ -304,6 +324,14 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("asdfafdfsçv",
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("asdfafdfsçv")).getVarchar());
+
+        Assert.assertNotEquals("53",
+                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
+                        ConstantOperator.createVarchar("%v")).getVarchar());
+
+        assertEquals("01",
+                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
+                        ConstantOperator.createVarchar("%v")).getVarchar());
 
         Assert.assertThrows("%a not supported in date format string", IllegalArgumentException.class, () ->
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%a")).getVarchar());
@@ -474,15 +502,40 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void toDate() {
+        ConstantOperator result1 = ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2001, 1, 9, 13, 4, 5)));
+        assertTrue(result1.getType().isDate());
+        // when transfer constantOpeartor to DateLiteral, only y/m/d will keep
+        assertEquals("2001-01-09T00:00", result1.getDate().toString());
+
+        ConstantOperator result2 = ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 14, 5, 6)));
+        assertTrue(result1.compareTo(result2) == 0);
+    }
+
+    @Test
     public void yearsSub() {
         assertEquals("2005-03-23T09:23:55",
                 ScalarOperatorFunctions.yearsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
     }
 
     @Test
+    public void quartersSub() {
+        assertEquals("2014-12-23T09:23:55",
+                ScalarOperatorFunctions.quartersSub(O_DT_20150323_092355, O_INT_1).getDatetime().toString());
+    }
+
+    @Test
     public void monthsSub() {
         assertEquals("2014-05-23T09:23:55",
                 ScalarOperatorFunctions.monthsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void weeksSub() {
+        assertEquals("2015-01-12T09:23:55",
+                ScalarOperatorFunctions.weeksSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
     }
 
     @Test
@@ -507,6 +560,12 @@ public class ScalarOperatorFunctionsTest {
     public void secondsSub() {
         assertEquals("2015-03-23T09:23:45",
                 ScalarOperatorFunctions.secondsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void millisecondsSub() {
+        assertEquals("2015-03-23T09:23:54.990",
+                ScalarOperatorFunctions.millisecondsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
     }
 
     @Test
@@ -1276,7 +1335,7 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.utcTimestamp().getDatetime());
     }
@@ -1286,7 +1345,7 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
     }
@@ -1296,8 +1355,7 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
-                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        LocalDateTime expected = ctx.getStartTimeInstant().atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now(new ConstantOperator(6, Type.INT)).getDatetime());
     }
 

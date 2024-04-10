@@ -136,7 +136,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         EquivalentDescriptor rightDesc = rightScanDistributionSpec.getEquivDesc();
 
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         long leftTableId = leftDesc.getTableId();
         long rightTableId = rightDesc.getTableId();
 

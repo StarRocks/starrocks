@@ -21,12 +21,15 @@
 
 #include "column/column.h"
 #include "common/status.h"
+#include "exec/hdfs_scanner.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
 #include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/compression/block_compression.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class BlockCompressionCodec;
@@ -50,7 +53,12 @@ public:
 
     Status skip_page();
 
-    Status skip_values(size_t num) { return _cur_decoder->skip(num); }
+    Status skip_values(size_t num) {
+        if (num == 0) {
+            return Status::OK();
+        }
+        return _cur_decoder->skip(num);
+    }
 
     Status next_page();
 
@@ -60,25 +68,11 @@ public:
 
     uint32_t num_values() const { return _num_values; }
 
-    // Try to decode n definition levels into 'levels'
-    // return number of decoded levels.
-    // If the returned value is less than input n, this means current page don't have
-    // enough levels.
-    // User should call next_page() to get more levels
-    size_t decode_def_levels(size_t n, level_t* levels) {
-        DCHECK_GT(_max_def_level, 0);
-        return _def_level_decoder.decode_batch(n, levels);
-    }
-
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
 
-    size_t decode_rep_levels(size_t n, level_t* levels) {
-        DCHECK_GT(_max_rep_level, 0);
-        return _rep_level_decoder.decode_batch(n, levels);
-    }
-
-    Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
+        SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
         size_t idx = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];
@@ -97,6 +91,7 @@ public:
     }
 
     Status decode_values(size_t n, ColumnContentType content_type, Column* dst) {
+        SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
         return _cur_decoder->next_batch(n, content_type, dst);
     }
 
@@ -112,14 +107,27 @@ public:
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
 
+    Status seek_to_offset(const uint64_t off) {
+        RETURN_IF_ERROR(_page_reader->seek_to_offset(off));
+        _page_parse_state = INITIALIZED;
+        return Status::OK();
+    }
+
+    void set_page_num(size_t page_num) { _page_reader->set_page_num(page_num); }
+
+    void set_next_read_page_idx(size_t cur_page_idx) { _page_reader->set_next_read_page_idx(cur_page_idx); }
+
+    Status load_dictionary_page();
+
 private:
     Status _parse_page_header();
     Status _parse_page_data();
 
-    Status _try_load_dictionary();
     Status _read_and_decompress_page_data();
     Status _parse_data_page();
     Status _parse_dict_page();
+
+    Status _try_load_dictionary();
 
     Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
 

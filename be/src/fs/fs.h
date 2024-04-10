@@ -85,12 +85,16 @@ struct SequentialFileOptions {
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
+    // Specify different buffer size for different read scenarios
+    int64_t buffer_size = -1;
 };
 
 struct RandomAccessFileOptions {
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
+    // Specify different buffer size for different read scenarios
+    int64_t buffer_size = -1;
 };
 
 struct DirEntry {
@@ -98,6 +102,11 @@ struct DirEntry {
     std::optional<int64_t> mtime;
     std::optional<int64_t> size; // Undefined if "is_dir" is true
     std::optional<bool> is_dir;
+};
+
+struct FileInfo {
+    std::string path;
+    std::optional<int64_t> size;
 };
 
 struct FileWriteStat {
@@ -159,8 +168,18 @@ public:
         return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const FileInfo& file_info) {
+        return new_random_access_file(RandomAccessFileOptions(), file_info);
+    }
+
     virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                const std::string& fname) = 0;
+
+    // Implementations may make use of the file info to make some optimizations, such as getting the file size directly.
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                               const FileInfo& file_info) {
+        return new_random_access_file(opts, file_info.path);
+    }
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
@@ -229,6 +248,7 @@ public:
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;
 
+    // TODO: Rename this method, because this method can also delete a normal file.
     // Deletes the contents of 'dirname' (if it is a directory) and the contents of all its subdirectories,
     // recursively, then deletes 'dirname' itself. Symlinks are not followed (symlink is removed, not its target).
     virtual Status delete_dir_recursive(const std::string& dirname) = 0;
@@ -286,6 +306,9 @@ struct WritableFileOptions {
     bool sync_on_close = true;
     // For remote filesystem, skip filling local filesystem cache on write requests
     bool skip_fill_local_cache = false;
+
+    bool direct_write = false;
+
     // See OpenMode for details.
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
 };
@@ -323,9 +346,9 @@ public:
 
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
-    const std::string& filename() const { return _name; }
+    const std::string& filename() const override { return _name; }
 
-    bool is_cache_hit() const { return _is_cache_hit; }
+    bool is_cache_hit() const override { return _is_cache_hit; }
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;

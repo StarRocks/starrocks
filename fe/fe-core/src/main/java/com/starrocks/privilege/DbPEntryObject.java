@@ -26,7 +26,9 @@ import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.starrocks.catalog.ExternalCatalog.getCompatibleDbUUID;
 
 public class DbPEntryObject implements PEntryObject {
     @SerializedName(value = "ci")
@@ -84,11 +86,25 @@ public class DbPEntryObject implements PEntryObject {
             return new DbPEntryObject(catalogId, PrivilegeBuiltinConstants.ALL_DATABASES_UUID);
         }
 
-        Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
-        if (database == null) {
-            throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
+        return new DbPEntryObject(catalogId, getDatabaseUUID(mgr, catalogName, tokens.get(0)));
+    }
+
+    /**
+     * for internal database, use {@link Database#getUUID()} as privilege id.
+     * for external database, use database name as privilege id.
+     */
+    public static String getDatabaseUUID(GlobalStateMgr mgr, String catalogName, String dbToken) throws PrivObjNotFoundException {
+        checkArgument(!dbToken.equals("*"));
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Database database = mgr.getMetadataMgr().getDb(catalogName, dbToken);
+            if (database == null) {
+                throw new PrivObjNotFoundException("cannot find db: " + dbToken);
+            }
+            return database.getUUID();
         }
-        return new DbPEntryObject(catalogId, database.getUUID());
+
+        // for database in external catalog, return database name directly without validation
+        return dbToken;
     }
 
     /**
@@ -110,7 +126,8 @@ public class DbPEntryObject implements PEntryObject {
         if (Objects.equals(other.uuid, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
             return this.catalogId == other.catalogId;
         }
-        return this.catalogId == other.catalogId && Objects.equals(other.uuid, this.uuid);
+        return this.catalogId == other.catalogId &&
+                Objects.equals(getCompatibleDbUUID(this.uuid), getCompatibleDbUUID(other.uuid));
     }
 
     @Override
@@ -122,15 +139,10 @@ public class DbPEntryObject implements PEntryObject {
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            return globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
-        } else {
-            Optional<Catalog> catalog = globalStateMgr.getCatalogMgr().getCatalogById(catalogId);
-            if (!catalog.isPresent()) {
-                return false;
-            }
-            String dbName = ExternalCatalog.getDbNameFromUUID(uuid);
-            return globalStateMgr.getMetadataMgr().getDb(catalog.get().getName(), dbName) != null;
+            return globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
         }
+        // do not validate privilege of external database
+        return true;
     }
 
     @Override

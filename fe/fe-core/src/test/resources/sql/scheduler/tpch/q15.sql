@@ -1,47 +1,9 @@
-[sql]
-select
-    s_suppkey,
-    s_name,
-    s_address,
-    s_phone,
-    total_revenue
-from
-    supplier,
-    (	select
-             l_suppkey as supplier_no,
-             sum(l_extendedprice * (1 - l_discount)) as total_revenue
-         from
-             lineitem
-         where
-                 l_shipdate >= date '1995-07-01'
-           and l_shipdate < date '1995-10-01'
-         group by
-             l_suppkey) a
-where
-        s_suppkey = supplier_no
-  and total_revenue = (
-    select
-        max(total_revenue)
-    from
-        (	select
-                 l_suppkey as supplier_no,
-                 sum(l_extendedprice * (1 - l_discount)) as total_revenue
-             from
-                 lineitem
-             where
-                     l_shipdate >= date '1995-07-01'
-               and l_shipdate < date '1995-10-01'
-             group by
-                 l_suppkey) b
-)
-order by
-    s_suppkey;
 [scheduler]
 PLAN FRAGMENT 0(F08)
   DOP: 16
   INSTANCES
     INSTANCE(0-F08#0)
-      BE: 10002
+      BE: 10003
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -95,20 +57,20 @@ PLAN FRAGMENT 3(F05)
   INSTANCES
     INSTANCE(7-F05#0)
       DESTINATIONS: 4-F02#0,5-F02#1,6-F02#2
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 4(F04)
   DOP: 16
   INSTANCES
     INSTANCE(8-F04#0)
       DESTINATIONS: 7-F05#0
-      BE: 10003
+      BE: 10001
     INSTANCE(9-F04#1)
       DESTINATIONS: 7-F05#0
       BE: 10002
     INSTANCE(10-F04#2)
       DESTINATIONS: 7-F05#0
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 5(F03)
   DOP: 16
@@ -356,4 +318,3 @@ PLAN FRAGMENT 6
      cardinality=1
      avgRowSize=32.0
 [end]
-

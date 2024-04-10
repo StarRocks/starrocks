@@ -64,14 +64,20 @@ public class QueryState {
 
     public enum ErrType {
         ANALYSIS_ERR,
-        OTHER_ERR
+        IGNORE_ERR,
+
+        INTERNAL_ERR,
+
+        IO_ERR,
+
+        UNKNOWN
     }
 
     private MysqlStateType stateType = MysqlStateType.OK;
     private String errorMessage = "";
     private ErrorCode errorCode;
     private String infoMessage;
-    private ErrType errType = ErrType.OTHER_ERR;
+    private ErrType errType = ErrType.UNKNOWN;
     private boolean isQuery = false;
     private long affectedRows = 0;
     private int warningRows = 0;
@@ -87,7 +93,7 @@ public class QueryState {
         errorMessage = "";
         errorCode = null;
         infoMessage = null;
-        errType = ErrType.OTHER_ERR;
+        errType = ErrType.UNKNOWN;
         isQuery = false;
         affectedRows = 0;
         warningRows = 0;

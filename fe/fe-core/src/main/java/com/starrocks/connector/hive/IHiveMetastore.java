@@ -42,6 +42,8 @@ public interface IHiveMetastore {
 
     Table getTable(String dbName, String tableName);
 
+    boolean tableExists(String dbName, String tableName);
+
     List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues);
 
     default Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionNames) {

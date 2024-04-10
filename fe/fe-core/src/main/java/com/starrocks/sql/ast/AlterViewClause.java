@@ -26,7 +26,7 @@ public class AlterViewClause extends AlterClause {
 
     protected List<Column> columns;
     protected String inlineViewDef;
-
+    protected String comment;
     public AlterViewClause(List<ColWithComment> colWithComments, QueryStatement queryStatement, NodePosition nodePosition) {
         super(AlterOpType.ALTER_VIEW, nodePosition);
         this.colWithComments = colWithComments;
@@ -47,6 +47,14 @@ public class AlterViewClause extends AlterClause {
 
     public void setColumns(List<Column> columns) {
         this.columns = columns;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 
     public String getInlineViewDef() {

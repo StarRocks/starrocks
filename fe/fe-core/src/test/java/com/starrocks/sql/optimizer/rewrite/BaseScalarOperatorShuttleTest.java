@@ -84,7 +84,8 @@ class BaseScalarOperatorShuttleTest {
     @Test
     void visitCollectionElement() {
         ArrayOperator arrayOperator = new ArrayOperator(ARRAY_TINYINT, true, Lists.newArrayList(ConstantOperator.createInt(3)));
-        CollectionElementOperator operator = new CollectionElementOperator(STRING, arrayOperator, ConstantOperator.createInt(0));
+        CollectionElementOperator operator =
+                new CollectionElementOperator(STRING, arrayOperator, ConstantOperator.createInt(0), false);
         {
             ScalarOperator newOperator = shuttle.visitCollectionElement(operator, null);
             assertEquals(operator, newOperator);

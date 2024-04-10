@@ -19,18 +19,11 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
+#include "util/slice.h"
 
 namespace starrocks::spill {
 
-class BlockReader {
-public:
-    virtual ~BlockReader() = default;
-    // read exacly the specified length of data from Block,
-    // if the Block has reached the end, should return EndOfFile status
-    virtual Status read_fully(void* data, int64_t count) = 0;
-
-    virtual std::string debug_string() = 0;
-};
+class BlockReader;
 
 // Block represents a continuous storage space and is the smallest storage unit of flush and restore in spill task.
 // Block only supports append writing and sequential reading, and neither writing nor reading of Block is guaranteed to be thread-safe.
@@ -49,17 +42,47 @@ public:
     virtual std::string debug_string() const = 0;
 
     size_t size() const { return _size; }
+    bool is_remote() const { return _is_remote; }
+    void set_is_remote(bool is_remote) { _is_remote = is_remote; }
+
+    int32_t next_sequence_id() { return _next_sequence_id++; }
+
+    virtual bool preallocate(size_t write_size) = 0;
 
 protected:
+    int32_t _next_sequence_id{};
     size_t _size{};
+    bool _is_remote = false;
 };
 
 using BlockPtr = std::shared_ptr<Block>;
 
+class BlockReader {
+public:
+    BlockReader(const Block* block) : _block(block) {}
+    virtual ~BlockReader() = default;
+    // read exacly the specified length of data from Block,
+    // if the Block has reached the end, should return EndOfFile status
+    virtual Status read_fully(void* data, int64_t count) = 0;
+
+    virtual std::string debug_string() = 0;
+
+    virtual const Block* block() const = 0;
+
+    int32_t next_sequence_id() { return _next_sequence_id++; }
+
+protected:
+    int32_t _next_sequence_id{};
+    const Block* _block = nullptr;
+};
+
 struct AcquireBlockOptions {
     TUniqueId query_id;
+    TUniqueId fragment_instance_id;
     int32_t plan_node_id;
     std::string name;
+    bool direct_io = false;
+    size_t block_size = 0;
 };
 
 // BlockManager is used to manage the life cycle of the Block.

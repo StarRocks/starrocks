@@ -204,6 +204,9 @@ enum TTaskType {
     // this use for calculate enum count
     DROP_AUTO_INCREMENT_MAP,
     COMPACTION,
+    REMOTE_SNAPSHOT,
+    REPLICATE_SNAPSHOT,
+    UPDATE_SCHEMA,
     NUM_TASK_TYPE
 }
 
@@ -316,6 +319,8 @@ struct TAggregateFunction {
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
   2: optional string symbol
+  // Table function left join
+  3: optional bool is_left_join
 }
 
 // Represents a function in the Catalog.
@@ -394,7 +399,8 @@ enum TTableType {
     MATERIALIZED_VIEW,
     FILE_TABLE,
     DELTALAKE_TABLE,
-    TABLE_FUNCTION_TABLE
+    TABLE_FUNCTION_TABLE,
+    ODPS_TABLE
 }
 
 enum TKeysType {
@@ -561,4 +567,10 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+}
+
+struct TSnapshotInfo {
+    1: optional TBackend backend
+    2: optional string snapshot_path
+    3: optional bool incremental_snapshot
 }

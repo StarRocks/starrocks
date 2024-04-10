@@ -18,6 +18,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -63,6 +66,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -73,6 +77,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
+import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
 public class StatisticUtils {
     private static final Logger LOG = LogManager.getLogger(StatisticUtils.class);
@@ -116,7 +121,7 @@ public class StatisticUtils {
             loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
         }
         if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
-            return StatsConstants.AnalyzeType.SAMPLE;
+            return SAMPLE;
         }
         return StatsConstants.AnalyzeType.FULL;
     }
@@ -155,15 +160,19 @@ public class StatisticUtils {
         }
 
         StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
+        Map<String, String> properties = Maps.newHashMap();
+        if (SAMPLE == analyzeType) {
+            properties = StatsConstants.buildInitStatsProp();
+        }
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), null, analyzeType,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+                StatsConstants.ScheduleType.ONCE, properties, LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         Future<?> future;
         try {
-            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
@@ -171,8 +180,8 @@ public class StatisticUtils {
 
                         statisticExecutor.collectStatistics(statsConnectCtx,
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        new ArrayList<>(collectPartitionIds), null, analyzeType,
-                                        StatsConstants.ScheduleType.ONCE,
+                                        new ArrayList<>(collectPartitionIds), null, null,
+                                        analyzeType, StatsConstants.ScheduleType.ONCE,
                                         analyzeStatus.getProperties()), analyzeStatus, false);
                     });
         } catch (Throwable e) {
@@ -259,6 +268,9 @@ public class StatisticUtils {
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else if (table.isHiveTable()) {
+            // for external table, we get last modified time from other system, there may be a time inconsistency
+            // between the two systems, so we add 60 seconds to make sure table update time is later than
+            // statistics update time
             HiveTable hiveTable = (HiveTable) table;
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
@@ -267,7 +279,7 @@ public class StatisticUtils {
             long lastModifiedTime = partitions.stream().map(PartitionInfo::getModifiedTime).max(Long::compareTo).
                     orElse(0L);
             if (lastModifiedTime != 0L) {
-                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime),
+                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime).plusSeconds(60),
                         Clock.systemDefaultZone().getZone());
             } else {
                 return null;
@@ -275,8 +287,8 @@ public class StatisticUtils {
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             Optional<Snapshot> snapshot = icebergTable.getSnapshot();
-            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()),
-                    Clock.systemDefaultZone().getZone())).orElse(null);
+            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
+                            plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
         } else {
             return null;
         }
@@ -359,6 +371,19 @@ public class StatisticUtils {
                     new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_uuid",  new TypeDef(tableUUIDType)),
+                    new ColumnDef("column_name", new TypeDef(columnNameType)),
+                    new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
+                    new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
@@ -456,24 +481,29 @@ public class StatisticUtils {
     }
 
     public static String quoting(String identifier) {
-        return "`" + identifier + "`";
+        String[] splits = identifier.split("\\.");
+        StringBuilder sb = new StringBuilder();
+        for (String split : splits) {
+            sb.append("`").append(split).append("`.");
+        }
+        return sb.substring(0, sb.length() - 1);
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
         if (table.isHiveTable() || table.isHudiTable()) {
             HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            GlobalStateMgr.getCurrentAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
                     hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
                     hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            GlobalStateMgr.getCurrentAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
@@ -481,6 +511,17 @@ public class StatisticUtils {
         }
 
         List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
-        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+    }
+
+    // only support collect statistics for slotRef and subfield expr
+    public static String getColumnName(Table table, Expr column) {
+        String colName;
+        if (column instanceof SlotRef) {
+            colName = table.getColumn(((SlotRef) column).getColumnName()).getName();
+        } else {
+            colName = ((SubfieldExpr) column).getPath();
+        }
+        return colName;
     }
 }

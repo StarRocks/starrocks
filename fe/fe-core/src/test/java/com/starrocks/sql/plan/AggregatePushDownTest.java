@@ -77,10 +77,10 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "where month(order_date)=1\n" +
                 "order by region, order_date";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, q1);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan, plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: income, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [2: order_date, DATE, false], [1: region, VARCHAR, true]\n"));
+                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"));
 
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: trans, rollup: trans\n" +

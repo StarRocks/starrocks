@@ -24,10 +24,7 @@ PROPERTIES ("key"="value"[, ...])
 
 ### resource_name
 
-资源名称。命名要求如下：
-
-- 必须由数字(0-9)、下划线(_)或字母(a-z或A-Z)组成，且只能以字母开头。
-- 总长度不能超过 64 个字符。
+资源名称。命名要求参见[系统限制](../../../reference/System_limit.md)。
 
 ### PROPERTIES
 
@@ -213,7 +210,7 @@ PROPERTIES (
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -224,7 +221,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES ( 
    "type" = "iceberg", 
    "starrocks.catalog-type"="HIVE", 
-   "iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris"="thrift://xx.xx.xx.xx:9083" 
 );
 ```
 
@@ -234,7 +231,7 @@ PROPERTIES (
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 

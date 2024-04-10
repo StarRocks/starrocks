@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_label: Datadog
 ---
 
 # StarRocks 集成 Datadog

@@ -16,10 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.analysis.TablePattern;
 import com.starrocks.common.Pair;
-import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
@@ -35,11 +32,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected String role;
     protected String objectTypeUnResolved;
     protected List<String> privilegeTypeUnResolved;
-
-    // the following fields is set by analyzer for old privilege framework and will be removed after 2.5 released
-    private PrivBitSet privBitSet = null;
-    private TablePattern tblPattern = null;
-    private ResourcePattern resourcePattern = null;
 
     // the following fields is set by analyzer, for new RBAC privilege framework
     private ObjectType objectType;
@@ -65,16 +57,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.clause = clause;
         this.objectsUnResolved = objectsUnResolved;
         this.role = clause.getRoleName();
-    }
-
-    public void setAnalysedTable(PrivBitSet privBitSet, TablePattern tablePattern) {
-        this.privBitSet = privBitSet;
-        this.tblPattern = tablePattern;
-    }
-
-    public void setAnalysedResource(PrivBitSet privBitSet, ResourcePattern resourcePattern) {
-        this.privBitSet = privBitSet;
-        this.resourcePattern = resourcePattern;
     }
 
     /**
@@ -104,10 +86,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         isGrantOnAll = true;
     }
 
-    public void setPrivBitSet(PrivBitSet privBitSet) {
-        this.privBitSet = privBitSet;
-    }
-
     public void setRole(String role) {
         this.role = role;
     }
@@ -126,18 +104,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public List<String> getPrivilegeTypeUnResolved() {
         return privilegeTypeUnResolved;
-    }
-
-    public TablePattern getTblPattern() {
-        return tblPattern;
-    }
-
-    public ResourcePattern getResourcePattern() {
-        return resourcePattern;
-    }
-
-    public PrivBitSet getPrivBitSet() {
-        return privBitSet;
     }
 
     public ObjectType getObjectType() {

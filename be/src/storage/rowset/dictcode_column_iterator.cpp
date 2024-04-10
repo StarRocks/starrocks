@@ -14,15 +14,43 @@
 
 #include "storage/rowset/dictcode_column_iterator.h"
 
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "gutil/casts.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
 
 Status GlobalDictCodeColumnIterator::decode_dict_codes(const Column& codes, Column* words) {
+    auto code_data = ColumnHelper::get_data_column(&codes);
+    if (code_data->is_array()) {
+        return decode_array_dict_codes(codes, words);
+    }
+
+    return decode_string_dict_codes(codes, words);
+}
+
+Status GlobalDictCodeColumnIterator::decode_array_dict_codes(const Column& codes, Column* words) {
+    auto* code_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(&codes));
+    auto* words_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(words));
+    words_array->offsets_column()->resize(0); // array offset set 0 default
+    words_array->offsets_column()->append(code_array->offsets(), 0, code_array->offsets().size());
+
+    if (codes.is_nullable()) {
+        DCHECK(words->is_nullable());
+        auto* code_null = down_cast<const NullableColumn*>(&codes);
+        auto* words_null = down_cast<NullableColumn*>(words);
+        words_null->mutable_null_column()->append(code_null->null_column_ref(), 0, code_null->size());
+        words_null->set_has_null(code_null->has_null());
+    }
+
+    return decode_string_dict_codes(*code_array->elements_column(), words_array->elements_column().get());
+}
+
+Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& codes, Column* words) {
     const auto& code_data = down_cast<const Int32Column*>(ColumnHelper::get_data_column(&codes))->get_data();
     const size_t size = code_data.size();
 
@@ -47,8 +75,13 @@ Status GlobalDictCodeColumnIterator::decode_dict_codes(const Column& codes, Colu
 
     if (output_nullable) {
         // reserve null data
-        down_cast<NullableColumn*>(words)->null_column_data().resize(size);
+        auto word_nulls = down_cast<NullableColumn*>(words)->mutable_null_column();
+        down_cast<NullableColumn*>(words)->set_has_null(codes.has_null());
         const auto& null_data = down_cast<const NullableColumn&>(codes).immutable_null_column_data();
+        word_nulls->resize(0);
+        for (size_t i = 0; i < size; ++i) {
+            word_nulls->append(null_data[i]);
+        }
         if (codes.has_null()) {
             // assign code 0 if input data is null
             for (size_t i = 0; i < size; ++i) {
@@ -60,7 +93,7 @@ Status GlobalDictCodeColumnIterator::decode_dict_codes(const Column& codes, Colu
     return Status::OK();
 }
 
-Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator* file_column_iter,
+Status GlobalDictCodeColumnIterator::build_code_convert_map(ColumnIterator* file_column_iter,
                                                             GlobalDictMap* global_dict,
                                                             std::vector<int16_t>* code_convert_map) {
     DCHECK(file_column_iter->all_page_dict_encoded());
@@ -94,9 +127,14 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator
     return Status::OK();
 }
 
-ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(bool nullable) {
+ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(Column* src) {
     ColumnPtr res = std::make_unique<Int32Column>();
-    if (nullable) {
+    auto code_data = ColumnHelper::get_data_column(src);
+    if (code_data->is_array()) {
+        res = ArrayColumn::create(NullableColumn::create(res, NullColumn::create()), UInt32Column::create());
+    }
+
+    if (src->is_nullable()) {
         res = NullableColumn::create(std::move(res), NullColumn::create());
     }
     return res;

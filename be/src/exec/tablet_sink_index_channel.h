@@ -136,11 +136,14 @@ public:
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close(bool wait_all_sender_close = false);
+    Status try_close();
     bool is_close_done();
     Status close_wait(RuntimeState* state);
 
+    Status try_finish();
+    bool is_finished();
     void cancel(const Status& err_st);
+    void cancel();
 
     void time_report(std::unordered_map<int64_t, AddBatchCounter>* add_batch_counter_map, int64_t* serialize_batch_ns,
                      int64_t* actual_consume_ns) {
@@ -160,6 +163,9 @@ public:
     std::set<int64_t> immutable_partition_ids() { return _immutable_partition_ids; }
     bool has_immutable_partition() { return !_immutable_partition_ids.empty(); }
     void reset_immutable_partition_ids() { _immutable_partition_ids.clear(); }
+
+    bool has_primary_replica() const { return _has_primary_replica; }
+    void set_has_primary_replica(bool has_primary_replica) { _has_primary_replica = has_primary_replica; }
 
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
@@ -196,9 +202,13 @@ private:
 
     // user cancel or get some errors
     bool _cancelled{false};
+    bool _cancel_finished{false};
 
-    // send finished means the consumer thread which send the rpc can exit
-    bool _send_finished{false};
+    // channel is closed
+    bool _closed{false};
+
+    // data sending is finished
+    bool _finished{false};
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
@@ -244,6 +254,8 @@ private:
     std::set<int64_t> _immutable_partition_ids;
 
     ExprContext* _where_clause = nullptr;
+
+    bool _has_primary_replica = false;
 };
 
 class IndexChannel {
@@ -276,7 +288,7 @@ public:
         }
     }
 
-    void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+    void mark_as_failed(const NodeChannel* ch);
 
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
@@ -303,6 +315,8 @@ private:
 
     bool _has_incremental_node_channel = false;
     ExprContext* _where_clause = nullptr;
+
+    bool _has_intolerable_failure = false;
 };
 
 } // namespace stream_load

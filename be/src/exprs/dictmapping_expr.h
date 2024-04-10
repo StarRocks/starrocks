@@ -25,6 +25,7 @@
 #include "gutil/casts.h"
 
 namespace starrocks {
+class RuntimeState;
 // DictMappingExpr.
 // The original expression will be rewritten as a dictionary mapping function in the global field optimization.
 // child(0) was input lowcardinality dictionary column (input was ID type).
@@ -38,6 +39,8 @@ public:
     DictMappingExpr(const TExprNode& node);
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictMappingExpr(*this)); }
+
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
@@ -56,11 +59,17 @@ public:
     }
 
     SlotId slot_id() {
-        DCHECK_EQ(children().size(), 2);
+        DCHECK_GE(children().size(), 2);
         return down_cast<const ColumnRef*>(get_child(0))->slot_id();
     }
 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override { return get_child(1)->get_slot_ids(slot_ids); }
+
+    void set_output_id(SlotId id) { _output_id = id; }
+
+    SlotId get_output_id() const { return _output_id; }
+
+    void disable_open_rewrite() { _open_rewrite = false; }
 
 private:
     std::shared_ptr<std::once_flag> _rewrite_once_flag = std::make_shared<std::once_flag>();
@@ -68,5 +77,9 @@ private:
     // used for dictionary expression calculation.
     // the input columns are dictionary columns
     Expr* dict_func_expr = nullptr;
+
+    SlotId _output_id = -1;
+
+    bool _open_rewrite = true;
 };
 } // namespace starrocks

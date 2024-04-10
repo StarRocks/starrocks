@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Objects;
-
 
 public class JDBCTableTest {
 
@@ -50,5 +48,4 @@ public class JDBCTableTest {
             Assert.fail();
         }
     }
-
 }

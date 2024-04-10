@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 5
 ---
 
 # BROKER LOAD
@@ -30,19 +31,17 @@ WITH BROKER
 ]
 ```
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../keywords.md)。
 
 ## 参数说明
 
 ### database_name 和 label_name
 
-`label_name` 指定导入作业的标签。
+`label_name` 指定导入作业的标签。命名要求参见[系统限制](../../../reference/System_limit.md)。
 
 `database_name` 为可选，指定目标 StarRocks 表所在的数据库。
 
 每个导入作业都对应一个在该数据库内唯一的标签。通过标签，可以查看对应导入作业的执行情况，并防止导入相同的数据。导入作业的状态为 **FINISHED** 时，其标签不可再复用给其他导入作业。导入作业的状态为 **CANCELLED** 时，其标签可以复用给其他导入作业，但通常都是用来重试同一个导入作业（即使用同一个标签导入相同的数据）以实现数据“精确一次 (Exactly-Once)”语义。
-
-有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。
 
 ### data_desc
 
@@ -92,12 +91,12 @@ INTO TABLE <table_name>
   > - Broker Load 支持通过 S3 或 S3A 协议访问 AWS S3，因此从 AWS S3 导入数据时，您在文件路径中传入的目标文件的 S3 URI 可以使用 `s3://` 或 `s3a://` 作为前缀。
   > - 由于 Broker Load 只支持通过 gs 协议访问 Google GCS，因此当从 Google GCS 导入数据时，必须确保文件路径传入的目标文件的 GCS URI 使用 `gs://` 为前缀。
   > - 从 Blob Storage 导入数据时，需要使用 wasb 或 wasbs 作为文件协议访问目标数据：
-  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 wasb 文件协议，文件路径格式为 `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
-  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 wasbs 文件协议，文件路径格式为 `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
-  > - 从 Azure Data Lake Storage Gen1 导入数据时，需要使用 adl 作为文件协议访问目标数据，文件路径格式为 `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`。
+  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 wasb 文件协议，文件路径格式为 `wasb://<container_name>@<storage_account_name>.blob.core.windows.net/<path>/<file_name>/*`。
+  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 wasbs 文件协议，文件路径格式为 `wasbs://<container_name>@<storage_account_name>.blob.core.windows.net/<path>/<file_name>/*`。
   > - 从 Data Lake Storage Gen2 导入数据时，需要使用 abfs 或 abfss 作为文件协议访问目标数据：
-  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
-  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
+  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container_name>@<storage_account_name>.dfs.core.windows.net/<file_name>`。
+  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container_name>@<storage_account_name>.dfs.core.windows.net/<file_name>`。
+  > - 从 Azure Data Lake Storage Gen1 导入数据时，需要使用 adl 作为文件协议访问目标数据，文件路径格式为 `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`。
   
 - `INTO TABLE`
 
@@ -111,7 +110,7 @@ INTO TABLE <table_name>
 
   > **说明**
   >
-  > 该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+  > 该参数仅适用于目标 StarRocks 表使用聚合表、并且所有 Value 列的聚合函数均为 `sum` 的情况。
 
 - `PARTITION`
 
@@ -200,15 +199,7 @@ INTO TABLE <table_name>
 
 ### WITH BROKER
 
-在 v2.3 及以前版本，您需要在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
-
-> **说明**
->
-> 在 v2.3 及以前版本，StarRocks 在执行 Broker Load 时需要借助 Broker 才能访问外部存储系统，称为“有 Broker 的导入”。Broker 是一个独立的无状态服务，封装了文件系统接口。通过 Broker，StarRocks 能够访问和读取外部存储系统上的数据文件，并利用自身的计算资源对数据文件中的数据进行预处理和导入。
->
-> 自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。
->
-> 您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../../../deployment/deploy_broker.md)完成 Broker 部署。
+自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
 
 ### StorageCredentialParams
 
@@ -254,30 +245,19 @@ StarRocks 访问存储系统的认证配置。
     | kerberos_keytab                 | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
     | kerberos_keytab_content         | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
-    需要注意的是，在多 Kerberos 用户的场景下，您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并且在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪组 Broker。另外还需要打开 Broker 进程的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 进程读取 **krb5.conf** 文件信息：
-
-    ```Plain
-    export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
-    ```
-
-    > **说明**
-    >
-    > - **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker 时，每个 Broker 节点均需要修改如上信息，然后重启各 Broker 节点使配置生效。
-    > - 您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
-
 - HA 配置
 
   可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点，包括如下几种场景：
 
   - 在单 HDFS 集群、并且配置了单 Kerberos 用户的场景下，可以采用有 Broker 的导入，也可以采用无 Broker 的导入。
   
-    - 如果采用有 Broker 的导入，您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
+    - 如果采用有 Broker 的导入，您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
   
-    - 如果采用无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE 节点的 `{deploy}/conf` 目录下。
+    - 如果采用无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE（或 CN）节点的 `{deploy}/conf` 目录下。
 
-  - 在单 HDFS 集群、并且配置了多 Kerberos 用户的场景下，只支持有 Broker 的导入。您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
+  - 在单 HDFS 集群、并且配置了多 Kerberos 用户的场景下，只支持有 Broker 的导入。您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
 
-  - 在多 HDFS 集群场景下（不管是单 Kerberos 用户、还是多 Kerberos 用户），只支持有 Broker 的导入。您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并且采取如下方法之一来配置 Broker 读取 HDFS 集群中各节点的信息：
+  - 在多 HDFS 集群场景下（不管是单 Kerberos 用户、还是多 Kerberos 用户），只支持有 Broker 的导入。您需要确保至少部署了一组独立的 Broker，并且采取如下方法之一来配置 Broker 读取 HDFS 集群中各节点的信息：
   
     - 将 `hdfs-site.xml` 文件放在每个 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
     - 在创建 Broker Load 作业时增加如下 HA 配置：
@@ -504,8 +484,8 @@ StarRocks 访问存储系统的认证配置。
 - 基于 Shared Key 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -518,18 +498,68 @@ StarRocks 访问存储系统的认证配置。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 用于存储数据的 Blob 容器的名称。         |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 用于存储数据的 Blob 容器的名称。         |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+##### Azure Data Lake Storage Gen2
+
+如果存储系统为 Data Lake Storage Gen2，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属的 Tenant 的 ID。                               |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建 Client (Application) Secret。                           |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Azure Data Lake Storage Gen1
 
@@ -562,56 +592,6 @@ StarRocks 访问存储系统的认证配置。
   | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls1.oauth2_credential | 是           | 新建 Client (Application) Secret。                           |
   | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
-
-##### Azure Data Lake Storage Gen2
-
-如果存储系统为 Data Lake Storage Gen2，请按如下配置 `StorageCredentialParams`：
-
-- 基于 Managed Identity 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属的 Tenant 的 ID。                               |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
-
-- 基于 Shared Key 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
-
-- 基于 Service Principal 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建 Client (Application) Secret。                           |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ### opt_properties
 
@@ -667,11 +647,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
   
   - 取值为 `0` 表示不记录过滤掉的数据行。
   - 取值为 `-1` 表示记录所有过滤掉的数据行。
-  - 取值为大于 0 的正整数（比如 `n`）表示每个 BE 节点上最多可以记录 `n` 条过滤掉的数据行。
+  - 取值为大于 0 的正整数（比如 `n`）表示每个 BE（或 CN）节点上最多可以记录 `n` 条过滤掉的数据行。
 
 - `load_mem_limit`
 
-  导入作业的内存限制，最大不超过 BE 的内存限制。单位：字节。默认内存限制为 2 GB。
+  导入作业的内存限制，最大不超过 BE（或 CN）的内存限制。单位：字节。默认内存限制为 2 GB。
 
 - `strict_mode`
 
@@ -679,17 +659,55 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `timezone`
 
-  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。
+  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/management/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/management/timezone.md)”中所述的会话级时区。
 
 - `priority`
 
-   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../../../administration/Configuration.md) `max_broker_load_job_concurrency` 指定 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
+   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` 指定 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
 
    已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) 语句修改该作业的优先级。
 
    StarRocks 自 v2.5 版本起支持为导入作业设置 `priority` 参数。
 
+- `merge_condition`
+
+  用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
+  
+  Broker Load 自 3.1 版本起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md#条件更新)。
+  
+  > **说明**
+  >
+  > 指定的列必须为非主键列，且仅主键表支持条件更新。
+
+StarRocks 自 3.2.3 版本起支持导入 JSON 格式的数据，相关参数如下：
+
+- jsonpaths
+
+  用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[导入 JSON 数据时配置列映射关系](#导入-json-数据时配置列映射关系)。
+
+- strip_outer_array
+
+  用于指定是否裁剪最外层的数组结构。取值范围：`true` 和 `false`。默认值：`false`。
+  
+  真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据文件解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标 StarRocks 表中对应的数据行。
+
+- json_root
+
+  用于指定待导入 JSON 数据的根元素。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为合法的 JsonPath 字符串。默认值为空，表示会导入整个 JSON 数据文件的数据。具体请参见本文提供的示例“[导入数据并指定 JSON 根节点](#指定-json-根节点使用匹配模式导入数据)”。
+
+<!-- - ignore_json_size
+
+  用于指定是否检查 HTTP 请求中 JSON Body 的大小。
+  
+  > **说明**
+  >
+  > HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。
+-->
+另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
+
 ## 列映射
+
+### 导入 CSV 数据时配置列映射关系
 
 如果源数据文件中的列与目标表中的列按顺序一一对应，您不需要指定列映射和转换关系。
 
@@ -706,13 +724,40 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 有关操作示例，参见[设置列映射关系](#设置列映射关系)。
 
+### 导入 JSON 数据时配置列映射关系
+
+如果 JSON 文件中的 Key 名与目标表中的列名一致，您可以使用简单模式来导入数据。简单模式下，不需要设置 `jsonpaths` 参数，这种模式要求 JSON 数据是大括号 {} 表示的对象类型，例如 `{"category": 1, "author": 2, "price": "3"}` 中，`category`、`author`、`price` 是 Key 的名称，按名称直接对应目标 表中的 `category`、`author`、`price` 三列。
+
+如果 JSON 文件中的 Key 名与目标表中的列名不一致，则需要使用匹配模式来导入数据。匹配模式下，需要通过 `jsonpaths` 和 `COLUMNS` 两个参数来指定 JSON 文件中的 Key 和目标表中的列之间的映射和转换关系：
+
+- `jsonpaths` 参数中按照 JSON 文件中 Key 的顺序一一指定待导入的 Key。
+- `COLUMNS` 参数中指定 JSON 文件中的 Key 与目标表中的列之间的映射关系和数据转换关系。
+  - `COLUMNS` 参数中指定的列名与 `jsonpaths` 参数中指定的 Key 按顺序保持一一对应。
+  - `COLUMNS` 参数中指定的列名与目标表中的列按名称保持一一对应。
+
+有关使用匹配模式导入 JSON 数据的示例，参见[使用匹配模式导入数据](#使用匹配模式导入数据)。
+
 ## 相关配置项
 
-[FE 配置项](../../../administration/Configuration.md#fe-配置项) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
+[FE 配置项](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
 
 StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
 
 自 StarRocks v2.5 版本起，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照作业创建时指定的优先级被放到队列中排队等待调度。参见上面介绍的可选参数 `priority`。您可以使用 [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) 语句修改处于 **QUEUEING** 状态或者 **LOADING** 状态的 Broker Load 作业的优先级。
+
+## 作业拆分与并行执行
+
+一个 Broker Load 作业会拆分成一个或者多个子任务并行处理，一个作业的所有子任务作为一个事务整体成功或失败。作业的拆分通过 `LOAD LABEL` 语句中的 `data_desc` 参数来指定：
+
+- 如果声明多个 `data_desc` 参数对应导入多张不同的表，则每张表数据的导入会拆分成一个子任务。
+
+- 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
+
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE（或 CN）上并行执行。实例的拆分由 FE 配置参数 [`min_bytes_per_broker_scanner`](../../../administration/management/FE_configuration.md) 和 BE（或 CN）节点数量决定，可以使用如下公式计算单个子任务的实例总数：
+
+单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`, BE/CN 节点数量）
+
+一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE（或 CN）节点数量相等的实例。
 
 ## 示例
 
@@ -983,7 +1028,7 @@ WITH BROKER
 >
 > - 使用 `hll_empty` 函数给导入的数据行在 `table10` 中的第四列补充默认值。
 
-有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md)和[hll_empty](../../sql-functions/aggregate-functions/hll_empty.md)。
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [hll_hash](../../sql-functions/scalar-functions/hll_hash.md)和[hll_empty](../../sql-functions/scalar-functions/hll_empty.md)。
 
 #### 提取文件路径中的分区字段
 
@@ -1151,3 +1196,143 @@ WITH BROKER
 > - 导入 ORC 格式的数据时，默认通过文件扩展名 (**.orc**) 判断数据文件的格式。如果文件名称中没有包含扩展名，则必须通过 `FORMAT AS` 参数指定数据文件格式为 `ORC`。
 >
 > - StarRocks v2.3 及之前版本，当数据文件中包含 ARRAY 类型的列时，必须确保数据文件和 StarRocks 表中对应的列同名，并且不能写在 SET 子句里。
+
+### 导入 JSON 格式的数据
+
+本小节主要描述导入 JSON 格式的数据时，需要关注的一些参数配置。
+
+StarRocks 数据库 `test_db` 里的表 `tbl1` 拥有如下表结构：
+
+```SQL
+`category` varchar(512) NULL COMMENT "",
+`author` varchar(512) NULL COMMENT "",
+`title` varchar(512) NULL COMMENT "",
+`price` double NULL COMMENT ""
+```
+
+#### 使用简单模式导入数据
+
+假设数据文件 `example1.json` 包含如下数据：
+
+```JSON
+{"category":"C++","author":"avc","title":"C++ primer","price":895}
+```
+
+您可以通过如下命令将 `example1.json` 中的数据导入到 `tbl1` 中：
+
+```SQL
+LOAD LABEL test_db.label15
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+> **说明**
+>
+> 如上述示例所示，在没有指定 `columns` 和 `jsonpaths` 参数的情况下，则会按照 StarRocks 表中的列名称去对应 JSON 数据文件中的字段。
+
+#### 使用匹配模式导入数据
+
+StarRocks 按照如下顺序对数据进行匹配和处理：
+
+1. （可选）根据 `strip_outer_array` 参数裁剪最外层的数组结构。
+
+    > **说明**
+    >
+    > 仅在 JSON 数据的最外层是一个通过中括号 `[]` 表示的数组结构时涉及，需要设置 `strip_outer_array` 为 `true`。
+
+2. （可选）根据 `json_root` 参数匹配 JSON 数据的根节点。
+
+    > **说明**
+    >
+    > 仅在 JSON 数据存在根节点时涉及，需要通过 `json_root` 参数来指定根节点。
+
+3. 根据 `jsonpaths` 参数提取待导入的 JSON 数据。
+
+##### 不指定 JSON 根节点、使用匹配模式导入数据
+
+假设数据文件 `example2.json` 包含如下数据：
+
+```JSON
+[
+    {"category":"xuxb111","author":"1avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb222","author":"2avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb333","author":"3avc","title":"SayingsoftheCentury","price":895}
+]
+```
+
+您可以通过指定 `jsonpaths` 参数进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
+
+```SQL
+LOAD LABEL test_db.label16
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **说明**
+>
+> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 会被忽略掉。
+
+##### 指定 JSON 根节点、使用匹配模式导入数据
+
+假设数据文件 `example3.json` 包含如下数据：
+
+```JSON
+{
+    "id": 10001,
+    "RECORDS":[
+        {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
+        {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
+        {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
+    ],
+    "comments": ["3 records", "there will be 3 rows"]
+}
+```
+
+您可以通过指定 `jsonpaths` 进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
+
+```SQL
+LOAD LABEL test_db.label17
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example3.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "json_root"="$.RECORDS",
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **说明**
+>
+> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 和 `timestamp` 会被忽略掉。另外，示例中还通过 `json_root` 参数指定了需要真正导入的数据为 `RECORDS` 字段对应的值，即一个 JSON 数组。

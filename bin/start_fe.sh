@@ -55,6 +55,8 @@ export DORIS_HOME="$STARROCKS_HOME"
 
 source $STARROCKS_HOME/bin/common.sh
 
+check_and_update_max_processes
+
 # export env variables from fe.conf
 #
 # JAVA_OPTS
@@ -146,6 +148,11 @@ if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
         final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
     fi
     echo "Start debugger with: $final_java_opt"
+fi
+
+# add datadog profile settings when enabled
+if [ "${ENABLE_DATADOG_PROFILE}" == "true" ] && [ -f "${STARROCKS_HOME}/datadog/dd-java-agent.jar" ]; then
+    final_java_opt="-javaagent:${STARROCKS_HOME}/datadog/dd-java-agent.jar ${final_java_opt}"
 fi
 
 if [ ! -d $LOG_DIR ]; then

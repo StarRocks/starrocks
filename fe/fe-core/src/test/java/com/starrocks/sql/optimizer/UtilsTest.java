@@ -263,7 +263,7 @@ public class UtilsTest {
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
-        GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v1",
+        GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v1",
                 new ColumnStatistic(1, 1, 0, 1, 1));
 
         Map<ColumnRefOperator, Column> columnRefMap = new HashMap<>();
@@ -278,9 +278,9 @@ public class UtilsTest {
                 new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
-        GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
+        GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
-        GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v3",
+        GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));

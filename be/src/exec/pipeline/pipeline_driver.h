@@ -318,14 +318,7 @@ public:
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
     bool is_still_pending_finish() { return source_operator()->pending_finish() || sink_operator()->pending_finish(); }
     // return false if all the dependencies are ready, otherwise return true.
-    bool dependencies_block() {
-        if (_all_dependencies_ready) {
-            return false;
-        }
-        _all_dependencies_ready =
-                std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); });
-        return !_all_dependencies_ready;
-    }
+    bool dependencies_block();
 
     // return false if all the local runtime filters are ready, otherwise return false.
     bool local_rf_block() {
@@ -345,7 +338,7 @@ public:
         _all_global_rf_ready_or_timeout =
                 _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
                 std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
-                    return rf_desc->is_local() || rf_desc->runtime_filter() != nullptr;
+                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
                 }); // or all the remote RFs are ready.
 
         return !_all_global_rf_ready_or_timeout;
@@ -368,6 +361,16 @@ public:
             return global_rf_block();
         } else {
             return global_rf_block();
+        }
+    }
+
+    std::string get_preconditions_block_reasons() {
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            return std::string(dependencies_block() ? "(dependencies," : "(") +
+                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(local_rf_block() ? "local runtime filter)" : ")");
+        } else {
+            return "";
         }
     }
 

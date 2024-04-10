@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.gson.JsonElement;
 import com.starrocks.catalog.MvId;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
@@ -42,5 +43,10 @@ public class ConnectorTblMetaInfoMgrTest {
         mgr.removeConnectorTableInfo("cat", "db", "tbl", tableInfo);
         json = mgr.inspect();
         Assert.assertEquals("{}", json);
+
+        ConnectorTableInfo tableInfo1 = new ConnectorTableInfo(null);
+        tableInfo1.updateMetaInfo(tableInfo);
+        JsonElement element = tableInfo1.inspect();
+        Assert.assertEquals("[{\"dbId\":1,\"id\":1},{\"dbId\":1,\"id\":2}]", element.toString());
     }
 }

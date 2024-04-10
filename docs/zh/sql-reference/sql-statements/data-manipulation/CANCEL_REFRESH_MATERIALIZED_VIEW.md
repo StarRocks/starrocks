@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 取消异步物化视图的刷新任务。
 
+:::tip
+
+该操作需要对应物化视图的 REFRESH 权限。
+
+:::
+
 ## 语法
 
 ```SQL

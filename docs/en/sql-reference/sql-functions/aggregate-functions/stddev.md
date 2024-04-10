@@ -3,7 +3,7 @@ displayed_sidebar: "English"
 ---
 
 
-# STDDEV,STDDEV_POP,std
+# stddev,stddev_pop,std
 
 ## Description
 
@@ -21,7 +21,9 @@ STDDEV(expr)
 
 ## Return value
 
-Returns a DOUBLE value.
+Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
+
+![image](../../../assets/stddevpop_formula.png)
 
 ## Examples
 
@@ -33,6 +35,10 @@ mysql> SELECT stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
 |   14.43100708360797 |       14.43100708360797 |
 +---------------------+-------------------------+
 ```
+
+## See also
+
+[stddev_samp](./stddev_samp.md)
 
 ## keyword
 

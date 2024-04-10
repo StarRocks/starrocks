@@ -39,7 +39,7 @@ private:
     void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);
     // Returns information about the blocking drivers with the following format:
     // {
-    //      "queries_not_in_workgroup": [{
+    //      "queries_in_workgroup": [{
     //          "query_id": "str",
     //          "fragments": [{
     //              "fragment_id": "str",
@@ -49,8 +49,7 @@ private:
     //                  "driver_desc": "str"
     //              }]
     //          }]
-    //      }],
-    //      "queries_in_workgroup": []
+    //      }]
     // }
     void _handle_stat(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);

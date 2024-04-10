@@ -1,53 +1,22 @@
-[sql]
-select
-    p_brand,
-    p_type,
-    p_size,
-    count(distinct ps_suppkey) as supplier_cnt
-from
-    partsupp,
-    part
-where
-        p_partkey = ps_partkey
-  and p_brand <> 'Brand#43'
-  and p_type not like 'PROMO BURNISHED%'
-  and p_size in (31, 43, 9, 6, 18, 11, 25, 1)
-  and ps_suppkey not in (
-    select
-        s_suppkey
-    from
-        supplier
-    where
-            s_comment like '%Customer%Complaints%'
-)
-group by
-    p_brand,
-    p_type,
-    p_size
-order by
-    supplier_cnt desc,
-    p_brand,
-    p_type,
-    p_size ;
 [scheduler]
 PLAN FRAGMENT 0(F05)
   DOP: 16
   INSTANCES
     INSTANCE(0-F05#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F04)
   DOP: 16
   INSTANCES
     INSTANCE(1-F04#0)
       DESTINATIONS: 0-F05#0
-      BE: 10003
+      BE: 10001
     INSTANCE(2-F04#1)
       DESTINATIONS: 0-F05#0
       BE: 10002
     INSTANCE(3-F04#2)
       DESTINATIONS: 0-F05#0
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -250,4 +219,3 @@ PLAN FRAGMENT 3
      cardinality=1
      avgRowSize=105.0
 [end]
-

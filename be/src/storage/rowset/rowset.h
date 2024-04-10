@@ -47,6 +47,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
 
@@ -131,7 +132,7 @@ private:
     RowsetState _rowset_state{ROWSET_UNLOADED};
 };
 
-class Rowset : public std::enable_shared_from_this<Rowset> {
+class Rowset : public std::enable_shared_from_this<Rowset>, public BaseRowset {
 public:
     Rowset(const TabletSchemaCSPtr&, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
     Rowset(const Rowset&) = delete;
@@ -148,7 +149,7 @@ public:
     //
     // May be called multiple times, subsequent calls will no-op.
     // Derived class implements the load logic by overriding the `do_load_once()` method.
-    Status load();
+    Status load() override;
 
     // reload this rowset after the underlying segment file is changed
     Status reload();
@@ -175,6 +176,8 @@ public:
 
     std::vector<SegmentSharedPtr>& segments() { return _segments; }
 
+    std::vector<SegmentSharedPtr> get_segments() override { return _segments; }
+
     // only used for updatable tablets' rowset
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
@@ -188,7 +191,7 @@ public:
                                                                    const TabletSchemaCSPtr& tablet_schema,
                                                                    KVStore* meta, int64_t version,
                                                                    OlapReaderStatistics* stats,
-                                                                   KVStore* dcg_meta = nullptr);
+                                                                   KVStore* dcg_meta = nullptr, size_t chunk_size = 0);
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
@@ -216,16 +219,19 @@ public:
     // NOTE: only used for updatable tablet's rowset
     void make_commit(int64_t version, uint32_t rowset_seg_id);
 
+    // Used in commit compaction, record `max_compact_input_rowset_id` for pk recover
+    void make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id);
+
     // helper class to access RowsetMeta
     int64_t start_version() const { return rowset_meta()->version().first; }
     int64_t end_version() const { return rowset_meta()->version().second; }
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
-    size_t num_rows() const { return rowset_meta()->num_rows(); }
+    int64_t num_rows() const override { return rowset_meta()->num_rows(); }
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
     size_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
     Version version() const { return rowset_meta()->version(); }
-    RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
+    RowsetId rowset_id() const override { return rowset_meta()->rowset_id(); }
     std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
@@ -236,6 +242,9 @@ public:
     uint32_t num_update_files() const { return rowset_meta()->get_num_update_files(); }
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
+    bool is_overlapped() const override { return rowset_meta()->is_segments_overlapping(); }
+
+    const TabletSchemaCSPtr tablet_schema() { return rowset_meta()->tablet_schema(); }
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
@@ -302,8 +311,6 @@ public:
     void set_is_compacting(bool flag) { is_compacting.store(flag); }
 
     bool get_is_compacting() { return is_compacting.load(); }
-
-    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
 
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();

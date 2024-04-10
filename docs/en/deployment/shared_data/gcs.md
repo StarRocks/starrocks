@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Deploy StarRocks using GCS 
+# Deploy StarRocks using GCS
 
 import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
 import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
@@ -56,7 +56,7 @@ use the prefix `aws_s3`.
 
 #### run_mode
 
-The running mode of the StarRocks cluster. Valid values: 
+The running mode of the StarRocks cluster. Valid values:
 
 - `shared_data`
 - `shared_nothing` (Default).
@@ -78,7 +78,7 @@ The cloud-native meta service RPC port.
 Whether to allow StarRocks to create the default storage volume by using the object storage-related properties specified in the FE configuration file. Valid values:
 
 - `true` (Default) If you specify this item as `true` when creating a new shared-data cluster, StarRocks creates the built-in storage volume `builtin_storage_volume` using the object storage-related properties in the FE configuration file, and sets it as the default storage volume. However, if you have not specified the object storage-related properties, StarRocks fails to start.
-- `false` If you specify this item as `false` when creating a new shared-data cluster, StarRocks starts directly without creating the built-in storage volume. You must manually create a storage volume and set it as the default storage volume before creating any object in StarRocks. For more information, see [Create the default storage volume](#create-default-storage-volume).
+- `false` If you specify this item as `false` when creating a new shared-data cluster, StarRocks starts directly without creating the built-in storage volume. You must manually create a storage volume and set it as the default storage volume before creating any object in StarRocks. For more information, see [Create the default storage volume](#use-your-shared-data-starrocks-cluster).
 
 Supported from v3.1.0.
 
@@ -149,25 +149,27 @@ enable_load_volume_from_conf = false
 ```
 
 ## Configure CN nodes for shared-data StarRocks
+
 <SharedDataCNconf />
 
 ## Use your shared-data StarRocks cluster
 
 <SharedDataUseIntro />
 
-The following example creates a storage volume `def_volume` for a GCS bucket `defaultbucket` with an HMAC Access Key and Secret Key, enables the storage volume, and sets it as the default storage volume:
+The following example creates a storage volume `def_volume` for a GCS bucket `defaultbucket` with an HMAC Access Key and Secret Key, enables the [Partitioned Prefix](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md#partitioned-prefix) feature, and sets it as the default storage volume:
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
 TYPE = S3
-LOCATIONS = ("s3://defaultbucket/test/")
+LOCATIONS = ("s3://defaultbucket")
 PROPERTIES
 (
     "enabled" = "true",
     "aws.s3.region" = "us-east1",
     "aws.s3.endpoint" = "https://storage.googleapis.com",
     "aws.s3.access_key" = "<HMAC access key>",
-    "aws.s3.secret_key" = "<HMAC secret key>"
+    "aws.s3.secret_key" = "<HMAC secret key>",
+    "aws.s3.enable_partitioned_prefix" = "true"
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;

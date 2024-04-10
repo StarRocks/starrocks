@@ -14,12 +14,27 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Set;
 
 public class MvRewriteHiveTest extends MvRewriteTestBase {
@@ -27,12 +42,12 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
     }
 
     @Test
     public void testHiveJoinMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
                 " as " +
                 " SELECT s_suppkey , s_name, n_name" +
@@ -73,7 +88,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
         dropMv("test", "hive_join_mv_1");
 
-        createAndRefreshMv("test", "hive_join_mv_2", "create materialized view hive_join_mv_2" +
+        createAndRefreshMv("create materialized view hive_join_mv_2" +
                 " distributed by hash(s_nationkey)" +
                 " as " +
                 " SELECT s_nationkey , s_name, n_name" +
@@ -107,7 +122,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveAggregateMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
                 " as " +
                 " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
@@ -144,8 +159,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     @Test
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan1 = getFragmentPlan(query1);
@@ -162,10 +176,9 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         // enforce choose the hive scan operator, not mv plan
         connectContext.getSessionVariable().setUseNthExecPlan(1);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
                 " as " +
                 " SELECT s_suppkey , s_name, n_name" +
@@ -183,8 +196,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveStaleness() throws Exception {
-        createAndRefreshMv("test", "hive_staleness_1",
-                "create materialized view hive_staleness_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_staleness_1 distributed by hash(s_suppkey) " +
                         "PROPERTIES (\n" +
                         "\"mv_rewrite_staleness_second\" = \"60\"" +
                         ") " +
@@ -210,8 +222,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @Test
     public void testHivePartitionPrune1() throws Exception {
-        createAndRefreshMv("test", "hive_partition_prune_mv1",
-                "CREATE MATERIALIZED VIEW `hive_partition_prune_mv1`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_partition_prune_mv1`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -260,6 +271,80 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                     "     rollup: hive_partition_prune_mv1");
         }
         starRocksAssert.dropMaterializedView("hive_partition_prune_mv1");
+    }
+
+    @Test
+    public void testPartitionedHiveMVWithLooseMode() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_partitioned_mv`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"query_rewrite_consistency\" = \"loose\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+
+        refreshMaterializedViewWithPartition("test", "hive_partitioned_mv",
+                "1998-01-02", "1998-01-04");
+        Set<String> toRefreshPartitions = Sets.newHashSet();
+
+        MaterializedView mv1 = getMv("test", "hive_partitioned_mv");
+        boolean result = mv1.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        Assert.assertTrue(result);
+        Assert.assertEquals(4, toRefreshPartitions.size());
+        Assert.assertTrue(toRefreshPartitions.contains("p19980101"));
+        Assert.assertTrue(toRefreshPartitions.contains("p19980104"));
+        Assert.assertTrue(toRefreshPartitions.contains("p19980105"));
+
+        String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "hive_partitioned_mv", "UNION");
+        dropMv("test", "hive_partitioned_mv");
+    }
+
+    @Test
+    public void testUnPartitionedHiveMVWithLooseMode() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_unpartitioned_mv`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"query_rewrite_consistency\" = \"loose\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+        MaterializedView mv1 = getMv("test", "hive_unpartitioned_mv");
+        Set<String> toRefreshPartitions = Sets.newHashSet();
+        boolean result = mv1.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        Assert.assertTrue(result);
+        Assert.assertEquals(1, toRefreshPartitions.size());
+
+        toRefreshPartitions.clear();
+        refreshMaterializedView("test", "hive_unpartitioned_mv");
+        result = mv1.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        Assert.assertTrue(result);
+        Assert.assertEquals(0, toRefreshPartitions.size());
+
+        String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "hive_unpartitioned_mv");
+        dropMv("test", "hive_unpartitioned_mv");
     }
 
     @Test
@@ -344,5 +429,319 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         String plan = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan, "hive_partitioned_mv");
         dropMv("test", "hive_partitioned_mv");
+    }
+
+    private List<LogicalScanOperator> getQueryOptExpression(String query) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        QueryStatement statement = null;
+        try {
+            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
+        } catch (Exception e) {
+            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+        }
+        LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
+                logicalPlan, optimizerConfig);
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
+        return scanOperators;
+    }
+
+    private ScanOperatorPredicates getScanOperatorPredicates(LogicalScanOperator logicalScanOperator) {
+        try {
+            return logicalScanOperator.getScanOperatorPredicates();
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        return null;
+    }
+
+    @Test
+    public void testHivePartitionPruner0() {
+        String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "GROUP BY `l_orderkey`, `l_suppkey`;";
+        List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+        Assert.assertTrue(scanOperators.size() == 1);
+        ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
+        Assert.assertTrue(scanOperatorPredicates != null);
+        Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+        Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 0);
+        Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 6);
+        Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
+        Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
+        Assert.assertTrue(scanOperators.get(0).getPredicate() == null);
+        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5]"));
+    }
+
+    @Test
+    public void testHivePartitionPruner1() {
+        // queries that can be pruned by optimizer
+        List<String> queries = ImmutableList.of(
+                "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "WHERE l_shipdate = '1998-01-01' GROUP BY `l_orderkey`, `l_suppkey`;",
+                "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "WHERE date_sub(l_shipdate, interval 1 day) = '1998-01-02' GROUP BY `l_orderkey`, `l_suppkey`;"
+        );
+
+        List<String> expects = ImmutableList.of(
+                "selectedPartitionIds=[1], partitionConjuncts=[16: l_shipdate = 1998-01-01]",
+                "selectedPartitionIds=[3], partitionConjuncts=[16: l_shipdate = 1998-01-03]"
+        );
+        for (int i = 0; i < queries.size(); i++) {
+            String query = queries.get(i);
+            List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+            Assert.assertTrue(scanOperators.size() == 1);
+            ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
+            Assert.assertTrue(scanOperatorPredicates != null);
+            Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+            Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 1);
+            Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 1);
+            Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
+            Assert.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 0);
+            Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 1);
+            // TODO: fixme
+            Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
+            Assert.assertTrue(scanOperatorPredicates.toString().equals(expects.get(i)));
+        }
+    }
+
+    @Test
+    public void testHivePartitionPruner2() {
+        String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "WHERE date_trunc('month', l_shipdate) = date_sub('1998-01-02', interval 1 day) " +
+                "GROUP BY `l_orderkey`, `l_suppkey`;";
+        List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+        Assert.assertTrue(scanOperators.size() == 1);
+        ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
+        Assert.assertTrue(scanOperatorPredicates != null);
+        Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+        Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 1);
+        Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
+        Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 6);
+        Assert.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 1);
+        Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
+        Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
+        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5], " +
+                "partitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01], " +
+                "noEvalPartitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01]"));
+    }
+
+    @Test
+    public void testHivePartitionPruner3() {
+        String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                " WHERE date_trunc('month', l_shipdate) = date_sub('1998-01-02', interval 1 day) " +
+                " and l_shipdate >= '1998-01-01' and l_orderkey > 1000 " +
+                " GROUP BY `l_orderkey`, `l_suppkey`;";
+        List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+        Assert.assertTrue(scanOperators.size() == 1);
+        ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
+        Assert.assertTrue(scanOperatorPredicates != null);
+        Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+        Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 1);
+        Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 5);
+
+        Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 2);
+        Assert.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 1);
+        Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 1);
+
+        Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
+        List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperators.get(0).getPredicate());
+        Assert.assertTrue(predicates.size() == 3);
+        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[1, 2, 3, 4, 5], " +
+                "partitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01, 16: l_shipdate >= 1998-01-01], " +
+                "noEvalPartitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01], " +
+                "nonPartitionConjuncts=[1: l_orderkey > 1000], minMaxConjuncts=[1: l_orderkey > 1000]"));
+    }
+
+    @Test
+    public void testHivePartitionPruneWithTwoTables1() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PARTITION BY (l_shipdate)\n" +
+                "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
+                " SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                " FROM hive0.partitioned_db.lineitem_par as a " +
+                " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                " WHERE b.o_orderdate >= '1991-01-01' and a.l_shipdate >= '1991-01-01' \n " +
+                " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+        starRocksAssert.withMaterializedView(mv1, (obj) -> {
+            String mvName = (String) obj;
+            refreshMaterializedView(DB_NAME, mvName);
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate >= '1991-01-01' and a.l_shipdate >= '1991-01-01' \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=5/6\n" +
+                        "     rollup: mv1");
+            }
+
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate >= '1991-01-01' and a.l_suppkey > 1 and a.l_shipdate >= '1991-01-01' \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 28: l_suppkey > 1\n" +
+                        "     partitions=5/6\n" +
+                        "     rollup: mv1");
+            }
+        });
+    }
+
+    @Test
+    public void testHivePartitionPruneWithTwoTables2() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PARTITION BY (l_shipdate)\n" +
+                "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
+                " SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                " FROM hive0.partitioned_db.lineitem_par as a " +
+                " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                " WHERE b.o_orderdate is not null and a.l_shipdate is not null \n " +
+                " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+        starRocksAssert.withMaterializedView(mv1, (obj) -> {
+            String mvName = (String) obj;
+            refreshMaterializedView(DB_NAME, mvName);
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate is not null and a.l_shipdate is not null \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate is not null and a.l_suppkey > 1 and a.l_shipdate is not null \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 28: l_suppkey > 1\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+        });
+    }
+
+    @Test
+    public void testHivePartitionPruneWithTwoTablesInnerJoin1() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PARTITION BY (l_shipdate)\n" +
+                "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
+                " SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                " FROM hive0.partitioned_db.lineitem_par as a " +
+                " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                " WHERE b.o_orderdate >= '1991-01-01' and a.l_shipdate >= '1991-01-01' \n " +
+                " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+        starRocksAssert.withMaterializedView(mv1, (obj) -> {
+            String mvName = (String) obj;
+            refreshMaterializedView(DB_NAME, mvName);
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate >= '1991-01-01' and a.l_shipdate >= '1991-01-01' \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=5/6\n" +
+                        "     rollup: mv1");
+            }
+
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate >= '1991-01-01' and a.l_suppkey > 1 and a.l_shipdate >= '1991-01-01' \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 28: l_suppkey > 1\n" +
+                        "     partitions=5/6\n" +
+                        "     rollup: mv1");
+            }
+        });
+    }
+
+    @Test
+    public void testHivePartitionPruneWithTwoTablesInnerJoin2() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PARTITION BY (l_shipdate)\n" +
+                "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
+                " SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                " FROM hive0.partitioned_db.lineitem_par as a " +
+                " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                " WHERE b.o_orderdate is not null and a.l_shipdate is not null \n " +
+                " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+        starRocksAssert.withMaterializedView(mv1, (obj) -> {
+            String mvName = (String) obj;
+            refreshMaterializedView(DB_NAME, mvName);
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate is not null and a.l_shipdate is not null \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate is not null and a.l_suppkey > 1 and a.l_shipdate is not null \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 28: l_suppkey > 1\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+        });
     }
 }

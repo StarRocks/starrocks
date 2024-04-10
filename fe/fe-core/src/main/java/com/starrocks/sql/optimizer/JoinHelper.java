@@ -142,7 +142,7 @@ public class JoinHelper {
 
     public boolean onlyShuffle() {
         return type.isRightJoin() || type.isFullOuterJoin() || JoinOperator.HINT_SHUFFLE.equals(hint) ||
-                JoinOperator.HINT_BUCKET.equals(hint);
+                JoinOperator.HINT_BUCKET.equals(hint) || JoinOperator.HINT_SKEW.equals(hint);
     }
 
     public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,

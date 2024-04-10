@@ -31,6 +31,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
@@ -116,7 +117,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     public HudiTable(long id, String name, String catalogName, String hiveDbName, String hiveTableName,
-                     String resourceName, List<Column> schema, List<String> dataColumnNames,
+                     String resourceName, String comment, List<Column> schema, List<String> dataColumnNames,
                      List<String> partColumnNames, long createTime, Map<String, String> properties) {
         super(id, name, TableType.HUDI, schema);
         this.catalogName = catalogName;
@@ -127,6 +128,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.createTime = createTime;
         this.hudiProperties = properties;
+        this.comment = comment;
     }
 
     public String getDbName() {
@@ -293,6 +295,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
         tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
         tHudiTable.setSerde_lib(hudiProperties.get(HUDI_TABLE_SERDE_LIB));
+        tHudiTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         TTableDescriptor tTableDescriptor =
                 new TTableDescriptor(id, TTableType.HUDI_TABLE, fullSchema.size(), 0, hiveTableName, hiveDbName);
@@ -435,6 +438,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         private String hiveDbName;
         private String hiveTableName;
         private String resourceName;
+
+        private String comment;
         private long createTime;
         private List<Column> fullSchema;
         private List<String> partitionColNames = Lists.newArrayList();
@@ -474,6 +479,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setComment(String comment) {
+            this.comment = comment;
+            return this;
+        }
+
         public Builder setCreateTime(long createTime) {
             this.createTime = createTime;
             return this;
@@ -500,8 +510,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         public HudiTable build() {
-            return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, fullSchema,
-                    dataColNames, partitionColNames, createTime, hudiProperties);
+            return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, comment,
+                    fullSchema, dataColNames, partitionColNames, createTime, hudiProperties);
         }
     }
 }

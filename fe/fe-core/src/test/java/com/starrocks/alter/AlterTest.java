@@ -35,14 +35,6 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
-import com.staros.proto.FileCacheInfo;
-import com.staros.proto.FilePathInfo;
-import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -54,7 +46,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -65,13 +56,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfoV2;
-import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.Constants;
@@ -79,8 +68,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -108,14 +96,14 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -262,7 +250,7 @@ public class AlterTest {
         String dropSQL = "drop table test_partition_exception";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }
@@ -280,28 +268,26 @@ public class AlterTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     private static void createMaterializedView(String sql) throws Exception {
-        Config.enable_experimental_mv = true;
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
     }
 
     private static void dropMaterializedView(String sql) throws Exception {
-        Config.enable_experimental_mv = true;
         DropMaterializedViewStmt dropMaterializedViewStmt =
                 (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(dropMaterializedViewStmt);
     }
 
     private static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
         AlterMaterializedViewStmt alterMaterializedViewStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterMaterializedView(alterMaterializedViewStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterMaterializedViewStmt);
             if (expectedException) {
                 Assert.fail();
             }
@@ -348,7 +334,7 @@ public class AlterTest {
     private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail();
             }
@@ -363,7 +349,7 @@ public class AlterTest {
     private static void alterTableWithNewParserAndExceptionMsg(String sql, String msg) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         } catch (Exception e) {
             Assert.assertEquals(msg, e.getMessage());
         }
@@ -400,7 +386,7 @@ public class AlterTest {
                 getDb("test").getTable("mv2");
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
+        Assert.assertEquals("insert overwrite `mv2` SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
         ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         ConnectContext.get().setCurrentRoleIds(UserIdentity.ROOT);
@@ -1000,7 +986,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1018,14 +1004,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-07\") EVERY (interval 1 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1038,7 +1024,7 @@ public class AlterTest {
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -1047,7 +1033,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1062,7 +1048,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1070,11 +1056,11 @@ public class AlterTest {
         Assert.assertTrue(partition.isPresent());
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
-        GlobalStateMgr.getCurrentState().addSubPartitions(db, table.getName(), partition.get(), 1);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 1);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 2);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 2);
 
-        GlobalStateMgr.getCurrentState().addSubPartitions(db, table.getName(), partition.get(), 2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 2);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 4);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
 
@@ -1090,7 +1076,7 @@ public class AlterTest {
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1098,7 +1084,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1116,7 +1102,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1125,20 +1111,20 @@ public class AlterTest {
         Partition partition = table.getPartition("p20140101");
         Assert.assertNotNull(partition);
 
-        GlobalStateMgr.getCurrentState().addSubPartitions(db, table.getName(), partition, 1);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition, 1);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
         Assert.assertEquals(partition.getSubPartitions().size(), 2);
 
         partition = table.getPartition("p20140103");
         Assert.assertNotNull(partition);
 
-        GlobalStateMgr.getCurrentState().addSubPartitions(db, table.getName(), partition, 2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition, 2);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 6);
         Assert.assertEquals(partition.getSubPartitions().size(), 3);
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -1146,7 +1132,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1161,7 +1147,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1169,227 +1155,7 @@ public class AlterTest {
         Assert.assertTrue(partition.isPresent());
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
-        GlobalStateMgr.getCurrentState().addSubPartitions(db, table.getName(), partition.get(), 1);
-    }
-
-    @Test
-    public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
-                        .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setFsName("test-fsname");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/1/");
-        FilePathInfo pathInfo = builder.build();
-
-        new Expectations() {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = pathInfo;
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L, 20006L),
-                        Lists.newArrayList(20007L, 20008L, 20009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new MockUp<SharedNothingStorageVolumeMgr>() {
-            @Mock
-            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public String getStorageVolumeIdOfTable(long tableId) {
-                return fsInfo.getFsKey();
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String dropSQL = "drop table if exists test_lake_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-        String createSQL = "CREATE TABLE test.test_lake_partition (\n" +
-                "      k1 DATE,\n" +
-                "      k2 INT,\n" +
-                "      k3 SMALLINT,\n" +
-                "      v1 VARCHAR(2048),\n" +
-                "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
-                ")\n" +
-                "DUPLICATE KEY(k1, k2, k3)\n" +
-                "PARTITION BY RANGE (k1, k2, k3) (\n" +
-                "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
-                "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "   \"datacache.enable\" = \"true\"\n" +
-                ")";
-
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-
-        String alterSQL = "ALTER TABLE test_lake_partition ADD\n" +
-                "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_lake_partition", addPartitionClause);
-
-        Table table = GlobalStateMgr.getCurrentState().getDb("test")
-                .getTable("test_lake_partition");
-
-        Assert.assertNotNull(table.getPartition("p1"));
-        Assert.assertNotNull(table.getPartition("p2"));
-        Assert.assertNotNull(table.getPartition("p3"));
-
-        dropSQL = "drop table test_lake_partition";
-        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-    }
-
-    @Test
-    public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        fsBuilder.setFsName("test-fsname");
-        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
-                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/1/");
-        FilePathInfo pathInfo = builder.build();
-
-        new Expectations() {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = pathInfo;
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(30001L, 30002L, 30003L),
-                        Lists.newArrayList(30004L, 30005L, 30006L),
-                        Lists.newArrayList(30007L, 30008L, 30009L),
-                        Lists.newArrayList(30010L, 30011L, 30012L),
-                        Lists.newArrayList(30013L, 30014L, 30015L),
-                        Lists.newArrayList(30016L, 30017L, 30018L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new MockUp<SharedNothingStorageVolumeMgr>() {
-            @Mock
-            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public String getStorageVolumeIdOfTable(long tableId) {
-                return fsInfo.getFsKey();
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String dropSQL = "drop table if exists site_access";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-        String createSQL = "CREATE TABLE site_access (\n" +
-                "    datekey INT,\n" +
-                "    site_id INT,\n" +
-                "    city_code SMALLINT,\n" +
-                "    user_name VARCHAR(32),\n" +
-                "    pv BIGINT DEFAULT '0'\n" +
-                ")\n" +
-                "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
-                "PARTITION BY RANGE (datekey) (\n" +
-                "    START (\"1\") END (\"5\") EVERY (1)\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(site_id) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ")";
-
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-
-        String alterSQL = "ALTER TABLE site_access \n" +
-                "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
-
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "site_access", addPartitionClause);
-
-        Table table = GlobalStateMgr.getCurrentState().getDb("test")
-                .getTable("site_access");
-
-        Assert.assertNotNull(table.getPartition("p1"));
-        Assert.assertNotNull(table.getPartition("p2"));
-        Assert.assertNotNull(table.getPartition("p3"));
-        Assert.assertNotNull(table.getPartition("p4"));
-        Assert.assertNotNull(table.getPartition("p7"));
-        Assert.assertNotNull(table.getPartition("p8"));
-
-        dropSQL = "drop table site_access";
-        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 1);
     }
 
     @Test
@@ -1434,14 +1200,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-15\") EVERY (interval 5 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1452,7 +1218,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -1475,14 +1241,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_exception ADD\n" +
                 "    PARTITIONS START (\"2014-01-01\") END (\"2014-01-04\") EVERY (interval 1 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exception", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exception", addPartitionClause);
     }
 
     @Test
@@ -1505,14 +1271,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_week ADD\n" +
                 "    PARTITIONS START (\"2017-03-25\") END (\"2017-04-10\") EVERY (interval 1 week)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_week", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_week", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_week");
@@ -1523,7 +1289,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         Config.enable_create_partial_partition_in_batch = false;
     }
 
@@ -1546,14 +1312,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_week ADD\n" +
                 "    PARTITIONS START (\"2017-03-20\") END (\"2017-04-10\") EVERY (interval 1 week)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_week", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_week", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_week");
@@ -1564,7 +1330,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1572,7 +1338,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1589,14 +1355,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2017-04-01\") EVERY (interval 1 month)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1608,7 +1374,7 @@ public class AlterTest {
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1616,7 +1382,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1633,14 +1399,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2020-01-01\") EVERY (interval 1 YEAR)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1652,7 +1418,7 @@ public class AlterTest {
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1660,7 +1426,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 INT,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1677,14 +1443,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"1\") END (\"4\") EVERY (1)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -1696,7 +1462,7 @@ public class AlterTest {
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1704,7 +1470,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1722,7 +1488,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
@@ -1730,7 +1496,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
-            GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
             Assert.fail();
         } catch (DdlException ex) {
 
@@ -1745,7 +1511,7 @@ public class AlterTest {
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -1770,7 +1536,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_0day ADD\n" +
@@ -1778,7 +1544,7 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
-            GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_0day", addPartitionClause);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_0day", addPartitionClause);
             Assert.fail();
         } catch (DdlException ex) {
 
@@ -1793,7 +1559,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_0day";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -1802,7 +1568,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test_partition (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1820,7 +1586,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
@@ -1828,7 +1594,7 @@ public class AlterTest {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
             AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-            GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
             Assert.fail();
         } catch (AnalysisException ex) {
 
@@ -1843,7 +1609,7 @@ public class AlterTest {
 
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1866,20 +1632,20 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exists", addPartitionClause);
 
         String alterSQL2 =
                 "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-02')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists", addPartitionClause2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exists", addPartitionClause2);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists");
@@ -1888,7 +1654,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_exists";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1911,20 +1677,20 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists2", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exists2", addPartitionClause);
 
         String alterSQL2 =
                 "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists2", addPartitionClause2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exists2", addPartitionClause2);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists2");
@@ -1933,7 +1699,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_exists2";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -1956,18 +1722,18 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists3", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exists3", addPartitionClause);
 
         String alterSQL2 = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists3", addPartitionClause2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exists3", addPartitionClause2);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists3");
@@ -1976,7 +1742,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_exists3";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test
@@ -2001,9 +1767,11 @@ public class AlterTest {
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(testUser));
         starRocksAssert.getCtx().setRemoteIP("%");
 
-        String renameDb = "alter database test rename test0";
+        starRocksAssert.withDatabase("test_to_rename");
+        String renameDb = "alter database test_to_rename rename test_to_rename_2";
         AlterDatabaseRenameStatement renameDbStmt =
                 (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(renameDbStmt, starRocksAssert.getCtx());
     }
 
     @Test
@@ -2027,7 +1795,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("2022-04-01", "shandong");
@@ -2035,7 +1803,7 @@ public class AlterTest {
         multiValues.add(values);
         PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p3", multiValues, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
 
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -2049,7 +1817,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -2066,10 +1834,10 @@ public class AlterTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         String stmt = "alter table modify_bucket set (\"dynamic_partition.buckets\" = \"10\");\n";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test
@@ -2093,13 +1861,13 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("shanxi", "shanghai");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition", addPartitionClause);
 
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
@@ -2113,7 +1881,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -2137,7 +1905,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
@@ -2185,12 +1953,12 @@ public class AlterTest {
 
         // replay log
         partitionInfo.setValues(partitionId, null);
-        GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayAddPartition(partitionPersistInfoIn);
         Assert.assertNotNull(partitionInfo.getIdToValues().get(partitionId));
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         file.delete();
     }
 
@@ -2214,7 +1982,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
@@ -2266,143 +2034,12 @@ public class AlterTest {
 
         // replay log
         partitionInfo.setMultiValues(partitionId, null);
-        GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayAddPartition(partitionPersistInfoIn);
         Assert.assertNotNull(partitionInfo.getIdToMultiValues().get(partitionId));
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-        file.delete();
-    }
-
-    @Test
-    public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
-                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setFsName("test-fsname");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/1/");
-        FilePathInfo pathInfo = builder.build();
-
-        new Expectations() {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = pathInfo;
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(30001L, 30002L, 30003L),
-                        Lists.newArrayList(30004L, 30005L, 30006L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new MockUp<SharedNothingStorageVolumeMgr>() {
-            @Mock
-            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public String getStorageVolumeIdOfTable(long tableId) {
-                return fsInfo.getFsKey();
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String createSQL = "CREATE TABLE test.new_table (\n" +
-                "      k1 DATE,\n" +
-                "      k2 INT,\n" +
-                "      k3 SMALLINT,\n" +
-                "      v1 VARCHAR(2048),\n" +
-                "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
-                ")\n" +
-                "DUPLICATE KEY(k1, k2, k3)\n" +
-                "PARTITION BY RANGE (k1, k2, k3) (\n" +
-                "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
-                "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "   \"datacache.enable\" = \"true\"\n" +
-                ")";
-
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("new_table");
-        RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-
-        long dbId = db.getId();
-        long tableId = table.getId();
-        Partition partition = table.getPartition("p1");
-        long partitionId = partition.getId();
-        DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
-        short replicationNum = partitionInfo.getReplicationNum(partitionId);
-        boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
-        boolean isTempPartition = false;
-        Range<PartitionKey> range = partitionInfo.getRange(partitionId);
-        DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partitionId);
-        RangePartitionPersistInfo partitionPersistInfoOut = new RangePartitionPersistInfo(dbId, tableId, partition,
-                dataProperty, replicationNum, isInMemory, isTempPartition, range, dataCacheInfo);
-
-        // write log
-        File file = new File("./test_serial.log");
-        if (file.exists()) {
-            file.delete();
-        }
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        partitionPersistInfoOut.write(out);
-
-        // read log
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
-
-        Assert.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
-        Assert.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
-        Assert.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
-        Assert.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
-        Assert.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
-        Assert.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
-        Assert.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
-        Assert.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
-
-        // replay log
-        GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
-        Assert.assertNotNull(partitionInfo.getDataCacheInfo(partitionId));
-
-        String dropSQL = "drop table new_table";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         file.delete();
     }
 
@@ -2427,13 +2064,13 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("shanxi", "heilongjiang");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p1", values, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_1", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_1", addPartitionClause);
     }
 
     @Test(expected = DdlException.class)
@@ -2457,7 +2094,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values1 = Lists.newArrayList("2022-04-01", "beijing");
@@ -2467,7 +2104,7 @@ public class AlterTest {
         multiValues.add(values2);
         PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p1", multiValues, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_2", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_2", addPartitionClause);
     }
 
     @Test(expected = DdlException.class)
@@ -2491,13 +2128,13 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("beijing", "chongqing");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_3", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_3", addPartitionClause);
     }
 
     @Test(expected = DdlException.class)
@@ -2521,7 +2158,7 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("2022-04-01", "shanghai");
@@ -2529,7 +2166,7 @@ public class AlterTest {
         multiValues.add(values);
         PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p3", multiValues, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_4", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_4", addPartitionClause);
     }
 
     @Test
@@ -2601,16 +2238,15 @@ public class AlterTest {
                 ");";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test2");
-
 
         String sql = "alter table test2.site_access add TEMPORARY partitions " +
                 "START (\"2023-03-27\") END (\"2023-03-30\") EVERY (INTERVAL 1 day);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
 
-        GlobalStateMgr.getCurrentState().addPartitions(db, "site_access", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "site_access", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test2")
                 .getTable("site_access");
@@ -2731,7 +2367,11 @@ public class AlterTest {
         PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
         TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
         cList.add(clause);
-        AlterJobMgr alter = new AlterJobMgr();
+        AlterJobMgr alter = new AlterJobMgr(
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler(),
+                new CompactionHandler());
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);
@@ -2742,7 +2382,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE t_recharge_detail DROP PARTITION p2 force;";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -2750,7 +2390,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE site_access_date_trunc ADD PARTITION p20210101 VALUES [(\"2021-01-01\"), (\"2021-01-02\"));";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test(expected = AnalysisException.class)
@@ -2759,7 +2399,7 @@ public class AlterTest {
         String sql = "ALTER TABLE site_access_time_slice\n" +
                 "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 1 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test(expected = AnalysisException.class)
@@ -2768,7 +2408,7 @@ public class AlterTest {
         String sql = "ALTER TABLE site_access_date_trunc\n" +
                 "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 2 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test
@@ -2798,20 +2438,33 @@ public class AlterTest {
         String sql = "ALTER MATERIALIZED VIEW mv2\n" +
                 "set (\"resource_group\" =\"\" )";
         AlterMaterializedViewStmt alterTableStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt);
         Assert.assertEquals("", mv.getTableProperty().getResourceGroup());
         sql = "ALTER MATERIALIZED VIEW mv2\n" +
                 "set (\"resource_group\" =\"not_exist_rg\" )";
         AlterMaterializedViewStmt alterTableStmt2 =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertThrows("resource_group not_exist_rg does not exist.",
-                SemanticException.class, () -> GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt2));
+                SemanticException.class,
+                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt2));
         sql = "ALTER MATERIALIZED VIEW mv2\n" +
                 "set (\"resource_group\" =\"mv_rg\" )";
         AlterMaterializedViewStmt alterTableStmt3 =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt3);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt3);
         Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(1L, "w1");
+            }
+        };
+        sql = "ALTER MATERIALIZED VIEW mv2 set (\"warehouse\" = \"w1\")";
+        AlterMaterializedViewStmt alterTableStmt4 =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt4);
+        Assert.assertEquals(1L, mv.getWarehouseId());
     }
 
     @Test(expected = DdlException.class)
@@ -2833,7 +2486,64 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE t2 ADD PARTITIONS START (\"2021-01-04\") END (\"2021-01-06\") EVERY (INTERVAL 1 DAY);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
+    @Test
+    public void testAlterForeignKey() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        {
+            // inner table
+            starRocksAssert.useDatabase("test").withMaterializedView("create materialized view if not exists `fk_mv_1` " +
+                    "refresh manual " +
+                    "as " +
+                    "select t1.event_day, t1.site_id, t2.user_name " +
+                    "from site_access_date_trunc t1 join site_access_time_slice t2 " +
+                    "on t1.site_id = t2.site_id");
+            connectContext.executeSql("alter materialized view fk_mv_1 set " +
+                    "( 'unique_constraints'='site_access_date_trunc.site_id'); ");
+            connectContext.executeSql("alter materialized view fk_mv_1 set " +
+                    "( 'foreign_key_constraints'='site_access_time_slice(site_id)" +
+                    " REFERENCES site_access_date_trunc(site_id)'); ");
+            while (true) {
+                ModifyTablePropertyOperationLog modifyMvLog =
+                        (ModifyTablePropertyOperationLog) UtFrameUtils.PseudoJournalReplayer.
+                                replayNextJournal(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES);
+                Assert.assertNotNull(modifyMvLog);
+                if (modifyMvLog.getProperties().containsKey("foreign_key_constraints")) {
+                    Assert.assertEquals("default_catalog.10001.10133(site_id) " +
+                                    "REFERENCES default_catalog.10001.10118(site_id)",
+                            modifyMvLog.getProperties().get("foreign_key_constraints"));
+                    break;
+                }
+            }
+        }
+
+        {
+            // external table
+            starRocksAssert.withMaterializedView("create materialized view if not exists `fk_mv_2` " +
+                    "refresh manual " +
+                    "as " +
+                    "select t1.l_orderkey, t1.l_partkey, t2.o_totalprice " +
+                    "from hive0.tpch.lineitem t1 join hive0.tpch.orders t2 " +
+                    "on t1.l_orderkey = t2.o_orderkey");
+            connectContext.executeSql("alter materialized view fk_mv_2 set " +
+                    "( 'unique_constraints'='hive0.tpch.orders.o_orderkey'); ");
+            connectContext.executeSql("alter materialized view fk_mv_2 set " +
+                    "( 'foreign_key_constraints'='hive0.tpch.lineitem(l_orderkey) " +
+                    "REFERENCES hive0.tpch.orders(o_orderkey)'); ");
+            while (true) {
+                ModifyTablePropertyOperationLog modifyMvLog =
+                        (ModifyTablePropertyOperationLog) UtFrameUtils.PseudoJournalReplayer.
+                                replayNextJournal(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES);
+                Assert.assertNotNull(modifyMvLog);
+                if (modifyMvLog.getProperties().containsKey("foreign_key_constraints")) {
+                    Assert.assertEquals("hive0.tpch.lineitem:0(l_orderkey) REFERENCES hive0.tpch.orders:0(o_orderkey)",
+                            modifyMvLog.getProperties().get("foreign_key_constraints"));
+                    break;
+                }
+            }
+        }
+    }
 }

@@ -14,40 +14,29 @@
 
 package com.starrocks.http;
 
-
+import com.starrocks.common.DdlException;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
 import mockit.MockUp;
-import okhttp3.MediaType;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
-import okio.BufferedSink;
-import org.jetbrains.annotations.NotNull;
 import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
 
-import java.io.IOException;
+import static org.junit.Assert.assertTrue;
 
-public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
+public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoadActionTest {
 
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
 
     @Override
-    @Before
-    public void setUp() {
+    protected void doSetUp() {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -55,17 +44,31 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
             }
         };
 
-
         ComputeNode computeNode = new ComputeNode(1234, "localhost", 8040);
         computeNode.setBePort(9300);
         computeNode.setAlive(true);
         computeNode.setHttpPort(TEST_HTTP_PORT);
-        GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
                 return true;
             }
+        };
+
+        new MockUp<TransactionLoadAction>() {
+
+            @Mock
+            public void redirectTo(BaseRequest request,
+                                   BaseResponse response,
+                                   TNetworkAddress addr) throws DdlException {
+                TransactionResult result = new TransactionResult();
+                result.setOKMsg("mock redirect to BE");
+                response.setContentType(JSON.toString());
+                response.appendContent(result.toJson());
+                writeResponse(request, response);
+            }
+
         };
     }
 
@@ -74,12 +77,13 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
      */
     @AfterClass
     public static void close() {
-        GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 
     @BeforeClass
-    public static void initBeServer() throws IllegalArgException, InterruptedException {
+    public static void initBeServer() throws Exception {
         TEST_HTTP_PORT = detectUsableSocketPort();
         beServer = new HttpServer(TEST_HTTP_PORT);
         BaseAction ac = new BaseAction(beServer.getController()) {
@@ -91,6 +95,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 writeResponse(request, response, HttpResponseStatus.OK);
             }
         };
+
         beServer.getController().registerHandler(HttpMethod.POST, "/api/transaction/begin", ac);
         beServer.getController().registerHandler(HttpMethod.POST, "/api/transaction/prepare", ac);
         beServer.getController().registerHandler(HttpMethod.POST, "/api/transaction/commit", ac);
@@ -100,291 +105,6 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
         while (!beServer.isStarted()) {
             Thread.sleep(500);
         }
+        assertTrue(beServer.isStarted());
     }
-
-    @Test
-    @Ignore("test whether this case affect cases in TableQueryPlanActionTest")
-    public void beginTransactionTimes() throws IOException {
-        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/begin";
-
-        for (int i = 0; i < 4096; i++) {
-            Request request = new Request.Builder()
-                    .get()
-                    .addHeader("Authorization", rootAuth)
-                    .addHeader("db", "testDb")
-                    .addHeader("label", String.valueOf(i))
-                    .url(pathUri)
-                    .method("POST", new RequestBody() {
-
-                        @Override
-                        public MediaType contentType() {
-                            return null;
-                        }
-
-                        @Override
-                        public void writeTo(@NotNull BufferedSink arg0) {
-                        }
-
-                    })
-                    .build();
-            try (Response response = networkClient.newCall(request).execute()) {
-                ResponseBody responseBody = response.body();
-                Assert.assertNotNull(responseBody);
-                String res = responseBody.string();
-                Assert.assertTrue(res.contains("OK"));
-            }
-
-            Assert.assertTrue(TransactionLoadAction.getAction().txnNodeMapSize() <= 2048);
-        }
-    }
-
-    @Test
-    public void beginTransaction() throws IOException {
-        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/begin";
-        Request request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-
-        request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .addHeader("db", "abc")
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-
-        request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .addHeader("db", "abc")
-                .addHeader("label", "abcdbcef")
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertTrue(res.contains("OK"));
-        }
-    }
-
-    @Test
-    public void commitTransaction() throws IOException {
-        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/commit";
-        Request request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-
-        request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .addHeader("db", "abc")
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-
-    }
-
-    @Test
-    public void rollbackTransaction() throws IOException {
-        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/rollback";
-        Request request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-
-        request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .addHeader("db", "abc")
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-
-        request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .addHeader("db", "testDb")
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-    }
-
-    @Test
-    public void prepareTransaction() throws IOException {
-        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/prepare";
-        Request request = new Request.Builder()
-                .get()
-                .addHeader("Authorization", rootAuth)
-                .url(pathUri)
-                .method("POST", new RequestBody() {
-
-                    @Override
-                    public MediaType contentType() {
-                        return null;
-                    }
-
-                    @Override
-                    public void writeTo(@NotNull BufferedSink arg0) {
-                    }
-
-                })
-                .build();
-
-        try (Response response = networkClient.newCall(request).execute()) {
-            ResponseBody responseBody = response.body();
-            Assert.assertNotNull(responseBody);
-            String res = responseBody.string();
-            Assert.assertFalse(res.contains("OK"));
-        }
-
-    }
-
 }

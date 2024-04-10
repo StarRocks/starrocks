@@ -58,7 +58,11 @@ public class ArrayType extends Type {
         if (depth >= MAX_NESTING_DEPTH) {
             return "array<...>";
         }
-        return String.format("array<%s>", itemType.toSql(depth + 1));
+        if (itemType.isDecimalOfAnyVersion()) {
+            return String.format("array<%s>", itemType);
+        } else {
+            return String.format("array<%s>", itemType.toSql(depth + 1));
+        }
     }
 
     @Override
@@ -165,6 +169,14 @@ public class ArrayType extends Type {
     // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
     public String toMysqlColumnTypeString() {
         return toSql();
+    }
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "array<...>";
+        }
+        return String.format("array<%s>", itemType.toTypeString(depth + 1));
     }
 }
 

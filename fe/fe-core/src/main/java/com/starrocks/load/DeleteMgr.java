@@ -37,6 +37,7 @@ package com.starrocks.load;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -78,9 +79,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -89,12 +91,14 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -118,7 +122,7 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class DeleteMgr implements Writable {
+public class DeleteMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(DeleteMgr.class);
 
     // TransactionId -> DeleteJob
@@ -191,7 +195,7 @@ public class DeleteMgr implements Writable {
             } catch (Throwable t) {
                 LOG.warn("error occurred during delete process", t);
                 // if transaction has been begun, need to abort it
-                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) !=
+                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) !=
                         null) {
                     cancelJob(deleteJob, CancelType.UNKNOWN, t.getMessage());
                 }
@@ -210,7 +214,7 @@ public class DeleteMgr implements Writable {
 
     private DeleteJob createJob(DeleteStmt stmt, List<Predicate> conditions, Database db, OlapTable olapTable,
                                 List<Partition> partitions)
-            throws DdlException, AnalysisException, BeginTransactionException {
+            throws DdlException, AnalysisException, RunningTxnExceedException {
         // check table state
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw new DdlException("Table's state is not normal: " + olapTable.getName());
@@ -236,6 +240,9 @@ public class DeleteMgr implements Writable {
                 // TODO: support list partition prune
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                 List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
+                if (partitionIds.isEmpty()) {
+                    return null;
+                }
                 for (Long partitionId : partitionIds) {
                     Partition partition = olapTable.getPartition(partitionId);
                     partitionNames.add(partition.getName());
@@ -265,19 +272,27 @@ public class DeleteMgr implements Writable {
         String label = "delete_" + UUID.randomUUID();
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
+
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (ConnectContext.get() != null) {
+            warehouseId = ConnectContext.get().getCurrentWarehouseId();
+        }
+
         // begin txn here and generate txn id
-        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(olapTable.getId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second);
+                TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second,
+                warehouseId);
 
         MultiDeleteInfo deleteInfo =
                 new MultiDeleteInfo(db.getId(), olapTable.getId(), olapTable.getName(), deleteConditions);
         deleteInfo.setPartitions(noPartitionSpecified,
                 partitions.stream().map(Partition::getId).collect(Collectors.toList()), partitionNames);
         DeleteJob deleteJob = null;
+
         if (olapTable.isCloudNativeTable()) {
-            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo);
+            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, warehouseId);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }
@@ -285,7 +300,7 @@ public class DeleteMgr implements Writable {
         idToDeleteJob.put(deleteJob.getTransactionId(), deleteJob);
 
         // add transaction callback
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
 
         return deleteJob;
     }
@@ -650,7 +665,7 @@ public class DeleteMgr implements Writable {
 
         LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(column.getType()));
         if (result instanceof DecimalLiteral) {
-            ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
+            ((DecimalLiteral) result).checkPrecisionAndScale(column.getType(), column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {
             predicate.setChild(childNo, result);
         }
@@ -835,12 +850,7 @@ public class DeleteMgr implements Writable {
     }
 
     public long getDeleteInfoCount() {
-        lock.readLock().lock();
-        try {
-            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
@@ -865,4 +875,15 @@ public class DeleteMgr implements Writable {
             dbToDeleteInfos.put(dbId, multiDeleteInfos);
         }
     }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long count = 0;
+        for (List<MultiDeleteInfo> value : dbToDeleteInfos.values()) {
+            count += value.size();
+        }
+        return ImmutableMap.of("DeleteInfo", getDeleteInfoCount(),
+                               "DeleteJob", (long) idToDeleteJob.size());
+    }
+
 }

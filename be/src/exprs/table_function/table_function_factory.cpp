@@ -25,6 +25,7 @@
 #include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
+#include "exprs/table_function/unnest_bitmap.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
@@ -101,6 +102,9 @@ TableFunctionResolver::TableFunctionResolver() {
     // this is just for compatibility and find the corresponding function
     TableFunctionPtr multi_unnest = std::make_shared<MultiUnnest>();
     add_function_mapping("unnest", {}, {}, multi_unnest);
+
+    TableFunctionPtr unnest_bitmap = std::make_shared<UnnestBitmap>();
+    add_function_mapping("unnest_bitmap", {TYPE_OBJECT}, {TYPE_BIGINT}, std::make_shared<UnnestBitmap>());
 
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);

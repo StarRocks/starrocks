@@ -116,7 +116,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
                 systemInfoService.getBackendIds(true);

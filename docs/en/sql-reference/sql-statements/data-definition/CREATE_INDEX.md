@@ -6,18 +6,24 @@ displayed_sidebar: "English"
 
 ## Description
 
-This statement is used to create indexes.
+This statement is used to create indexes. You can use this statement to create oly Bitmap indexes. For usage notes and scenarios of Bitmap indexes, see [Bitmap index](../../../table_design/indexes/Bitmap_index.md).
 
-Syntax:
+:::tip
+
+This operation requires the ALTER privilege on the target table. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
+## Syntax
 
 ```sql
-CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT'balabala']
+CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala']
 ```
 
 Note:
 
-1. Only support bitmap index in the current version.
-2. Create BITMAP index only in a single column.
+1. For the naming conventions of indexes, see [System limits](../../../reference/System_limit.md).
+2. One column can have only one BITMAP index. If a column already has an index, you cannot create one more index on it.
 
 ## Examples
 

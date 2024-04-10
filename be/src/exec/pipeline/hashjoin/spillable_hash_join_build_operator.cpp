@@ -93,13 +93,12 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         _join_builder->spiller()->cancel();
     }
 
-    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+    auto flush_function = [this](RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
-    auto io_executor = _join_builder->spill_channel()->io_executor();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+    auto set_call_back_function = [this](RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
         return spiller->set_flush_all_call_back(
                 [this]() {
@@ -107,13 +106,13 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+                state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     WARN_IF_ERROR(publish_runtime_filters(state),
                   fmt::format("spillable hash join operator of query {} publish runtime filter failed, ignore it...",
                               print_id(state->query_id())));
-    SpillProcessTasksBuilder task_builder(state, io_executor);
+    SpillProcessTasksBuilder task_builder(state);
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_join_builder->spill_channel()->execute(task_builder));
@@ -123,24 +122,35 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
 
 Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* state) {
     // publish empty runtime filters
-
     // Building RuntimeBloomFilter need to know the initial hash table size and all join keys datas.
     // It usually involves re-reading all the data that has been spilled
     // which cannot be streamed process in the spill scenario when build phase is finished
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
     // we could build global runtime filter for this case later.
-    auto merged = _partial_rf_merger->set_always_true();
-    // for spillable operator, this interface never returns error status because we skip building rf here
-    DCHECK(merged.ok());
 
-    if (merged.value()) {
-        RuntimeInFilterList in_filters;
+    bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
+    if (is_colocate_runtime_filter) {
+        // init local colocate in/bloom filters
+        RuntimeInFilterList in_filter_lists;
         RuntimeBloomFilterList bloom_filters;
-        // publish empty runtime bloom-filters
-        state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
-        // move runtime filters into RuntimeFilterHub.
-        runtime_filter_hub()->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
-                                                                   std::move(in_filters), std::move(bloom_filters)));
+        runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
+                                            std::make_unique<RuntimeFilterCollector>(in_filter_lists));
+        state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
+    } else {
+        auto merged = _partial_rf_merger->set_always_true();
+        // for spillable operator, this interface never returns error status because we skip building rf here
+        DCHECK(merged.ok());
+
+        if (merged.value()) {
+            RuntimeInFilterList in_filters;
+            RuntimeBloomFilterList bloom_filters;
+            // publish empty runtime bloom-filters
+            state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            // move runtime filters into RuntimeFilterHub.
+            runtime_filter_hub()->set_collector(
+                    _plan_node_id,
+                    std::make_unique<RuntimeFilterCollector>(std::move(in_filters), std::move(bloom_filters)));
+        }
     }
     return Status::OK();
 }
@@ -248,6 +258,7 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->name = "hash-join-build";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
     // TODO: Our current adaptive dop for non-broadcast functions will also result in a build hash_joiner corresponding to multiple prob hash_join prober.
     //
     _spill_options->read_shared =

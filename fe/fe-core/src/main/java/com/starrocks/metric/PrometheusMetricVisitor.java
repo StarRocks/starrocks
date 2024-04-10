@@ -43,6 +43,8 @@ import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.SystemInfoService;
 
 import java.util.HashSet;
 import java.util.List;
@@ -82,19 +84,19 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         // heap
         sb.append(Joiner.on(" ").join(HELP, JVM_HEAP_SIZE_BYTES, "jvm heap stat\n"));
         sb.append(Joiner.on(" ").join(TYPE, JVM_HEAP_SIZE_BYTES, "gauge\n"));
-        sb.append(JVM_HEAP_SIZE_BYTES).append("{type=\"max\"} ").append(jvmStats.getMem().getHeapMax().getBytes())
+        sb.append(JVM_HEAP_SIZE_BYTES).append("{type=\"max\"} ").append(jvmStats.getMem().getHeapMax())
                 .append("\n");
         sb.append(JVM_HEAP_SIZE_BYTES).append("{type=\"committed\"} ")
-                .append(jvmStats.getMem().getHeapCommitted().getBytes()).append("\n");
-        sb.append(JVM_HEAP_SIZE_BYTES).append("{type=\"used\"} ").append(jvmStats.getMem().getHeapUsed().getBytes())
+                .append(jvmStats.getMem().getHeapCommitted()).append("\n");
+        sb.append(JVM_HEAP_SIZE_BYTES).append("{type=\"used\"} ").append(jvmStats.getMem().getHeapUsed())
                 .append("\n");
         // non heap
         sb.append(Joiner.on(" ").join(HELP, JVM_NON_HEAP_SIZE_BYTES, "jvm non heap stat\n"));
         sb.append(Joiner.on(" ").join(TYPE, JVM_NON_HEAP_SIZE_BYTES, "gauge\n"));
         sb.append(JVM_NON_HEAP_SIZE_BYTES).append("{type=\"committed\"} ")
-                .append(jvmStats.getMem().getNonHeapCommitted().getBytes()).append("\n");
+                .append(jvmStats.getMem().getNonHeapCommitted()).append("\n");
         sb.append(JVM_NON_HEAP_SIZE_BYTES).append("{type=\"used\"} ")
-                .append(jvmStats.getMem().getNonHeapUsed().getBytes()).append("\n");
+                .append(jvmStats.getMem().getNonHeapUsed()).append("\n");
 
         // mem pool
         for (MemoryPool memPool : jvmStats.getMem()) {
@@ -114,9 +116,9 @@ public class PrometheusMetricVisitor extends MetricVisitor {
                 sb.append(JVM_DIRECT_BUFFER_POOL_SIZE_BYTES).append("{type=\"count\"} ").append(pool.getCount())
                         .append("\n");
                 sb.append(JVM_DIRECT_BUFFER_POOL_SIZE_BYTES).append("{type=\"used\"} ")
-                        .append(pool.getUsed().getBytes()).append("\n");
+                        .append(pool.getUsed()).append("\n");
                 sb.append(JVM_DIRECT_BUFFER_POOL_SIZE_BYTES).append("{type=\"capacity\"} ")
-                        .append(pool.getTotalCapacity().getBytes()).append("\n");
+                        .append(pool.getTotalCapacity()).append("\n");
             }
         }
 
@@ -149,13 +151,13 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     private void addMemPoolMetrics(MemoryPool memPool, String metricName, String desc) {
         sb.append(Joiner.on(" ").join(HELP, metricName, desc));
         sb.append(Joiner.on(" ").join(TYPE, metricName, "gauge\n"));
-        sb.append(metricName).append("{type=\"committed\"} ").append(memPool.getCommitted().getBytes())
+        sb.append(metricName).append("{type=\"committed\"} ").append(memPool.getCommitted())
                 .append("\n");
-        sb.append(metricName).append("{type=\"used\"} ").append(memPool.getUsed().getBytes())
+        sb.append(metricName).append("{type=\"used\"} ").append(memPool.getUsed())
                 .append("\n");
-        sb.append(metricName).append("{type=\"peak_used\"} ").append(memPool.getPeakUsed().getBytes())
+        sb.append(metricName).append("{type=\"peak_used\"} ").append(memPool.getPeakUsed())
                 .append("\n");
-        sb.append(metricName).append("{type=\"max\"} ").append(memPool.getMax().getBytes())
+        sb.append(metricName).append("{type=\"max\"} ").append(memPool.getMax())
                 .append("\n");
     }
 
@@ -205,19 +207,27 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     @Override
     public void getNodeInfo() {
         final String NODE_INFO = "node_info";
+        final NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        final SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
         sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
         sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
-                .append(GlobalStateMgr.getCurrentState().getFrontends(null).size()).append("\n");
+                .append(nodeMgr.getFrontends(null).size()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"total\"} ")
-                .append(GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber()).append("\n");
+                .append(systemInfoService.getTotalBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"alive\"} ")
-                .append(GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber()).append("\n");
+                .append(systemInfoService.getAliveBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"decommissioned\"} ")
-                .append(GlobalStateMgr.getCurrentSystemInfo().getDecommissionedBackendIds().size()).append("\n");
+                .append(systemInfoService.getDecommissionedBackendIds().size())
+                .append("\n");
         sb.append(NODE_INFO).append("{type=\"broker_node_num\", state=\"dead\"} ").append(
                         GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
                                 .count())
                 .append("\n");
+
+        sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"total\"} ")
+            .append(systemInfoService.getTotalComputeNodeNumber()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"alive\"} ")
+            .append(systemInfoService.getAliveComputeNodeNumber()).append("\n");
 
         // only master FE has this metrics, to help the Grafana knows who is the leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {

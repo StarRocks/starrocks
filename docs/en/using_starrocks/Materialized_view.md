@@ -54,7 +54,7 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   > **NOTE**
   >
-  > Asynchronous materialized views created on base tables in a [JDBC catalog](../data_source/catalog/jdbc_catalog.md) do not support query rewrite.
+  > Asynchronous materialized views created on base tables in a JDBC catalog or a Hudi catalog do not support query rewrite.
 
 ## Decide when to create a materialized view
 
@@ -309,7 +309,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### Check the execution status of asynchronous materialized view
 
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../reference/information_schema/tasks.md) and [`task_runs`](../reference/information_schema/task_runs.md) in [Information Schema](../reference/information_schema/information_schema.md).
+You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../reference/information_schema/tasks.md) and [`task_runs`](../reference/information_schema/task_runs.md) in [Information Schema](../reference/overview-pages/information_schema.md).
 
 The following example checks the execution status of the materialized view that was created most recently:
 
@@ -332,7 +332,7 @@ The following example checks the execution status of the materialized view that 
 2. Check the execution status in the table `task_runs` using the `TASK_NAME` you have found.
 
     ```Plain
-    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
+    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME\G
     *************************** 1. row ***************************
         QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
         TASK_NAME: mv-59299
@@ -360,7 +360,7 @@ DROP MATERIALIZED VIEW order_mv;
 
 ### Relevant session variables
 
-The following variables control the behaviour of an asynchronous materialized view:
+The following variables control the behavior of an asynchronous materialized view:
 
 - `analyze_mv`: Whether and how to analyze the materialized view after refresh. Valid values are an empty string (Do not analyze), `sample` (Sampled statistics collection), and `full` (Full statistics collection). Default is `sample`.
 - `enable_materialized_view_rewrite`: Whether to enable the automatic rewrite for materialized view. Valid values are `true` (Default since v2.5) and `false`.

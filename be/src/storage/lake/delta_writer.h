@@ -26,6 +26,7 @@ class SlotDescriptor;
 class Chunk;
 class TabletSchema;
 class ThreadPool;
+struct FileInfo;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -53,21 +54,21 @@ public:
     DISALLOW_COPY_AND_MOVE(DeltaWriter);
 
     // NOTE: It's ok to invoke this method in a bthread, there is no I/O operation in this method.
-    [[nodiscard]] Status open();
+    Status open();
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status finish(FinishMode mode = kWriteTxnLog);
-
-    // Manual flush, mainly used in UT
-    // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush();
+    Status finish(FinishMode mode = kWriteTxnLog);
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush_async();
+    Status flush();
+
+    // Manual flush, mainly used in UT
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status flush_async();
 
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
@@ -82,9 +83,9 @@ public:
 
     const int64_t queueing_memtable_num() const;
 
-    // Return the list of files created by this DeltaWriter.
+    // Return the list of file infos created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
-    std::vector<std::string> files() const;
+    std::vector<FileInfo> files() const;
 
     // The sum of all segment file sizes, in bytes.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
@@ -168,8 +169,8 @@ public:
         return *this;
     }
 
-    DeltaWriterBuilder& set_index_id(int64_t index_id) {
-        _index_id = index_id;
+    DeltaWriterBuilder& set_schema_id(int64_t schema_id) {
+        _schema_id = schema_id;
         return *this;
     }
 
@@ -180,7 +181,7 @@ private:
     int64_t _txn_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
-    int64_t _index_id{0};
+    int64_t _schema_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     std::string _merge_condition{};

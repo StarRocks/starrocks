@@ -28,6 +28,7 @@
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "simd/simd.h"
 #include "util/phmap/phmap.h"
 
 #if defined(__aarch64__)
@@ -96,7 +97,7 @@ struct HashTableSlotDescriptor {
 };
 
 struct JoinHashTableItems {
-    //TODO: memory continus problem?
+    //TODO: memory continues problem?
     ChunkPtr build_chunk = nullptr;
     Columns key_columns;
     Buffer<HashTableSlotDescriptor> build_slots;
@@ -124,19 +125,24 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
+    bool mor_reader_mode = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
 
     void calculate_ht_info(size_t key_bytes) {
         if (used_buckets == 0) { // to avoid redo
-            for (const auto value : first) {
-                used_buckets += value != 0;
-            }
+            used_buckets = SIMD::count_nonzero(first);
             keys_per_bucket = used_buckets == 0 ? 0 : row_count * 1.0 / used_buckets;
             size_t probe_bytes = key_bytes + row_count * sizeof(uint32_t);
-            cache_miss_serious = ((probe_bytes > (1UL << 25) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 26)) &&
-                                 row_count > (1UL << 18);
+            // cache miss is serious when
+            // 1) the ht's size is enough large, for example, larger than (1UL << 27) bytes.
+            // 2) smaller ht but most buckets have more than one keys
+            cache_miss_serious = row_count > (1UL << 18) &&
+                                 ((probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
+                                  (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
+            VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
+                       << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
         }
     }
 
@@ -257,13 +263,15 @@ struct HashTableParam {
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
-    std::set<SlotId> output_slots;
+    std::set<SlotId> build_output_slots;
+    std::set<SlotId> probe_output_slots;
     std::set<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+    bool mor_reader_mode = false;
 };
 
 template <class T>
@@ -558,7 +566,12 @@ private:
     }
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
+
+        if (_table_items->mor_reader_mode) {
+            return;
+        }
         bool to_nullable = _table_items->right_to_nullable;
+
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;

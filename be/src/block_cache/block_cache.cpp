@@ -45,24 +45,6 @@ BlockCache* BlockCache::instance() {
 }
 
 Status BlockCache::init(const CacheOptions& options) {
-    for (auto& dir : options.disk_spaces) {
-        if (dir.size == 0) {
-            continue;
-        }
-        fs::path dir_path(dir.path);
-        if (fs::exists(dir_path)) {
-            if (!fs::is_directory(dir_path)) {
-                LOG(ERROR) << "the block cache disk path already exists but not a directory, path: " << dir.path;
-                return Status::InvalidArgument("invalid block cache disk path");
-            }
-        } else {
-            std::error_code ec;
-            if (!fs::create_directory(dir_path, ec)) {
-                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path << ", reason: " << ec.message();
-                return Status::InvalidArgument("invalid block cache disk path");
-            }
-        }
-    }
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
 #ifdef WITH_CACHELIB
     if (options.engine == "cachelib") {
@@ -80,7 +62,9 @@ Status BlockCache::init(const CacheOptions& options) {
         LOG(ERROR) << "unsupported block cache engine: " << options.engine;
         return Status::NotSupported("unsupported block cache engine");
     }
-    return _kv_cache->init(options);
+    RETURN_IF_ERROR(_kv_cache->init(options));
+    _initialized.store(true, std::memory_order_relaxed);
+    return Status::OK();
 }
 
 Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
@@ -166,10 +150,18 @@ void BlockCache::record_read_cache(size_t size, int64_t lateny_us) {
     _kv_cache->record_read_cache(size, lateny_us);
 }
 
+const DataCacheMetrics BlockCache::cache_metrics(int level) const {
+    return _kv_cache->cache_metrics(level);
+}
+
 Status BlockCache::shutdown() {
     Status st = _kv_cache->shutdown();
-    _kv_cache = nullptr;
+    _initialized.store(false, std::memory_order_relaxed);
     return st;
+}
+
+DataCacheEngineType BlockCache::engine_type() {
+    return _kv_cache->engine_type();
 }
 
 } // namespace starrocks

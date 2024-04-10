@@ -64,10 +64,10 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -76,7 +76,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -131,6 +130,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.KAFKA);
+        this.progress = new KafkaProgress();
+        this.timestampProgress = new KafkaProgress();
     }
 
     public KafkaRoutineLoadJob(Long id, String name,
@@ -139,6 +140,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         this.brokerList = brokerList;
         this.topic = topic;
         this.progress = new KafkaProgress();
+        this.timestampProgress = new KafkaProgress();
     }
 
     public String getConfluentSchemaRegistryUrl() {
@@ -177,6 +179,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         latestPartitionOffsets.put(Integer.valueOf(partition), Long.valueOf(offset));
     }
 
+    public Long getPartitionOffset(int partition) {
+        return latestPartitionOffsets.get(Integer.valueOf(partition));
+    }
+
     @Override
     public void prepare() throws UserException {
         super.prepare();
@@ -185,7 +191,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
-        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties);
+        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouseId);
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -242,6 +248,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), id,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
+                    kafkaTaskInfo.setWarehouseId(warehouseId);
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }
@@ -261,14 +268,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     @Override
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             aliveNodeNum = 0;
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long nodeId : computeIds) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;
                 }
@@ -276,13 +283,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
         int partitionNum = currentKafkaPartitions.size();
         if (partitionNum == 0) {
-            // In non-stop states (NEED_SCHEDULE/RUNNING), having `partitionNum` as 0 is equivalent 
-            // to `currentKafkaPartitions` being uninitialized. When `currentKafkaPartitions` is 
-            // uninitialized, it indicates that the job has just been created and hasn't been scheduled yet. 
+            // In non-stop states (NEED_SCHEDULE/RUNNING), having `partitionNum` as 0 is equivalent
+            // to `currentKafkaPartitions` being uninitialized. When `currentKafkaPartitions` is
+            // uninitialized, it indicates that the job has just been created and hasn't been scheduled yet.
             // At this point, the user-specified number of partitions is used.
             partitionNum = customKafkaPartitions.size();
             if (partitionNum == 0) {
-                // If the user hasn't specified partition information, then we no longer take the `partition` 
+                // If the user hasn't specified partition information, then we no longer take the `partition`
                 // variable into account when calculating concurrency.
                 partitionNum = Integer.MAX_VALUE;
             }
@@ -336,13 +343,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
         super.updateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
+        this.timestampProgress.update(attachment.getTimestampProgress());
     }
 
     @Override
     protected void replayUpdateProgress(RLTaskTxnCommitAttachment attachment) {
         super.replayUpdateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
     }
 
     @Override
@@ -352,6 +360,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(timeToExecuteMs, oldKafkaTaskInfo,
                 ((KafkaProgress) progress).getPartitionIdToOffset(oldKafkaTaskInfo.getPartitions()),
                 ((KafkaTaskInfo) routineLoadTaskInfo).getLatestOffset());
+        kafkaTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -450,7 +459,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private List<Integer> getAllKafkaPartitions() throws UserException {
         convertCustomProperties(false);
-        return KafkaUtil.getAllKafkaPartitions(brokerList, topic, ImmutableMap.copyOf(convertedCustomProperties));
+        return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
+                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {
@@ -460,16 +470,19 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDBName());
         }
 
-        long tableId = -1L;
+        Table table = db.getTable(stmt.getTableName());
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName());
+        }
+
+        long tableId = table.getId();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
-            Table table = db.getTable(stmt.getTableName());
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
-            tableId = table.getId();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         }
 
         // init kafka routine load job
@@ -489,8 +502,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         List<Integer> allKafkaPartitions = getAllKafkaPartitions();
         for (Integer customPartition : customKafkaPartitions) {
             if (!allKafkaPartitions.contains(customPartition)) {
-                throw new LoadException("there is a custom kafka partition " + customPartition
-                        + " which is invalid for topic " + topic);
+                throw new LoadException("there is an invalid custom partition: " + customPartition + " for topic: " + topic);
             }
         }
     }
@@ -798,5 +810,26 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",
                 this.id, dataSourceProperties);
+    }
+
+    // update substate according to the lag.
+    @Override
+    public void updateSubstate() throws UserException {
+        KafkaProgress progress = (KafkaProgress) getTimestampProgress();
+        Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
+        long now = System.currentTimeMillis();
+
+        for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
+            int partition = entry.getKey();
+            long lag = (now - entry.getValue().longValue()) / 1000;
+            if (lag > Config.routine_load_unstable_threshold_second) {
+                updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
+                        String.format("The lag [%d] of partition [%d] exceeds " +
+                                        "Config.routine_load_unstable_threshold_second [%d]",
+                                lag, partition, Config.routine_load_unstable_threshold_second)));
+                return;
+            }
+        }
+        updateSubstate(JobSubstate.STABLE, null);
     }
 }

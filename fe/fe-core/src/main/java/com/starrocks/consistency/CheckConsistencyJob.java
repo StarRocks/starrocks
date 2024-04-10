@@ -47,9 +47,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -111,17 +113,13 @@ public class CheckConsistencyJob {
         return tabletId;
     }
 
-    public synchronized void setChecksum(long backendId, long checksum) {
-        this.checksumMap.put(backendId, checksum);
-    }
-
     /*
      * return:
      *  true: continue
      *  false: cancel
      */
     public boolean sendTasks() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.debug("tablet[{}] has been removed", tabletId);
@@ -253,7 +251,7 @@ public class CheckConsistencyJob {
         }
 
         // check again. in case tablet has already been removed
-        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.warn("tablet[{}] has been removed", tabletId);
             return -1;
@@ -268,6 +266,7 @@ public class CheckConsistencyJob {
         boolean isConsistent = true;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
+        JournalTask journalTask;
         try {
             Table table = db.getTable(tabletMeta.getTableId());
             if (table == null) {
@@ -372,12 +371,14 @@ public class CheckConsistencyJob {
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), partition.getId(),
                     index.getId(), tabletId, lastCheckTime,
                     checkedVersion, isConsistent);
-            GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheck(info);
-            return 1;
-
+            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
+
+        // Wait for edit log write finish out of db lock.
+        EditLog.waitInfinity(journalTask);
+        return 1;
     }
 
     private boolean isTimeout() {

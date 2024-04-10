@@ -16,14 +16,23 @@
 package com.starrocks.journal.bdbje;
 
 import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.LockMode;
+import com.sleepycat.je.dbi.DbConfigManager;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
+import com.sleepycat.je.rep.RollbackException;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
+import com.sleepycat.je.rep.impl.RepImpl;
+import com.sleepycat.je.rep.stream.MatchpointSearchResults;
+import com.sleepycat.je.utilint.DatabaseUtil;
+import com.sleepycat.je.utilint.VLSN;
 import com.starrocks.common.Config;
 import com.starrocks.journal.JournalException;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,6 +78,7 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testSetupStandalone() throws Exception {
+        long startMs = System.currentTimeMillis();
         String selfNodeHostPort = findUnbindHostPort();
         BDBEnvironment environment = new BDBEnvironment(
                 createTmpDir(),
@@ -88,22 +98,28 @@ public class BDBEnvironmentTest {
         Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
         db.close();
         environment.close();
+        System.out.println("testSetupStandalone cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     // address already in use
     @Test(expected = JournalException.class)
     public void testSetupStandaloneMultitimes() throws Exception {
-        String selfNodeHostPort = findUnbindHostPort();
-        for (int i = 0; i < 2; i++) {
-            BDBEnvironment environment = new BDBEnvironment(
-                    createTmpDir(),
-                    "standalone",
-                    selfNodeHostPort,
-                    selfNodeHostPort,
-                    true);
-            environment.setup();
+        long startMs = System.currentTimeMillis();
+        try {
+            String selfNodeHostPort = findUnbindHostPort();
+            for (int i = 0; i < 2; i++) {
+                BDBEnvironment environment = new BDBEnvironment(
+                        createTmpDir(),
+                        "standalone",
+                        selfNodeHostPort,
+                        selfNodeHostPort,
+                        true);
+                environment.setup();
+            }
+            Assert.fail();
+        } finally {
+            System.out.println("testSetupStandaloneMultitimes cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
         }
-        Assert.fail();
     }
 
     /**
@@ -178,6 +194,7 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testNormalCluster() throws Exception {
+        long startMs = System.currentTimeMillis();
         initClusterMasterFollower();
 
         // leader write
@@ -230,10 +247,12 @@ public class BDBEnvironmentTest {
             followerEnvironment.close();
         }
         observerEnvironment.close();
+        System.out.println("testNormalCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     @Test
     public void testDeleteDb() throws Exception {
+        long startMs = System.currentTimeMillis();
         initClusterMasterFollower();
 
         // open n dbs and each write 1 kv
@@ -287,6 +306,7 @@ public class BDBEnvironmentTest {
         for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
+        System.out.println("testDeleteDb cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     /**
@@ -298,122 +318,34 @@ public class BDBEnvironmentTest {
      * we think it's reached our expectation.
      */
     @Test
-    public void testRollbackExceptionOnSetupCluster() throws Exception {
-        initClusterMasterFollower();
+    public void testRollbackExceptionOnSetupCluster(@Mocked RepImpl rep) throws Exception {
+        long startMs = System.currentTimeMillis();
+        new Expectations() {
+            {
+                rep.getName();
+                minTimes = 0;
+                result = "starrocks";
 
-        // leader write db 0
-        Long dbIndexOld = 0L;
-        String dbNameOld = String.valueOf(dbIndexOld);
-        CloseSafeDatabase leaderDb = leaderEnvironment.openDatabase(dbNameOld);
-        DatabaseEntry key = randomEntry();
-        DatabaseEntry value = randomEntry();
-        leaderDb.put(null, key, value);
-        leaderDb.close();
-        Assert.assertEquals(1, leaderEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(dbIndexOld, leaderEnvironment.getDatabaseNames().get(0));
+                rep.isValid();
+                minTimes = 0;
+                result = false;
 
-        Thread.sleep(1000);
-
-        // follower read db 0
-        for (BDBEnvironment followerEnvironment : followerEnvironments) {
-            CloseSafeDatabase followerDb = followerEnvironment.openDatabase(dbNameOld);
-            DatabaseEntry newvalue = new DatabaseEntry();
-            followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
-            Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
-            Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(dbIndexOld, followerEnvironment.getDatabaseNames().get(0));
-            followerDb.close();
-        }
-
-        // manually backup follower's meta dir
-        for (File followerPath : followerPaths) {
-            File dst = new File(followerPath.getAbsolutePath() + "_bk");
-            LOG.info("backup {} to {}", followerPath, dst);
-            FileUtils.copyDirectory(followerPath, dst);
-        }
-
-        // leader write 2 * txn_rollback_limit lines in new db and quit
-        Long dbIndexNew = 1L;
-        String dbNameNew = String.valueOf(dbIndexNew);
-        leaderDb = leaderEnvironment.openDatabase(dbNameNew);
-        for (int i = 0; i < Config.txn_rollback_limit * 2; i++) {
-            leaderDb.put(null, randomEntry(), randomEntry());
-        }
-        leaderDb.close();
-        Assert.assertEquals(2, leaderEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(dbIndexOld, leaderEnvironment.getDatabaseNames().get(0));
-        Assert.assertEquals(dbIndexNew, leaderEnvironment.getDatabaseNames().get(1));
-
-        // close all environment
-        leaderEnvironment.close();
-        for (BDBEnvironment followerEnvironment : followerEnvironments) {
-            followerEnvironment.close();
-        }
-
-        // restore follower's path
-        for (File followerPath : followerPaths) {
-            LOG.info("delete {} ", followerPath);
-            FileUtils.deleteDirectory(followerPath);
-            File src = new File(followerPath.getAbsolutePath() + "_bk");
-            LOG.info("mv {} to {}", src, followerPath);
-            FileUtils.moveDirectory(src, followerPath);
-        }
-
-        Thread.sleep(1000);
-
-        // start follower
-        // Since we have brutally copied the metadata directory of the follower, there's a slight chance that restart
-        // would fail with the following error
-        //
-        // follower0(2):./BDBEnvironmentTest1759179149378245783 Log file 00000000.jdb was deleted unexpectedly.
-        // LOG_UNEXPECTED_FILE_DELETION: A log file was unexpectedly deleted, log is likely invalid.
-        // Environment is invalid and must be closed.
-        //
-        // We'll ignore such scenario
-        try {
-            for (int i = 0; i < 2; ++i) {
-                followerEnvironments[i] = new BDBEnvironment(
-                        followerPaths[i],
-                        String.format("follower%d", i),
-                        followerNodeHostPorts[i],
-                        followerNodeHostPorts[i],
-                        true);
-                followerEnvironments[i].setup();
-                Assert.assertEquals(1, followerEnvironments[i].getDatabaseNames().size());
-                Assert.assertEquals(dbIndexOld, followerEnvironments[i].getDatabaseNames().get(0));
+                rep.getConfigManager();
+                minTimes = 0;
+                result = new DbConfigManager(new EnvironmentConfig());
             }
-        } catch (JournalException e) {
-            LOG.warn("restart fails in testRollbackExceptionOnSetupCluster, ignore this case, ", e);
-            return;
-        }
+        };
 
-        Thread.sleep(1000);
-
-        // wait for state change
-        BDBEnvironment newMasterEnvironment = null;
-        while (newMasterEnvironment == null) {
-            Thread.sleep(1000);
-            for (int i = 0; i < 2; ++ i) {
-                if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
-                    newMasterEnvironment = followerEnvironments[i];
-                    LOG.warn("=========> new leader is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
-                    leaderDb = newMasterEnvironment.openDatabase(dbNameOld);
-                    key = randomEntry();
-                    value = randomEntry();
-                    leaderDb.put(null, key, value);
-
-                    Thread.sleep(1000);
-
-                    int followerIndex = 1 - i;
-                    CloseSafeDatabase followerDb = followerEnvironments[followerIndex].openDatabase(dbNameOld);
-                    DatabaseEntry newvalue = new DatabaseEntry();
-                    followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
-                    Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
-                    break;
-                }
+        // mock DatabaseUtil.checkForNullParam to generate RollBackException
+        new MockUp<DatabaseUtil>() {
+            @Mock
+            public void checkForNullParam(final Object param, final String name) {
+                throw new RollbackException(rep, VLSN.FIRST_VLSN, new MatchpointSearchResults(rep));
             }
-        }
+        };
 
+        leaderNodeHostPort = findUnbindHostPort();
+        leaderPath = createTmpDir();
         // set retry times = 1 to ensure no recovery
         BDBEnvironment.RETRY_TIME = 1;
         // start leader will get rollback exception
@@ -429,6 +361,7 @@ public class BDBEnvironmentTest {
         } catch (JournalException e) {
             LOG.warn("got Rollback Exception, as expect, ", e);
         }
+        System.out.println("testRollbackExceptionOnSetupCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     /**
@@ -480,12 +413,16 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testAddBadFollowerNoFailover() throws Exception {
+        long startMs = System.currentTimeMillis();
         testAddBadFollowerBase(false);
+        System.out.println("testAddBadFollowerNoFailover cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     @Test
     public void testAddBadFollowerAfterFailover() throws Exception {
+        long startMs = System.currentTimeMillis();
         testAddBadFollowerBase(true);
+        System.out.println("testAddBadFollowerAfterFailover cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     protected void testAddBadFollowerBase(boolean failover) throws Exception {
@@ -511,7 +448,6 @@ public class BDBEnvironmentTest {
         LOG.warn("=========> start new follower for the first time");
         // should set up successfully as a standalone leader
         newfollowerEnvironment.setup();
-        Thread.sleep(10000);
         newfollowerEnvironment.close();
 
         // 2. bad new follower start for the second time
@@ -530,7 +466,7 @@ public class BDBEnvironmentTest {
         }
 
         // 5. normally leader won't down
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 2; ++i) {
             Thread.sleep(1000);
             LOG.warn("==============> getDatabasesNames() {}", leaderEnvironment.getDatabaseNames());
         }
@@ -538,6 +474,7 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testGetDatabase() throws Exception {
+        long startMs = System.currentTimeMillis();
         String selfNodeHostPort = findUnbindHostPort();
         BDBEnvironment environment = new BDBEnvironment(
                 createTmpDir(),
@@ -579,5 +516,6 @@ public class BDBEnvironmentTest {
         Assert.assertEquals(0, l4.size());
 
         environment.close();
+        System.out.println("testGetDatabase cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 }

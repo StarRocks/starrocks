@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.backup;
 
 import autovalue.shaded.com.google.common.common.collect.Maps;
@@ -28,6 +27,7 @@ import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.backup.Status;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -42,7 +42,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -55,6 +54,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStorageMedium;
@@ -84,9 +84,10 @@ public class LakeRestoreJob extends RestoreJob {
 
     public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
                           boolean allowLoad, int restoreReplicationNum, long timeoutMs,
-                          GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
+                          GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta,
+                          MvRestoreContext mvRestoreContext) {
         super(label, backupTs, dbId, dbName, jobInfo, allowLoad, restoreReplicationNum, timeoutMs,
-                globalStateMgr, repoId, backupMeta);
+                globalStateMgr, repoId, backupMeta, mvRestoreContext);
         this.type = JobType.LAKE_RESTORE;
     }
 
@@ -127,12 +128,14 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryComputeNodeId());
+                Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_NAME, tablet);
+
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
-                        backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
-                snapshotInfos.put(idChain.getTabletId(), backend.getId(), info);
-            } catch (UserException e) {
+                        computeNodeId, tbl.getSchemaHashByIndexId(index.getId()), -1);
+                snapshotInfos.put(idChain.getTabletId(), computeNodeId, info);
+            } catch (Exception e) {
                 LOG.error(e.getMessage());
                 status = new Status(Status.ErrCode.COMMON_ERROR,
                         "failed to choose replica to make snapshot for tablet " + tablet.getId());
@@ -206,7 +209,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void sendDownloadTasks() {
         for (Map.Entry<Long, RestoreSnapshotsRequest> entry : requests.entrySet()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(entry.getKey());
             LakeService lakeService = null;
             try {
                 lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
@@ -278,7 +281,7 @@ public class LakeRestoreJob extends RestoreJob {
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
                     restoredIdx.getId(), indexMeta.getSchemaHash(), medium, true);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
-                GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
             }
         }
     }
@@ -311,11 +314,11 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
         try {
-            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
+            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(db.getId(), remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());
-            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, new MvRestoreContext());
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }

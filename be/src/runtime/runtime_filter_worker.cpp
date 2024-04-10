@@ -176,6 +176,15 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
     }
 }
 
+void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs) {
+    RuntimeState* state = _state;
+    for (auto* rf_desc : rf_descs) {
+        auto* filter = rf_desc->runtime_filter();
+        if (filter == nullptr) continue;
+        state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+    }
+}
+
 void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf) {
     _state->exec_env()->add_rf_event({
             _state->query_id(),
@@ -521,7 +530,9 @@ RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread
     Thread::set_thread_name(_thread, "runtime_filter");
 }
 
-RuntimeFilterWorker::~RuntimeFilterWorker() {
+RuntimeFilterWorker::~RuntimeFilterWorker() = default;
+
+void RuntimeFilterWorker::close() {
     _queue.shutdown();
     _thread.join();
 }
@@ -888,7 +899,7 @@ void RuntimeFilterWorker::execute() {
             RuntimeFilterMerger merger(_exec_env, UniqueId(ev.query_id), ev.query_options, ev.is_opened_by_pipeline);
             Status st = merger.init(ev.create_rf_merger_request);
             if (!st.ok()) {
-                VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.get_error_msg();
+                VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.message();
                 break;
             }
             _mergers.insert(std::make_pair(ev.query_id, std::move(merger)));

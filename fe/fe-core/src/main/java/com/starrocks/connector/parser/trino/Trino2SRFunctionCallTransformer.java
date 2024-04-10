@@ -76,6 +76,7 @@ public class Trino2SRFunctionCallTransformer {
         registerStringFunctionTransformer();
         registerRegexpFunctionTransformer();
         registerJsonFunctionTransformer();
+        registerURLFunctionTransformer();
         registerBitwiseFunctionTransformer();
         registerUnicodeFunctionTransformer();
         registerMapFunctionTransformer();
@@ -87,7 +88,7 @@ public class Trino2SRFunctionCallTransformer {
         // 1.approx_distinct
         registerFunctionTransformer("approx_distinct", 1,
                 "approx_count_distinct", ImmutableList.of(Expr.class));
-        
+
         // 2. arbitrary
         registerFunctionTransformer("arbitrary", 1,
                 "any_value", ImmutableList.of(Expr.class));
@@ -179,8 +180,20 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("format_datetime", 2, "jodatime_format",
                 ImmutableList.of(Expr.class, Expr.class));
 
+        // to_char -> jodatime_format
+        registerFunctionTransformer("to_char", 2, "jodatime_format",
+                ImmutableList.of(Expr.class, Expr.class));
+
         // parse_datetime -> str_to_jodatime
         registerFunctionTransformer("parse_datetime", 2, "str_to_jodatime",
+                ImmutableList.of(Expr.class, Expr.class));
+
+        // to_date -> to_tera_date
+        registerFunctionTransformer("to_date", 2, "to_tera_date",
+                ImmutableList.of(Expr.class, Expr.class));
+
+        // to_timestamp -> to_tera_timestamp
+        registerFunctionTransformer("to_timestamp", 2, "to_tera_timestamp",
                 ImmutableList.of(Expr.class, Expr.class));
     }
 
@@ -219,12 +232,21 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("replace", 2, new FunctionCallExpr("replace",
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
                         new StringLiteral(""))));
+
+        registerFunctionTransformer("index", 2, "instr",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerRegexpFunctionTransformer() {
         // regexp_like -> regexp
         registerFunctionTransformer("regexp_like", 2, "regexp",
                 ImmutableList.of(Expr.class, Expr.class));
+    }
+
+    private static void registerURLFunctionTransformer() {
+        // url_extract_path('https://www.starrocks.io/showcase') -> parse_url('https://www.starrocks.io/showcase', 'PATH')
+        registerFunctionTransformer("url_extract_path", 1, new FunctionCallExpr("parse_url",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("PATH"))));
     }
 
     private static void registerJsonFunctionTransformer() {
@@ -236,8 +258,8 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("json_parse", 1, "parse_json",
                 ImmutableList.of(Expr.class));
 
-        // json_extract -> json_query
-        registerFunctionTransformer("json_extract", 2, "json_query",
+        // json_extract -> get_json_string
+        registerFunctionTransformer("json_extract", 2, "get_json_string",
                 ImmutableList.of(Expr.class, Expr.class));
 
         // json_size -> json_length
@@ -284,6 +306,9 @@ public class Trino2SRFunctionCallTransformer {
     private static void registerBinaryFunctionTransformer() {
         // to_hex -> hex
         registerFunctionTransformer("to_hex", 1, "hex", ImmutableList.of(Expr.class));
+
+        // from_hex -> hex_decode_binary
+        registerFunctionTransformer("from_hex", 1, "hex_decode_binary", ImmutableList.of(Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
@@ -293,7 +318,7 @@ public class Trino2SRFunctionCallTransformer {
     }
 
     private static void registerFunctionTransformerWithVarArgs(String trinoFnName, String starRocksFnName,
-                                                    List<Class<? extends Expr>> starRocksArgumentsClass) {
+                                                               List<Class<? extends Expr>> starRocksArgumentsClass) {
         Preconditions.checkState(starRocksArgumentsClass.size() == 1);
         FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, starRocksArgumentsClass);
         registerFunctionTransformerWithVarArgs(trinoFnName, starRocksFunctionCall);

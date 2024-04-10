@@ -49,6 +49,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Backend;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
@@ -549,7 +550,7 @@ public class Repository implements Writable, GsonPostProcessable {
 
     public Status getBrokerAddress(Long beId, GlobalStateMgr globalStateMgr, List<FsBroker> brokerAddrs) {
         // get backend
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
         if (be == null) {
             return new Status(ErrCode.COMMON_ERROR, "backend " + beId + " is missing. "
                     + "failed to send upload snapshot task");
@@ -584,15 +585,14 @@ public class Repository implements Writable, GsonPostProcessable {
         return info;
     }
 
-    public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp, List<String> snapshotNames)
-            throws AnalysisException {
+    public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp, List<String> snapshotNames) {
         List<List<String>> snapshotInfos = Lists.newArrayList();
         if (Strings.isNullOrEmpty(snapshotName)) {
             // get all snapshot infos
             List<String> fullSnapshotNames = Lists.newArrayList();
             Status status = listSnapshots(fullSnapshotNames);
             if (!status.ok()) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         "Failed to list snapshot in repo: " + name + ", err: " + status.getErrMsg());
             }
 

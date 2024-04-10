@@ -96,6 +96,27 @@ TEST_F(FileUtilsTest, TestCopyFile) {
     ASSERT_EQ(4194317, std::filesystem::file_size(dst_file_name));
 }
 
+TEST_F(FileUtilsTest, TestCopyFileByRange) {
+    std::string src_file_name = _s_test_data_path + "/abcd12345_2.txt";
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    std::unique_ptr<WritableFile> src_file = *FileSystem::Default()->new_writable_file(opts, src_file_name);
+
+    char large_bytes2[(1 << 12)];
+    memset(large_bytes2, 0, sizeof(char) * ((1 << 12)));
+    int i = 0;
+    while (i < 1 << 10) {
+        ASSERT_TRUE(src_file->append(Slice(large_bytes2, 1 << 12)).ok());
+        ++i;
+    }
+    ASSERT_TRUE(src_file->append(Slice(large_bytes2, 13)).ok());
+    ASSERT_TRUE(src_file->close().ok());
+
+    std::string dst_file_name = _s_test_data_path + "/abcd123456_2.txt";
+    fs::copy_file_by_range(src_file_name, dst_file_name, 10, 1024);
+
+    ASSERT_EQ(1024, std::filesystem::file_size(dst_file_name));
+}
+
 TEST_F(FileUtilsTest, TestRemove) {
     // remove_all
     ASSERT_OK(fs::remove_all("./file_test"));

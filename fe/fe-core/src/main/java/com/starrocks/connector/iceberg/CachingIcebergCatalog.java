@@ -34,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -43,10 +44,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Cache<IcebergTableName, Table> tables;
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, List<String>> partitionNames = new ConcurrentHashMap<>();
+    private final ExecutorService backgroundExecutor;
 
-    public CachingIcebergCatalog(IcebergCatalog delegate, long ttlSec) {
+    public CachingIcebergCatalog(IcebergCatalog delegate, long ttlSec, ExecutorService executorService) {
         this.delegate = delegate;
         this.tables = CacheBuilder.newBuilder().expireAfterWrite(ttlSec, SECONDS).maximumSize(100000).build();
+        this.backgroundExecutor = executorService;
     }
 
     @Override
@@ -96,6 +99,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(dbName, tableName);
+    }
+
+    @Override
     public boolean createTable(String dbName,
                                String tableName,
                                Schema schema,
@@ -113,12 +121,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName) {
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(dbName, tblName, newTblName);
+        invalidateCache(new IcebergTableName(dbName, tblName));
+    }
+
+    @Override
+    public List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (partitionNames.containsKey(icebergTableName)) {
             return partitionNames.get(icebergTableName);
         } else {
-            List<String> partitionNames = delegate.listPartitionNames(dbName, tableName);
+            List<String> partitionNames = delegate.listPartitionNames(dbName, tableName, executorService);
             this.partitionNames.put(icebergTableName, partitionNames);
             return partitionNames;
         }
@@ -130,7 +144,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void refreshTable(String dbName, String tableName) {
+    public synchronized void refreshTable(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (tables.getIfPresent(icebergTableName) == null) {
             partitionNames.remove(icebergTableName);
@@ -138,55 +152,60 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             BaseTable currentTable = (BaseTable) getTable(dbName, tableName);
             BaseTable updateTable = (BaseTable) delegate.getTable(dbName, tableName);
             if (updateTable == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
             TableOperations currentOps = currentTable.operations();
             TableOperations updateOps = updateTable.operations();
             if (currentOps == null || updateOps == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
 
             TableMetadata currentPointer = currentOps.current();
             TableMetadata updatePointer = updateOps.current();
             if (currentPointer == null || updatePointer == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
 
             String currentLocation = currentOps.current().metadataFileLocation();
             String updateLocation = updateOps.current().metadataFileLocation();
             if (currentLocation == null || updateLocation == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
             if (!currentLocation.equals(updateLocation)) {
                 LOG.info("Refresh iceberg caching catalog table {}.{} from {} to {}",
                         dbName, tableName, currentLocation, updateLocation);
                 tables.put(icebergTableName, updateTable);
-                partitionNames.put(icebergTableName, delegate.listPartitionNames(dbName, tableName));
+                partitionNames.put(icebergTableName, delegate.listPartitionNames(dbName, tableName, executorService));
             }
         }
-    }
-
-    private void clearCache(IcebergTableName icebergTableName) {
-        tables.invalidate(icebergTableName);
-        partitionNames.remove(icebergTableName);
     }
 
     public void refreshCatalog() {
         List<IcebergTableName> identifiers = Lists.newArrayList(tables.asMap().keySet());
         for (IcebergTableName identifier : identifiers) {
             try {
-                refreshTable(identifier.dbName, identifier.tableName);
+                refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName, identifier.tableName, e);
+                invalidateCache(identifier);
             }
         }
     }
 
-    private static class IcebergTableName {
+    public void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+        partitionNames.remove(icebergTableName);
+    }
+
+    public void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+        tables.invalidate(icebergTableName);
+        partitionNames.remove(icebergTableName);
+    }
+
+    static class IcebergTableName {
         private final String dbName;
         private final String tableName;
 

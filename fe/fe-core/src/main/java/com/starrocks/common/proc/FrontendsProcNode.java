@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
@@ -87,17 +88,20 @@ public class FrontendsProcNode implements ProcNodeInterface {
     }
 
     public static void getFrontendsInfo(GlobalStateMgr globalStateMgr, List<List<String>> infos) {
-        String leaderIp = GlobalStateMgr.getCurrentState().getLeaderIp();
-        if (leaderIp == null) {
-            leaderIp = "";
+        InetSocketAddress leader = null;
+        try {
+            leader = globalStateMgr.getHaProtocol().getLeader();
+        } catch (Exception e) {
+            // this may happen when majority of FOLLOWERS are down and no MASTER right now.
+            LOG.warn("failed to get leader: {}", e.getMessage());
         }
 
         // get all node which are joined in bdb group
         List<InetSocketAddress> allFe = globalStateMgr.getHaProtocol().getElectableNodes(true /* include leader */);
         allFe.addAll(globalStateMgr.getHaProtocol().getObserverNodes());
-        List<Pair<String, Integer>> helperNodes = globalStateMgr.getHelperNodes();
+        List<Pair<String, Integer>> helperNodes = globalStateMgr.getNodeMgr().getHelperNodes();
 
-        for (Frontend fe : globalStateMgr.getFrontends(null /* all */)) {
+        for (Frontend fe : globalStateMgr.getNodeMgr().getFrontends(null /* all */)) {
 
             List<String> info = new ArrayList<String>();
             info.add(fe.getNodeName());
@@ -106,7 +110,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             info.add(Integer.toString(fe.getEditLogPort()));
             info.add(Integer.toString(Config.http_port));
 
-            if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
+            if (fe.getHost().equals(globalStateMgr.getNodeMgr().getSelfNode().first)) {
                 info.add(Integer.toString(Config.query_port));
                 info.add(Integer.toString(Config.rpc_port));
             } else {
@@ -114,17 +118,19 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-
-            if (fe.getHost().equals(leaderIp)) {
+            //An ipv6 address may have different format, so we compare InetSocketAddress objects instead of IP Strings.
+            //e.g.  fdbd:ff1:ce00:1c26::d8 and fdbd:ff1:ce00:1c26:0:0:d8
+            InetSocketAddress curAddress = new InetSocketAddress(fe.getHost(), fe.getEditLogPort());
+            if (curAddress.equals(leader)) {
                 info.add(FrontendNodeType.LEADER.toString());
             } else {
                 info.add(fe.getRole().name());
             }
 
-            info.add(Integer.toString(globalStateMgr.getClusterId()));
+            info.add(Integer.toString(globalStateMgr.getNodeMgr().getClusterId()));
             info.add(String.valueOf(isJoin(allFe, fe)));
 
-            if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
+            if (NetUtils.isSameIP(fe.getHost(), globalStateMgr.getNodeMgr().getSelfNode().first)) {
                 info.add("true");
                 info.add(Long.toString(globalStateMgr.getMaxJournalId()));
             } else {
@@ -152,11 +158,14 @@ public class FrontendsProcNode implements ProcNodeInterface {
     }
 
     private static boolean isHelperNode(List<Pair<String, Integer>> helperNodes, Frontend fe) {
-        return helperNodes.stream().anyMatch(p -> p.first.equals(fe.getHost()) && p.second == fe.getEditLogPort());
+        return helperNodes.stream().anyMatch(p -> NetUtils.isSameIP(p.first, fe.getHost()) && p.second == fe.getEditLogPort());
     }
 
     private static boolean isJoin(List<InetSocketAddress> allFeHosts, Frontend fe) {
         for (InetSocketAddress addr : allFeHosts) {
+            if (fe.getEditLogPort() != addr.getPort()) {
+                return false;
+            }
             String realHost = "";
             try {
                 InetAddress address = addr.getAddress();
@@ -164,7 +173,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
                     LOG.warn("Failed to get InetAddress {}", addr);
                     continue;
                 }
-                if (InetAddressValidator.getInstance().isValidInet4Address(fe.getHost())) {
+                if (InetAddressValidator.getInstance().isValid(fe.getHost())) {
                     realHost = address.getHostAddress();
                 } else {
                     realHost = address.getHostName();
@@ -173,7 +182,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 LOG.warn("Failed to get address hostname of fe: {} msg: {}", addr, e);
                 continue;
             }
-            if (fe.getHost().equals(realHost) && fe.getEditLogPort() == addr.getPort()) {
+            if (NetUtils.isSameIP(fe.getHost(), realHost)) {
                 return true;
             }
         }

@@ -341,7 +341,8 @@ Status StreamChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ConnectorChunkSource::prepare(state));
     // open data source eagerly rather than delay until to read data so that
     // it can interact with stream pipeline engine normally, such as set_offset()
-    RETURN_IF_ERROR(_open_data_source(state));
+    [[maybe_unused]] bool mem_alloc_failed = false;
+    RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
     return Status::OK();
 }
 

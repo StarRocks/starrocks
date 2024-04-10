@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# UPPER
+# upper
 
 ## Description
 

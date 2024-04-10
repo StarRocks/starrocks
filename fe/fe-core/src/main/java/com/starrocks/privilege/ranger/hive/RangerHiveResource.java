@@ -15,18 +15,28 @@
 package com.starrocks.privilege.ranger.hive;
 
 import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.ranger.RangerAccessResourceBuilder;
 import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
-import java.util.List;
-import java.util.Locale;
-
 public class RangerHiveResource extends RangerAccessResourceImpl {
-    public RangerHiveResource(ObjectType objectType, List<String> objectTokens) {
-        if (objectType.equals(ObjectType.DATABASE)) {
-            setValue(ObjectType.DATABASE.name().toLowerCase(Locale.ENGLISH), objectTokens.get(0));
-        } else if (objectType.equals(ObjectType.TABLE)) {
-            setValue(ObjectType.DATABASE.name().toLowerCase(Locale.ENGLISH), objectTokens.get(0));
-            setValue(ObjectType.TABLE.name().toLowerCase(Locale.ENGLISH), objectTokens.get(1));
+    static class RangerHiveAccessResourceBuilder extends RangerAccessResourceBuilder {
+        private RangerHiveAccessResourceBuilder() {
+            super(new RangerHiveResource());
         }
+
+        @Override
+        public String convertToRangerType(ObjectType objectType) {
+            if (objectType.equals(ObjectType.DATABASE)) {
+                return "database";
+            } else if (objectType.equals(ObjectType.TABLE)) {
+                return "table";
+            } else {
+                return "unknown";
+            }
+        }
+    }
+
+    public static RangerAccessResourceBuilder builder() {
+        return new RangerHiveAccessResourceBuilder();
     }
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # STREAM LOAD
@@ -57,8 +58,8 @@ The following table describes the parameters in the URL.
 
 | Parameter     | Required | Description                                                  |
 | ------------- | -------- | ------------------------------------------------------------ |
-| fe_host       | Yes      | The IP address of the FE node in your StarRocks cluster.<br/>**NOTE**<br/>If you submit the load job to a specific BE node, you must input the IP address of the BE node. |
-| fe_http_port  | Yes      | The HTTP port number of the FE node in your StarRocks cluster. The default port number is `8030`.<br/>**NOTE**<br/>If you submit the load job to a specific BE node, you must input the HTTP port number of the BE node. The default port number is `8030`. |
+| fe_host       | Yes      | The IP address of the FE node in your StarRocks cluster.<br/>**NOTE**<br/>If you submit the load job to a specific BE or CN node, you must input the IP address of the BE or CN node. |
+| fe_http_port  | Yes      | The HTTP port number of the FE node in your StarRocks cluster. The default port number is `8030`.<br/>**NOTE**<br/>If you submit the load job to a specific BE or CN node, you must input the HTTP port number of the BE or CN node. The default port number is `8030`. |
 | database_name | Yes      | The name of the database to which the StarRocks table belongs. |
 | table_name    | Yes      | The name of the StarRocks table.                             |
 
@@ -142,14 +143,14 @@ The following table describes the optional parameters.
 
 | Parameter        | Required | Description                                                  |
 | ---------------- | -------- | ------------------------------------------------------------ |
-| label            | No       | The label of the load job. If you do not specify this parameter, StarRocks automatically generates a label for the load job.<br/>StarRocks does not allow you to use one label to load a data batch multiple times. As such, StarRocks prevents the same data from being repeatedly loaded. For label naming conventions, see [System limits](../../../reference/System_limit.md).<br/>By default, StarRocks retains the labels of load jobs that were successfully completed over the most recent three days. You can use the [FE parameter](../../../administration/Configuration.md) `label_keep_max_second` to change the label retention period. |
+| label            | No       | The label of the load job. If you do not specify this parameter, StarRocks automatically generates a label for the load job.<br/>StarRocks does not allow you to use one label to load a data batch multiple times. As such, StarRocks prevents the same data from being repeatedly loaded. For label naming conventions, see [System limits](../../../reference/System_limit.md).<br/>By default, StarRocks retains the labels of load jobs that were successfully completed over the most recent three days. You can use the [FE parameter](../../../administration/management/FE_configuration.md) `label_keep_max_second` to change the label retention period. |
 | where            | No       | The conditions based on which StarRocks filters the pre-processed data. StarRocks loads only the pre-processed data that meets the filter conditions specified in the WHERE clause. |
 | max_filter_ratio | No       | The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `0`.<br/>We recommend that you retain the default value `0`. This way, if unqualified data records are detected, the load job fails, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.<br/>**NOTE**<br/>Unqualified data records do not include data records that are filtered out by the WHERE clause. |
-| log_rejected_record_num | No           | Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that data rows that are filtered out will not be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.</li></ul> |
-| timeout          | No       | The timeout period of the load job. Valid values: `1` to `259200`. Unit: second. Default value: `600`.<br/>**NOTE**In addition to the `timeout` parameter, you can also use the [FE parameter](../../../administration/Configuration.md) `stream_load_default_timeout_second` to centrally control the timeout period for all Stream Load jobs in your StarRocks cluster. If you specify the `timeout` parameter, the timeout period specified by the `timeout` parameter prevails. If you do not specify the `timeout` parameter, the timeout period specified by the `stream_load_default_timeout_second` parameter prevails. |
+| log_rejected_record_num | No           | Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that data rows that are filtered out will not be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE or CN.</li></ul> |
+| timeout          | No       | The timeout period of the load job. Valid values: `1` to `259200`. Unit: second. Default value: `600`.<br/>**NOTE**In addition to the `timeout` parameter, you can also use the [FE parameter](../../../administration/management/FE_configuration.md) `stream_load_default_timeout_second` to centrally control the timeout period for all Stream Load jobs in your StarRocks cluster. If you specify the `timeout` parameter, the timeout period specified by the `timeout` parameter prevails. If you do not specify the `timeout` parameter, the timeout period specified by the `stream_load_default_timeout_second` parameter prevails. |
 | strict_mode      | No       | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`.  The value `true` specifies to enable the strict mode, and the value `false` specifies to disable the strict mode. |
-| timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
-| load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE. |
+| timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/management/timezone.md). |
+| load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE or CN. |
 | merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates. |
 
 ## Column mapping
@@ -387,7 +388,7 @@ curl --location-trusted -u <username>:<password> \
 >
 > - The `hll_empty` function is used to fill the specified default value into `col2` of `table7`.
 
-For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) and [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md).
+For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) and [hll_empty](../../sql-functions/scalar-functions/hll_empty.md).
 
 #### Load data into tables containing BITMAP-type columns
 
@@ -489,7 +490,7 @@ StarRocks performs the following steps to match and process JSON data:
 
 3. Extracts the specified JSON data as instructed by the `jsonpaths` parameter setting.
 
-##### Load JSON data using matched without root element specified
+##### Load JSON data using matched mode without root element specified
 
 Suppose that your data file `example2.json` consists of the following data:
 

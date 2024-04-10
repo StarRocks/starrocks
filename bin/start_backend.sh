@@ -54,12 +54,14 @@ while true; do
     esac
 done
 
-
 # ================== conf section =======================
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 source $STARROCKS_HOME/bin/common.sh
 
 export_shared_envvars
+
+check_and_update_max_processes
+
 if [ ${RUN_BE} -eq 1 ] ; then
     export_env_from_conf $STARROCKS_HOME/conf/be.conf
 fi
@@ -80,11 +82,9 @@ else
     echo "JEMALLOC_CONF from conf is '$JEMALLOC_CONF'"
 fi
 # enable coredump when BE build with ASAN
-export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
-# Dependent dynamic libraries
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 
 # ================== jvm section =======================
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
@@ -99,6 +99,7 @@ fi
 
 if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
@@ -181,7 +182,7 @@ fi
 
 chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
 
-if [[ $(ulimit -n) -lt 60000 ]]; then
+if [ $(ulimit -n) != "unlimited" ] && [ $(ulimit -n) -lt 60000 ]; then
     ulimit -n 65535
 fi
 
@@ -190,6 +191,11 @@ LOG_FILE=$LOG_DIR/be.out
 if [ ${RUN_CN} -eq 1 ]; then
     START_BE_CMD="${START_BE_CMD} --cn"
     LOG_FILE=${LOG_DIR}/cn.out
+fi
+
+# enable DD profile
+if [ "${ENABLE_DATADOG_PROFILE}" == "true" ] && [ -f "${STARROCKS_HOME}/datadog/ddprof" ]; then
+    START_BE_CMD="${STARROCKS_HOME}/datadog/ddprof -l debug ${START_BE_CMD}"
 fi
 
 if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then

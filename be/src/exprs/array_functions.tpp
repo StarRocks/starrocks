@@ -101,26 +101,25 @@ private:
         Datum v = column.get(index);
         const auto& items = v.get<DatumArray>();
 
-        for (const auto& item : items) {
-            if (item.is_null()) {
-                has_null = true;
-            } else {
-                hash_set->emplace(item.get<CppType>());
-            }
-        }
-
         auto& dest_data_column = dest_column->elements_column();
         auto& dest_offsets = dest_column->offsets_column()->get_data();
 
-        if (has_null) {
-            dest_data_column->append_nulls(1);
+        for (const auto& item : items) {
+            if (item.is_null()) {
+                if (!has_null) {
+                    dest_data_column->append_nulls(1);
+                    has_null = true;
+                }
+                continue;
+            }
+
+            const auto& tt = item.get<CppType>();
+            if (hash_set->count(tt) == 0) {
+                hash_set->emplace(tt);
+                dest_data_column->append_datum(tt);
+            }
         }
 
-        auto iter = hash_set->begin();
-        while (iter != hash_set->end()) {
-            dest_data_column->append_datum(*iter);
-            ++iter;
-        }
         dest_offsets.emplace_back(dest_offsets.back() + hash_set->size() + has_null);
     }
 };
@@ -772,7 +771,7 @@ private:
 class ArrayJoin {
 public:
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
-        // TODO: optimize the performace of const sep or const null replace str
+        // TODO: optimize the performance of const sep or const null replace str
         DCHECK_GE(columns.size(), 2);
         size_t chunk_size = columns[0]->size();
 
@@ -790,7 +789,7 @@ private:
     static ColumnPtr _join_column_replace_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
                                                const ColumnPtr& null_replace_column, size_t chunk_size) {
         NullableBinaryColumnBuilder res;
-        // byte_size may be smaller or larger then actual used size
+        // byte_size may be smaller or larger than actual used size
         // byte_size is only one reserve size
         size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
                            ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size() +
@@ -1427,7 +1426,7 @@ private:
     }
 };
 
-// Todo:support datatime/data
+// Todo:support datetime/date
 template <LogicalType Type>
 class ArrayGenerate {
 public:

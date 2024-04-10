@@ -52,11 +52,15 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -67,10 +71,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataPartition;
@@ -87,6 +92,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -138,7 +144,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
-    // backend id => backend lastStartTime 
+    // backend id => backend lastStartTime
     private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
 
     @SerializedName("id")
@@ -182,6 +188,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private int progress;
     @SerializedName("fm")
     private ExportFailMsg failMsg;
+    @SerializedName("warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
     private TupleDescriptor exportTupleDesc;
     private Table exportTable;
     // when set to true, means this job instance is created by replay thread(FE restarted or master changed)
@@ -215,6 +224,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.id = jobId;
         this.queryId = queryId;
         this.queryIdString = queryId.toString();
+    }
+
+    public ExportJob(long jobId, UUID queryId, long warehouseId) {
+        this(jobId, queryId);
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public void setJob(ExportStmt stmt) throws UserException {
@@ -312,46 +330,67 @@ public class ExportJob implements Writable, GsonPostProcessable {
             scanNodes.add(scanNode);
             fragments.add(fragment);
         } else {
-            for (TScanRangeLocations tablet : tabletLocations) {
-                List<TScanRangeLocation> locations = tablet.getLocations();
-                Collections.shuffle(locations);
-                tablet.setLocations(locations.subList(0, 1));
-            }
-
-            long maxBytesPerBe = Config.export_max_bytes_per_be_per_task;
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-            List<TScanRangeLocations> copyTabletLocations = Lists.newArrayList(tabletLocations);
-            int taskIdx = 0;
-            while (!copyTabletLocations.isEmpty()) {
-                Map<Long, Long> bytesPerBe = Maps.newHashMap();
-                List<TScanRangeLocations> taskTabletLocations = Lists.newArrayList();
-                Iterator<TScanRangeLocations> iter = copyTabletLocations.iterator();
-                while (iter.hasNext()) {
-                    TScanRangeLocations scanRangeLocations = iter.next();
-                    long tabletId = scanRangeLocations.getScan_range().getInternal_scan_range().getTablet_id();
-                    long backendId = scanRangeLocations.getLocations().get(0).getBackend_id();
-                    Replica replica = invertedIndex.getReplica(tabletId, backendId);
-                    long dataSize = replica != null ? replica.getDataSize() : 0L;
-
-                    Long assignedBytes = bytesPerBe.get(backendId);
-                    if (assignedBytes == null || assignedBytes < maxBytesPerBe) {
-                        taskTabletLocations.add(scanRangeLocations);
-                        bytesPerBe.put(backendId, assignedBytes != null ? assignedBytes + dataSize : dataSize);
-                        iter.remove();
-                    }
-                }
-
-                OlapScanNode taskScanNode = genOlapScanNodeByLocation(taskTabletLocations);
-                scanNodes.add(taskScanNode);
-                PlanFragment fragment = genPlanFragment(exportTable.getType(), taskScanNode, taskIdx++);
-                fragments.add(fragment);
-            }
-
-            LOG.info("total {} tablets of export job {}, and assign them to {} coordinators",
-                    tabletLocations.size(), id, fragments.size());
+            genTaskFragments(fragments, scanNodes);
         }
 
         genCoordinators(stmt, fragments, scanNodes);
+    }
+
+    private void genTaskFragments(List<PlanFragment> fragments, List<ScanNode> scanNodes) throws UserException {
+        Preconditions.checkNotNull(tabletLocations);
+
+        for (TScanRangeLocations tablet : tabletLocations) {
+            List<TScanRangeLocation> locations = tablet.getLocations();
+            Collections.shuffle(locations);
+            tablet.setLocations(locations.subList(0, 1));
+        }
+
+        long maxBytesPerBe = Config.export_max_bytes_per_be_per_task;
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        List<TScanRangeLocations> copyTabletLocations = Lists.newArrayList(tabletLocations);
+        int taskIdx = 0;
+        while (!copyTabletLocations.isEmpty()) {
+            Map<Long, Long> bytesPerBe = Maps.newHashMap();
+            List<TScanRangeLocations> taskTabletLocations = Lists.newArrayList();
+            Iterator<TScanRangeLocations> iter = copyTabletLocations.iterator();
+            while (iter.hasNext()) {
+                TScanRangeLocations scanRangeLocations = iter.next();
+                long backendId = scanRangeLocations.getLocations().get(0).getBackend_id();
+                long tabletId = scanRangeLocations.getScan_range().getInternal_scan_range().getTablet_id();
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dataSize = 0L;
+                if (tabletMeta.isLakeTablet()) {
+                    Partition partition = exportTable.getPartition(tabletMeta.getPartitionId());
+                    if (partition != null) {
+                        MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                        if (index != null) {
+                            Tablet tablet = index.getTablet(tabletId);
+                            if (tablet != null) {
+                                dataSize = tablet.getDataSize(true);
+                            }
+                        }
+                    }
+                } else {
+                    Replica replica = invertedIndex.getReplica(tabletId, backendId);
+                    dataSize = replica != null ? replica.getDataSize() : 0L;
+                }
+
+                Long assignedBytes = bytesPerBe.get(backendId);
+                if (assignedBytes == null || assignedBytes < maxBytesPerBe) {
+                    taskTabletLocations.add(scanRangeLocations);
+                    bytesPerBe.put(backendId, assignedBytes != null ? assignedBytes + dataSize : dataSize);
+                    iter.remove();
+                }
+            }
+
+            OlapScanNode taskScanNode = genOlapScanNodeByLocation(taskTabletLocations);
+            scanNodes.add(taskScanNode);
+            PlanFragment fragment = genPlanFragment(exportTable.getType(), taskScanNode, taskIdx++);
+            fragments.add(fragment);
+        }
+
+        LOG.info("total {} tablets of export job {}, and assign them to {} coordinators",
+                tabletLocations.size(), id, fragments.size());
     }
 
     private ScanNode genScanNode() throws UserException {
@@ -359,7 +398,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
-                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
+                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", warehouseId);
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
@@ -382,7 +421,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 new PlanNodeId(nextId.getAndIncrement()),
                 exportTupleDesc,
                 "OlapScanNodeForExport",
-                locations);
+                locations,
+                warehouseId);
     }
 
     private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws UserException {
@@ -448,12 +488,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit());
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit(), warehouseId);
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                     id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
         }
-        LOG.info("create {} coordintors for export job: {}", coordList.size(), id);
+        LOG.info("create {} coordinators for export job: {}", coordList.size(), id);
     }
 
     // For olap table, it may have multiple replica, 
@@ -492,7 +532,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
                 id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
-                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit());
+                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), warehouseId);
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
@@ -728,12 +768,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
             String host = address.getHostname();
             int port = address.getPort();
 
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(host, port);
             if (backend == null) {
                 continue;
             }
             long backendId = backend.getId();
-            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
+            if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAvailable(backendId)) {
                 continue;
             }
 
@@ -760,8 +800,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
-                if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNodeWithBePort(host, port);
+                if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkNodeAvailable(node)) {
                     continue;
                 }
                 try {
@@ -1199,7 +1240,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         @Override
         public boolean equals(Object obj) {
             return obj instanceof NetworkAddress
-                    && this.hostname.equals(((NetworkAddress) obj).hostname)
+                    && NetUtils.isSameIP(this.hostname, ((NetworkAddress) obj).hostname)
                     && this.port == ((NetworkAddress) obj).port;
         }
 
@@ -1210,7 +1251,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         @Override
         public String toString() {
-            return hostname + ":" + port;
+            return NetUtils.getHostPortInAccessibleFormat(hostname, port);
         }
     }
 }

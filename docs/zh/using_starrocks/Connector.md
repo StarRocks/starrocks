@@ -29,7 +29,7 @@ CREATE EXTERNAL CATALOG <catalog_name> PROPERTIES ("key"="valuse", ...);
 创建hive catalog
 
 ```sql
-CREATE EXTERNAL CATALOG hive_catalog0 PROPERTIES("type"="hive", "hive.metastore.uris"="thrift://127.0.0.1:9083");
+CREATE EXTERNAL CATALOG hive_catalog0 PROPERTIES("type"="hive", "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083");
 ```
 
 #### 说明

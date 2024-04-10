@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -29,6 +31,7 @@ public class AnalyzeTestUtil {
     private static String DB_NAME = "test";
 
     public static void init() throws Exception {
+        Config.enable_experimental_rowstore = true;
         // create connect context
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -153,6 +156,7 @@ public class AnalyzeTestUtil {
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` string NOT NULL COMMENT \"\",\n" +
                 "  `v2` int NOT NULL,\n" +
+                "  `v4` int NOT NULL,\n" +
                 "  `v3` array<int> not null" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +
@@ -350,7 +354,7 @@ public class AnalyzeTestUtil {
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
-        } catch (ParsingException | SemanticException | UnsupportedException e) {
+        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }

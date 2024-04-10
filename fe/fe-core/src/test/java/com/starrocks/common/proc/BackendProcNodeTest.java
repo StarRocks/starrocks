@@ -82,7 +82,7 @@ public class BackendProcNodeTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 minTimes = 0;
                 result = tabletInvertedIndex;
 

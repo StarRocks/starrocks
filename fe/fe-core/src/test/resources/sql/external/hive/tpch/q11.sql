@@ -1,31 +1,3 @@
-[sql]
-select
-    ps_partkey,
-    sum(ps_supplycost * ps_availqty) as value
-from
-    partsupp,
-    supplier,
-    nation
-where
-    ps_suppkey = s_suppkey
-  and s_nationkey = n_nationkey
-  and n_name = 'PERU'
-group by
-    ps_partkey having
-    sum(ps_supplycost * ps_availqty) > (
-    select
-    sum(ps_supplycost * ps_availqty) * 0.0001000000
-    from
-    partsupp,
-    supplier,
-    nation
-    where
-    ps_suppkey = s_suppkey
-                  and s_nationkey = n_nationkey
-                  and n_name = 'PERU'
-    )
-order by
-    value desc ;
 [fragment statistics]
 PLAN FRAGMENT 0(F13)
 Output Exprs:1: ps_partkey | 18: sum
@@ -38,7 +10,6 @@ cardinality: 1600000
 column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
 * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
-* expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F05)
 
@@ -100,7 +71,6 @@ OutPut Exchange Id: 28
 |  assert number of rows: LE 1
 |  cardinality: 1
 |  column statistics:
-|  * sum-->[1.0, 9999000.0, 0.0, 16.0, 1.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
 26:Project

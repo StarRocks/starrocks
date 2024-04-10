@@ -109,6 +109,10 @@ public class LoadStmt extends DdlStmt {
     public static final String BOS_ACCESSKEY = "bos_accesskey";
     public static final String BOS_SECRET_ACCESSKEY = "bos_secret_accesskey";
 
+    public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
+    public static final String JSONPATHS = "jsonpaths";
+    public static final String JSONROOT = "json_root";
+
     // mini load params
     public static final String KEY_IN_PARAM_COLUMNS = "columns";
     public static final String KEY_IN_PARAM_SET = "set";
@@ -145,6 +149,9 @@ public class LoadStmt extends DdlStmt {
             .add(PARTIAL_UPDATE_MODE)
             .add(SPARK_LOAD_SUBMIT_TIMEOUT)
             .add(MERGE_CONDITION)
+            .add(STRIP_OUTER_ARRAY)
+            .add(JSONPATHS)
+            .add(JSONROOT)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,

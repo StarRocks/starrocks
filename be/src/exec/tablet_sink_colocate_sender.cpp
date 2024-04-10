@@ -131,7 +131,7 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
         if (!st.ok()) {
             LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
                          << ", node=" << node->node_info()->host << ":" << node->node_info()->brpc_port
-                         << ", errmsg=" << st.get_error_msg();
+                         << ", errmsg=" << st.message();
             err_st = st;
             // we only send to primary replica, if it fail whole load fail
             if (_enable_replicated_storage) {
@@ -183,7 +183,7 @@ Status TabletSinkColocateSender::open_wait() {
         if (!st.ok()) {
             LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                          << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
-                         << ", errmsg=" << st.get_error_msg();
+                         << ", errmsg=" << st.message();
             err_st = st.clone_and_append(std::string(" be:") + ch->node_info()->host);
             this->_mark_as_failed(ch);
         }
@@ -214,7 +214,7 @@ Status TabletSinkColocateSender::try_close(RuntimeState* state) {
             auto st = ch->try_close();
             if (!st.ok()) {
                 LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                 err_st = st;
                 this->_mark_as_failed(ch);
             }
@@ -263,7 +263,7 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
                 if (!channel_status.ok()) {
                     LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                  << ", load_info=" << ch->print_load_info()
-                                 << ", error_msg=" << channel_status.get_error_msg();
+                                 << ", error_msg=" << channel_status.message();
                     err_st = channel_status;
                     this->_mark_as_failed(ch);
                 }

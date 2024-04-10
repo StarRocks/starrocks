@@ -1,1 +1,1 @@
-HTTP API format should follow [Restful API Standard](/docs/developers/code-style-guides/restful-api-standard.md)
+HTTP API format should follow [Restful API Standard](/docs/en/developers/code-style-guides/restful-api-standard.md)

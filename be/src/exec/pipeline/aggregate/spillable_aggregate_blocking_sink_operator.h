@@ -18,6 +18,7 @@
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state.h"
 
@@ -41,6 +42,7 @@ public:
     [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
+
     void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
         TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
@@ -57,6 +59,9 @@ public:
     }
 
     [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+    // only the prepare/open phase calls are valid.
+    SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
 
 private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }

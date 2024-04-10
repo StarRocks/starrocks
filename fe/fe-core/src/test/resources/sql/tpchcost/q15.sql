@@ -1,41 +1,3 @@
-[sql]
-select
-    s_suppkey,
-    s_name,
-    s_address,
-    s_phone,
-    total_revenue
-from
-    supplier,
-    (	select
-             l_suppkey as supplier_no,
-             sum(l_extendedprice * (1 - l_discount)) as total_revenue
-         from
-             lineitem
-         where
-                 l_shipdate >= date '1995-07-01'
-           and l_shipdate < date '1995-10-01'
-         group by
-             l_suppkey) a
-where
-        s_suppkey = supplier_no
-  and total_revenue = (
-    select
-        max(total_revenue)
-    from
-        (	select
-                 l_suppkey as supplier_no,
-                 sum(l_extendedprice * (1 - l_discount)) as total_revenue
-             from
-                 lineitem
-             where
-                     l_shipdate >= date '1995-07-01'
-               and l_shipdate < date '1995-10-01'
-             group by
-                 l_suppkey) b
-)
-order by
-    s_suppkey;
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
@@ -50,7 +12,6 @@ column statistics:
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
-* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
 * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)

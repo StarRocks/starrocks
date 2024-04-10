@@ -22,9 +22,12 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -37,6 +40,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
@@ -97,7 +101,20 @@ public class CTASAnalyzer {
         }
 
         for (int i = 0; i < allFields.size(); i++) {
-            Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
+            boolean isConnectorTable = false;
+            try {
+                Table connectorTable = tableRefToTable.get(allFields.get(i).getRelationAlias().getTbl());
+                if (connectorTable != null) {
+                    isConnectorTable = connectorTable instanceof HiveTable
+                            || connectorTable instanceof TableFunctionTable
+                            || connectorTable instanceof IcebergTable;
+                }
+            } catch (NullPointerException ignored) {
+                // skip if nullPointer called
+            }
+            Type type = isConnectorTable
+                    ? AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(), false)
+                    : AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
@@ -141,7 +158,7 @@ public class CTASAnalyzer {
                 // if we don't, we pick the first column
                 String defaultColumnName = finalColumnNames.get(0);
                 double candidateDistinctCountCount = 1.0;
-                StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentStatisticStorage();
+                StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentState().getStatisticStorage();
 
                 for (Map.Entry<Pair<String, Pair<String, String>>, Table> columnEntry : columnNameToTable.entrySet()) {
                     Pair<String, String> columnName = columnEntry.getKey().second;
@@ -189,6 +206,14 @@ public class CTASAnalyzer {
             }
             AnalyzerUtils.checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             rangePartitionDesc.setAutoPartitionTable(true);
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            for (ColumnDef columnDef : columnDefs) {
+                for (String partitionColName : ((ListPartitionDesc) partitionDesc).getPartitionColNames()) {
+                    if (columnDef.getName().equalsIgnoreCase(partitionColName)) {
+                        columnDef.setAllowNull(false);
+                    }
+                }
+            }
         }
 
         Analyzer.analyze(createTableStmt, session);

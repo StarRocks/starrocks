@@ -77,6 +77,7 @@ class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
+class BlockCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -96,6 +97,7 @@ namespace lake {
 class LocationProvider;
 class TabletManager;
 class UpdateManager;
+class ReplicationTxnManager;
 } // namespace lake
 namespace spill {
 class DirManager;
@@ -121,6 +123,7 @@ public:
 
     MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
+    MemTracker* connector_scan_pool_mem_tracker() { return _connector_scan_pool_mem_tracker.get(); }
     MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
     MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
     MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker.get(); }
@@ -138,10 +141,13 @@ public:
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+    MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
+    MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
+    MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -164,6 +170,7 @@ private:
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
+    std::shared_ptr<MemTracker> _connector_scan_pool_mem_tracker;
 
     // Limit the memory used by load
     std::shared_ptr<MemTracker> _load_mem_tracker;
@@ -198,6 +205,9 @@ private:
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
 
+    // The memory used for jit cache
+    std::shared_ptr<MemTracker> _jit_cache_mem_tracker;
+
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
@@ -206,6 +216,11 @@ private:
     std::shared_ptr<MemTracker> _clone_mem_tracker;
 
     std::shared_ptr<MemTracker> _consistency_mem_tracker;
+
+    std::shared_ptr<MemTracker> _replication_mem_tracker;
+
+    // The memory used for datacache
+    std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 };
@@ -255,12 +270,15 @@ public:
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
     workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
+    ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
+    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; };
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
+    ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
@@ -295,7 +313,9 @@ public:
 
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
-    int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
+    uint32_t calc_pipeline_dop(int32_t pipeline_dop) const;
+
+    uint32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
@@ -303,9 +323,13 @@ public:
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
+    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
+
     AgentServer* agent_server() const { return _agent_server; }
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
+
+    BlockCache* block_cache() const { return _block_cache; }
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
@@ -328,6 +352,9 @@ private:
     PriorityThreadPool* _thread_pool = nullptr;
     ThreadPool* _streaming_load_thread_pool = nullptr;
 
+    ThreadPool* _load_segment_thread_pool = nullptr;
+    ThreadPool* _load_rowset_thread_pool = nullptr;
+
     workgroup::ScanExecutor* _scan_executor = nullptr;
     workgroup::ScanExecutor* _connector_scan_executor = nullptr;
 
@@ -336,6 +363,7 @@ private:
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
+    std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
@@ -369,9 +397,11 @@ private:
     lake::TabletManager* _lake_tablet_manager = nullptr;
     lake::LocationProvider* _lake_location_provider = nullptr;
     lake::UpdateManager* _lake_update_manager = nullptr;
+    lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
+    BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
 };
 

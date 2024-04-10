@@ -8,13 +8,18 @@ displayed_sidebar: "Chinese"
 
 删除用户。
 
+:::tip
+
+只有拥有 `user_admin` 角色的用户才可以删除用户。
+
+:::
+
 ## 语法
 
 ```sql
- -- 命令
  DROP USER 'user_identity'
 
- --参数说明
+ -- 参数说明
 user_identity:user@'host'
 ```
 
@@ -22,7 +27,7 @@ user_identity:user@'host'
 
 ## 示例
 
-删除用户 jack@'192.%'。
+删除用户 `jack@'192.%'`。
 
 ```sql
 DROP USER 'jack'@'192.%';

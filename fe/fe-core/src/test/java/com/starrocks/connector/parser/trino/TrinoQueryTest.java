@@ -799,6 +799,18 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testOffsetLimit() throws Exception {
+        String sql = "select * from t0 offset 1 limit 10";
+        assertPlanContains(sql, "offset: 1", "limit: 10");
+
+        sql = "select v1 from t0 order by v1 offset 2 limit 20";
+        assertPlanContains(sql, "offset: 2", "limit: 20");
+
+        sql = "select v1 from t0 order by v1 offset 2";
+        analyzeFail(sql);
+    }
+
+    @Test
     public void testHaving() throws Exception {
         String sql = "select sum(v1) from t0 having sum(v1) > 0";
         assertPlanContains(sql, "having: 4: sum > 0");
@@ -916,28 +928,54 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testIntervalLiteral() throws Exception {
-        String sql = "select date '2022-01-01' + interval '1' year;";
+        String sql = "select timestamp '2022-01-01' + interval '1' year;";
         assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
 
-        sql = "select date '2022-01-01' + interval '1' year + interval '1' month;";
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month;";
         assertPlanContains(sql, "<slot 2> : '2023-02-01 00:00:00'");
 
-        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day;";
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day;";
         assertPlanContains(sql, "<slot 2> : '2023-02-02 00:00:00'");
 
-        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour;";
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour;";
         assertPlanContains(sql, "<slot 2> : '2023-02-02 01:00:00'");
 
-        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
                 "interval '1' minute;";
         assertPlanContains(sql, "<slot 2> : '2023-02-02 01:01:00'");
 
-        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+        sql = "select timestamp '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
                 "interval '1' minute + interval '1' second;";
         assertPlanContains(sql, "<slot 2> : '2023-02-02 01:01:01'");
 
-        sql = "select interval '1' year + date '2022-01-01';";
+        sql = "select interval '1' year + timestamp '2022-01-01';";
         assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
+    }
+
+    @Test
+    public void testIntervalDateLiteral() throws Exception {
+        String sql = "select date '2022-01-01' + interval '1' year;";
+        assertPlanContains(sql, "<slot 2> : '2023-01-01'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-01'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute + interval '1' second;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02'");
+
+        sql = "select interval '1' year + date '2022-01-01';";
+        assertPlanContains(sql, "<slot 2> : '2023-01-01'");
     }
 
     @Test

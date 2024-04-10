@@ -23,7 +23,7 @@ jobs:
     outputs:
       output1: ${{ steps.proto-check-info.outputs.proto }}
     steps:
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
@@ -45,12 +45,12 @@ jobs:
         uses: actions-ecosystem/action-add-labels@v1
         if: needs.proto-checker.outputs.output1 == 'true'
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT }}
           labels: PROTO-REVIEW
 
       - name: remove label
         uses: actions-ecosystem/action-remove-labels@v1
         if: needs.proto-checker.outputs.output1 != 'true'
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT }}
           labels: PROTO-REVIEW

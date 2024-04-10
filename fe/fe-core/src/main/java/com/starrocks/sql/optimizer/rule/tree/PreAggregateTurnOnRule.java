@@ -143,11 +143,11 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 return null;
             }
             // check has value conjunct
-            boolean allKeyConjunct =
-                    Utils.extractColumnRef(
-                                    Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
-                            .map(ref -> scan.getColRefToColumnMetaMap().get(ref)).filter(Objects::nonNull)
-                            .allMatch(Column::isKey);
+            List<ColumnRefOperator> predicateColRefs =
+                    Utils.extractColumnRef(Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates)));
+            boolean allKeyConjunct = predicateColRefs.stream()
+                    .map(ref -> scan.getColRefToColumnMetaMap().get(ref)).filter(Objects::nonNull)
+                    .allMatch(Column::isKey);
             if (!allKeyConjunct) {
                 scan.setTurnOffReason("Predicates include the value column");
                 return null;

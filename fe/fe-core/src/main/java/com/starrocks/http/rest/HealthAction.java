@@ -56,8 +56,10 @@ public class HealthAction extends RestBaseAction {
         response.setContentType("application/json");
 
         RestResult result = new RestResult();
-        result.addResultEntry("total_backend_num", GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
-        result.addResultEntry("online_backend_num", GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
+        result.addResultEntry("total_backend_num",
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
+        result.addResultEntry("online_backend_num",
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber());
         sendResult(request, response, result);
     }
 }

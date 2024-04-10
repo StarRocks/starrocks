@@ -45,6 +45,10 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3 struct<c3_sub1 array<struct<c3_sub1_sub1 int, c3_sub1_sub2 int>>, c3_sub2 int>) " +
                 "duplicate key(c1) distributed by hash(c1) buckets 1 " +
                 "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table index_struct_nest(c1 int,\n" +
+                "index_struct array<struct<`index` bigint(20), char_col varchar(1048576)>>)\n" +
+                "duplicate key(c1) distributed by hash(c1) buckets 1\n" +
+                "properties('replication_num'='1')");
         FeConstants.runningUnitTest = false;
     }
 
@@ -67,6 +71,11 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select c2 from test1 union all select c2_0 from test1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar(10)>)");
+
+        sql = "select index_struct[1].`index` from index_struct_nest";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 3> : 2: index_struct[1].index[true]");
     }
 
     @Test
@@ -296,6 +305,9 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3.d[false]", "c2.a[false]", "c1.a[false]");
         // we don't support non-copy for this expr now
         assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
+        // test common project expr
+        sql = "select c1.a, c1.a + 1 as c1a, c1.a + 2 as c2a from test";
+        assertVerbosePlanContains(sql, "c1.a[true]", "cast(2: c1.a[true] as BIGINT)");
     }
 
     @Test

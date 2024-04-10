@@ -25,7 +25,8 @@ public class AutoInferUtil {
             return 1;
         }
 
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        int defaultReplicationNum =
+                Math.min(3, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
         if (defaultReplicationNum == 0) {
             throw new NoAliveBackendException("No alive backend");
         }

@@ -28,35 +28,48 @@ import static com.starrocks.connector.hive.HiveClassNames.TEXT_INPUT_FORMAT_CLAS
 public enum RemoteFileInputFormat {
     PARQUET,
     ORC,
-    TEXT,
+    TEXTFILE,
     AVRO,
     RCBINARY,
     RCTEXT,
     SEQUENCE,
     UNKNOWN;
-    private static final ImmutableMap<String, RemoteFileInputFormat> VALID_INPUT_FORMATS =
+    private static final ImmutableMap<String, RemoteFileInputFormat> CLASS_NAME_TO_INPUT_FORMAT =
             new ImmutableMap.Builder<String, RemoteFileInputFormat>()
                     .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, PARQUET)
                     .put(ORC_INPUT_FORMAT_CLASS, ORC)
-                    .put(TEXT_INPUT_FORMAT_CLASS, TEXT)
+                    .put(TEXT_INPUT_FORMAT_CLASS, TEXTFILE)
                     .put(AVRO_INPUT_FORMAT_CLASS, AVRO)
                     .put(RCFILE_INPUT_FORMAT_CLASS, RCBINARY)
                     .put(SEQUENCE_INPUT_FORMAT_CLASS, SEQUENCE)
                     .build();
-    private static final ImmutableMap<String, Boolean> FILE_FORMAT_SPLITTABLE_INFOS =
+    private static final ImmutableMap<String, Boolean> INPUT_FORMAT_SPLITTABLE =
             new ImmutableMap.Builder<String, Boolean>()
                     .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, true)
                     .put(HUDI_PARQUET_INPUT_FORMAT, true)
                     .put(ORC_INPUT_FORMAT_CLASS, true)
                     .put(TEXT_INPUT_FORMAT_CLASS, true)
+                    .put(AVRO_INPUT_FORMAT_CLASS, true)
+                    .put(RCFILE_INPUT_FORMAT_CLASS, true)
+                    .put(SEQUENCE_INPUT_FORMAT_CLASS, true)
+                    .build();
+
+    private static final ImmutableMap<RemoteFileInputFormat, Boolean> INPUT_FORMAT_BACKEND_SPLITTABLE =
+            new ImmutableMap.Builder<RemoteFileInputFormat, Boolean>()
+                    .put(PARQUET, true)
+                    .put(ORC, true)
                     .build();
 
     public static RemoteFileInputFormat fromHdfsInputFormatClass(String className) {
-        return VALID_INPUT_FORMATS.getOrDefault(className, UNKNOWN);
+        return CLASS_NAME_TO_INPUT_FORMAT.getOrDefault(className, UNKNOWN);
     }
 
     public static boolean isSplittable(String className) {
-        return FILE_FORMAT_SPLITTABLE_INFOS.containsKey(className) && FILE_FORMAT_SPLITTABLE_INFOS.get(className);
+        return INPUT_FORMAT_SPLITTABLE.getOrDefault(className, false);
+    }
+
+    public boolean isBackendSplittable() {
+        return INPUT_FORMAT_BACKEND_SPLITTABLE.getOrDefault(this, false);
     }
 
     public THdfsFileFormat toThrift() {
@@ -65,7 +78,7 @@ public enum RemoteFileInputFormat {
                 return THdfsFileFormat.PARQUET;
             case ORC:
                 return THdfsFileFormat.ORC;
-            case TEXT:
+            case TEXTFILE:
                 return THdfsFileFormat.TEXT;
             case AVRO:
                 return THdfsFileFormat.AVRO;

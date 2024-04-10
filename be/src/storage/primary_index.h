@@ -41,7 +41,7 @@ public:
 
     PrimaryIndex();
     PrimaryIndex(const Schema& pk_schema);
-    ~PrimaryIndex();
+    virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
@@ -111,9 +111,7 @@ public:
 
     Status on_commited();
 
-    double get_write_amp_score();
-
-    Status major_compaction(Tablet* tablet);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
 
     Status abort();
 
@@ -124,9 +122,6 @@ public:
     std::size_t size() const;
 
     // [not thread-safe]
-    std::size_t capacity() const;
-
-    // [not thread-safe]
     void reserve(size_t s);
 
     std::string to_string() const;
@@ -134,6 +129,18 @@ public:
     bool enable_persistent_index() { return _persistent_index != nullptr; }
 
     size_t key_size() { return _key_size; }
+
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
+    // only for ut
+    void set_status(bool loaded, Status st) {
+        _loaded = loaded;
+        _status = st;
+    }
 
 protected:
     void _set_schema(const Schema& pk_schema);

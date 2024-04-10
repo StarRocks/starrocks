@@ -15,8 +15,9 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.common.UserException;
+import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.load.pipe.PipeFileRecord;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -154,8 +155,8 @@ public class FileListTableRepo extends FileListRepo {
      */
     static class SQLBuilder {
 
-        public static String buildCreateTableSql() {
-            int replica = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        public static String buildCreateTableSql() throws UserException {
+            int replica = AutoInferUtil.calDefaultReplicationNum();
             return String.format(FILE_LIST_TABLE_CREATE,
                     CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replica);
         }

@@ -58,7 +58,7 @@ The following example builds mutual authentication between central control node 
 
 ### Create configuration file
 
-Create the StarRocks deployment topology file based on the following YAML template. See [Configuration](../administration/Configuration.md) for detailed information.
+Create the StarRocks deployment topology file based on the following YAML template. See [Configuration](../administration/management/FE_configuration.md) for detailed information.
 
 ```yaml
 global:
@@ -143,7 +143,7 @@ be_servers:
 
 ### Create deployment directory (Optional)
 
-If the paths under which StarRocks to be deployed does not exist, and you have the privilege to create such paths, you do not have create these paths, and StarGo will create them for you based on the configration file. If the the paths already exist, make sure you have the write access to them. You can also create necessary deployment directories on each node by running the following commands.
+If the paths under which StarRocks to be deployed does not exist, and you have the privilege to create such paths, you do not have create these paths, and StarGo will create them for you based on the configuration file. If the the paths already exist, make sure you have the write access to them. You can also create necessary deployment directories on each node by running the following commands.
 
 - Create **meta** directory on FE nodes.
 
@@ -168,7 +168,7 @@ Deploy StarRocks cluster by running the following command.
 ./sr-ctl cluster deploy <cluster_name> <version> <topology_file>
 ```
 
-|Prameter|Description|
+|Parameter|Description|
 |----|----|
 |cluster_name|Name of the cluster to deploy.|
 |version|StarRocks version.|
@@ -490,7 +490,7 @@ You can scale a cluster out via StarGo.
 
 ### Create configuration file
 
-Create the scale-out task topology file based on the following template. You can specify the file to add FE and/or BE nodes based on your demand. See [Configuration](../administration/Configuration.md) for detailed information.
+Create the scale-out task topology file based on the following template. You can specify the file to add FE and/or BE nodes based on your demand. See [Configuration](../administration/management/FE_configuration.md) for detailed information.
 
 ```yaml
 # Add an FE node.

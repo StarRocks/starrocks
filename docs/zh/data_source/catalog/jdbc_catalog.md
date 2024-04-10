@@ -14,8 +14,8 @@ JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执�
 
 ## 前提条件
 
-- 确保 FE 和 BE 可以通过 `driver_url` 指定的下载路径，下载所需的 JDBC 驱动程序。
-- BE 所在机器的启动脚本 **$BE_HOME/bin/start_be.sh** 中需要配置 `JAVA_HOME`，要配置成 JDK 环境，不能配置成 JRE 环境，比如 `export JAVA_HOME = <JDK 的绝对路径>`。注意需要将该配置添加在 BE 启动脚本最开头，添加完成后需重启 BE。
+- 确保 FE 和 BE（或 CN）可以通过 `driver_url` 指定的下载路径，下载所需的 JDBC 驱动程序。
+- BE（或 CN）所在机器的启动脚本 **$BE_HOME/bin/start_be.sh** 中需要配置 `JAVA_HOME`，要配置成 JDK 环境，不能配置成 JRE 环境，比如 `export JAVA_HOME = <JDK 的绝对路径>`。注意需要将该配置添加在 BE（或 CN）启动脚本最开头，添加完成后需重启 BE（或 CN）。
 
 ## 创建 JDBC Catalog
 
@@ -51,12 +51,12 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | user         | 目标数据库登录用户名。                                       |
 | password     | 目标数据库用户登录密码。                                     |
 | jdbc_uri     | JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。 |
-| driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br />**说明**<br />您也可以把 JDBC 驱动程序部署在 FE 或 BE 所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file:///<path>/to/the/driver`。 |
+| driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br />**说明**<br />您也可以把 JDBC 驱动程序部署在 FE 或 BE（或 CN）所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file:///<path>/to/the/driver`。 |
 | driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：`com.mysql.jdbc.Driver`（MySQL 5.x 及之前版本）、`com.mysql.cj.jdbc.Driver`（MySQL 6.x 及之后版本）</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
 
 > **说明**
 >
-> FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE 会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。
+> FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE（或 CN）会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。
 
 ### 创建示例
 
@@ -115,7 +115,7 @@ DROP Catalog jdbc0;
 1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查看指定 Catalog 所属的集群中的数据库：
 
    ```SQL
-   SHOW DATABASES from <catalog_name>;
+   SHOW DATABASES FROM <catalog_name>;
    ```
 
 2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：

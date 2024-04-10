@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
 #include <mutex>
 
 #include "column/column_access_path.h"
@@ -40,14 +42,52 @@ using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
 class OlapScanContextFactory;
 using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
+class ConcurrentJitRewriter {
+public:
+    ConcurrentJitRewriter(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
+    Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
+
+private:
+    // TODO: use c++20 barrier after upgrading gcc
+    class Barrier {
+    public:
+        explicit Barrier() : _count(0), _current(0) {}
+
+        void arrive() {
+            std::unique_lock<std::mutex> lock(_mutex);
+            ++_count;
+        }
+
+        void wait() {
+            std::unique_lock<std::mutex> lock(_mutex);
+            if (++_current >= _count) {
+                _cv.notify_all();
+            } else {
+                _cv.wait(lock, [this] { return _current >= _count; });
+            }
+        }
+
+    private:
+        std::size_t _count;
+        std::size_t _current;
+        std::mutex _mutex;
+        std::condition_variable _cv;
+    };
+    const int32_t _dop;
+    Barrier _barrier;
+    std::atomic_int _errors;
+    std::atomic_int _id = 0;
+};
+
 class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan,
-                             BalancedChunkBuffer& chunk_buffer)
+                             BalancedChunkBuffer& chunk_buffer, ConcurrentJitRewriter& jit_rewriter)
             : _scan_node(scan_node),
               _scan_table_id(scan_table_id),
               _chunk_buffer(chunk_buffer),
-              _shared_scan(shared_scan) {}
+              _shared_scan(shared_scan),
+              _jit_rewriter(jit_rewriter) {}
     ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
@@ -57,7 +97,7 @@ public:
     bool is_prepare_finished() const { return _is_prepare_finished.load(std::memory_order_acquire); }
 
     Status parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
-                           RuntimeFilterProbeCollector* runtime_bloom_filters);
+                           RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
     OlapScanConjunctsManager& conjuncts_manager() { return _conjuncts_manager; }
@@ -90,7 +130,6 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
-    DictOptimizeParser _dict_optimize_parser;
     ObjectPool _obj_pool;
 
     // For shared_scan mechanism
@@ -110,6 +149,7 @@ private:
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+    ConcurrentJitRewriter& _jit_rewriter;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.
@@ -124,7 +164,8 @@ public:
               _shared_scan(shared_scan),
               _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
                             std::move(chunk_buffer_limiter)),
-              _contexts(shared_morsel_queue ? 1 : dop) {}
+              _contexts(shared_morsel_queue ? 1 : dop),
+              _jit_rewriter(dop) {}
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 
@@ -139,6 +180,7 @@ private:
 
     int64_t _scan_table_id = -1;
     std::vector<OlapScanContextPtr> _contexts;
+    ConcurrentJitRewriter _jit_rewriter;
 };
 
 } // namespace pipeline

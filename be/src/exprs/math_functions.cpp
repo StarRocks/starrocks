@@ -286,6 +286,7 @@ DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, 
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(ln, TYPE_DOUBLE, TYPE_DOUBLE, std::log);
 DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN_WITH_IMPL(log10, TYPE_DOUBLE, TYPE_DOUBLE, std::log10);
 DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN_WITH_IMPL(sqrt, TYPE_DOUBLE, TYPE_DOUBLE, std::sqrt);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cbrt, TYPE_DOUBLE, TYPE_DOUBLE, std::cbrt);
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(truncateImpl, l, r) {
     return MathFunctions::double_round(l, r, false, true);
@@ -767,6 +768,17 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
                 fmt::format("cosine_similarity does not support null values. {} array has null value.",
                             base->has_null() ? "base" : "target"));
     }
+    if (base->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(base);
+        const_column->data_column()->assign(base->size(), 0);
+        base = const_column->data_column().get();
+    }
+    if (target->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->assign(target->size(), 0);
+        target = const_column->data_column().get();
+    }
+
     if (base->is_nullable()) {
         base = down_cast<const NullableColumn*>(base)->data_column().get();
     }
@@ -872,6 +884,7 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         }
         result_data[i] = result_value;
         target_data += dim_size;
+        base_data += dim_size;
     }
     return result;
 }

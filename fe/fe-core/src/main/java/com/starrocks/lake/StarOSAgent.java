@@ -46,6 +46,7 @@ import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -76,11 +77,11 @@ public class StarOSAgent {
 
     public static final long DEFAULT_WORKER_GROUP_ID = 0L;
 
-    private StarClient client;
-    private String serviceId;
-    private Map<String, Long> workerToId;
-    private Map<Long, Long> workerToBackend;
-    private ReentrantReadWriteLock rwLock;
+    protected StarClient client;
+    protected String serviceId;
+    protected Map<String, Long> workerToId;
+    protected Map<Long, Long> workerToBackend;
+    protected ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
         serviceId = "";
@@ -95,7 +96,7 @@ public class StarOSAgent {
         return true;
     }
 
-    private void prepare() {
+    protected void prepare() {
         if (!serviceId.isEmpty()) {
             return;
         }
@@ -190,13 +191,18 @@ public class StarOSAgent {
         return null;
     }
 
-    public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+    private static String constructTablePath(long dbId, long tableId) {
+        return String.format("db%d/%d", dbId, tableId);
+    }
+
+    public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
         try {
             FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
             if (fsType == null || fsType == FileStoreType.INVALID) {
                 throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
             }
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, suffix);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
@@ -204,10 +210,10 @@ public class StarOSAgent {
         }
     }
 
-    public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) throws DdlException {
+    public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
         try {
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId,
-                     storageVolumeId, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
@@ -274,6 +280,16 @@ public class StarOSAgent {
         return workerId;
     }
 
+    public long getWorkerTabletNum(String workerIpPort) {
+        try {
+            WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+            return workerInfo.getTabletNum();
+        } catch (StarClientException e) {
+            LOG.info("Failed to get worker tablet num from starMgr, Error: {}.", e.getMessage());
+        }
+        return 0;
+    }
+
     public void addWorker(long nodeId, String workerIpPort, long workerGroupId) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -328,13 +344,13 @@ public class StarOSAgent {
         workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
     }
 
-    public void removeWorker(String workerIpPort) throws DdlException {
+    public void removeWorker(String workerIpPort, long workerGroupId) throws DdlException {
         prepare();
 
         long workerId = getWorker(workerIpPort);
 
         try {
-            client.removeWorker(serviceId, workerId);
+            client.removeWorker(serviceId, workerId, workerGroupId);
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
@@ -500,34 +516,21 @@ public class StarOSAgent {
         }
     }
 
-    private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
-        return getShardReplicas(shardId, DEFAULT_WORKER_GROUP_ID);
-    }
-
-    private List<ReplicaInfo> getShardReplicas(long shardId, long workerGroupId) throws UserException {
-        try {
-            ShardInfo info = getShardInfo(shardId, workerGroupId);
-            return info.getReplicaInfoList();
-        } catch (StarClientException e) {
-            throw new UserException(e);
-        }
-    }
-
     private Optional<Long> getBackendIdByHostStarletPort(String host, int starletPort) {
-        long backendId = GlobalStateMgr.getCurrentSystemInfo()
+        long backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendIdWithStarletPort(host, starletPort);
         if (backendId == -1L) {
-            backendId = GlobalStateMgr.getCurrentSystemInfo().
+            backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                     getComputeNodeIdWithStarletPort(host, starletPort);
         }
         return backendId == -1 ? Optional.empty() : Optional.of(backendId);
     }
 
     private Optional<Long> getBackendIdByHostHeartbeatPort(String host, int heartbeatPort) {
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo()
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendWithHeartbeatPort(host, heartbeatPort);
         if (node == null) {
-            node = GlobalStateMgr.getCurrentSystemInfo().
+            node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                     getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         }
         return node == null ? Optional.empty() : Optional.of(node.getId());
@@ -585,7 +588,12 @@ public class StarOSAgent {
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
         Set<Long> backendIds = getAllBackendIdsByShard(shardId, workerGroupId, true);
         if (backendIds.isEmpty()) {
-            throw new UserException("Failed to get primary backend. shard id: " + shardId);
+            // If BE stops, routine load task may catch UserException during load plan,
+            // and the job state will changed to PAUSED.
+            // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
+            // when all BEs become alive.
+            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                    "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
     }
@@ -594,9 +602,18 @@ public class StarOSAgent {
         return getAllBackendIdsByShard(shardId, workerGroupId, false);
     }
 
-    private Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+    public Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
             throws UserException {
-        List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
+        try {
+            ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
+            return getAllBackendIdsByShard(shardInfo, onlyPrimary);
+        } catch (StarClientException e) {
+            throw new UserException(e);
+        }
+    }
+
+    public Set<Long> getAllBackendIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+        List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
         if (onlyPrimary) {
             replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
                     .collect(Collectors.toList());
@@ -712,5 +729,10 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId), workerGroupId);
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
+    }
+
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long partitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(partitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, partitionId)).build();
     }
 }

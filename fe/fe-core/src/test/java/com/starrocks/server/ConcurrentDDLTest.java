@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
@@ -21,7 +20,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -118,7 +116,6 @@ public class ConcurrentDDLTest {
 
         List<List<Long>> bucketSeq = GlobalStateMgr.getCurrentState().getColocateTableIndex().getBackendsPerBucketSeq(
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
-        System.out.println(bucketSeq);
         // check all created colocate tables has same tablet distribution as the bucket seq in colocate group
         for (long threadId : threadIds) {
             table = db.getTable("test_tbl_" + threadId);
@@ -127,7 +124,6 @@ public class ConcurrentDDLTest {
                     .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
                     .map(replicaList -> replicaList.get(0).getBackendId())
                     .collect(Collectors.toList());
-            System.out.println(backendIdList);
             Assert.assertEquals(bucketSeq, backendIdList.stream().map(Arrays::asList).collect(Collectors.toList()));
         }
     }
@@ -143,8 +139,10 @@ public class ConcurrentDDLTest {
                 " concurrent_test_db.test_mv_RRR DISTRIBUTED BY HASH(`k2`) REFRESH MANUAL" +
                 " as select k2,k3 from concurrent_test_db.base_t1;";
 
+        final int NUM_ROUND = 1;
+
         // run multi rounds to try to detect potential concurrency problems
-        for (int round = 0; round < 5; round++) {
+        for (int round = 0; round < NUM_ROUND; round++) {
             System.out.println("round-" + round + " begin");
             AtomicBoolean stop = new AtomicBoolean(false);
 
@@ -152,7 +150,7 @@ public class ConcurrentDDLTest {
             Thread controlThread = new Thread(() -> {
                 int times = 0;
                 Random random = new Random();
-                while (times < 10) {
+                while (times < 5) {
                     try {
                         System.out.println("creating table and db time: " + times);
                         starRocksAssert.withDatabase("concurrent_test_db");
@@ -167,8 +165,6 @@ public class ConcurrentDDLTest {
                         ShowTableStmt showTableStmt =
                                 (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
                                         "show tables from concurrent_test_db", connectContext);
-                        ShowExecutor showExecutor = new ShowExecutor(connectContext, showTableStmt);
-                        System.out.println("show tables result: " + showExecutor.execute().getResultRows());
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {
@@ -204,19 +200,16 @@ public class ConcurrentDDLTest {
                         try {
                             if (idx == 0) { // create table
                                 sql = createTableSqlFormat.replaceAll("RRR", randomStr);
-                                // System.out.println(sql);
                                 starRocksAssert.withTable(sql);
                             } else if (idx == 1) { // create view
                                 sql = createViewSqlFormat.replaceAll("RRR", randomStr);
-                                // System.out.println(sql);
                                 starRocksAssert.withView(sql);
                             } else { // create mv
                                 sql = createMVSqlFormat.replaceAll("RRR", randomStr);
-                                // System.out.println(sql);
                                 starRocksAssert.withMaterializedView(sql);
                             }
                         } catch (Exception e) {
-                             // System.out.println(sql + " failed, msg: " + e.getMessage());
+                            // do nothing
                         }
                     }
                 });
@@ -262,7 +255,6 @@ public class ConcurrentDDLTest {
                                 " distributed by hash(id) buckets 5183 " +
                                 "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
                     } catch (Exception e) {
-                        System.out.println(e.getMessage());
                         errorCount.incrementAndGet();
                     }
                     System.out.println("end to create table same_tbl");

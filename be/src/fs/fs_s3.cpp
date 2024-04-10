@@ -17,14 +17,11 @@
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/core/client/ClientConfiguration.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
-#include <aws/s3/model/CreateBucketRequest.h>
-#include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
-#include <aws/s3/model/GetObjectRequest.h>
-#include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
@@ -148,7 +145,14 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
 
     if (!aws_cloud_credential.iam_role_arn.empty()) {
         // Do assume role
-        auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
+        Aws::Client::ClientConfiguration clientConfiguration{};
+        if (!aws_cloud_credential.sts_region.empty()) {
+            clientConfiguration.region = aws_cloud_credential.sts_region;
+        }
+        if (!aws_cloud_credential.sts_endpoint.empty()) {
+            clientConfiguration.endpointOverride = aws_cloud_credential.sts_endpoint;
+        }
+        auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider, clientConfiguration);
         credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
                 aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
                 Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
@@ -343,6 +347,9 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const FileInfo& file_info) override;
+
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const std::string& path) override;
 
@@ -364,6 +371,8 @@ public:
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
     Status delete_file(const std::string& path) override;
+
+    Status delete_files(const std::vector<std::string>& paths) override;
 
     Status create_dir(const std::string& dirname) override;
 
@@ -412,6 +421,20 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     auto client = new_s3client(uri, _options);
     auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                                 const FileInfo& file_info) {
+    S3URI uri;
+    if (!uri.parse(file_info.path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
+    }
+    auto client = new_s3client(uri, _options);
+    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    if (file_info.size.has_value()) {
+        input_stream->set_size(file_info.size.value());
+    }
+    return std::make_unique<RandomAccessFile>(std::move(input_stream), file_info.path);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,
@@ -511,7 +534,12 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
     do {
         auto outcome = client->ListObjectsV2(request);
@@ -714,6 +742,66 @@ Status S3FileSystem::delete_file(const std::string& path) {
     }
 }
 
+Status S3FileSystem::delete_files(const std::vector<std::string>& paths) {
+    if (paths.empty()) {
+        return Status::OK();
+    }
+
+    std::vector<std::string> keys;
+    keys.reserve(paths.size());
+
+    for (const auto& path : paths) {
+        S3URI uri;
+        if (!uri.parse(path)) {
+            return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
+        }
+        if (UNLIKELY(!uri.key().empty() && uri.key().back() == '/')) {
+            return Status::InvalidArgument(fmt::format("object key ended with slash: {}", path));
+        }
+        keys.emplace_back(std::move(uri.key()));
+    }
+
+    S3URI uri;
+    (void)uri.parse(paths[0]);
+
+    int max_delete_keys = 1000;
+    size_t keys_size = keys.size();
+    size_t total_deleted = 0;
+    Aws::Vector<Aws::S3::Model::ObjectIdentifier> objects;
+    objects.reserve(std::min<size_t>(keys_size, max_delete_keys));
+
+    Aws::S3::Model::DeleteObjectsRequest delete_request;
+    delete_request.SetBucket(uri.bucket());
+    auto client = new_s3client(uri, _options);
+    while (total_deleted < keys_size) {
+        int count = 0;
+        for (size_t i = total_deleted; i < keys_size && i < total_deleted + max_delete_keys; i++) {
+            objects.emplace_back().SetKey(std::move(keys[i]));
+            count++;
+        }
+        Aws::S3::Model::Delete d;
+        d.WithObjects(std::move(objects)).WithQuiet(true);
+
+        delete_request.SetDelete(std::move(d));
+
+        auto delete_outcome = client->DeleteObjects(delete_request);
+        if (!delete_outcome.IsSuccess()) {
+            return to_status(delete_outcome.GetError().GetErrorType(), delete_outcome.GetError().GetMessage());
+        }
+        if (!delete_outcome.GetResult().GetErrors().empty()) {
+            for (const auto& error : delete_outcome.GetResult().GetErrors()) {
+                LOG(WARNING) << "Delete objects " << error.GetKey() << " error: " << error.GetMessage();
+            }
+            // Return the first error message to caller
+            const auto& e = delete_outcome.GetResult().GetErrors()[0];
+            return Status::InternalError(fmt::format("Delete objects error: {}", e.GetMessage()));
+        }
+        total_deleted += count;
+        objects.clear();
+    }
+    return Status::OK();
+}
+
 Status S3FileSystem::delete_dir(const std::string& dirname) {
     S3URI uri;
     if (!uri.parse(dirname)) {
@@ -782,7 +870,12 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key());
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
 
     Aws::S3::Model::DeleteObjectsRequest delete_request;

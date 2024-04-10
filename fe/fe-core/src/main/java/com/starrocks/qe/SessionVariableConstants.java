@@ -34,6 +34,31 @@ public class SessionVariableConstants {
 
     public static final String VARCHAR = "varchar";
 
+    public enum ChooseInstancesMode {
+
+        // the number of chosen instances is the same as the max number of instances from its children fragments
+        LOCALITY,
+
+        // auto increase or decrease the instances based on the processed data size
+        AUTO,
+
+        // choose more instances than the max number of instances from its children fragments
+        // if the remote fragment needs process too much data
+        ADAPTIVE_INCREASE,
+
+        // choose fewer instances than the max number of instances from its children fragments
+        // if the remote fragment doesn't need process too much data
+        ADAPTIVE_DECREASE;
+
+        public boolean enableIncreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_INCREASE;
+        }
+
+        public boolean enableDecreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_DECREASE;
+        }
+    }
+
     public enum AggregationStage {
         AUTO,
         ONE_STAGE,

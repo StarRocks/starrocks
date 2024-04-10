@@ -101,14 +101,14 @@ public class TabletSchedCtxTest {
         be2.setDisks(ImmutableMap.copyOf(disks));
         be2.setAlive(true);
 
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(be1);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(be2);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be1);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be2);
 
         // tablet with single replica
         LocalTablet tablet = new LocalTablet(TABLET_ID_1);
         TabletMeta tabletMeta = new TabletMeta(DB_ID, TB_ID, PART_ID, INDEX_ID, SCHEMA_HASH, TStorageMedium.HDD);
-        GlobalStateMgr.getCurrentInvertedIndex().addTablet(TABLET_ID_1, tabletMeta);
-        GlobalStateMgr.getCurrentInvertedIndex().
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID_1, tabletMeta);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().
                 addReplica(TABLET_ID_1, new Replica(50001, be1.getId(), 0, Replica.ReplicaState.NORMAL));
 
         // mock catalog
@@ -129,17 +129,17 @@ public class TabletSchedCtxTest {
         olapTable.addPartition(partition);
         Database db = new Database();
         db.registerTableUnlocked(olapTable);
-        GlobalStateMgr.getCurrentState().getIdToDb().put(DB_ID, db);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(DB_ID, db);
 
         // prepare clusterLoadStatistic
-        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentSystemInfo(),
-                GlobalStateMgr.getCurrentInvertedIndex());
+        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(stat);
         tabletScheduler.setLoadStatistic(clusterLoadStatistic);
-        GlobalStateMgr.getCurrentSystemInfo().getBackends().forEach(be -> {
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
             TabletScheduler.PathSlot slot = new TabletScheduler.PathSlot(pathHashes, Config.tablet_sched_slot_num_per_path);
@@ -150,28 +150,28 @@ public class TabletSchedCtxTest {
     @Test
     public void testSingleReplicaRecover() throws SchedException {
         // drop be1 and TABLET_ID_1 missing
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(be1);
-        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentSystemInfo(),
-                GlobalStateMgr.getCurrentInvertedIndex());
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(be1);
+        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
         tabletScheduler.setLoadStatistic(clusterLoadStatistic);
 
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
-                GlobalStateMgr.getCurrentInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
         TabletSchedCtx ctx =
                 new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
-                        TABLET_ID_1, System.currentTimeMillis(), GlobalStateMgr.getCurrentSystemInfo());
+                        TABLET_ID_1, System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         ctx.setTablet(missedTablet);
         ctx.setStorageMedium(TStorageMedium.HDD);
 
         AgentBatchTask agentBatchTask = new AgentBatchTask();
         Config.recover_with_empty_tablet = false;
         SchedException schedException = Assert.assertThrows(SchedException.class, () -> tabletScheduler
-                .handleTabletByTypeAndStatus(LocalTablet.TabletStatus.REPLICA_MISSING, ctx, agentBatchTask));
+                .handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask));
         Assert.assertEquals("unable to find source replica", schedException.getMessage());
 
         Config.recover_with_empty_tablet = true;
-        tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletStatus.REPLICA_MISSING, ctx, agentBatchTask);
+        tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask);
         Assert.assertEquals(1, agentBatchTask.getTaskNum());
 
         AgentTask recoverTask = agentBatchTask.getAllTasks().get(0);

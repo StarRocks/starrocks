@@ -37,7 +37,7 @@ public class RepositoryAnalyzer {
         new RepositoryAnalyzerVisitor().analyze(dropRepositoryStmt, session);
     }
 
-    public static class RepositoryAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class RepositoryAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(DdlStmt statement, ConnectContext session) {
             visit(statement, session);
         }

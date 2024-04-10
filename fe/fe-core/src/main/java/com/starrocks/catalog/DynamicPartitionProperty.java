@@ -34,6 +34,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil.StartOfDate;
@@ -170,29 +172,32 @@ public class DynamicPartitionProperty {
         return historyPartitionNum;
     }
 
-    public String getPropString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        sb.append(ENABLE + ":" + enable + ",");
-        sb.append(TIME_UNIT + ":" + timeUnit + ",");
-        sb.append(TIME_ZONE + ":" + tz.getID() + ",");
-        sb.append(START + ":" + start + ",");
-        sb.append(END + ":" + end + ",");
-        sb.append(PREFIX + ":" + prefix + ",");
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(ENABLE, String.valueOf(enable));
+        properties.put(TIME_UNIT, timeUnit);
+        properties.put(TIME_ZONE, tz.getID());
+        properties.put(START, String.valueOf(start));
+        properties.put(END, String.valueOf(end));
+        properties.put(PREFIX, prefix);
         if (buckets > 0) {
-            sb.append(BUCKETS + ":" + buckets + ",");
+            properties.put(BUCKETS, String.valueOf(buckets));
         }
+        properties.put(HISTORY_PARTITION_NUM, String.valueOf(historyPartitionNum));
         if (replicationNum != NOT_SET_REPLICATION_NUM) {
-            sb.append(REPLICATION_NUM + ":" + replicationNum + ",");
+            properties.put(REPLICATION_NUM, String.valueOf(replicationNum));
         }
         if (getTimeUnit().equalsIgnoreCase(TimeUnit.WEEK.toString())) {
-            sb.append(START_DAY_OF_WEEK + ":" + startOfWeek.dayOfWeek + ",");
+            properties.put(START_DAY_OF_WEEK, String.valueOf(startOfWeek.dayOfWeek));
         } else if (getTimeUnit().equalsIgnoreCase(TimeUnit.MONTH.toString())) {
-            sb.append(START_DAY_OF_MONTH + ":" + startOfMonth.day + ",");
+            properties.put(START_DAY_OF_MONTH, String.valueOf(startOfMonth.day));
         }
-        sb.deleteCharAt(sb.length() - 1);
-        sb.append("}");
-        return sb.toString();
+        return properties;
+    }
+
+    @VisibleForTesting
+    public void setTimeUnit(String timeUnit) {
+        this.timeUnit = timeUnit;
     }
 
     @Override

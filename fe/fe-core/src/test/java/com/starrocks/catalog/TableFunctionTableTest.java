@@ -14,39 +14,53 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.UserException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TBrokerFileStatus;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class TableFunctionTableTest {
-    Map<String, String> properties = new HashMap<>();
 
-    @Before
-    public void setUp() {
+    Map<String, String> newProperties() {
+        Map<String, String> properties = new HashMap<>();
         properties.put("path", "fake://some_bucket/some_path/*");
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
+        properties.put("auto_detect_sample_files", "10");
+        properties.put("csv.column_separator", ",");
+        properties.put("csv.row_delimiter", "\n");
+        properties.put("csv.enclose", "\\");
+        properties.put("csv.escape", "'");
+        properties.put("csv.skip_header", "2");
+        properties.put("csv.trim_space", "true");
+        return properties;
     }
 
     @Test
     public void testNormal() {
         Assertions.assertDoesNotThrow(() -> {
-            TableFunctionTable table = new TableFunctionTable(properties);
+            TableFunctionTable table = new TableFunctionTable(newProperties());
             List<Column> schema = table.getFullSchema();
             Assertions.assertEquals(5, schema.size());
             Assertions.assertEquals(new Column("col_int", Type.INT), schema.get(0));
@@ -62,7 +76,7 @@ public class TableFunctionTableTest {
                                   @Mocked SystemInfoService systemInfoService) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getCurrentSystemInfo();
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 minTimes = 0;
 
@@ -72,7 +86,7 @@ public class TableFunctionTableTest {
             }
         };
 
-        TableFunctionTable t = new TableFunctionTable(properties);
+        TableFunctionTable t = new TableFunctionTable(newProperties());
 
         Method method = TableFunctionTable.class.getDeclaredMethod("getFileSchema", null);
         method.setAccessible(true);
@@ -124,5 +138,49 @@ public class TableFunctionTableTest {
         } catch (Exception e) {
             Assert.assertFalse(false);
         }
+    }
+
+    @Test
+    public void testProperties() {
+        // normal case.
+        Assertions.assertDoesNotThrow(() -> {
+            TableFunctionTable table = new TableFunctionTable(newProperties());
+            Assert.assertEquals("fake://some_bucket/some_path/*", Deencapsulation.getField(table, "path"));
+            Assert.assertEquals("ORC", Deencapsulation.getField(table, "format"));
+            Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
+                    Deencapsulation.getField(table, "columnsFromPath"));
+            Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
+            Assert.assertEquals("\n", table.getCsvRowDelimiter());
+            Assert.assertEquals(",", table.getCsvColumnSeparator());
+            Assert.assertEquals('\\', table.getCsvEnclose());
+            Assert.assertEquals('\'', table.getCsvEscape());
+            Assert.assertEquals(2, table.getCsvSkipHeader());
+            Assert.assertEquals(true, table.getCsvTrimSpace());
+        });
+
+        // abnormal case.
+        Assertions.assertThrows(DdlException.class, () -> {
+            Map<String, String> properties = newProperties();
+            properties.put("auto_detect_sample_files", "not_a_number");
+            new TableFunctionTable(properties);
+        });
+    }
+
+    @Test
+    public void testNoFilesFound() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            }
+        };
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2");
+        properties.put("format", "parquet");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "No files were found matching the pattern(s) or path(s): " +
+                        "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
+                () -> new TableFunctionTable(properties));
     }
 }

@@ -24,10 +24,14 @@
 #include "exprs/expr.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/stored_column_reader_with_index.h"
+#include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
+#include "io/shared_buffered_input_stream.h"
 #include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
 #include "util/runtime_profile.h"
+#include "util/thrift_util.h"
 #include "utils.h"
 
 namespace starrocks {
@@ -85,31 +89,9 @@ public:
                 const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
         _col_type = &col_type;
+        _chunk_metadata = chunk_metadata;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, col_type, _opts.timezone, &converter));
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
-    }
-
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        DCHECK(_field->is_nullable ? dst->is_nullable() : true);
-        ColumnContentType content_type =
-                _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
-        if (!converter->need_convert) {
-            return _reader->read_records(num_records, content_type, dst);
-        } else {
-            auto column = converter->create_src_column();
-
-            Status status = _reader->read_records(num_records, content_type, column.get());
-            if (!status.ok() && !status.is_end_of_file()) {
-                return status;
-            }
-
-            {
-                SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-                RETURN_IF_ERROR(converter->convert(column, dst));
-            }
-
-            return Status::OK();
-        }
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
@@ -117,16 +99,18 @@ public:
         ColumnContentType content_type =
                 _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
         if (!converter->need_convert) {
+            SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
             return _reader->read_range(range, filter, content_type, dst);
         } else {
-            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             auto column = converter->create_src_column();
-            RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+                RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
+            }
+            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             return converter->convert(column, dst);
         }
     }
-
-    Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _reader->get_levels(def_levels, rep_levels, num_levels);
@@ -215,6 +199,32 @@ public:
         return Status::OK();
     }
 
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override;
+
+    const tparquet::ColumnChunk* get_chunk_metadata() override { return _chunk_metadata; }
+
+    const ParquetField* get_column_parquet_field() override { return _field; }
+
+    StatusOr<tparquet::OffsetIndex*> get_offset_index(const uint64_t rg_first_row) override {
+        if (_offset_index_ctx == nullptr) {
+            _offset_index_ctx = std::make_unique<ColumnOffsetIndexCtx>();
+            _offset_index_ctx->rg_first_row = rg_first_row;
+            int64_t offset_index_offset = _chunk_metadata->offset_index_offset;
+            uint32_t offset_index_length = _chunk_metadata->offset_index_length;
+            std::vector<uint8_t> offset_index_data;
+            offset_index_data.reserve(offset_index_length);
+            RETURN_IF_ERROR(
+                    _opts.file->read_at_fully(offset_index_offset, offset_index_data.data(), offset_index_length));
+
+            RETURN_IF_ERROR(deserialize_thrift_msg(offset_index_data.data(), &offset_index_length,
+                                                   TProtocolType::COMPACT, &_offset_index_ctx->offset_index));
+        }
+        return &_offset_index_ctx->offset_index;
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
+
 private:
     // Returns true if all of the data pages in the column chunk are dict encoded
     bool _column_all_pages_dict_encoded();
@@ -226,6 +236,8 @@ private:
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
     const TypeDescriptor* _col_type = nullptr;
+    const tparquet::ColumnChunk* _chunk_metadata = nullptr;
+    std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
 };
 
 bool ScalarColumnReader::_column_all_pages_dict_encoded() {
@@ -286,6 +298,94 @@ bool ScalarColumnReader::_column_all_pages_dict_encoded() {
     }
 
     return true;
+}
+
+void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                 int64_t* end_offset, ColumnIOType type, bool active) {
+    const auto& column = _opts.row_group_meta->columns[_field->physical_column_index];
+    if (type == ColumnIOType::PAGES) {
+        const tparquet::ColumnMetaData& column_metadata = column.meta_data;
+        if (_offset_index_ctx != nullptr) {
+            // add dict page
+            if (column_metadata.__isset.dictionary_page_offset) {
+                auto r = io::SharedBufferedInputStream::IORange(
+                        column_metadata.dictionary_page_offset,
+                        column_metadata.data_page_offset - column_metadata.dictionary_page_offset, active);
+                ranges->emplace_back(r);
+                *end_offset = std::max(*end_offset, r.offset + r.size);
+            }
+            _offset_index_ctx->collect_io_range(ranges, end_offset, active);
+        } else {
+            int64_t offset = 0;
+            if (column_metadata.__isset.dictionary_page_offset) {
+                offset = column_metadata.dictionary_page_offset;
+            } else {
+                offset = column_metadata.data_page_offset;
+            }
+            int64_t size = column_metadata.total_compressed_size;
+            auto r = io::SharedBufferedInputStream::IORange(offset, size, active);
+            ranges->emplace_back(r);
+            *end_offset = std::max(*end_offset, offset + size);
+        }
+    } else if (type == ColumnIOType::PAGE_INDEX) {
+        // only active column need column index
+        if (column.__isset.column_index_offset && active) {
+            auto r = io::SharedBufferedInputStream::IORange(column.column_index_offset, column.column_index_length);
+            ranges->emplace_back(r);
+        }
+        // all column need offset index
+        if (column.__isset.offset_index_offset) {
+            auto r = io::SharedBufferedInputStream::IORange(column.offset_index_offset, column.offset_index_length);
+            ranges->emplace_back(r);
+        }
+    }
+}
+
+void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) {
+    if (_offset_index_ctx == nullptr) {
+        if (!_chunk_metadata->__isset.offset_index_offset) {
+            return;
+        }
+        auto st = get_offset_index(rg_first_row);
+        if (!st.ok()) {
+            return;
+        }
+    }
+    size_t page_num = _offset_index_ctx->offset_index.page_locations.size();
+    size_t range_size = range.size();
+
+    size_t range_idx = 0;
+    Range<uint64_t> r = range[range_idx++];
+
+    for (size_t i = 0; i < page_num; i++) {
+        int64_t first_row = _offset_index_ctx->offset_index.page_locations[i].first_row_index + rg_first_row;
+        int64_t end_row = first_row;
+        if (i != page_num - 1) {
+            end_row = _offset_index_ctx->offset_index.page_locations[i + 1].first_row_index + rg_first_row;
+        } else {
+            // a little trick, we don't care about the real rows of the last page.
+            if (range.end() < first_row) {
+                _offset_index_ctx->page_selected.emplace_back(false);
+                continue;
+            } else {
+                end_row = range.end();
+            }
+        }
+        if (end_row <= r.begin()) {
+            _offset_index_ctx->page_selected.emplace_back(false);
+            continue;
+        }
+        while (first_row >= r.end() && range_idx < range_size) {
+            r = range[range_idx++];
+        }
+        _offset_index_ctx->page_selected.emplace_back(first_row < r.end() && end_row > r.begin());
+    }
+    const tparquet::ColumnMetaData& column_metadata =
+            _opts.row_group_meta->columns[_field->physical_column_index].meta_data;
+    bool has_dict_page = column_metadata.__isset.dictionary_page_offset;
+    // be compatible with PARQUET-1850
+    has_dict_page |= _offset_index_ctx->check_dictionary_page(column_metadata.data_page_offset);
+    _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get(), has_dict_page);
 }
 
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
@@ -396,46 +496,6 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        NullableColumn* nullable_column = nullptr;
-        ArrayColumn* array_column = nullptr;
-        if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
-            DCHECK(nullable_column->mutable_data_column()->is_array());
-            array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
-        } else {
-            DCHECK(dst->is_array());
-            DCHECK(!_field->is_nullable);
-            array_column = down_cast<ArrayColumn*>(dst);
-        }
-        auto* child_column = array_column->elements_column().get();
-        auto st = _element_reader->prepare_batch(num_records, child_column);
-
-        level_t* def_levels = nullptr;
-        level_t* rep_levels = nullptr;
-        size_t num_levels = 0;
-        _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-
-        auto& offsets = array_column->offsets_column()->get_data();
-        offsets.resize(num_levels + 1);
-        NullColumn null_column(num_levels);
-        auto& is_nulls = null_column.get_data();
-        size_t num_offsets = 0;
-        bool has_null = false;
-        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
-                          &num_offsets, &has_null);
-        offsets.resize(num_offsets + 1);
-        is_nulls.resize(num_offsets);
-
-        if (dst->is_nullable()) {
-            DCHECK(nullable_column != nullptr);
-            nullable_column->mutable_null_column()->swap_column(null_column);
-            nullable_column->set_has_null(has_null);
-        }
-
-        return st;
-    }
-
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
@@ -476,14 +536,21 @@ public:
         return Status::OK();
     }
 
-    Status finish_batch() override { return Status::OK(); }
-
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override {
         _element_reader->set_need_parse_levels(need_parse_levels);
+    }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {
+        _element_reader->collect_column_io_range(ranges, end_offset, type, active);
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        _element_reader->select_offset_index(range, rg_first_row);
     }
 
 private:
@@ -493,7 +560,7 @@ private:
 
 class MapColumnReader : public ColumnReader {
 public:
-    explicit MapColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit MapColumnReader() = default;
     ~MapColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> key_reader,
@@ -508,90 +575,6 @@ public:
         }
 
         return Status::OK();
-    }
-
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        NullableColumn* nullable_column = nullptr;
-        MapColumn* map_column = nullptr;
-        if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
-            DCHECK(nullable_column->mutable_data_column()->is_map());
-            map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
-        } else {
-            DCHECK(dst->is_map());
-            DCHECK(!_field->is_nullable);
-            map_column = down_cast<MapColumn*>(dst);
-        }
-        auto* key_column = map_column->keys_column().get();
-        auto* value_column = map_column->values_column().get();
-        Status st;
-
-        // TODO(SmithCruise) Ugly code, it's a temporary solution,
-        //  to reset late materialization's rows_to_skip before read each subfield column
-        size_t origin_next_row = _opts.context->next_row;
-        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
-
-        if (_key_reader != nullptr) {
-            st = _key_reader->prepare_batch(num_records, key_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
-            }
-        }
-
-        if (_value_reader != nullptr) {
-            // do reset
-            _opts.context->next_row = origin_next_row;
-            _opts.context->rows_to_skip = origin_rows_to_skip;
-
-            st = _value_reader->prepare_batch(num_records, value_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
-            }
-        }
-
-        // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
-        DCHECK((_key_reader == nullptr) || (_value_reader == nullptr) || (value_column->size() == key_column->size()));
-
-        level_t* def_levels = nullptr;
-        level_t* rep_levels = nullptr;
-        size_t num_levels = 0;
-
-        if (_key_reader != nullptr) {
-            _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-        } else if (_value_reader != nullptr) {
-            _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-        } else {
-            DCHECK(false) << "Unreachable!";
-        }
-
-        auto& offsets = map_column->offsets_column()->get_data();
-        offsets.resize(num_levels + 1);
-        NullColumn null_column(num_levels);
-        auto& is_nulls = null_column.get_data();
-        size_t num_offsets = 0;
-        bool has_null = false;
-
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
-                          &num_offsets, &has_null);
-        offsets.resize(num_offsets + 1);
-        is_nulls.resize(num_offsets);
-
-        // fill with default
-        if (_key_reader == nullptr) {
-            key_column->append_default(offsets.back());
-        }
-        if (_value_reader == nullptr) {
-            value_column->append_default(offsets.back());
-        }
-
-        if (dst->is_nullable()) {
-            DCHECK(nullable_column != nullptr);
-            nullable_column->mutable_null_column()->swap_column(null_column);
-            nullable_column->set_has_null(has_null);
-        }
-
-        return st;
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
@@ -661,8 +644,6 @@ public:
         return Status::OK();
     }
 
-    Status finish_batch() override { return Status::OK(); }
-
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         // check _value_reader
         if (_key_reader != nullptr) {
@@ -684,16 +665,34 @@ public:
         }
     }
 
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {
+        if (_key_reader != nullptr) {
+            _key_reader->collect_column_io_range(ranges, end_offset, type, active);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->collect_column_io_range(ranges, end_offset, type, active);
+        }
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        if (_key_reader != nullptr) {
+            _key_reader->select_offset_index(range, rg_first_row);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->select_offset_index(range, rg_first_row);
+        }
+    }
+
 private:
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _key_reader;
     std::unique_ptr<ColumnReader> _value_reader;
-    const ColumnReaderOptions& _opts;
 };
 
 class StructColumnReader : public ColumnReader {
 public:
-    explicit StructColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit StructColumnReader() = default;
     ~StructColumnReader() override = default;
 
     Status init(const ParquetField* field, std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers) {
@@ -712,79 +711,6 @@ public:
         }
 
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
-    }
-
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        NullableColumn* nullable_column = nullptr;
-        StructColumn* struct_column = nullptr;
-        if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
-            DCHECK(nullable_column->mutable_data_column()->is_struct());
-            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
-        } else {
-            DCHECK(dst->is_struct());
-            DCHECK(!_field->is_nullable);
-            struct_column = down_cast<StructColumn*>(dst);
-        }
-
-        const auto& field_names = struct_column->field_names();
-
-        DCHECK_EQ(field_names.size(), _child_readers.size());
-
-        // TODO(SmithCruise) Ugly code, it's a temporary solution,
-        //  to reset late materialization's rows_to_skip before read each subfield column
-        size_t origin_next_row = _opts.context->next_row;
-        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
-
-        // Fill data for subfield column reader
-        bool first_read = true;
-        size_t real_read = 0;
-        for (size_t i = 0; i < field_names.size(); i++) {
-            const auto& field_name = field_names[i];
-            if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
-                if (_child_readers[field_name] != nullptr) {
-                    Column* child_column = struct_column->field_column(field_name).get();
-                    _opts.context->next_row = origin_next_row;
-                    _opts.context->rows_to_skip = origin_rows_to_skip;
-                    RETURN_IF_ERROR(_child_readers[field_name]->prepare_batch(num_records, child_column));
-                    size_t current_real_read = child_column->size();
-                    real_read = first_read ? current_real_read : real_read;
-                    first_read = false;
-                    if (UNLIKELY(real_read != current_real_read)) {
-                        return Status::InternalError(strings::Substitute("Unmatched row count, $0", field_name));
-                    }
-                }
-            } else {
-                return Status::InternalError(
-                        strings::Substitute("there is no match subfield reader for $1", field_name));
-            }
-        }
-
-        if (UNLIKELY(first_read)) {
-            return Status::InternalError(
-                    strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
-        }
-
-        for (size_t i = 0; i < field_names.size(); i++) {
-            const auto& field_name = field_names[i];
-            if (_child_readers[field_name] == nullptr) {
-                Column* child_column = struct_column->field_column(field_name).get();
-                child_column->append_default(real_read);
-            }
-        }
-
-        if (dst->is_nullable()) {
-            DCHECK(nullable_column != nullptr);
-            size_t row_nums = struct_column->fields_column()[0]->size();
-            NullColumn null_column(row_nums, 0);
-            auto& is_nulls = null_column.get_data();
-            bool has_null = false;
-            _handle_null_rows(is_nulls.data(), &has_null, row_nums);
-
-            nullable_column->mutable_null_column()->swap_column(null_column);
-            nullable_column->set_has_null(has_null);
-        }
-        return Status::OK();
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
@@ -848,8 +774,6 @@ public:
         }
         return Status::OK();
     }
-
-    Status finish_batch() override { return Status::OK(); }
 
     // get_levels functions only called by complex type
     // If parent is a struct type, only def_levels has value.
@@ -972,6 +896,23 @@ public:
         return Status::OK();
     }
 
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {
+        for (const auto& pair : _child_readers) {
+            if (pair.second != nullptr) {
+                pair.second->collect_column_io_range(ranges, end_offset, type, active);
+            }
+        }
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        for (const auto& pair : _child_readers) {
+            if (pair.second != nullptr) {
+                pair.second->select_offset_index(range, rg_first_row);
+            }
+        }
+    }
+
 private:
     void _handle_null_rows(uint8_t* is_nulls, bool* has_null, size_t num_rows) {
         level_t* def_levels = nullptr;
@@ -1026,7 +967,6 @@ private:
     std::map<std::string, std::unique_ptr<ColumnReader>> _child_readers;
     // First non-nullptr child ColumnReader, used to get def & rep levels
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
-    const ColumnReaderOptions& _opts;
 };
 
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
@@ -1107,8 +1047,9 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
                             std::unique_ptr<ColumnReader>* output) {
     // We will only set a complex type in ParquetField
     if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
-        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
-                                                         field->type.type, col_type.type));
+        return Status::InternalError(
+                strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
+                                    logical_type_to_string(field->type.type), logical_type_to_string(col_type.type)));
     }
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
@@ -1127,7 +1068,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], &value_reader));
         }
 
-        std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
+        std::unique_ptr<MapColumnReader> reader(new MapColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
@@ -1147,7 +1088,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
-        std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));
+        std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
         *output = std::move(reader);
         return Status::OK();
@@ -1191,7 +1132,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
                                                  value_iceberg_schema, &value_reader));
         }
 
-        std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
+        std::unique_ptr<MapColumnReader> reader(new MapColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
@@ -1214,7 +1155,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
-        std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));
+        std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
         *output = std::move(reader);
         return Status::OK();

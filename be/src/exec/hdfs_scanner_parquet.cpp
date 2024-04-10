@@ -31,7 +31,10 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
                                          scanner_params.materialize_slots, &_need_skip_rowids));
         for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(runtime_state->timezone(), *tdelete_file));
+            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
+                    runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
+                    scanner_params.mor_params.delete_column_tuple_desc, scanner_params.iceberg_equal_delete_schema,
+                    runtime_state, _mor_processor));
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }
@@ -39,6 +42,12 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 }
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
+    // if we have split tasks, we don't need to update counter
+    // and we will update those counters in sub io tasks.
+    if (has_split_tasks()) {
+        return;
+    }
+
     RuntimeProfile::Counter* request_bytes_read = nullptr;
     RuntimeProfile::Counter* request_bytes_read_uncompressed = nullptr;
     RuntimeProfile::Counter* level_decode_timer = nullptr;
@@ -68,6 +77,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* page_skip = nullptr;
     // round-by-round
     RuntimeProfile::Counter* group_min_round_cost = nullptr;
+    // page index
+    RuntimeProfile::Counter* rows_before_page_index = nullptr;
+    RuntimeProfile::Counter* page_index_timer = nullptr;
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
@@ -94,14 +106,18 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
 
-    group_active_lazy_coalesce_together =
-            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceTogether", TUnit::UNIT, kParquetProfileSectionPrefix);
-    group_active_lazy_coalesce_seperately =
-            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceSeperately", TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether",
+                                                            TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_seperately = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceSeperately",
+                                                              TUnit::UNIT, kParquetProfileSectionPrefix);
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
-    group_min_round_cost = ADD_CHILD_COUNTER(root, "GroupMinRound", TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_min_round_cost = root->AddLowWaterMarkCounter(
+            "GroupMinRound", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            kParquetProfileSectionPrefix);
+    rows_before_page_index = ADD_CHILD_COUNTER(root, "RowsBeforePageIndex", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_index_timer = ADD_CHILD_TIMER(root, "PageIndexTime", kParquetProfileSectionPrefix);
 
     COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
@@ -122,8 +138,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
-    COUNTER_UPDATE(group_min_round_cost, _app_stats.group_min_round_cost);
+    group_min_round_cost->set(_app_stats.group_min_round_cost);
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+    COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
+    COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {

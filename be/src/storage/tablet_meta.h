@@ -99,7 +99,10 @@ public:
 
     static TabletMetaSharedPtr create();
 
-    static RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets);
+    static const RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(
+            const std::vector<RowsetMetaSharedPtr>& rowsets);
+
+    static const RowsetMetaPB& rowset_meta_pb_with_max_rowset_version(const std::vector<RowsetMetaPB>& rowsets);
 
     explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
@@ -113,6 +116,7 @@ public:
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
     [[nodiscard]] Status create_from_file(const std::string& file_path);
+    [[nodiscard]] Status create_from_memory(std::string_view data);
     [[nodiscard]] Status save(const std::string& file_path);
     [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
     [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
@@ -144,6 +148,7 @@ public:
     // disk space occupied by tablet
     size_t tablet_footprint() const;
     size_t version_count() const;
+    size_t segment_count() const;
     Version max_version() const;
 
     TabletState tablet_state() const;
@@ -160,6 +165,7 @@ public:
     void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
+    const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -224,6 +230,10 @@ public:
         _enable_shortcut_compaction = enable_shortcut_compaction;
     }
 
+    void set_source_schema(const TabletSchemaCSPtr& source_schema) { _source_schema = source_schema; }
+
+    const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
@@ -284,6 +294,9 @@ private:
     bool _enable_shortcut_compaction = true;
 
     std::string _storage_type;
+
+    // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
+    TabletSchemaCSPtr _source_schema = nullptr;
 
     std::shared_mutex _meta_lock;
 };
@@ -350,6 +363,14 @@ inline size_t TabletMeta::tablet_footprint() const {
 
 inline size_t TabletMeta::version_count() const {
     return _rs_metas.size();
+}
+
+inline size_t TabletMeta::segment_count() const {
+    size_t num_segments = 0;
+    for (auto rowset_meta : _rs_metas) {
+        num_segments += rowset_meta->num_segments();
+    }
+    return num_segments;
 }
 
 inline TabletState TabletMeta::tablet_state() const {

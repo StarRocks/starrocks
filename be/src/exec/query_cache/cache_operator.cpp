@@ -164,7 +164,7 @@ static inline Chunks remap_chunks(const Chunks& chunks, const SlotRemapping& slo
 }
 Status CacheOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
+    _push_chunk_num_counter = ADD_COUNTER(_unique_metrics, "PushChunkNum", TUnit::UNIT);
     _cache_probe_timer = ADD_TIMER(_unique_metrics, "CacheProbeTime");
     _cache_probe_chunks_counter = ADD_COUNTER(_unique_metrics, "CacheProbeChunkNum", TUnit::UNIT);
     _cache_probe_tablets_counter = ADD_COUNTER(_unique_metrics, "CacheProbeTabletNum", TUnit::UNIT);
@@ -186,10 +186,6 @@ Status CacheOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-static inline std::string flatten_tablet_set(const std::unordered_set<int64_t>& tablets) {
-    return fmt::format("{}", fmt::join(tablets.begin(), tablets.end(), ","));
-}
-
 void CacheOperator::close(RuntimeState* state) {
     std::unordered_set<int64_t> passthrough_tablets;
     for (auto tablet_id : _all_tablets) {
@@ -201,9 +197,6 @@ void CacheOperator::close(RuntimeState* state) {
     _cache_populate_tablets_counter->update(_populate_tablets.size());
     _cache_probe_tablets_counter->update(_probe_tablets.size());
     _cache_passthrough_tablets_counter->update(passthrough_tablets.size());
-    _unique_metrics->add_info_string("CacheProbeTablets", flatten_tablet_set(_probe_tablets));
-    _unique_metrics->add_info_string("CachePopulateTablets", flatten_tablet_set(_populate_tablets));
-    _unique_metrics->add_info_string("CachePassthroughTablets", flatten_tablet_set(passthrough_tablets));
 
     Operator::close(state);
 }

@@ -8,7 +8,11 @@ displayed_sidebar: "Chinese"
 
 查看当前用户，指定用户，或指定角色的权限信息。
 
-> 说明：每个用户都有权限查看自己和自己所拥有角色的权限信息。只有 `user_admin` 角色可以查看指定用户或角色的权限信息。
+:::tip
+
+每个用户都可以查看自己和自己所拥有角色的权限信息。只有拥有 `user_admin` 角色的用户才可以查看指定用户或角色的权限信息。
+
+:::
 
 ## 语法
 
@@ -59,7 +63,7 @@ mysql> SHOW GRANTS FOR 'user_g'@'%';
 |UserIdentity |Catalog      |Grants                                                                                         |
 +-------------+-------------------------------------------------------------------------------------------------------------+
 |'user_g'@'%' |NULL         |GRANT role_g, public to `user_g`@`%`;                                                          | 
-|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON `user_a`@`%`, `user_b`@`%`TO `user_g`@`%`;                                | 
+|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON USER `user_a`@`%` TO USER `user_g`@`%`;                                | 
 |'user_g'@'%' |default      |GRANT CREATE DATABASE ON CATALOG default_catalog TO USER `user_g`@`%`;                         |
 |'user_g'@'%' |default      |GRANT ALTER, DROP, CREATE_TABLE ON DATABASE db1 TO USER `user_g`@`%`;                          |
 |'user_g'@'%' |default      |GRANT CREATE_VIEW ON DATABASE db1 TO USER `user_g`@`%` WITH GRANT OPTION;                      |

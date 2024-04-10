@@ -23,6 +23,7 @@
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
+#include "exec/avro_test.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
@@ -42,13 +43,6 @@ extern "C" {
 #endif
 
 namespace starrocks {
-
-struct AvroHelper {
-    avro_schema_t schema = NULL;
-    avro_value_iface_t* iface = NULL;
-    avro_value_t avro_val;
-    std::string schema_text;
-};
 
 class AvroScannerTest : public ::testing::Test {
 protected:

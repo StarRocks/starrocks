@@ -93,7 +93,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         std::lock_guard guard(_task_mutex);
@@ -229,8 +228,19 @@ void ScanOperator::_detach_chunk_sources() {
 }
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
+    // check when expired, are there running io tasks or submitted tasks
+    if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
+                 (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
+        LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
+                     << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
+                     << " _submit_task_counter= " << _submit_task_counter->value()
+                     << " _morsels_counter= " << _morsels_counter->value()
+                     << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
+                                                                          : "");
+    }
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
+    set_buffer_finished();
     _is_finished = true;
     return Status::OK();
 }
@@ -285,31 +295,44 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
 
-    int cnt = _io_tasks_per_scan_operator;
     int to_sched[_io_tasks_per_scan_operator];
     int size = 0;
 
-    // pick up already started chunk source.
-    while (--cnt >= 0) {
-        _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
-        int i = _chunk_source_idx;
-        if (_is_io_task_running[i]) {
-            total_cnt -= 1;
-            continue;
+    // right here, we want total running io tasks as `total_cnt`
+    {
+        bool skip[_io_tasks_per_scan_operator];
+        // check if we can return earlier.
+        for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
+            if (!_is_io_task_running[i] && _chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+                return Status::OK();
+            }
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
-            return Status::OK();
+        // update skip vector, and pick up already started chunk source.
+        for (int i = 0; i < _io_tasks_per_scan_operator && total_cnt > 0; i++) {
+            if (_is_io_task_running[i]) {
+                skip[i] = true;
+                total_cnt -= 1;
+            } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
+                RETURN_IF_ERROR(_trigger_next_scan(state, i));
+                skip[i] = true;
+                total_cnt -= 1;
+            } else {
+                skip[i] = false;
+            }
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
-            RETURN_IF_ERROR(_trigger_next_scan(state, i));
-            total_cnt -= 1;
-        } else {
-            to_sched[size++] = i;
+
+        // now skip vector includes already started chunk source
+        // we are going to pick up `total_cnt` new chunk source to start.
+        for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
+            _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
+            int idx = _chunk_source_idx;
+            if (skip[idx]) continue;
+            to_sched[size++] = idx;
         }
     }
 
-    size = std::min(size, total_cnt);
     // pick up new chunk source.
+    begin_pickup_morsels();
     ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
     if (size > 0 && morsel_ready) {
         for (int i = 0; i < size; i++) {
@@ -408,7 +431,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+
             if (!status.ok() && !status.is_end_of_file()) {
+                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -483,7 +509,12 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
                     // created from rowsets passed in to itself instead of capturing it from TabletManager again.
                     morsel->set_from_version(delta_version);
-                    morsel->set_delta_rowsets(std::move(delta_rowsets));
+
+                    std::vector<BaseRowsetSharedPtr> drs;
+                    for (auto& rs : delta_rowsets) {
+                        drs.emplace_back(rs);
+                    }
+                    morsel->set_delta_rowsets(std::move(drs));
                     break;
                 } else {
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
@@ -497,7 +528,11 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
                     morsel->set_from_version(delta_verrsion);
-                    morsel->set_delta_rowsets(std::move(delta_rowsets));
+                    std::vector<BaseRowsetSharedPtr> drs;
+                    for (auto& rs : delta_rowsets) {
+                        drs.emplace_back(rs);
+                    }
+                    morsel->set_delta_rowsets(std::move(drs));
                 }
                 break;
             }
@@ -541,8 +576,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
 
-    RuntimeProfile* merged_profile =
-            RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles, false);
+    ObjectPool obj_pool;
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
@@ -571,6 +606,8 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
           _scan_task_group(std::make_shared<workgroup::ScanTaskGroup>()) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
+    TEST_SUCC_POINT("ScanOperatorFactory::prepare");
+
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(do_prepare(state));
 

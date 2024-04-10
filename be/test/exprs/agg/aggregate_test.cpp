@@ -1355,42 +1355,137 @@ TEST_F(AggregateTest, test_percentile_cont) {
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
 
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column2->append(6.0);
+
     // update input column 1
     auto state1 = ManagedAggrState::create(ctx, func);
-
-    auto data_column1 = DoubleColumn::create();
-    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
-    data_column1->append(3.0);
-    data_column1->append(3.0);
-
+    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.25, 1);
     std::vector<const Column*> raw_columns1;
     raw_columns1.resize(2);
     raw_columns1[0] = data_column1.get();
     raw_columns1[1] = const_colunm1.get();
-
     func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
 
     // update input column 2
     auto state2 = ManagedAggrState::create(ctx, func);
-
-    auto data_column2 = DoubleColumn::create();
-    auto const_colunm2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
-    data_column2->append(6.0);
-
+    auto const_colunm2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.25, 1);
     std::vector<const Column*> raw_columns2;
     raw_columns2.resize(2);
     raw_columns2[0] = data_column2.get();
     raw_columns2[1] = const_colunm2.get();
-
     func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
 
-    // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
-    auto result_column = DoubleColumn::create();
-    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column.get());
-    func->merge(local_ctx.get(), serde_column.get(), state2->state(), 0);
-    func->finalize_to_column(local_ctx.get(), state2->state(), result_column.get());
+    // state3
+    auto state3 = ManagedAggrState::create(ctx, func);
 
+    // merge column 1 and column 2
+    auto result_column = DoubleColumn::create();
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+
+    // [2,3,4,5,6], rate = 0.25 -> 3
+    ASSERT_EQ(3, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_percentile_cont_1) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
+
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column2->append(6.0);
+
+    // update input column 1
+    auto state1 = ManagedAggrState::create(ctx, func);
+    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, 1);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(2);
+    raw_columns1[0] = data_column1.get();
+    raw_columns1[1] = const_colunm1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    // update input column 2
+    auto state2 = ManagedAggrState::create(ctx, func);
+    auto const_colunm2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, 1);
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(2);
+    raw_columns2[0] = data_column2.get();
+    raw_columns2[1] = const_colunm2.get();
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    // state3
+    auto state3 = ManagedAggrState::create(ctx, func);
+
+    // merge column 1 and column 2
+    auto result_column = DoubleColumn::create();
+    ColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    ColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+
+    // [2,3,4,5,6], rate = 1 -> 6
+    ASSERT_EQ(6, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_percentile_cont_2) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
+
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+    data_column1->append(5.0);
+    data_column1->append(6.0);
+
+    // update input column 1
+    auto state1 = ManagedAggrState::create(ctx, func);
+    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.25, 1);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(2);
+    raw_columns1[0] = data_column1.get();
+    raw_columns1[1] = const_colunm1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    // merge column 1 and column 2
+    auto result_column = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state1->state(), result_column.get());
+
+    // [2,3,4,5,6], rate = 0.25 -> 3
     ASSERT_EQ(3, result_column->get_data()[0]);
 }
 
@@ -1782,10 +1877,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
-        ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -1806,6 +1901,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -1849,10 +1948,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
-        ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -1873,6 +1972,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],int:[2,9,5,7,6]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -1900,12 +2003,12 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(),
                          "['', 'bcd', 'cdrdfe', 'Datum()', 'esfg', NULL, NULL]"),
                   0);
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[2, 9, 5, 7, 6, 3, 3]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[2, 9, 5, 7, 6, 3, 3]"), 0);
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -1926,6 +2029,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg',NULL,NULL],int:[2,9,5,7,6,3,3]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -1955,10 +2062,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -1977,6 +2084,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL,NULL],int:[3,3]}]"), 0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -2014,12 +2125,12 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(),
                          "[NULL, NULL, NULL, 'bcd', 'cdrdfe', NULL, 'esfg']"),
                   0);
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3, NULL, 9, NULL, 7, 6]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3, NULL, 9, NULL, 7, 6]"), 0);
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2040,6 +2151,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,NULL,NULL,'bcd','cdrdfe',NULL,'esfg'],int:[3,3,NULL,9,NULL,7,6]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -2083,10 +2198,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
-        ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2108,6 +2223,9 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
                   0);
 
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
@@ -2199,6 +2317,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
@@ -2270,6 +2392,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],sep:[',',',',',',',',','],int:[2,9,5,7,6]}]");
 
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
@@ -2324,6 +2450,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->size(), 1); // empty also need output
+
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
 
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -2395,6 +2525,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
+
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
 
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);

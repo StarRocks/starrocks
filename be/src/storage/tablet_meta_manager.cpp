@@ -48,6 +48,7 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
+#include "fmt/format.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
@@ -850,10 +851,10 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
     put_fixed64_le(&prefix, BigEndian::FromHost64(tablet_id));
 
     return store->get_meta()->iterate(META_COLUMN_FAMILY_INDEX, prefix,
-                                      [&](std::string_view key, std::string_view value) -> bool {
+                                      [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
                                           bool parse_ok = false;
                                           auto rowset_meta = std::make_shared<RowsetMeta>(value, &parse_ok);
-                                          CHECK(parse_ok) << "Corrupted rowset meta";
+                                          RETURN_ERROR_IF_FALSE(parse_ok, "Corrupted rowset meta");
                                           return func(std::move(rowset_meta));
                                       });
 }
@@ -1219,19 +1220,20 @@ Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId table
                                                   DeltaColumnGroupList* dcgs) {
     std::string lower = encode_delta_column_group_key(tablet_id, segment_id, end_version);
     std::string upper = encode_delta_column_group_key(tablet_id, segment_id, begin_version);
-    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
-                                  [&](std::string_view key, std::string_view value) -> bool {
-                                      TTabletId dummy;
-                                      uint32_t dummy_segment_id;
-                                      int64_t decode_version;
-                                      decode_delta_column_group_key(key, &dummy, &dummy_segment_id, &decode_version);
-                                      CHECK(segment_id == dummy_segment_id);
-                                      DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
-                                      CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
-                                      CHECK(dcgs != nullptr);
-                                      dcgs->push_back(std::move(dcg_ptr));
-                                      return true;
-                                  });
+    auto st = meta->iterate_range(
+            META_COLUMN_FAMILY_INDEX, lower, upper,
+            [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
+                TTabletId dummy;
+                uint32_t dummy_segment_id;
+                int64_t decode_version;
+                decode_delta_column_group_key(key, &dummy, &dummy_segment_id, &decode_version);
+                RETURN_ERROR_IF_FALSE(segment_id == dummy_segment_id);
+                DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
+                RETURN_ERROR_IF_FALSE(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                RETURN_ERROR_IF_FALSE(dcgs != nullptr);
+                dcgs->push_back(std::move(dcg_ptr));
+                return true;
+            });
     if (!st.ok()) {
         LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
         return st;
@@ -1245,7 +1247,8 @@ Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId table
     std::string lower = encode_delta_column_group_key(tablet_id, rowsetid, segment_id, end_version);
     std::string upper = encode_delta_column_group_key(tablet_id, rowsetid, segment_id, begin_version);
     auto st = meta->iterate_range(
-            META_COLUMN_FAMILY_INDEX, lower, upper, [&](std::string_view key, std::string_view value) -> bool {
+            META_COLUMN_FAMILY_INDEX, lower, upper,
+            [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
                 TTabletId dummy;
                 uint32_t dummy_segment_id;
                 int64_t decode_version;
@@ -1254,11 +1257,11 @@ Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId table
                 rowsetid_string = rowsetid.to_string();
                 rowsetid_string.resize(64, ' ');
                 decode_delta_column_group_key(key, &dummy, &dummy_rowsetid_string, &dummy_segment_id, &decode_version);
-                CHECK(segment_id == dummy_segment_id);
-                CHECK(rowsetid_string == dummy_rowsetid_string);
+                RETURN_ERROR_IF_FALSE(segment_id == dummy_segment_id);
+                RETURN_ERROR_IF_FALSE(rowsetid_string == dummy_rowsetid_string);
                 DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
-                CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
-                CHECK(dcgs != nullptr);
+                RETURN_ERROR_IF_FALSE(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                RETURN_ERROR_IF_FALSE(dcgs != nullptr);
                 dcgs->push_back(std::move(dcg_ptr));
                 return true;
             });
@@ -1274,18 +1277,43 @@ Status TabletMetaManager::scan_tablet_delta_column_group(KVStore* meta, TTabletI
                                                          DeltaColumnGroupList* dcgs) {
     std::string lower = encode_delta_column_group_key(tablet_id, 0, INT64_MAX);
     std::string upper = encode_delta_column_group_key(tablet_id, UINT32_MAX, INT64_MAX);
-    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
-                                  [&](std::string_view key, std::string_view value) -> bool {
-                                      TTabletId dummy;
-                                      uint32_t dummy_segment_id;
-                                      int64_t decode_version;
-                                      decode_delta_column_group_key(key, &dummy, &dummy_segment_id, &decode_version);
-                                      DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
-                                      CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
-                                      CHECK(dcgs != nullptr);
-                                      dcgs->push_back(std::move(dcg_ptr));
-                                      return true;
-                                  });
+    auto st = meta->iterate_range(
+            META_COLUMN_FAMILY_INDEX, lower, upper,
+            [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
+                TTabletId dummy;
+                uint32_t dummy_segment_id;
+                int64_t decode_version;
+                decode_delta_column_group_key(key, &dummy, &dummy_segment_id, &decode_version);
+                DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
+                RETURN_ERROR_IF_FALSE(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                RETURN_ERROR_IF_FALSE(dcgs != nullptr);
+                dcgs->push_back(std::move(dcg_ptr));
+                return true;
+            });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
+        return st;
+    }
+    return Status::OK();
+}
+
+Status TabletMetaManager::scan_tablet_delta_column_group_by_segment(KVStore* meta, TTabletId tablet_id,
+                                                                    std::map<uint32_t, DeltaColumnGroupList>* dcgs) {
+    std::string lower = encode_delta_column_group_key(tablet_id, 0, INT64_MAX);
+    std::string upper = encode_delta_column_group_key(tablet_id, UINT32_MAX, INT64_MAX);
+    auto st = meta->iterate_range(
+            META_COLUMN_FAMILY_INDEX, lower, upper,
+            [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
+                TTabletId dummy;
+                uint32_t segment_id;
+                int64_t decode_version;
+                decode_delta_column_group_key(key, &dummy, &segment_id, &decode_version);
+                DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
+                RETURN_ERROR_IF_FALSE(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                RETURN_ERROR_IF_FALSE(dcgs != nullptr);
+                (*dcgs)[segment_id].push_back(std::move(dcg_ptr));
+                return true;
+            });
     if (!st.ok()) {
         LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
         return st;
@@ -1340,6 +1368,21 @@ Status TabletMetaManager::put_del_vector(DataDir* store, WriteBatch* batch, TTab
     auto v = delvec.save();
     auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     return to_status(batch->Put(h, k, v));
+}
+
+Status TabletMetaManager::put_del_vectors(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                          const EditVersion& version,
+                                          const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs) {
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    for (auto& rssid_delvec : delvecs) {
+        tsid.segment_id = rssid_delvec.first;
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
+        auto dv_value = rssid_delvec.second->save();
+        RETURN_IF_ERROR(batch->Put(handle, dv_key, dv_value));
+    }
+    return Status::OK();
 }
 
 Status TabletMetaManager::put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
@@ -1711,6 +1754,13 @@ Status TabletMetaManager::remove_table_persistent_index_meta(DataDir* store, TTa
     return meta->write_batch(&batch);
 }
 
+Status TabletMetaManager::remove_tablet_persistent_index_meta(DataDir* store, TTabletId tablet_id) {
+    KVStore* meta = store->get_meta();
+    WriteBatch batch;
+    RETURN_IF_ERROR(clear_persistent_index(store, &batch, tablet_id));
+    return meta->write_batch(&batch);
+}
+
 // methods for operating pending commits
 Status TabletMetaManager::pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                                 const RowsetMetaPB& rowset, const string& rowset_meta_key) {
@@ -1743,13 +1793,12 @@ Status TabletMetaManager::pending_rowset_iterate(DataDir* store, TTabletId table
     put_fixed64_le(&prefix, BigEndian::FromHost64(tablet_id));
 
     return store->get_meta()->iterate(
-            META_COLUMN_FAMILY_INDEX, prefix, [&](std::string_view key, std::string_view value) -> bool {
+            META_COLUMN_FAMILY_INDEX, prefix, [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
                 TTabletId tid = -1;
                 int64_t version = -1;
-                if (!decode_meta_pending_rowset_key(key, &tid, &version)) {
-                    LOG(ERROR) << "corrupt pending rowset key: " << hexdump(key.data(), key.length());
-                    return false;
-                }
+                bool decode_ok = decode_meta_pending_rowset_key(key, &tid, &version);
+                RETURN_ERROR_IF_FALSE(decode_ok,
+                                      fmt::format("corrupt pending rowset key: {}", hexdump(key.data(), key.length())));
                 return func(version, value);
             });
 }

@@ -27,6 +27,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
@@ -48,6 +49,7 @@ public class OptimizerContext {
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
+    private Set<Long> currentSqlDbIds;
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
@@ -60,6 +62,20 @@ public class OptimizerContext {
     private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
+
+    // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
+    // lifecycle instead of per materialized view.
+    private QueryMaterializationContext queryMaterializationContext;
+
+    private boolean isShortCircuit = false;
+    private boolean inMemoPhase = false;
+
+    // Is not null predicate can be derived from inner join or semi join,
+    // which should be kept to be used to convert outer join into inner join.
+    private List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
+
+    // uniquePartitionIdGenerator for external catalog
+    private long uniquePartitionIdGenerator = 0L;
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -89,6 +105,7 @@ public class OptimizerContext {
         this.queryId = connectContext.getQueryId();
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
+        this.currentSqlDbIds = connectContext.getCurrentSqlDbIds();
         this.cteContext = new CTEContext();
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
@@ -128,6 +145,10 @@ public class OptimizerContext {
 
     public DumpInfo getDumpInfo() {
         return dumpInfo;
+    }
+
+    public Set<Long> getCurrentSqlDbIds() {
+        return currentSqlDbIds;
     }
 
     public CTEContext getCteContext() {
@@ -229,5 +250,52 @@ public class OptimizerContext {
                 "2. try query again, " +
                 "3. enlarge new_planner_optimize_timeout session variable",
                 ErrorType.INTERNAL_ERROR);
+    }
+
+    public void setQueryMaterializationContext(QueryMaterializationContext queryMaterializationContext) {
+        this.queryMaterializationContext = queryMaterializationContext;
+    }
+
+    public QueryMaterializationContext getQueryMaterializationContext() {
+        return queryMaterializationContext;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
+    public void clear() {
+        if (this.queryMaterializationContext != null) {
+            this.queryMaterializationContext.clear();
+        }
+    }
+
+    public void setInMemoPhase(boolean inMemoPhase) {
+        this.inMemoPhase = inMemoPhase;
+    }
+
+    public boolean isInMemoPhase() {
+        return this.inMemoPhase;
+    }
+
+    public List<IsNullPredicateOperator> getPushdownNotNullPredicates() {
+        return pushdownNotNullPredicates;
+    }
+
+    public void addPushdownNotNullPredicates(IsNullPredicateOperator notNullPredicate) {
+        pushdownNotNullPredicates.add(notNullPredicate);
+    }
+
+    // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
+    public void clearNotNullPredicates() {
+        pushdownNotNullPredicates.clear();
+    }
+
+    public long getNextUniquePartitionId() {
+        return uniquePartitionIdGenerator++;
     }
 }

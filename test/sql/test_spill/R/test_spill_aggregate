@@ -121,6 +121,9 @@ select count(*) from (select array_agg(c0) from t3 group by c0) tb;
 -- result:
 40961
 -- !result
+select c0, sum(c1) as sc1 from (select c0, c1 from t3 where c0 < -1 limit 100) tb group by c0;
+-- result:
+-- !result
 with agged as ( select c0 as lk, c1 from t3 group by 1,2 ) select count(*),count(l.lk),count(l.c1),count(r.lk),count(r.c1) from agged l join agged r on l.lk = r.lk;
 -- result:
 40960	40960	40960	40960	40960
@@ -167,4 +170,41 @@ select count(*), max(tb.c0), min(tb.c1) from (select distinct c0, c1 from t4) tb
 select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t4 group by c0 having c0 > 100) tb;
 -- result:
 0	None	None
+-- !result
+create table t5 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 16 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t5 SELECT generate_series, 650000 - generate_series FROM TABLE(generate_series(1,  650000));
+-- result:
+-- !result
+select max(s1) from (select sum(c1) s1 from t5 group by c0) tb;
+-- result:
+649999
+-- !result
+select max(s1), avg(s2) from (select sum(c1) s1, sum(c0) s2 from t5 group by c0) tb;
+-- result:
+649999	325000.5
+-- !result
+select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2 from t5 group by c0 limit 10) tb;
+-- result:
+10	10
+-- !result
+select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2, c0 from t5 group by c0 limit 10) tb;
+-- result:
+10	10
+-- !result
+select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2, c0, c1 from t5 group by c0, c1 limit 10) tb;
+-- result:
+10	10
+-- !result
+select distinct c0, c1 from t5 order by 1, 2 limit 1;
+-- result:
+1	649999
+-- !result
+select count(*) from (select distinct c0, c1 from t5 limit 10) tb;
+-- result:
+10
 -- !result

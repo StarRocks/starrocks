@@ -31,14 +31,10 @@
 
 namespace starrocks::lake {
 
-Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
-    if (progress == nullptr) {
-        return Status::InvalidArgument("progress is null");
-    }
-
+Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
+    _tablet_schema = _tablet.get_schema();
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
@@ -52,7 +48,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment));
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -75,15 +71,18 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
             RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
         RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer, mask_buffer.get(),
-                                             source_masks.get(), progress, cancel_func));
+                                             source_masks.get(), cancel_func));
     }
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the number of rows read may be less than the
     //    number of rows counted in the metadata.
     // 2. If the number of rows is 0, the progress will not be updated
-    progress->update(100);
+    _context->progress.update(100);
 
     RETURN_IF_ERROR(writer->finish());
+
+    // update writer stats
+    _context->stats->segment_write_ns += writer->stats().segment_write_ns;
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
@@ -93,16 +92,24 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
         op_compaction->add_input_rowsets(rowset->id());
     }
     for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file);
+        op_compaction->mutable_output_rowset()->add_segments(std::move(file.path));
+        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
     }
+
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
-    RETURN_IF_ERROR(_tablet.put_txn_log(txn_log));
+    RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
+    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
-        _tablet.update_mgr()->preload_compaction_state(*txn_log, _tablet, _tablet_schema);
+        Tablet t(_tablet.tablet_manager(), _tablet.id());
+        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
+
+    LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
+              << ", statistics: " << _context->stats->to_json_stats();
+
     return Status::OK();
 }
 
@@ -115,7 +122,10 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         //
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(false, true));
+        LakeIOOptions lake_io_opts{.fill_data_cache = false,
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+        auto fill_meta_cache = true;
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
                 const auto* column_reader = segment->column(column_index);
@@ -134,7 +144,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     const std::vector<uint32_t>& column_group,
                                                     std::unique_ptr<TabletWriter>& writer,
                                                     RowSourceMaskBuffer* mask_buffer,
-                                                    std::vector<RowSourceMask>* source_masks, Progress* progress,
+                                                    std::vector<RowSourceMask>* source_masks,
                                                     const CancelFunc& cancel_func) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
@@ -142,14 +152,15 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
-    TabletReader reader(_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = false;
+    reader_params.lake_io_opts = {config::lake_enable_vertical_compaction_fill_data_cache,
+                                  config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
@@ -158,6 +169,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
+    int64 reader_time_ns = 0;
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
@@ -168,10 +180,13 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
-        if (auto st = reader.get_next(chunk.get(), source_masks); st.is_end_of_file()) {
-            break;
-        } else if (!st.ok()) {
-            return st;
+        {
+            SCOPED_RAW_TIMER(&reader_time_ns);
+            if (auto st = reader.get_next(chunk.get(), source_masks); st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                return st;
+            }
         }
 
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
@@ -185,11 +200,15 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             source_masks->clear();
         }
 
-        progress->update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                         column_group_size);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << progress->value();
+        _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
+                                  column_group_size);
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
     }
     RETURN_IF_ERROR(writer->flush_columns());
+
+    // add reader stats
+    _context->stats->reader_time_ns += reader_time_ns;
+    _context->stats->accumulate(reader.stats());
 
     if (is_key) {
         RETURN_IF_ERROR(mask_buffer->flush());

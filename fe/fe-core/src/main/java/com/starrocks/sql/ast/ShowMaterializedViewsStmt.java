@@ -63,6 +63,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("last_refresh_error_message", ScalarType.createVarchar(1024))
                     .column("rows", ScalarType.createVarchar(50))
                     .column("text", ScalarType.createVarchar(1024))
+                    .column("extra_message", ScalarType.createVarchar(1024))
+                    .column("query_rewrite_status", ScalarType.createVarchar(64))
                     .build();
 
     private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(

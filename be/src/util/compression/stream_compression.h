@@ -71,12 +71,17 @@ public:
 
     CompressionTypePB get_type() { return _ctype; }
 
+    size_t get_compressed_block_size() { return _compressed_block_size; }
+    size_t set_compressed_block_size(size_t size) { return _compressed_block_size = size; }
+
 protected:
     virtual Status init() { return Status::OK(); }
 
     StreamCompression(CompressionTypePB ctype) : _ctype(ctype) {}
 
     CompressionTypePB _ctype;
+
+    size_t _compressed_block_size = 0;
 };
 
 } // namespace starrocks

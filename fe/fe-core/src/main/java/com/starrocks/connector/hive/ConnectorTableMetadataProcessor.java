@@ -178,7 +178,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         LOG.info("Start to refresh hive external table metadata in the background");
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MetadataMgr metadataMgr = gsm.getMetadataMgr();
-        List<Database> databases = gsm.getDbIds().stream()
+        List<Database> databases = gsm.getLocalMetastore().getDbIds().stream()
                 .map(gsm::getDb)
                 .filter(Objects::nonNull)
                 .filter(db -> !db.isSystemDatabase())

@@ -1,4 +1,4 @@
--- name: test_split_or
+-- name: test_low_cardinality
 CREATE TABLE `common_duplicate` (
   `c0` int(11) NOT NULL COMMENT "",
   `c1` int(11) NOT NULL COMMENT "",
@@ -14,7 +14,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -36,7 +35,6 @@ DISTRIBUTED BY HASH(`c2`, `c1`, `c0`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3, c4",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -635,7 +633,7 @@ SELECT
     SUBSTRING(lcd.c4, 3) AS substring_c4,
     TRIM(CONCAT(lcd.c4, ' - ', 'a')) AS trimmed,
     UPPER(lcd.c4) AS upper_c4,
-    IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result,
+    IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result
 FROM
     low_card_duplicate lcd
 group by
@@ -951,7 +949,7 @@ FROM
     low_card_duplicate lcd
     INNER JOIN low_card_duplicate lcp ON lcd.c0 = lcp.c0
     right JOIN common_duplicate cd ON lcd.c0 = cd.c0
-    order by c0, upper_c1 limit 5;
+    order by c0, upper_c1, coalesce_c2 desc limit 5;
 
 -- cte
 WITH CTE1 AS (
@@ -1149,5 +1147,8 @@ order by
 limit
     10;
 
+SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
 
+set low_cardinality_optimize_v2 = false;
 
+SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;

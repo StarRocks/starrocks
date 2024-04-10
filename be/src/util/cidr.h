@@ -34,6 +34,10 @@
 
 #pragma once
 
+#include <sys/un.h>
+
+#include <array>
+#include <cstdint>
 #include <string>
 
 namespace starrocks {
@@ -42,16 +46,14 @@ namespace starrocks {
 class CIDR {
 public:
     CIDR();
-    void reset();
     bool reset(const std::string& cidr_str);
-    bool contains(const std::string& ip);
+    bool contains(const CIDR& ip) const;
     static bool ip_to_int(const std::string& ip_str, uint32_t* value);
 
 private:
-    bool contains(uint32_t ip_int);
-
-    uint32_t _address{0};
-    uint32_t _netmask{0xffffffff};
+    sa_family_t _family;
+    std::array<std::uint8_t, 16> _address;
+    std::uint8_t _netmask_len;
 };
 
 } // end namespace starrocks

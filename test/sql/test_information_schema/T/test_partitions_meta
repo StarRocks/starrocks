@@ -1,0 +1,15 @@
+-- name: test_partitions_meta
+CREATE TABLE `partitions_meta_test` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NOT NULL COMMENT ""
+)engine=olap
+DUPLICATE KEY(`k`)
+PARTITION BY RANGE(`v`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("10")),
+PARTITION p3 VALUES [("10"), ("2147483647")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+select TABLE_NAME, PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by partition_name;

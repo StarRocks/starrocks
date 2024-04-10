@@ -10,7 +10,7 @@ HLL 是一种近似去重算法，在部分对去重精度要求不高的场景�
 
 ## 创建包含 HLL 列的表
 
-使用 HLL 去重，需要在建表语句中，将目标指标列的类型设置为 **HLL**，聚合函数设置为 **HLL_UNION**。只有聚合模型表 (Aggregate Key) 支持 HLL 类型列。
+使用 HLL 去重，需要在建表语句中，将目标指标列的类型设置为 **HLL**，聚合函数设置为 **HLL_UNION**。只有聚合表支持 HLL 类型列。
 
 > 说明
 >
@@ -155,5 +155,5 @@ Bitmap 类型仅支持 TINYINT，SMALLINT，INT，BIGINT（注意不支持 LARGE
 * **[HLL_UNION_AGG(hll)](../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)**：此函数为聚合函数，用于计算满足条件的所有数据的基数估算。此函数还可用于分析函数，只支持默认窗口，不支持窗口子句。
 * **[HLL_RAW_AGG(hll)](../sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)**：此函数为聚合函数，用于聚合 HLL 类型字段，返回 HLL 类型。
 * **[HLL_CARDINALITY(hll)](../sql-reference/sql-functions/scalar-functions/hll_cardinality.md)**：此函数用于估算单条 HLL 列的基数。
-* **[HLL_HASH(column_name](../sql-reference/sql-functions/aggregate-functions/hll_hash.md)**：生成 HLL 列类型，用于 `insert` 或导入 HLL 类型。
-* **[HLL_EMPTY()](../sql-reference/sql-functions/aggregate-functions/hll_empty.md)**：生成空 HLL 列，用于 `insert` 或导入数据时补充默认值。
+* **[HLL_HASH(column_name](../sql-reference/sql-functions/scalar-functions/hll_hash.md)**：生成 HLL 列类型，用于 `insert` 或导入 HLL 类型。
+* **[HLL_EMPTY()](../sql-reference/sql-functions/scalar-functions/hll_empty.md)**：生成空 HLL 列，用于 `insert` 或导入数据时补充默认值。

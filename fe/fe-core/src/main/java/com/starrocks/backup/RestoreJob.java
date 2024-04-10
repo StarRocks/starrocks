@@ -43,6 +43,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
@@ -53,6 +54,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -70,6 +72,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
@@ -80,11 +83,12 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -98,6 +102,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -179,6 +184,11 @@ public class RestoreJob extends AbstractJob {
 
     protected Map<Long, Long> unfinishedSignatureToId = Maps.newConcurrentMap();
 
+    // store some remote table ids that is skipped to restore, eg: mv is active in local db
+    protected Set<Long> skipRestoreRemoteTableIds = Sets.newHashSet();
+
+    private MvRestoreContext mvRestoreContext;
+
     private AgentBatchTask batchTask;
 
     public RestoreJob() {
@@ -187,7 +197,8 @@ public class RestoreJob extends AbstractJob {
 
     public RestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
                       boolean allowLoad, int restoreReplicationNum, long timeoutMs,
-                      GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
+                      GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta,
+                      MvRestoreContext mvRestoreContext) {
         super(JobType.RESTORE, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.backupTimestamp = backupTs;
         this.jobInfo = jobInfo;
@@ -195,6 +206,7 @@ public class RestoreJob extends AbstractJob {
         this.restoreReplicationNum = restoreReplicationNum;
         this.state = RestoreJobState.PENDING;
         this.backupMeta = backupMeta;
+        this.mvRestoreContext = mvRestoreContext;
     }
 
     public RestoreJobState getState() {
@@ -203,6 +215,14 @@ public class RestoreJob extends AbstractJob {
 
     public RestoreFileMapping getFileMapping() {
         return fileMapping;
+    }
+
+    public BackupJobInfo getJobInfo() {
+        return jobInfo;
+    }
+
+    public BackupMeta getBackupMeta() {
+        return backupMeta;
     }
 
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
@@ -501,6 +521,19 @@ public class RestoreJob extends AbstractJob {
                         // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
                     }
+                    if (localTbl.isMaterializedView()) {
+                        MaterializedView mv = (MaterializedView) localTbl;
+                        if (mv.isActive()) {
+                            // Skip to restore existed mv if mv is existed and active in the current local db,
+                            // mv should be refreshed by local table changes rather than backup/restore because we don't
+                            // track mv's version map with data's restore.
+                            // eg: we restore mv's data (old version) but not restore associated version map which may
+                            // cause wrong result if it can be used to rewrite.
+                            LOG.warn("Skip to restore existed and active mv: {}", mv.getName());
+                            skipRestoreRemoteTableIds.add(remoteTbl.getId());
+                            continue;
+                        }
+                    }
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
@@ -733,7 +766,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
-        return remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+        return remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, mvRestoreContext);
     }
 
     protected void sendCreateReplicaTasks() {
@@ -798,6 +831,7 @@ public class RestoreJob extends AbstractJob {
         unfinishedSignatureToId.clear();
         taskProgress.clear();
         taskErrMsg.clear();
+        skipRestoreRemoteTableIds.clear();
         Multimap<Long, Long> bePathsMap = HashMultimap.create();
         batchTask = new AgentBatchTask();
         Locker locker = new Locker();
@@ -826,7 +860,7 @@ public class RestoreJob extends AbstractJob {
 
         // check disk capacity
         com.starrocks.common.Status st =
-                GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(bePathsMap, true);
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkExceedDiskCapacityLimit(bePathsMap, true);
         if (!st.ok()) {
             status = new Status(ErrCode.COMMON_ERROR, st.getErrorMsg());
             return;
@@ -868,28 +902,43 @@ public class RestoreJob extends AbstractJob {
                 MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
                 TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), physicalPartition.getId(),
                         restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
+                TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                        .setId(indexMeta.getSchemaId())
+                        .setKeysType(indexMeta.getKeysType())
+                        .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                        .setSchemaHash(indexMeta.getSchemaHash())
+                        .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                        .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                        .setStorageType(indexMeta.getStorageType())
+                        .addColumns(indexMeta.getSchema())
+                        .setBloomFilterColumnNames(bfColumns)
+                        .setBloomFilterFpp(bfFpp)
+                        .setIndexes(localTbl.getCopiedIndexes())
+                        .build().toTabletSchema();
                 for (Tablet restoreTablet : restoredIdx.getTablets()) {
-                    GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                     for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
-                        GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                                .addReplica(restoreTablet.getId(), restoreReplica);
                         LOG.info("tablet {} physical partition {} index {} replica {}",
                                 restoreTablet.getId(), physicalPartition.getId(), restoredIdx.getId(),
                                 restoreReplica.getId());
-                        CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
-                                localTbl.getId(), physicalPartition.getId(), restoredIdx.getId(),
-                                restoreTablet.getId(), indexMeta.getShortKeyColumnCount(),
-                                indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), restoreReplica.getVersion(),
-                                indexMeta.getKeysType(), indexMeta.getStorageType(),
-                                TStorageMedium.HDD /* all restored replicas will be saved to HDD */,
-                                indexMeta.getSchema(), bfColumns, bfFpp, null,
-                                localTbl.getCopiedIndexes(),
-                                localTbl.isInMemory(),
-                                localTbl.enablePersistentIndex(),
-                                localTbl.primaryIndexCacheExpireSec(),
-                                localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
-                                localTbl.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                                indexMeta.getSortKeyUniqueIds());
-                        task.setInRestoreMode(true);
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                .setNodeId(restoreReplica.getBackendId())
+                                .setDbId(dbId)
+                                .setTableId(localTbl.getId())
+                                .setPartitionId(physicalPartition.getId())
+                                .setIndexId(restoredIdx.getId())
+                                .setTabletId(restoreTablet.getId())
+                                .setVersion(restoreReplica.getVersion())
+                                .setStorageMedium(TStorageMedium.HDD) /* all restored replicas will be saved to HDD */
+                                .setEnablePersistentIndex(localTbl.enablePersistentIndex())
+                                .setPrimaryIndexCacheExpireSec(localTbl.primaryIndexCacheExpireSec())
+                                .setTabletType(localTbl.getPartitionInfo().getTabletType(restorePart.getId()))
+                                .setCompressionType(localTbl.getCompressionType())
+                                .setInRestoreMode(true)
+                                .setTabletSchema(tabletSchema)
+                                .build();
                         batchTask.addTask(task);
                     }
                 }
@@ -1073,9 +1122,9 @@ public class RestoreJob extends AbstractJob {
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
                     restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
             for (Tablet restoreTablet : restoreIdx.getTablets()) {
-                GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                 for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
-                    GlobalStateMgr.getCurrentInvertedIndex()
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
                             .addReplica(restoreTablet.getId(), restoreReplica);
                 }
             }
@@ -1108,6 +1157,7 @@ public class RestoreJob extends AbstractJob {
         unfinishedSignatureToId.clear();
         taskProgress.clear();
         taskErrMsg.clear();
+        skipRestoreRemoteTableIds.clear();
         batchTask = new AgentBatchTask();
         for (long dbId : dbToSnapshotInfos.keySet()) {
             List<SnapshotInfo> infos = dbToSnapshotInfos.get(dbId);
@@ -1292,6 +1342,7 @@ public class RestoreJob extends AbstractJob {
         unfinishedSignatureToId.clear();
         taskProgress.clear();
         taskErrMsg.clear();
+        skipRestoreRemoteTableIds.clear();
 
         prepareAndSendDirMoveTasks();
 
@@ -1396,6 +1447,10 @@ public class RestoreJob extends AbstractJob {
             try {
                 for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                     Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
+                    // skip to restore table ids
+                    if (skipRestoreRemoteTableIds.contains(tblInfo.id)) {
+                        continue;
+                    }
                     if (tbl == null) {
                         LOG.warn("skip post actions after restore success, table name does not existed: %s",
                                 tblInfo.name);
@@ -1418,14 +1473,16 @@ public class RestoreJob extends AbstractJob {
                         }
                     }
 
-                    if (tbl.isMaterializedView()) {
-                        // rebuild materialized view after restore job finished
-                        MaterializedView mv = (MaterializedView) tbl;
+                    // rebuild olap table after restore job finished,
+                    // - for base table, update existed materialized view's base table info
+                    // - for materialized view, update existed materialized view's base table infos
+                    if (tbl instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) tbl;
                         try {
-                            mv.doAfterRestore(db);
+                            olapTable.doAfterRestore(mvRestoreContext);
                         } catch (Exception e) {
                             // no throw exceptions
-                            LOG.warn(String.format("rebuild materialized view %s failed: ", mv.getName()), e);
+                            LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);
                         }
                     }
                 }
@@ -1487,12 +1544,16 @@ public class RestoreJob extends AbstractJob {
         info.add(TimeUtils.longToTimeString(snapshotFinishedTime));
         info.add(TimeUtils.longToTimeString(downloadFinishedTime));
         info.add(TimeUtils.longToTimeString(finishedTime));
-        info.add(Joiner.on(", ").join(unfinishedSignatureToId.entrySet()));
-        info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
-                e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
-                Collectors.toList())));
-        info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
-                + "]").collect(Collectors.toList())));
+        try {
+            info.add(Joiner.on(", ").join(unfinishedSignatureToId.entrySet()));
+            info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
+                    e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
+                    Collectors.toList())));
+            info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
+                    + "]").collect(Collectors.toList())));
+        } catch (Exception e) {
+            throw new SemanticException("meta data may has been updated during this period, please try again");
+        }
         info.add(status.toString());
         info.add(String.valueOf(timeoutMs / 1000));
         return info;
@@ -1567,7 +1628,7 @@ public class RestoreJob extends AbstractJob {
                     for (Partition part : restoreTbl.getPartitions()) {
                         for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             for (Tablet tablet : idx.getTablets()) {
-                                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
+                                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tablet.getId());
                             }
                         }
                     }
@@ -1613,6 +1674,9 @@ public class RestoreJob extends AbstractJob {
 
     private void setTableStateToNormal(Database db) {
         for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
+            if (skipRestoreRemoteTableIds.contains(tblInfo.id)) {
+                continue;
+            }
             Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
             if (tbl == null) {
                 continue;

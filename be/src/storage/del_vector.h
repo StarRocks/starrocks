@@ -53,7 +53,7 @@ public:
 
     std::string save() const;
 
-    void save_to(std::string* str);
+    void save_to(std::string* str) const;
 
     std::string to_string() const;
 

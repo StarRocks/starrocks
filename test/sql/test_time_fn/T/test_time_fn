@@ -297,3 +297,10 @@ VALUES ('2020-01-01','2020-01-01 00:00:00'),
 select to_iso8601(d1),to_iso8601(d2) from to_iso8601_test order by d1;
 
 select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),to_iso8601(datetime'2020-01-01 00:00:00.1');
+
+-- name: test_timestamp_add
+select timestampadd(MILLISECOND, 1, '2019-01-02 00:00:00');
+
+
+-- name: test_timestamp_diff
+select  timestampdiff(MILLISECOND, '2003-02-01 00:00:00', '2003-05-01 12:05:55');

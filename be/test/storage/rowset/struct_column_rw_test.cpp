@@ -50,7 +50,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema, nullptr);
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
     }
 
     void test_int_struct() {
@@ -166,14 +166,11 @@ protected:
         }
 
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::FIELD, "f1", 0);
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f1", 0));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -188,31 +185,26 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 auto dst_f1_column = Int32Column::create();
-                auto dst_f2_column = BinaryColumn::create();
                 Columns dst_columns;
                 dst_columns.emplace_back(std::move(dst_f1_column));
-                dst_columns.emplace_back(std::move(dst_f2_column));
 
-                ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+                ColumnPtr dst_column = StructColumn::create(dst_columns, std::vector<std::string>{"f1"});
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:1,f2:CONST: ''}", dst_column->debug_item(0));
+                ASSERT_EQ("{f1:1}", dst_column->debug_item(0));
             }
         }
 
         // read and check
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::FIELD, "f2", 1);
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f2", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -226,19 +218,17 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_f1_column = Int32Column::create();
                 auto dst_f2_column = BinaryColumn::create();
                 Columns dst_columns;
-                dst_columns.emplace_back(std::move(dst_f1_column));
                 dst_columns.emplace_back(std::move(dst_f2_column));
 
-                ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+                ColumnPtr dst_column = StructColumn::create(dst_columns, std::vector<std::string>{"f2"});
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:CONST: 0,f2:'Column2'}", dst_column->debug_item(0));
+                ASSERT_EQ("{f2:'Column2'}", dst_column->debug_item(0));
             }
         }
     }

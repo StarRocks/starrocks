@@ -6,6 +6,12 @@ displayed_sidebar: "Chinese"
 
 DROP FILE 语句用于删除保存在数据库中的文件。使用该语句删除一个文件，那么该文件在 FE 内存和 BDBJE 中均会被删除。
 
+:::tip
+
+该操作需要 SYSTEM 级 FILE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。当一个文件归属于一个数据库时，对该数据库拥有访问权限的用户都可以使用该文件。
+
+:::
+
 ## 语法
 
 ```SQL

@@ -56,7 +56,7 @@ public:
 
     Status remove(const std::string& key) override;
 
-    std::unordered_map<std::string, double> cache_stats() override;
+    const DataCacheMetrics cache_metrics(int level) override;
 
     void record_read_remote(size_t size, int64_t lateny_us) override;
 
@@ -64,7 +64,10 @@ public:
 
     Status shutdown() override;
 
+    DataCacheEngineType engine_type() override { return DataCacheEngineType::CACHELIB; }
+
 private:
+    std::unordered_map<std::string, double> cache_stats();
     void _dump_cache_stats();
 
     std::unique_ptr<Cache> _cache = nullptr;

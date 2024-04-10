@@ -335,13 +335,13 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testScalarReuseIsNull() throws Exception {
-        String sql =
+        String plan =
                 getFragmentPlan("SELECT (abs(1) IS NULL) = true AND ((abs(1) IS NULL) IS NOT NULL) as count FROM t1;");
-        Assert.assertTrue(sql.contains("1:Project\n"
-                + "  |  <slot 4> : (6: expr = TRUE) AND (6: expr IS NOT NULL)\n"
-                + "  |  common expressions:\n"
-                + "  |  <slot 5> : abs(1)\n"
-                + "  |  <slot 6> : 5: abs IS NULL"));
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 4> : (6: expr) AND (6: expr IS NOT NULL)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 5> : abs(1)\n" +
+                "  |  <slot 6> : 5: abs IS NULL"));
     }
 
     @Test
@@ -437,7 +437,7 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: false; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: false; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, VARCHAR, false]); args: INVALID_TYPE; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, false]); args: INVALID_TYPE; " +
                 "result: VARCHAR; args nullable: false; result nullable: true]");
 
         // with count, all columns should be nullable
@@ -447,9 +447,9 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, VARCHAR, true]); args: INVALID_TYPE; result: VARCHAR; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "sum[([count_t1a, VARCHAR, true]); args: BIGINT; result: BIGINT; " +
+                "sum[([count_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
                 "args nullable: true; result nullable: true]");
     }
 

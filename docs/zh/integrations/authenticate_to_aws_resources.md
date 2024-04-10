@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_label: AWS
+description: "本文介绍如何认证 AWS 资源"
 ---
 
 # 配置 AWS 认证信息
@@ -187,7 +189,7 @@ StarRocks 支持以下类型的 External Catalog：
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
   );
   ```
 
@@ -218,7 +220,7 @@ StarRocks 支持以下类型的 External Catalog：
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
   );
   ```
 
@@ -252,7 +254,7 @@ StarRocks 支持以下类型的 External Catalog：
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
   );
   ```
 

@@ -115,9 +115,9 @@ public class GetNextTest extends SchedulerTestBase {
             }
         });
 
-        SimpleScheduler.removeFromBlacklist(BACKEND1_ID);
-        SimpleScheduler.removeFromBlacklist(backend2.getId());
-        SimpleScheduler.removeFromBlacklist(backend3.getId());
+        SimpleScheduler.removeFromBlocklist(BACKEND1_ID);
+        SimpleScheduler.removeFromBlocklist(backend2.getId());
+        SimpleScheduler.removeFromBlocklist(backend3.getId());
 
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
@@ -159,9 +159,9 @@ public class GetNextTest extends SchedulerTestBase {
             }
         });
 
-        SimpleScheduler.removeFromBlacklist(BACKEND1_ID);
-        SimpleScheduler.removeFromBlacklist(backend2.getId());
-        SimpleScheduler.removeFromBlacklist(backend3.getId());
+        SimpleScheduler.removeFromBlocklist(BACKEND1_ID);
+        SimpleScheduler.removeFromBlocklist(backend2.getId());
+        SimpleScheduler.removeFromBlocklist(backend3.getId());
 
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler;

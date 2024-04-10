@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <utility>
 
 #include "column/vectorized_fwd.h"
@@ -38,14 +39,16 @@ public:
     SpillInputStream() = default;
     virtual ~SpillInputStream() = default;
 
-    virtual StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) = 0;
+    virtual StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) = 0;
     virtual bool is_ready() = 0;
     virtual void close() = 0;
 
     virtual void get_io_stream(std::vector<SpillInputStream*>* io_stream) {}
 
     virtual bool enable_prefetch() const { return false; }
-    virtual Status prefetch(SerdeContext& ctx) { return Status::NotSupported("input stream doesn't support prefetch"); }
+    virtual Status prefetch(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
+        return Status::NotSupported("input stream doesn't support prefetch");
+    }
 
     void mark_is_eof() { _eof = true; }
 
@@ -64,7 +67,7 @@ public:
     YieldableRestoreTask(InputStreamPtr input_stream) : _input_stream(std::move(input_stream)) {
         _input_stream->get_io_stream(&_sub_stream);
     }
-    Status do_read(workgroup::YieldContext& ctx, SerdeContext& context, int* yield);
+    Status do_read(workgroup::YieldContext& ctx, SerdeContext& context);
 
 private:
     InputStreamPtr _input_stream;
@@ -76,7 +79,10 @@ class BlockGroup {
 public:
     BlockGroup() = default;
 
-    void append(BlockPtr block) { _blocks.emplace_back(std::move(block)); }
+    void append(BlockPtr block) {
+        std::lock_guard guard(_mutex);
+        _blocks.emplace_back(std::move(block));
+    }
 
     StatusOr<InputStreamPtr> as_unordered_stream(const SerdePtr& serde, Spiller* spiller);
 
@@ -85,7 +91,10 @@ public:
 
     void clear() { _blocks.clear(); }
 
+    // TODO: support drop block inadvance
+
 private:
+    std::mutex _mutex;
     std::vector<BlockPtr> _blocks;
 };
 

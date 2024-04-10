@@ -592,4 +592,22 @@ Status MemoryFileSystem::read_file(const std::string& path, std::string* content
     return random_access_file->read_at_fully(0, content->data(), content->size());
 }
 
+namespace {
+
+class MemoryInputStream : public io::SeekableInputStreamWrapper {
+public:
+    explicit MemoryInputStream(std::string_view data) : io::SeekableInputStreamWrapper(&_stream, kDontTakeOwnership) {
+        _stream.reset(data.data(), static_cast<int64_t>(data.size()));
+    }
+
+private:
+    io::ArrayInputStream _stream;
+};
+
+} // namespace
+
+std::unique_ptr<RandomAccessFile> new_random_access_file_from_memory(std::string_view name, std::string_view data) {
+    return std::make_unique<RandomAccessFile>(std::make_shared<MemoryInputStream>(data), std::string(name));
+}
+
 } // namespace starrocks

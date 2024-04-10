@@ -35,9 +35,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TFileFormatType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -78,6 +81,7 @@ public class LoadTest {
             {
                 analyzer.getDescTbl();
                 result = descTable;
+                minTimes = 0;
             }
         };
 
@@ -250,5 +254,58 @@ public class LoadTest {
         Assert.assertEquals(2, slotDescByName.size());
         Assert.assertFalse(slotDescByName.containsKey(c1Name));
         Assert.assertTrue(slotDescByName.containsKey(c1NameInSource));
+    }
+
+    /**
+     * set (c1 = year())
+     */
+    @Test
+    public void testMappingExprInvalid() {
+        // columns
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(c0Name, null));
+
+        String c1Name = "c1";
+        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+
+        // column mappings
+        // c1 = year()
+        List<Expr> params1 = Lists.newArrayList();
+        Expr mapping1 = new FunctionCallExpr(FunctionSet.YEAR, params1);
+        columnExprs.add(new ImportColumnDesc(c1Name, mapping1));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                table.getColumn(c1Name);
+                result = columns.get(1);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Expr 'year()' analyze error: No matching function with signature: year(), derived column is 'c1'",
+                () -> Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
+                        slotDescByName, params, true, true, columnsFromPath));
+    }
+
+    @Test
+    public void testGetFormatType() {
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("parquet", "hdfs://127.0.0.1:9000/some_file"));
+        Assert.assertEquals(TFileFormatType.FORMAT_ORC, Load.getFormatType("orc", "hdfs://127.0.0.1:9000/some_file"));
+        Assert.assertEquals(TFileFormatType.FORMAT_JSON, Load.getFormatType("json", "hdfs://127.0.0.1:9000/some_file"));
+
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.parq"));
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.parquet"));
+        Assert.assertEquals(TFileFormatType.FORMAT_ORC, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.orc"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_GZ, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.gz"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_BZ2, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.bz2"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.lz4"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.deflate"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.zst"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file"));
     }
 }

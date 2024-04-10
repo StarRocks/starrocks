@@ -19,6 +19,7 @@
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_configs_scanner.h"
+#include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -33,6 +34,7 @@
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
+#include "exec/schema_scanner/schema_partitions_meta_scanner.h"
 #include "exec/schema_scanner/schema_pipe_files.h"
 #include "exec/schema_scanner/schema_pipes.h"
 #include "exec/schema_scanner/schema_routine_load_jobs_scanner.h"
@@ -49,9 +51,12 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
+#include "exec/schema_scanner/sys_fe_locks.h"
+#include "exec/schema_scanner/sys_fe_memory_usage.h"
 #include "exec/schema_scanner/sys_object_dependencies.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
+
 namespace starrocks {
 
 StarRocksServer* SchemaScanner::_s_starrocks_server;
@@ -177,6 +182,14 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablePipeFiles>();
     case TSchemaTableType::SCH_PIPES:
         return std::make_unique<SchemaTablePipes>();
+    case TSchemaTableType::SYS_FE_LOCKS:
+        return std::make_unique<SysFeLocks>();
+    case TSchemaTableType::SCH_BE_DATACACHE_METRICS:
+        return std::make_unique<SchemaBeDataCacheMetricsScanner>();
+    case TSchemaTableType::SCH_PARTITIONS_META:
+        return std::make_unique<SchemaPartitionsMetaScanner>();
+    case TSchemaTableType::SYS_FE_MEMORY_USAGE:
+        return std::make_unique<SysFeMemoryUsage>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

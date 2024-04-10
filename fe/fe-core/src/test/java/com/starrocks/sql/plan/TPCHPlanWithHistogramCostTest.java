@@ -15,17 +15,25 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.TpchSQL;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
@@ -60,118 +68,23 @@ public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
         setTableStatistics(t7, 6000000 * scale);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
     }
 
-    @Test
-    public void testTPCH1() {
-        runFileUnitTest("tpch-histogram-cost/q1");
+    @ParameterizedTest(name = "Tpch.{0}")
+    @MethodSource("tpchSource")
+    public void testTPCH(String name, String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile);
     }
 
-    @Test
-    public void testTPCH2() {
-        runFileUnitTest("tpch-histogram-cost/q2");
+    private static Stream<Arguments> tpchSource() {
+        List<Arguments> cases = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), "tpch-histogram-cost/" + entry.getKey()));
+        }
+        return cases.stream();
     }
 
-    @Test
-    public void testTPCH3() {
-        runFileUnitTest("tpch-histogram-cost/q3");
-    }
-
-    @Test
-    public void testTPCH4() {
-        runFileUnitTest("tpch-histogram-cost/q4");
-    }
-
-    @Test
-    public void testTPCH5() {
-        runFileUnitTest("tpch-histogram-cost/q5");
-    }
-
-    @Test
-    public void testTPCH6() {
-        runFileUnitTest("tpch-histogram-cost/q6");
-    }
-
-    @Test
-    public void testTPCH7() {
-        runFileUnitTest("tpch-histogram-cost/q7");
-    }
-
-    @Test
-    public void testTPCH8() {
-        runFileUnitTest("tpch-histogram-cost/q8");
-    }
-
-    @Test
-    public void testTPCH9() {
-        runFileUnitTest("tpch-histogram-cost/q9");
-    }
-
-    @Test
-    public void testTPCH10() {
-        runFileUnitTest("tpch-histogram-cost/q10");
-    }
-
-    @Test
-    public void testTPCH11() {
-        runFileUnitTest("tpch-histogram-cost/q11");
-    }
-
-    @Test
-    public void testTPCH12() {
-        runFileUnitTest("tpch-histogram-cost/q12");
-    }
-
-    @Test
-    public void testTPCH13() {
-        runFileUnitTest("tpch-histogram-cost/q13");
-    }
-
-    @Test
-    public void testTPCH14() {
-        runFileUnitTest("tpch-histogram-cost/q14");
-    }
-
-    @Test
-    public void testTPCH15() {
-        runFileUnitTest("tpch-histogram-cost/q15");
-    }
-
-    @Test
-    public void testTPCH16() {
-        runFileUnitTest("tpch-histogram-cost/q16");
-    }
-
-    @Test
-    public void testTPCH17() {
-        runFileUnitTest("tpch-histogram-cost/q17");
-    }
-
-    @Test
-    public void testTPCH18() {
-        runFileUnitTest("tpch-histogram-cost/q18");
-    }
-
-    @Test
-    public void testTPCH19() {
-        runFileUnitTest("tpch-histogram-cost/q19");
-    }
-
-    @Test
-    public void testTPCH20() {
-        runFileUnitTest("tpch-histogram-cost/q20");
-    }
-
-    @Test
-    public void testTPCH21() {
-        runFileUnitTest("tpch-histogram-cost/q21");
-    }
-
-    @Test
-    public void testTPCH22() {
-        runFileUnitTest("tpch-histogram-cost/q22");
-    }
 }

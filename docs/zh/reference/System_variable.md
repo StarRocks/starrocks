@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['session','variable']
 ---
 
 # 系统变量
@@ -145,9 +146,15 @@ SELECT /*+ SET_VAR
 
 用于指定在查询执行过程中，各个节点传输的单个数据包的行数。默认一个数据包的行数为 1024 行，即源端节点每产生 1024 行数据后，打包发给目的节点。较大的行数，会在扫描大数据量场景下提升查询的吞吐率，但可能会在小查询场景下增加查询延迟。同时，也会增加查询的内存开销。建议设置范围 1024 至 4096。
 
-### big_query_profile_second_threshold （3.1 及以后）
+### big_query_profile_threshold （3.1 及以后）
 
-当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_second_threshold` 设定的阈值时，则会生成 Profile。
+当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_threshold` 设定的阈值时，则会生成 Profile。
+
+注意：在版本 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，我们引入了 `big_query_profile_second_threshold` 参数，用于设定大型查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
+
+### catalog（3.2.4 及以后）
+
+用于指定当前会话所在的 Catalog。
 
 ### cbo_decimal_cast_string_strict （2.5.14 及以后）
 
@@ -159,7 +166,13 @@ SELECT /*+ SET_VAR
 
 ### cbo_eq_base_type （2.5.14 及以后）
 
-用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认 `VARCHAR`，可选 `DECIMAL`。
+用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
+
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* 含义：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
+* 默认值：64
+* 引入版本：v3.1.9, v3.2.5
 
 ### character_set_database（global）
 
@@ -168,6 +181,12 @@ StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）
 ### connector_io_tasks_per_scan_operator（2.5 及以后）
 
 外表查询时每个 Scan 算子能同时下发的 I/O 任务的最大数量。取值为整数，默认值 16。目前外表查询时会使用自适应算法来调整并发 I/O 任务的数量，通过 `enable_connector_adaptive_io_tasks` 开关来控制，默认打开。
+
+### connector_sink_compression_codec（3.2.3 及以后）
+
+用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。
+
+有效值：`gzip`、`brotli`、`zstd` 和 `lz4`。
 
 ### count_distinct_column_buckets（2.5 及以后）
 
@@ -193,6 +212,14 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于兼容 MySQL 客户端，无实际作用。
 
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+解决升级中的兼容问题，用户不可见。
+
+默认值：`true`。
+-->
+
 ### enable_connector_adaptive_io_tasks（2.5 及以后）
 
 外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
@@ -207,13 +234,23 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 ### enable_group_level_query_queue （3.1.4 及以后）
 
-是否开启资源组粒度的[查询队列](../administration/query_queues.md)。
+是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 
 默认值：false，表示不开启。
+
+### enable_iceberg_metadata_cache（3.2.1 及以后）
+
+是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 
 ### enable_insert_strict
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
+
+### enable_materialized_view_for_insert
+
+* 含义：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
 
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
@@ -223,9 +260,20 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
 
+### enable_short_circuit（3.2.3 及以后）
+
+是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当表为[行列混存表](../table_design/hybrid_table.md)，并且[查询满足条件](../table_design/hybrid_table.md#查询数据)
+（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径，直接查询按行存储的数据。
+
 ### enable_spill（3.0 及以后）
 
 是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
+
+### enable_strict_order_by
+
+是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
+
+该变量从 2.5.18，3.1.7 版本开始支持。
 
 ### enable_profile
 
@@ -253,13 +301,13 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 默认值：`false`，表示使用原来的机制，即每次查询会从多个副本中选择一个。自 2.5.6、3.0.8、3.1.4、3.2.0 版本起，StarRocks 支持该参数。
 
-### enable_scan_block_cache（2.5 及以后）
+### enable_scan_datacache（2.5 及以后）
 
-是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。
+是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
 
-### enable_populate_block_cache（2.5 及以后）
+### enable_populate_datacache（2.5 及以后）
 
-StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。
+StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。在 3.2 之前各版本中，对应变量为 `enable_populate_block_cache`。
 
 ### enable_tablet_internal_parallel
 
@@ -408,11 +456,11 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 ### max_pushdown_conditions_per_column
 
-该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### max_scan_key_num
 
-该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### nested_mv_rewrite_max_level
 
@@ -442,7 +490,7 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 在一个分布式的查询执行计划中，上层节点通常有一个或多个 exchange node 用于接收来自下层节点在不同 BE 上的执行实例的数据。通常 exchange node 数量等于下层节点执行实例数量。
 
-在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细模型上进行聚合查询的场景。
+在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细表上进行聚合查询的场景。
 
 ### parallel_fragment_exec_instance_num
 
@@ -503,7 +551,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_mem_limit
 
-用于设置每个 BE 节点上查询的内存限制。默认值为 `0`，表示没有限制。支持 `B`、`K`、`KB`、`M`、`MB`、`G`、`GB`、`T`、`TB`、`P`、`PB` 等单位。
+用于设置每个 BE 节点上单个查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
 
 ### query_queue_concurrency_limit (global)
 
@@ -580,7 +628,28 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 
 ### sql_mode
 
-用于指定 SQL 模式，以适应某些 SQL 方言。
+用于指定 SQL 模式，以适应某些 SQL 方言。有效值包括：
+
+* `PIPES_AS_CONCAT`：管道符号 `|` 用于连接字符串。例如：`select 'hello ' || 'world'`。
+* `ONLY_FULL_GROUP_BY` (默认值)：SELECT LIST 中只能包含 GROUP BY 列或者聚合函数。
+* `ALLOW_THROW_EXCEPTION`：类型转换报错而不是返回 NULL。
+* `FORBID_INVALID_DATE`：禁止非法的日期。
+* `MODE_DOUBLE_LITERAL`：将浮点类型解释为 DOUBLE 而非 DECIMAL。
+* `SORT_NULLS_LAST`：排序后，将 NULL 值放到最后。
+* `ERROR_IF_OVERFLOW`：运算溢出时，报错而不是返回 NULL，目前仅 DECIMAL 支持这一行为。
+* `GROUP_CONCAT_LEGACY`：使用 2.5 及以前的 `group_concat` 的语法。该选项从 3.0.9，3.1.6 开始支持。
+
+不同模式之间可以独立设置，您可以单独开启某一个模式，例如：
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT';
+```
+
+或者，您也可以同时设置多个模式，例如：
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
+```
 
 ### sql_safe_updates
 
@@ -589,6 +658,10 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 ### sql_select_limit
 
 用于兼容 MySQL 客户端。无实际作用。
+
+### statistic_collect_parallel
+
+用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快采集任务的执行速度。
 
 ### storage_engine
 
@@ -619,9 +692,26 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
 
+### trace_log_mode
+
+- 含义：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
+  - `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
+  - `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
+
+  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
+
+- 默认值：`command`
+- 引入版本：v3.2.0
+
+### transaction_read_only
+
+* 含义：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。该变量用于指定事务访问模式。取值 `ON` 表示只读。取值 `OFF` 表示可读可写。
+* 默认值：OFF
+* 引入版本：v2.5.18, v3.0.9, v3.1.7
+
 ### tx_isolation
 
-用于兼容 MySQL 客户端。无实际作用。
+用于兼容 MySQL 客户端，无实际作用。别名 `transaction_isolation`。
 
 ### use_compute_nodes
 
@@ -647,4 +737,10 @@ MySQL 服务器的版本。
 
 ### wait_timeout
 
-用于设置空闲连接的连接时长，单位为秒。当一个空闲连接在该时长内与 StarRocks 没有任何交互，则 StarRocks 会主动断开这个链接。默认为 8 小时。
+用于设置客户端与 StarRocks 数据库交互时的最大空闲时长。如果一个空闲连接在该时长内与 StarRocks 数据库没有任何交互，StarRocks 会主动断开这个连接。
+
+单位：秒。默认值：28800（即 8 小时）。
+
+### orc_use_column_names
+
+设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。该变量从 3.1.10 版本起支持。

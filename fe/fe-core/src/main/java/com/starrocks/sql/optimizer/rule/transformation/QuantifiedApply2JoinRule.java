@@ -90,9 +90,11 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
         OptExpression joinExpression;
         if (isNotIn) {
             //@TODO: if will can filter null, use left-anti-join
+            List<ScalarOperator> correlatedConjuncts = Utils.extractConjuncts(apply.getCorrelationConjuncts());
+            correlatedConjuncts.forEach(conjunct -> conjunct.setCorrelated(true));
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN,
                     Utils.compoundAnd(simplifiedPredicate,
-                            Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate()))));
+                            Utils.compoundAnd(Utils.compoundAnd(correlatedConjuncts), apply.getPredicate()))));
         } else {
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
                     Utils.compoundAnd(simplifiedPredicate,

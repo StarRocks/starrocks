@@ -41,6 +41,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -50,11 +51,9 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
-import org.apache.commons.lang3.tuple.ImmutableTriple;
-import org.apache.commons.lang3.tuple.Triple;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -88,8 +87,6 @@ public class AgentTaskTest {
     private long replicaId2 = 50001L;
 
     private short shortKeyNum = (short) 2;
-    private int schemaHash1 = 60000;
-    private int schemaHash2 = 60001;
     private long version = 1L;
 
     private TStorageType storageType = TStorageType.COLUMN;
@@ -99,11 +96,11 @@ public class AgentTaskTest {
     private AgentTask createReplicaTask;
     private AgentTask dropTask;
     private AgentTask cloneTask;
-    private AgentTask modifyEnablePersistentIndexTask1;
-    private AgentTask modifyEnablePersistentIndexTask2;
-    private AgentTask modifyInMemoryTask;
-    private AgentTask modifyPrimaryIndexCacheExpireSecTask1;
-    private AgentTask modifyPrimaryIndexCacheExpireSecTask2;
+    private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask1;
+    private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask2;
+    private TabletMetadataUpdateAgentTask modifyInMemoryTask;
+    private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask1;
+    private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask2;
 
     @Before
     public void setUp() throws AnalysisException {
@@ -119,52 +116,64 @@ public class AgentTaskTest {
 
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
-        // create tasks
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                .setId(indexId1)
+                .setKeysType(KeysType.AGG_KEYS)
+                .setShortKeyColumnCount(shortKeyNum)
+                .setSchemaHash(0)
+                .setStorageType(storageType)
+                .addColumns(columns)
+                .build().toTabletSchema();
 
-        // create
-        createReplicaTask = new CreateReplicaTask(backendId1, dbId, tableId, partitionId,
-                indexId1, tabletId1, shortKeyNum, schemaHash1,
-                version, KeysType.AGG_KEYS,
-                storageType, TStorageMedium.SSD,
-                columns, null, 0, latch, null,
-                false, false, 0, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
+        createReplicaTask = CreateReplicaTask.newBuilder()
+                .setNodeId(backendId1)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId1)
+                .setTabletId(tabletId1)
+                .setVersion(version)
+                .setStorageMedium(TStorageMedium.SSD)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .build();
 
         // drop
-        dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);
+        dropTask = new DropReplicaTask(backendId1, tabletId1, 0, false);
 
         // clone
         cloneTask =
-                new CloneTask(backendId1, dbId, tableId, partitionId, indexId1, tabletId1, schemaHash1,
+                new CloneTask(backendId1, "127.0.0.1", dbId, tableId, partitionId, indexId1, tabletId1, 0,
                         Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, -1, 3600);
 
         // modify tablet meta
-        // <tablet id, tablet schema hash, tablet in memory/ tablet enable persistent index>
+        // <tablet id, tablet in memory/ tablet enable persistent index>
         // for report handle
-        List<Triple<Long, Integer, Boolean>> tabletToMeta = Lists.newArrayList();
-        tabletToMeta.add(new ImmutableTriple<>(tabletId1, schemaHash1, true));
-        tabletToMeta.add(new ImmutableTriple<>(tabletId2, schemaHash2, false));
-        modifyEnablePersistentIndexTask1 =
-                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+        List<Pair<Long, Boolean>> tabletToMeta = Lists.newArrayList();
+        tabletToMeta.add(new Pair<>(tabletId1, true));
+        tabletToMeta.add(new Pair<>(tabletId2, false));
+        modifyEnablePersistentIndexTask1 = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+                backendId1, tabletToMeta);
 
         // for schema change
-        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch = new MarkedCountDownLatch<>(1);
-        Set<Pair<Long, Integer>> tabletIdWithSchemaHash = new HashSet();
-        tabletIdWithSchemaHash.add(Pair.create(tabletId1, schemaHash1));
-        countDownLatch.addMark(backendId1, tabletIdWithSchemaHash);
-        modifyEnablePersistentIndexTask2 =
-                new UpdateTabletMetaInfoTask(backendId1, tabletIdWithSchemaHash, true,
-                        countDownLatch, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
-        modifyInMemoryTask =
-                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.INMEMORY);
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(1);
+        Set<Long> tabletSet = new HashSet();
+        tabletSet.add(tabletId1);
+        countDownLatch.addMark(backendId1, tabletSet);
+        modifyEnablePersistentIndexTask2 = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+                backendId1, tabletSet, true);
+        modifyEnablePersistentIndexTask2.setLatch(countDownLatch);
+        modifyInMemoryTask = TabletMetadataUpdateAgentTaskFactory.createIsInMemoryUpdateTask(backendId1, tabletToMeta);
 
-        List<Triple<Long, Integer, Integer>> tabletToMeta2 = Lists.newArrayList();
-        tabletToMeta2.add(new ImmutableTriple<>(tabletId1, schemaHash1, 7200));
-        modifyPrimaryIndexCacheExpireSecTask1 =
-                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta2, TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
-        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch2 = new MarkedCountDownLatch<>(1);
-        modifyPrimaryIndexCacheExpireSecTask2 =
-                new UpdateTabletMetaInfoTask(backendId1, tabletIdWithSchemaHash, true,
-                        countDownLatch2, TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+        List<Pair<Long, Integer>> tabletToMeta2 = Lists.newArrayList();
+        tabletToMeta2.add(new Pair<>(tabletId1, 7200));
+        modifyPrimaryIndexCacheExpireSecTask1 = TabletMetadataUpdateAgentTaskFactory
+                .createPrimaryIndexCacheExpireTimeUpdateTask(backendId1, tabletToMeta2);
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch2 = new MarkedCountDownLatch<>(1);
+        modifyPrimaryIndexCacheExpireSecTask2 = TabletMetadataUpdateAgentTaskFactory
+                .createPrimaryIndexCacheExpireTimeUpdateTask(backendId1, tabletSet, 1);
+        modifyPrimaryIndexCacheExpireSecTask2.setLatch(countDownLatch2);
     }
 
     @Test
@@ -285,7 +294,7 @@ public class AgentTaskTest {
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
 
         dropTask.failed();
-        DropReplicaTask dropTask2 = new DropReplicaTask(backendId2, tabletId1, schemaHash1, false);
+        DropReplicaTask dropTask2 = new DropReplicaTask(backendId2, tabletId1, 0, false);
         AgentTaskQueue.addTask(dropTask2);
         dropTask2.failed();
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));

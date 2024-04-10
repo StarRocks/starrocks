@@ -26,7 +26,7 @@ unnest(array0[, array1 ...])
 
 返回数组展开后的多行数据。返回值的数据类型取决于数组中的元素类型。
 
-有关 StarRocks 支持的数组元素类型，请参见 [ARRAY](../../sql-statements/data-types/Array.md)。
+有关 StarRocks 支持的数组元素类型，请参见 [ARRAY](../../data-types/semi_structured/Array.md)。
 
 ## 注意事项
 
@@ -70,7 +70,7 @@ SELECT * FROM student_score ORDER BY id;
 +------+--------------+
 
 -- 将 scores 列中的数组元素展开成多行。
-SELECT id, scores, unnest FROM student_score, unnest(scores);
+SELECT id, scores, unnest FROM student_score, unnest(scores) AS unnest;
 +------+--------------+--------+
 | id   | scores       | unnest |
 +------+--------------+--------+
@@ -122,7 +122,7 @@ SELECT * FROM example_table;
 
 -- 使用 UNNEST 将 type 和 scores 这两列中的元素展开为多行。
 SELECT id, unnest.type, unnest.scores
-FROM example_table, unnest(split(type, ";"), scores) as unnest(type,scores);
+FROM example_table, unnest(split(type, ";"), scores) AS unnest(type,scores);
 +------+-------+--------+
 | id   | type  | scores |
 +------+-------+--------+

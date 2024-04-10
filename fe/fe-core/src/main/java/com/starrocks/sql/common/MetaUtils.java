@@ -20,11 +20,14 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
@@ -35,6 +38,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,9 +58,9 @@ public class MetaUtils {
         }
     }
 
-    public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
+    public static void checkDbNullAndReport(Database db, String name) {
         if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, name);
         }
     }
 
@@ -67,13 +71,16 @@ public class MetaUtils {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return;
         }
+        if (operation == null) {
+            throw new SemanticException("operation is null");
+        }
 
         Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
         if (catalog == null) {
             throw new SemanticException("Catalog %s is not found", catalogName);
         }
 
-        if (catalog.getType().equalsIgnoreCase("iceberg")) {
+        if (!operation.equals("ALTER") && catalog.getType().equalsIgnoreCase("iceberg")) {
             throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
         }
     }
@@ -168,6 +175,27 @@ public class MetaUtils {
         }
     }
 
+    /**
+     * Materialized view name is a little bit different from a normal table
+     * 1. Use default catalog if not specified, actually it only support default catalog until now
+     */
+    public static void normalizeMVName(ConnectContext connectContext, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+        if (Strings.isNullOrEmpty(tableName.getDb())) {
+            if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
+                throw new SemanticException("No database selected. " +
+                        "You could set the database name through `<database>.<table>` or `use <database>` statement");
+            }
+            tableName.setDb(connectContext.getDatabase());
+        }
+
+        if (Strings.isNullOrEmpty(tableName.getTbl())) {
+            throw new SemanticException("Table name cannot be empty");
+        }
+    }
+
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
         CreateMaterializedViewStmt stmt;
 
@@ -187,4 +215,25 @@ public class MetaUtils {
                 originStmt.originStmt);
         return Maps.newConcurrentMap();
     }
+
+    public static String genInsertLabel(TUniqueId executionId) {
+        return "insert_" + DebugUtil.printId(executionId);
+    }
+
+    public static String genDeleteLabel(TUniqueId executionId) {
+        return "delete_" + DebugUtil.printId(executionId);
+    }
+
+    public static String genUpdateLabel(TUniqueId executionId) {
+        return "update_" + DebugUtil.printId(executionId);
+    }
+
+    public static ExternalOlapTable syncOLAPExternalTableMeta(ExternalOlapTable externalOlapTable) {
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        new TableMetaSyncer().syncTable(copiedTable);
+        return copiedTable;
+    }
+
+
 }

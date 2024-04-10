@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
+#include "gen_cpp/RuntimeProfile_types.h"
 
 namespace starrocks {
 
@@ -158,91 +159,96 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
 }
 
 TEST(TestRuntimeProfile, testProfileMergeStrategy) {
-    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
-    std::vector<RuntimeProfile*> profiles;
+    auto do_test = [](TCounterAggregateType::type type1, TCounterAggregateType::type type2) {
+        std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
+        std::vector<RuntimeProfile*> profiles;
 
-    TCounterStrategy strategy1;
-    strategy1.aggregate_type = TCounterAggregateType::SUM;
-    strategy1.merge_type = TCounterMergeType::MERGE_ALL;
+        TCounterStrategy strategy1;
+        strategy1.aggregate_type = type1;
+        strategy1.merge_type = TCounterMergeType::MERGE_ALL;
 
-    TCounterStrategy strategy2;
-    strategy2.aggregate_type = TCounterAggregateType::SUM;
-    strategy2.merge_type = TCounterMergeType::SKIP_ALL;
+        TCounterStrategy strategy2;
+        strategy2.aggregate_type = type1;
+        strategy2.merge_type = TCounterMergeType::SKIP_ALL;
 
-    TCounterStrategy strategy3;
-    strategy3.aggregate_type = TCounterAggregateType::AVG;
-    strategy3.merge_type = TCounterMergeType::SKIP_FIRST_MERGE;
+        TCounterStrategy strategy3;
+        strategy3.aggregate_type = type2;
+        strategy3.merge_type = TCounterMergeType::SKIP_FIRST_MERGE;
 
-    TCounterStrategy strategy4;
-    strategy4.aggregate_type = TCounterAggregateType::AVG;
-    strategy4.merge_type = TCounterMergeType::SKIP_SECOND_MERGE;
+        TCounterStrategy strategy4;
+        strategy4.aggregate_type = type2;
+        strategy4.merge_type = TCounterMergeType::SKIP_SECOND_MERGE;
 
-    auto profile1 = std::make_shared<RuntimeProfile>("profile");
-    {
-        auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, strategy1);
-        time1->set(1000000000L);
+        auto profile1 = std::make_shared<RuntimeProfile>("profile");
+        {
+            auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, strategy1);
+            time1->set(1000000000L);
 
-        auto* time2 = profile1->add_counter("time2", TUnit::TIME_NS, strategy2);
-        time2->set(2000000000L);
+            auto* time2 = profile1->add_counter("time2", TUnit::TIME_NS, strategy2);
+            time2->set(2000000000L);
 
-        auto* count1 = profile1->add_counter("count1", TUnit::UNIT, strategy3);
-        count1->set(6L);
+            auto* count1 = profile1->add_counter("count1", TUnit::UNIT, strategy3);
+            count1->set(6L);
 
-        auto* count2 = profile1->add_counter("count2", TUnit::UNIT, strategy4);
-        count2->set(8L);
+            auto* count2 = profile1->add_counter("count2", TUnit::UNIT, strategy4);
+            count2->set(8L);
 
-        profiles.push_back(profile1.get());
-    }
+            profiles.push_back(profile1.get());
+        }
 
-    auto profile2 = std::make_shared<RuntimeProfile>("profile");
-    {
-        auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, strategy1);
-        time1->set(1000000000L);
+        auto profile2 = std::make_shared<RuntimeProfile>("profile");
+        {
+            auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, strategy1);
+            time1->set(1000000000L);
 
-        auto* time2 = profile2->add_counter("time2", TUnit::TIME_NS, strategy2);
-        time2->set(3000000000L);
+            auto* time2 = profile2->add_counter("time2", TUnit::TIME_NS, strategy2);
+            time2->set(3000000000L);
 
-        auto* count1 = profile2->add_counter("count1", TUnit::UNIT, strategy3);
-        count1->set(6L);
+            auto* count1 = profile2->add_counter("count1", TUnit::UNIT, strategy3);
+            count1->set(6L);
 
-        auto* count2 = profile2->add_counter("count2", TUnit::UNIT, strategy4);
-        count2->set(8L);
-        profiles.push_back(profile2.get());
-    }
+            auto* count2 = profile2->add_counter("count2", TUnit::UNIT, strategy4);
+            count2->set(8L);
+            profiles.push_back(profile2.get());
+        }
 
-    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
+        auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
 
-    auto* merged_time1 = merged_profile->get_counter("time1");
-    ASSERT_EQ(2000000000L, merged_time1->value());
-    auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
-    auto* merged_max_of_time1 = merged_profile->get_counter("__MAX_OF_time1");
-    ASSERT_TRUE(merged_min_of_time1);
-    ASSERT_TRUE(merged_max_of_time1);
-    ASSERT_EQ(1000000000L, merged_min_of_time1->value());
-    ASSERT_EQ(1000000000L, merged_max_of_time1->value());
+        auto* merged_time1 = merged_profile->get_counter("time1");
+        ASSERT_EQ(2000000000L, merged_time1->value());
+        auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
+        auto* merged_max_of_time1 = merged_profile->get_counter("__MAX_OF_time1");
+        ASSERT_TRUE(merged_min_of_time1);
+        ASSERT_TRUE(merged_max_of_time1);
+        ASSERT_EQ(1000000000L, merged_min_of_time1->value());
+        ASSERT_EQ(1000000000L, merged_max_of_time1->value());
 
-    auto* merged_time2 = merged_profile->get_counter("time2");
-    ASSERT_EQ(2000000000L, merged_time2->value());
-    auto* merged_min_of_time2 = merged_profile->get_counter("__MIN_OF_time2");
-    auto* merged_max_of_time2 = merged_profile->get_counter("__MAX_OF_time2");
-    ASSERT_FALSE(merged_min_of_time2);
-    ASSERT_FALSE(merged_max_of_time2);
+        auto* merged_time2 = merged_profile->get_counter("time2");
+        ASSERT_EQ(2000000000L, merged_time2->value());
+        auto* merged_min_of_time2 = merged_profile->get_counter("__MIN_OF_time2");
+        auto* merged_max_of_time2 = merged_profile->get_counter("__MAX_OF_time2");
+        ASSERT_FALSE(merged_min_of_time2);
+        ASSERT_FALSE(merged_max_of_time2);
 
-    auto* merged_count1 = merged_profile->get_counter("count1");
-    ASSERT_EQ(6, merged_count1->value());
-    auto* merged_min_of_count1 = merged_profile->get_counter("__MIN_OF_count1");
-    auto* merged_max_of_count1 = merged_profile->get_counter("__MAX_OF_count1");
-    ASSERT_FALSE(merged_min_of_count1);
-    ASSERT_FALSE(merged_max_of_count1);
+        auto* merged_count1 = merged_profile->get_counter("count1");
+        ASSERT_EQ(6, merged_count1->value());
+        auto* merged_min_of_count1 = merged_profile->get_counter("__MIN_OF_count1");
+        auto* merged_max_of_count1 = merged_profile->get_counter("__MAX_OF_count1");
+        ASSERT_FALSE(merged_min_of_count1);
+        ASSERT_FALSE(merged_max_of_count1);
 
-    auto* merged_count2 = merged_profile->get_counter("count2");
-    ASSERT_EQ(8, merged_count2->value());
-    auto* merged_min_of_count2 = merged_profile->get_counter("__MIN_OF_count2");
-    auto* merged_max_of_count2 = merged_profile->get_counter("__MAX_OF_count2");
-    ASSERT_TRUE(merged_min_of_count2);
-    ASSERT_TRUE(merged_max_of_count2);
-    ASSERT_EQ(8, merged_min_of_count2->value());
-    ASSERT_EQ(8, merged_max_of_count2->value());
+        auto* merged_count2 = merged_profile->get_counter("count2");
+        ASSERT_EQ(8, merged_count2->value());
+        auto* merged_min_of_count2 = merged_profile->get_counter("__MIN_OF_count2");
+        auto* merged_max_of_count2 = merged_profile->get_counter("__MAX_OF_count2");
+        ASSERT_TRUE(merged_min_of_count2);
+        ASSERT_TRUE(merged_max_of_count2);
+        ASSERT_EQ(8, merged_min_of_count2->value());
+        ASSERT_EQ(8, merged_max_of_count2->value());
+    };
+
+    do_test(TCounterAggregateType::SUM, TCounterAggregateType::AVG);
+    do_test(TCounterAggregateType::SUM_AVG, TCounterAggregateType::AVG_SUM);
 }
 
 TEST(TestRuntimeProfile, testConflictInfoString) {
@@ -293,6 +299,31 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
     actual_values.insert(*(merged_profile->get_info_string("key1__DUP(4)")));
 
     ASSERT_EQ(expected_values, actual_values);
+}
+
+static void test_mass_conflict_info_string(int num) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
+    std::vector<std::shared_ptr<RuntimeProfile>> profile_ptrs;
+    std::vector<RuntimeProfile*> profiles;
+    for (int i = 1; i <= num; ++i) {
+        auto profile = std::make_shared<RuntimeProfile>("profile");
+        profile->add_info_string("key", std::to_string(i));
+        profile_ptrs.push_back(profile);
+        profiles.push_back(profile.get());
+    }
+
+    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
+    for (int i = 0; i < num - 1; ++i) {
+        ASSERT_TRUE(merged_profile->get_info_string("key__DUP(" + std::to_string(i) + ")") != nullptr);
+    }
+}
+
+TEST(TestRuntimeProfile, testMassConflictInfoString) {
+    for (int i = 1; i <= 32; ++i) {
+        test_mass_conflict_info_string(i);
+    }
+    test_mass_conflict_info_string(1024);
+    test_mass_conflict_info_string(3267);
 }
 
 TEST(TestRuntimeProfile, testCopyCounterWithParent) {
@@ -444,4 +475,110 @@ TEST(TestRuntimeProfile, testRemoveCounter) {
                                         "counter2-2-2", "counter3"});
     }
 }
+
+TEST(TestRuntimeProfile, testUpdateWithOldAndNewProfile) {
+    auto profile = std::make_shared<RuntimeProfile>("parent-profile");
+    auto* counter1 =
+            profile->add_counter("counter1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    auto* child_profile = profile->create_child("child-profile", true);
+    auto* counter2 =
+            child_profile->add_counter("counter2", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+
+    ASSERT_EQ(0, profile->get_version());
+    ASSERT_EQ(0, child_profile->get_version());
+    COUNTER_UPDATE(counter1, 1);
+    COUNTER_UPDATE(counter2, 2);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(2, counter2->value());
+
+    // thrift profile whose parent and child profiles are both 1
+    TRuntimeProfileTree tree;
+    profile->to_thrift(&tree);
+    ASSERT_EQ(2, tree.nodes.size());
+    ASSERT_TRUE(tree.nodes[0].__isset.version);
+    ASSERT_EQ(0, tree.nodes[0].version);
+    ASSERT_TRUE(tree.nodes[1].__isset.version);
+    ASSERT_EQ(0, tree.nodes[1].version);
+
+    // update with new versions for both parent and child profile,
+    // both should update success
+    COUNTER_SET(counter1, int64_t(2));
+    COUNTER_SET(counter2, int64_t(3));
+    ASSERT_EQ(2, counter1->value());
+    ASSERT_EQ(3, counter2->value());
+    // make thrift profile versions newer
+    tree.nodes[0].version = 1;
+    tree.nodes[1].version = 1;
+    profile->update(tree);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(2, counter2->value());
+    ASSERT_EQ(1, profile->get_version());
+    ASSERT_EQ(1, child_profile->get_version());
+
+    // update with an old version for both parent profile, and a new
+    // version for child profile, both should skip
+    COUNTER_SET(counter1, int64_t(4));
+    COUNTER_SET(counter2, int64_t(5));
+    ASSERT_EQ(4, counter1->value());
+    ASSERT_EQ(5, counter2->value());
+    // make thrift parent older, and child newer
+    tree.nodes[0].version = 0;
+    tree.nodes[1].version = 2;
+    // increase parent version to 2
+    profile->inc_version();
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(1, child_profile->get_version());
+    profile->update(tree);
+    ASSERT_EQ(4, counter1->value());
+    ASSERT_EQ(5, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(1, child_profile->get_version());
+
+    // update with a new version for parent profile, and an old
+    // version for child profile, the parent should success, and
+    // the child skip
+    COUNTER_SET(counter1, int64_t(5));
+    COUNTER_SET(counter2, int64_t(6));
+    ASSERT_EQ(5, counter1->value());
+    ASSERT_EQ(6, counter2->value());
+    // make thrift parent equal, and child older
+    tree.nodes[0].version = 2;
+    tree.nodes[1].version = 0;
+    // increase child version to 2
+    child_profile->inc_version();
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+    profile->update(tree);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(6, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+
+    // update with old versions for both parent and child profile,
+    // both should skip
+    COUNTER_SET(counter1, int64_t(7));
+    COUNTER_SET(counter2, int64_t(8));
+    ASSERT_EQ(7, counter1->value());
+    ASSERT_EQ(8, counter2->value());
+    // make thrift both parent and child older
+    tree.nodes[0].version = 1;
+    tree.nodes[1].version = 1;
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+    profile->update(tree);
+    ASSERT_EQ(7, counter1->value());
+    ASSERT_EQ(8, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+
+    // If thrift not set version, should success
+    tree.nodes[0].__isset.version = false;
+    tree.nodes[1].__isset.version = false;
+    profile->update(tree);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(2, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+}
+
 } // namespace starrocks

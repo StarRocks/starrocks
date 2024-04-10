@@ -23,7 +23,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -35,13 +34,13 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -173,11 +172,31 @@ public class AuthenticationMgr {
         }
     }
 
+    /**
+     * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
+     * but some external system, like LDAP, return default max connection number
+     * @param currUserIdentity user identity of current connection
+     * @return max connection number of the user
+     */
+    public long getMaxConn(UserIdentity currUserIdentity) {
+        if (currUserIdentity.isEphemeral()) {
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+        } else {
+            String userName = currUserIdentity.getUser();
+            return getMaxConn(userName);
+        }
+    }
+
+    /**
+     * Get max connection number based on plain username, the user should be an internal user,
+     * if the user doesn't exist in SR, it will throw an exception.
+     * @param userName plain username saved in SR
+     * @return max connection number of the user
+     */
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            // TODO(yiming): find a better way to specify max connections for external user, like ldap, kerberos etc.
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+            throw new SemanticException("Unknown user: " + userName);
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
@@ -384,59 +403,6 @@ public class AuthenticationMgr {
         }
     }
 
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap) throws DdlException {
-        createSecurityIntegration(name, propertyMap, false);
-
-    }
-
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap, boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration;
-        try {
-            securityIntegration =
-                    SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        } catch (DdlException e) {
-            throw new DdlException("failed to create security integration, error: " + e.getMessage(), e);
-        }
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateSecurityIntegration(name, propertyMap);
-        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
-    }
-
-    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
-                                         boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public SecurityIntegration getSecurityIntegration(String name) {
-        return nameToSecurityIntegrationMap.get(name);
-    }
-
-    public Set<SecurityIntegration> getAllSecurityIntegrations() {
-        return new HashSet<>(nameToSecurityIntegrationMap.values());
-    }
-
-    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws DdlException {
-        // using concurrent hash map and COW, we don't need lock protection here
-        SecurityIntegration securityIntegration =
-                SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-    }
-
-    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void replayDropSecurityIntegration(String name)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
     public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
         try {
             writeLock();
@@ -570,92 +536,6 @@ public class AuthenticationMgr {
         }
     }
 
-    /**
-     * Use new image format by SRMetaBlockWriter/SRMetaBlockReader
-     * <p>
-     * +------------------+
-     * |     header       |
-     * +------------------+
-     * |                  |
-     * |  Authentication  |
-     * |     Manager      |
-     * |                  |
-     * +------------------+
-     * |     numUser      |
-     * +------------------+
-     * | User Identify 1  |
-     * +------------------+
-     * |      User        |
-     * |  Authentication  |
-     * |     Info 1       |
-     * +------------------+
-     * | User Identify 2  |
-     * +------------------+
-     * |      User        |
-     * |  Authentication  |
-     * |     Info 2       |
-     * +------------------+
-     * |       ...        |
-     * +------------------+
-     * |      footer      |
-     * +------------------+
-     */
-    public void save(DataOutputStream dos) throws IOException {
-        try {
-            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
-            final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "com.starrocks.authentication.AuthenticationManager", cnt);
-            // 1 json for myself
-            writer.writeJson(this);
-            // 1 json for num user
-            writer.writeJson(userToAuthenticationInfo.size());
-            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
-                // 2 json for each user(kv)
-                writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
-            }
-            LOG.info("saved {} users", userToAuthenticationInfo.size());
-            writer.close();
-        } catch (SRMetaBlockException e) {
-            IOException exception = new IOException("failed to save AuthenticationManager!");
-            exception.initCause(e);
-            throw exception;
-        }
-    }
-
-    public static AuthenticationMgr load(DataInputStream dis) throws IOException, DdlException {
-        try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "com.starrocks.authentication.AuthenticationManager");
-            AuthenticationMgr ret = null;
-            try {
-                // 1 json for myself
-                ret = reader.readJson(AuthenticationMgr.class);
-                ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
-                // 1 json for num user
-                int numUser = reader.readJson(int.class);
-                LOG.info("loading {} users", numUser);
-                for (int i = 0; i != numUser; ++i) {
-                    // 2 json for each user(kv)
-                    UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                    UserAuthenticationInfo userAuthenticationInfo = reader.readJson(UserAuthenticationInfo.class);
-                    userAuthenticationInfo.analyze();
-                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
-                }
-            } catch (SRMetaBlockEOFException eofException) {
-                LOG.warn("got EOF exception, ignore, ", eofException);
-            } finally {
-                reader.close();
-            }
-            assert ret != null; // can't be NULL
-            LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
-            // mark data is loaded
-            ret.isLoaded = true;
-            return ret;
-        } catch (SRMetaBlockException | AuthenticationException e) {
-            throw new DdlException("failed to load AuthenticationManager!", e);
-        }
-    }
-
     public boolean isLoaded() {
         return isLoaded;
     }
@@ -664,32 +544,12 @@ public class AuthenticationMgr {
         isLoaded = loaded;
     }
 
-    /**
-     * these public interfaces are for AuthUpgrader to upgrade from 2.x
-     */
-    public void upgradeUserUnlocked(UserIdentity userIdentity, Password password) throws AuthenticationException {
-        AuthPlugin plugin = password.getAuthPlugin();
-        if (plugin == null) {
-            plugin = AuthPlugin.MYSQL_NATIVE_PASSWORD;
-        }
-        AuthenticationProvider provider = AuthenticationProviderFactory.create(plugin.toString());
-        UserAuthenticationInfo info = provider.upgradedFromPassword(userIdentity, password);
-        userToAuthenticationInfo.put(userIdentity, info);
-        LOG.info("upgrade user {}", userIdentity);
-    }
-
     public UserAuthenticationInfo getUserAuthenticationInfoByUserIdentity(UserIdentity userIdentity) {
         return userToAuthenticationInfo.get(userIdentity);
     }
 
     public Map<UserIdentity, UserAuthenticationInfo> getUserToAuthenticationInfo() {
         return userToAuthenticationInfo;
-    }
-
-    public void upgradeUserProperty(String userName, long maxConn) {
-        UserProperty userProperty = new UserProperty();
-        userProperty.setMaxConn(maxConn);
-        userNameToProperty.put(userName, new UserProperty());
     }
 
     private Class<?> authClazz = null;

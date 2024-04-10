@@ -27,4 +27,78 @@ public class UnionTest extends SchedulerTestBase {
     public void testUnionUnGather() {
         runFileUnitTest("scheduler/union/union_ungather");
     }
+
+    @Test
+    public void test() throws Exception {
+        String sql = "select met1.* from (\n" +
+                "  with denominator as (select 1 as num),\n" +
+                "  numerator as (select 1 as num)\n" +
+                "  SELECT ROUND((SELECT COUNT(*) * 100 FROM numerator)\n" +
+                "       / (SELECT COUNT(*)  FROM denominator), 2)\n" +
+                "       AS measure_score\n" +
+                "       , (SELECT COUNT(*) FROM numerator) AS numerator_count\n" +
+                "       , (SELECT COUNT(*)  FROM denominator) AS denominator_count\n" +
+                ") as met1\n" +
+                "union all\n" +
+                "select met2.* from (\n" +
+                "  with denominator as (select 1 as num),\n" +
+                "  numerator as (select 1 as num)\n" +
+                "  SELECT ROUND((SELECT COUNT(*) * 100 FROM numerator)\n" +
+                "       / (SELECT COUNT(*)  FROM denominator), 2)\n" +
+                "       AS measure_score\n" +
+                "       , (SELECT COUNT(*) FROM numerator) AS numerator_count\n" +
+                "       , (SELECT COUNT(*)  FROM denominator) AS denominator_count\n" +
+                ") as met2\n" +
+                "union all\n" +
+                "select met3.* from (\n" +
+                "  with denominator as (select 1 as num),\n" +
+                "  numerator as (select 1 as num)\n" +
+                "  SELECT ROUND((SELECT COUNT(*) * 100 FROM numerator)\n" +
+                "       / (SELECT COUNT(*)  FROM denominator), 2)\n" +
+                "       AS measure_score\n" +
+                "       , (SELECT COUNT(*) FROM numerator) AS numerator_count\n" +
+                "       , (SELECT COUNT(*)  FROM denominator) AS denominator_count\n" +
+                ") as met3\n" +
+                "union all\n" +
+                "select met4.* from (\n" +
+                "  with denominator as (select 1 as num),\n" +
+                "  numerator as (select 1 as num)\n" +
+                "  SELECT ROUND((SELECT COUNT(*) * 100 FROM numerator)\n" +
+                "       / (SELECT COUNT(*)  FROM denominator), 2)\n" +
+                "       AS measure_score\n" +
+                "       , (SELECT COUNT(*) FROM numerator) AS numerator_count\n" +
+                "       , (SELECT COUNT(*)  FROM denominator) AS denominator_count\n" +
+                ") as met4\n" +
+                "union all\n" +
+                "select met5.* from (\n" +
+                "  with denominator as (select 1 as num),\n" +
+                "  numerator as (select 1 as num)\n" +
+                "  SELECT ROUND((SELECT COUNT(*) * 100 FROM numerator)\n" +
+                "       / (SELECT COUNT(*)  FROM denominator), 2)\n" +
+                "       AS measure_score\n" +
+                "       , (SELECT COUNT(*) FROM numerator) AS numerator_count\n" +
+                "       , (SELECT COUNT(*)  FROM denominator) AS denominator_count\n" +
+                ") as met5\n" +
+                "union all\n" +
+                "select met6.* from (\n" +
+                "  with denominator as (select 1 as num),\n" +
+                "  numerator as (select 1 as num)\n" +
+                "  SELECT ROUND((SELECT COUNT(*) * 100 FROM numerator)\n" +
+                "       / (SELECT COUNT(*)  FROM denominator), 2)\n" +
+                "       AS measure_score\n" +
+                "       , (SELECT COUNT(*) FROM numerator) AS numerator_count\n" +
+                "       , (SELECT COUNT(*)  FROM denominator) AS denominator_count\n" +
+                ") as met6\n" +
+                "union all\n" +
+                "select met7.* from (\n" +
+                "  with denominator as (select 1 as num),\n" +
+                "  numerator as (select 1 as num)\n" +
+                "  SELECT ROUND((SELECT COUNT(*) * 100 FROM numerator)\n" +
+                "       / (SELECT COUNT(*)  FROM denominator), 2)\n" +
+                "       AS measure_score\n" +
+                "       , (SELECT COUNT(*) FROM numerator) AS numerator_count\n" +
+                "       , (SELECT COUNT(*)  FROM denominator) AS denominator_count\n" +
+                ") as met7";
+        getFragmentPlan(sql);
+    }
 }

@@ -20,8 +20,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -83,20 +85,21 @@ public class AnalyzeInsertTest {
     }
 
     @Test
+    public void testInsertOverwriteWhenSchemaChange() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getDb("test").getTable("t0");
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        analyzeFail("insert overwrite t0 select * from t0;",
+                "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
+        table.setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    @Test
     public void testInsertIcebergUnpartitionedTable(@Mocked IcebergTable icebergTable) {
         analyzeFail("insert into err_catalog.db.tbl values(1)",
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadata) {
-            {
-                metadata.getDb("iceberg_catalog", "err_db");
-                result = null;
-                minTimes = 0;
-            }
-        };
-        analyzeFail("insert into iceberg_catalog.err_db.tbl values (1)",
-                "Unknown database 'err_db'");
 
         new Expectations(metadata) {
             {
@@ -189,8 +192,7 @@ public class AnalyzeInsertTest {
             }
         };
 
-        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
-                "partition value can't be null.");
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)");
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
 
         new Expectations() {
@@ -223,9 +225,6 @@ public class AnalyzeInsertTest {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
-                result = new Database();
-
                 metadata.getTable(anyString, anyString, anyString);
                 result = hiveTable;
             }
@@ -259,6 +258,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1");
 
+        analyzeSuccess("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\" ) \n" +
+                "select \"abc\" as k1");
+
         analyzeFail("insert into files ( \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
@@ -269,31 +273,21 @@ public class AnalyzeInsertTest {
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"compression\" = \"uncompressed\" ) \n" +
                         "select \"abc\" as k1",
-                "format is a mandatory property. " +
-                        "Use \"path\" = \"parquet\" as only parquet format is supported now");
+                "format is a mandatory property. Use any of (parquet, orc, csv).");
 
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                "\t\"format\"=\"orc\", \n" +
+                "\t\"format\"=\"unknown\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
-                "use \"path\" = \"parquet\", as only parquet format is supported now");
-
-        analyzeFail("insert into files ( \n" +
-                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                        "\t\"format\"=\"parquet\" ) \n" +
-                        "select \"abc\" as k1",
-                "compression is a mandatory property. " +
-                "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                "(uncompressed, gzip, brotli, zstd, lz4).");
+                "Unsupported format unknown. Use any of (parquet, orc, csv).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"unknown\" ) \n" +
                         "select \"abc\" as k1",
-                "compression type unknown is not supported. " +
-                        "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
+                "Unsupported compression codec unknown. Use any of (uncompressed, snappy, lz4, zstd, gzip).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -310,14 +304,6 @@ public class AnalyzeInsertTest {
                         "\t\"compression\" = \"uncompressed\", \n" +
                         "\t\"partition_by\"=\"k1\" ) \n" +
                         "select \"abc\" as k1");
-
-        analyzeFail("insert into files ( \n" +
-                "\t\"path\" = \"s3://path/to/directory/prefix\", \n" +
-                "\t\"format\"=\"parquet\", \n" +
-                "\t\"compression\" = \"uncompressed\", \n" +
-                "\t\"partition_by\"=\"k1\" ) \n" +
-                "select \"abc\" as k1",
-                "If partition_by is used, path should be a directory ends with forward slash(/).");
 
         analyzeSuccess("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -355,5 +341,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\", \n" +
                 "\t\"partition_by\"=\"k1\" ) \n" +
                 "select 1.23 as k1", "partition column does not support type of DECIMAL32(3,2).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
     }
 }

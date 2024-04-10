@@ -20,10 +20,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.system.Backend;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,7 +63,7 @@ public class ShowStreamLoadTest {
                 "DUPLICATE KEY (c0) DISTRIBUTED BY HASH (c0) BUCKETS 3 properties(\"replication_num\"=\"1\") ;;";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.
                 parseStmtWithNewParser(createTableStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     @Test
@@ -74,21 +76,21 @@ public class ShowStreamLoadTest {
 
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         labelName = "label_routine_load";
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, true);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, true,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         String sql = "show all stream load";
         ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        ShowExecutor executor = new ShowExecutor(connectContext, showStreamLoadStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, connectContext);
         Assert.assertEquals(resultSet.getResultRows().size(), 2);
 
         String sqlWithWhere = "show all stream load where Type = \"ROUTINE_LOAD\"";
         ShowStreamLoadStmt showStreamLoadStmtWithWhere = (ShowStreamLoadStmt) UtFrameUtils.
                 parseStmtWithNewParser(sqlWithWhere, connectContext);
-        executor = new ShowExecutor(connectContext, showStreamLoadStmtWithWhere);
-        ShowResultSet resultSetWithWhere = executor.execute();
+        ShowResultSet resultSetWithWhere = ShowExecutor.execute(showStreamLoadStmtWithWhere, connectContext);
         Assert.assertEquals(resultSetWithWhere.getResultRows().size(), 1);
     }
 }

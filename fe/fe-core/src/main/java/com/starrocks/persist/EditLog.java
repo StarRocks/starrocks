@@ -47,15 +47,14 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -83,6 +82,8 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
@@ -104,6 +105,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -123,7 +125,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 /**
  * EditLog maintains a log of the memory modifications.
@@ -133,13 +134,13 @@ public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-    private BlockingQueue<JournalTask> journalQueue;
+    private final BlockingQueue<JournalTask> journalQueue;
 
     public EditLog(BlockingQueue<JournalTask> journalQueue) {
         this.journalQueue = journalQueue;
     }
 
-    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
+    public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID
@@ -155,16 +156,9 @@ public class EditLog {
                     globalStateMgr.setNextId(id + 1);
                     break;
                 }
-                case OperationType.OP_SAVE_TRANSACTION_ID: {
-                    String idString = journal.getData().toString();
-                    long id = Long.parseLong(idString);
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
-                            .initTransactionId(id + 1);
-                    break;
-                }
                 case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
                     TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                             .initTransactionId(idInfo.getTxnId() + 1);
                     break;
                 }
@@ -199,21 +193,20 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_DB:
                 case OperationType.OP_ALTER_DB_V2: {
+
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
-                    String dbName = dbInfo.getDbName();
-                    LOG.info("Begin to unprotect alter db info {}", dbName);
-                    globalStateMgr.replayAlterDatabaseQuota(dbName, dbInfo.getQuota(), dbInfo.getQuotaType());
+                    globalStateMgr.getLocalMetastore().replayAlterDatabaseQuota(dbInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_DB: {
                     Text dbId = (Text) journal.getData();
-                    globalStateMgr.replayEraseDatabase(Long.parseLong(dbId.toString()));
+                    globalStateMgr.getLocalMetastore().replayEraseDatabase(Long.parseLong(dbId.toString()));
                     break;
                 }
                 case OperationType.OP_RECOVER_DB:
                 case OperationType.OP_RECOVER_DB_V2: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    globalStateMgr.replayRecoverDatabase(info);
+                    globalStateMgr.getLocalMetastore().replayRecoverDatabase(info);
                     break;
                 }
                 case OperationType.OP_RENAME_DB:
@@ -221,7 +214,7 @@ public class EditLog {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
                     String dbName = dbInfo.getDbName();
                     LOG.info("Begin to unprotect rename db {}", dbName);
-                    globalStateMgr.replayRenameDatabase(dbName, dbInfo.getNewDbName());
+                    globalStateMgr.getLocalMetastore().replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
                 case OperationType.OP_CREATE_TABLE:
@@ -236,7 +229,7 @@ public class EditLog {
                         LOG.info("Begin to unprotect create table. db = "
                                 + info.getDbName() + " table = " + info.getTable().getId());
                     }
-                    globalStateMgr.replayCreateTable(info);
+                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_DROP_TABLE:
@@ -249,7 +242,7 @@ public class EditLog {
                     }
                     LOG.info("Begin to unprotect drop table. db = "
                             + db.getOriginName() + " table = " + info.getTableId());
-                    globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
+                    globalStateMgr.getLocalMetastore().replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
                 case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
@@ -257,7 +250,7 @@ public class EditLog {
                     LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
-                    globalStateMgr.replayCreateTable(info);
+                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION_V2: {
@@ -265,7 +258,7 @@ public class EditLog {
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
-                    globalStateMgr.replayAddPartition(info);
+                    globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -273,27 +266,27 @@ public class EditLog {
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
-                    globalStateMgr.replayAddPartition(info);
+                    globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITIONS: {
                     AddPartitionsInfo infos = (AddPartitionsInfo) journal.getData();
                     for (PartitionPersistInfo info : infos.getAddPartitionInfos()) {
-                        globalStateMgr.replayAddPartition(info);
+                        globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     }
                     break;
                 }
                 case OperationType.OP_ADD_PARTITIONS_V2: {
                     AddPartitionsInfoV2 infos = (AddPartitionsInfoV2) journal.getData();
                     for (PartitionPersistInfoV2 info : infos.getAddPartitionInfos()) {
-                        globalStateMgr.replayAddPartition(info);
+                        globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     }
                     break;
                 }
                 case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
                     AddSubPartitionsInfoV2 infos = (AddSubPartitionsInfoV2) journal.getData();
                     for (PhysicalPartitionPersistInfoV2 info : infos.getAddSubPartitionInfos()) {
-                        globalStateMgr.replayAddSubPartition(info);
+                        globalStateMgr.getLocalMetastore().replayAddSubPartition(info);
                     }
                     break;
                 }
@@ -302,7 +295,7 @@ public class EditLog {
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartitionName());
-                    globalStateMgr.replayDropPartition(info);
+                    globalStateMgr.getLocalMetastore().replayDropPartition(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_PARTITION:
@@ -322,58 +315,74 @@ public class EditLog {
                 }
                 case OperationType.OP_ERASE_TABLE: {
                     Text tableId = (Text) journal.getData();
-                    globalStateMgr.replayEraseTable(Long.parseLong(tableId.toString()));
+                    globalStateMgr.getLocalMetastore().replayEraseTable(Long.parseLong(tableId.toString()));
                     break;
                 }
                 case OperationType.OP_ERASE_MULTI_TABLES: {
                     MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
-                    globalStateMgr.replayEraseMultiTables(multiEraseTableInfo);
+                    globalStateMgr.getLocalMetastore().replayEraseMultiTables(multiEraseTableInfo);
+                    break;
+                }
+                case OperationType.OP_DISABLE_TABLE_RECOVERY: {
+                    DisableTableRecoveryInfo disableTableRecoveryInfo = (DisableTableRecoveryInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDisableTableRecovery(disableTableRecoveryInfo);
+                    break;
+                }
+                case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
+                    DisablePartitionRecoveryInfo disableRecoveryInfo = (DisablePartitionRecoveryInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDisablePartitionRecovery(disableRecoveryInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.getData();
-                    globalStateMgr.replayErasePartition(Long.parseLong(partitionId.toString()));
+                    globalStateMgr.getLocalMetastore().replayErasePartition(Long.parseLong(partitionId.toString()));
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE:
                 case OperationType.OP_RECOVER_TABLE_V2: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    globalStateMgr.replayRecoverTable(info);
+                    globalStateMgr.getLocalMetastore().replayRecoverTable(info);
                     break;
                 }
                 case OperationType.OP_RECOVER_PARTITION:
                 case OperationType.OP_RECOVER_PARTITION_V2: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    globalStateMgr.replayRecoverPartition(info);
+                    globalStateMgr.getLocalMetastore().replayRecoverPartition(info);
                     break;
                 }
                 case OperationType.OP_RENAME_TABLE:
                 case OperationType.OP_RENAME_TABLE_V2: {
                     TableInfo info = (TableInfo) journal.getData();
-                    globalStateMgr.replayRenameTable(info);
+                    globalStateMgr.getLocalMetastore().replayRenameTable(info);
                     break;
                 }
                 case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
                     ChangeMaterializedViewRefreshSchemeLog log =
                             (ChangeMaterializedViewRefreshSchemeLog) journal.getData();
-                    globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
+                    globalStateMgr.getAlterJobMgr().replayChangeMaterializedViewRefreshScheme(log);
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
                     ModifyTablePropertyOperationLog log =
                             (ModifyTablePropertyOperationLog) journal.getData();
-                    globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
+                    globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewProperties(opCode, log);
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS: {
                     AlterMaterializedViewStatusLog log =
                             (AlterMaterializedViewStatusLog) journal.getData();
-                    globalStateMgr.replayAlterMaterializedViewStatus(log);
+                    globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewStatus(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS: {
+                    AlterMaterializedViewBaseTableInfosLog log =
+                            (AlterMaterializedViewBaseTableInfosLog) journal.getData();
+                    globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewBaseTableInfos(log);
                     break;
                 }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
                     RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
-                    globalStateMgr.replayRenameMaterializedView(log);
+                    globalStateMgr.getAlterJobMgr().replayRenameMaterializedView(log);
                     break;
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
@@ -384,12 +393,12 @@ public class EditLog {
                 case OperationType.OP_RENAME_PARTITION:
                 case OperationType.OP_RENAME_PARTITION_V2: {
                     TableInfo info = (TableInfo) journal.getData();
-                    globalStateMgr.replayRenamePartition(info);
+                    globalStateMgr.getLocalMetastore().replayRenamePartition(info);
                     break;
                 }
                 case OperationType.OP_RENAME_COLUMN_V2: {
                     ColumnRenameInfo info = (ColumnRenameInfo) journal.getData();
-                    globalStateMgr.replayRenameColumn(info);
+                    globalStateMgr.getLocalMetastore().replayRenameColumn(info);
                     break;
                 }
                 case OperationType.OP_BACKUP_JOB:
@@ -433,7 +442,7 @@ public class EditLog {
                 case OperationType.OP_RENAME_ROLLUP:
                 case OperationType.OP_RENAME_ROLLUP_V2: {
                     TableInfo info = (TableInfo) journal.getData();
-                    globalStateMgr.replayRenameRollup(info);
+                    globalStateMgr.getLocalMetastore().replayRenameRollup(info);
                     break;
                 }
                 case OperationType.OP_EXPORT_CREATE:
@@ -468,47 +477,53 @@ public class EditLog {
                 case OperationType.OP_ADD_REPLICA:
                 case OperationType.OP_ADD_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.replayAddReplica(info);
+                    globalStateMgr.getLocalMetastore().replayAddReplica(info);
                     break;
                 }
                 case OperationType.OP_UPDATE_REPLICA:
                 case OperationType.OP_UPDATE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.replayUpdateReplica(info);
+                    globalStateMgr.getLocalMetastore().replayUpdateReplica(info);
                     break;
                 }
                 case OperationType.OP_DELETE_REPLICA:
                 case OperationType.OP_DELETE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.replayDeleteReplica(info);
+                    globalStateMgr.getLocalMetastore().replayDeleteReplica(info);
+                    break;
+                }
+                case OperationType.OP_BATCH_DELETE_REPLICA: {
+                    BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayBatchDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
                     ComputeNode computeNode = (ComputeNode) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayAddComputeNode(computeNode);
                     break;
                 }
                 case OperationType.OP_DROP_COMPUTE_NODE: {
                     DropComputeNodeLog dropComputeNodeLog = (DropComputeNodeLog) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
                     break;
                 }
                 case OperationType.OP_ADD_BACKEND:
                 case OperationType.OP_ADD_BACKEND_V2: {
                     Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().replayAddBackend(be);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayAddBackend(be);
                     break;
                 }
                 case OperationType.OP_DROP_BACKEND:
                 case OperationType.OP_DROP_BACKEND_V2: {
                     Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().replayDropBackend(be);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayDropBackend(be);
                     break;
                 }
                 case OperationType.OP_BACKEND_STATE_CHANGE:
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateBackendState(be);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
@@ -516,14 +531,14 @@ public class EditLog {
                 case OperationType.OP_ADD_FRONTEND:
                 case OperationType.OP_ADD_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
-                    globalStateMgr.replayAddFrontend(fe);
+                    globalStateMgr.getNodeMgr().replayAddFrontend(fe);
                     break;
                 }
                 case OperationType.OP_REMOVE_FRONTEND:
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
-                    globalStateMgr.replayDropFrontend(fe);
-                    if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
+                    globalStateMgr.getNodeMgr().replayDropFrontend(fe);
+                    if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
                         throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
                     }
                     break;
@@ -531,22 +546,7 @@ public class EditLog {
                 case OperationType.OP_UPDATE_FRONTEND:
                 case OperationType.OP_UPDATE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
-                    globalStateMgr.replayUpdateFrontend(fe);
-                    break;
-                }
-                case OperationType.OP_CREATE_USER:
-                case OperationType.OP_NEW_DROP_USER:
-                case OperationType.OP_GRANT_PRIV:
-                case OperationType.OP_REVOKE_PRIV:
-                case OperationType.OP_SET_PASSWORD:
-                case OperationType.OP_CREATE_ROLE:
-                case OperationType.OP_DROP_ROLE:
-                case OperationType.OP_GRANT_ROLE:
-                case OperationType.OP_REVOKE_ROLE:
-                case OperationType.OP_UPDATE_USER_PROPERTY:
-                case OperationType.OP_GRANT_IMPERSONATE:
-                case OperationType.OP_REVOKE_IMPERSONATE: {
-                    GlobalStateMgr.getCurrentState().replayOldAuthJournal(opCode, journal.getData());
+                    globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
                     break;
                 }
                 case OperationType.OP_TIMESTAMP:
@@ -575,14 +575,8 @@ public class EditLog {
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
                     break;
                 }
-                case OperationType.OP_GLOBAL_VARIABLE: {
-                    SessionVariable variable = (SessionVariable) journal.getData();
-                    globalStateMgr.replayGlobalVariable(variable);
-                    break;
-                }
                 case OperationType.OP_CREATE_CLUSTER: {
-                    final Cluster value = (Cluster) journal.getData();
-                    globalStateMgr.replayCreateCluster(value);
+                    // ignore
                     break;
                 }
                 case OperationType.OP_ADD_BROKER:
@@ -612,23 +606,16 @@ public class EditLog {
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
-                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2:
-                case OperationType.OP_UPSERT_TRANSACTION_STATE: {
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
                     final TransactionState state = (TransactionState) journal.getData();
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
                     break;
                 }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
                     final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
-                    LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
-                    break;
-                }
-                case OperationType.OP_DELETE_TRANSACTION_STATE: {
-                    final TransactionState state = (TransactionState) journal.getData();
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayDeleteTransactionState(state);
-                    LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
                 case OperationType.OP_CREATE_REPOSITORY:
@@ -644,7 +631,7 @@ public class EditLog {
                 }
                 case OperationType.OP_TRUNCATE_TABLE: {
                     TruncateTableInfo info = (TruncateTableInfo) journal.getData();
-                    globalStateMgr.replayTruncateTable(info);
+                    globalStateMgr.getLocalMetastore().replayTruncateTable(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_ADD_TABLE:
@@ -679,13 +666,13 @@ public class EditLog {
                 case OperationType.OP_MODIFY_TABLE_COLOCATE:
                 case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
-                    globalStateMgr.replayModifyTableColocate(info);
+                    globalStateMgr.getColocateTableIndex().replayModifyTableColocate(info);
                     break;
                 }
                 case OperationType.OP_HEARTBEAT_V2:
                 case OperationType.OP_HEARTBEAT: {
                     final HbPackage hbPackage = (HbPackage) journal.getData();
-                    GlobalStateMgr.getCurrentHeartbeatMgr().replayHearbeat(hbPackage);
+                    GlobalStateMgr.getCurrentState().getHeartbeatMgr().replayHearbeat(hbPackage);
                     break;
                 }
                 case OperationType.OP_ADD_FUNCTION:
@@ -711,7 +698,7 @@ public class EditLog {
                 case OperationType.OP_BACKEND_TABLETS_INFO:
                 case OperationType.OP_BACKEND_TABLETS_INFO_V2: {
                     BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
-                    GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2:
@@ -825,10 +812,9 @@ public class EditLog {
                             globalStateMgr.getRollupHandler().replayAlterJobV2(alterJob);
                             break;
                         case SCHEMA_CHANGE:
-                            globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
-                            break;
                         case OPTIMIZE:
                             globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
+                            break;
                         default:
                             break;
                     }
@@ -845,12 +831,12 @@ public class EditLog {
                 case OperationType.OP_MODIFY_DISTRIBUTION_TYPE:
                 case OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2: {
                     TableInfo tableInfo = (TableInfo) journal.getData();
-                    globalStateMgr.replayConvertDistributionType(tableInfo);
+                    globalStateMgr.getLocalMetastore().replayConvertDistributionType(tableInfo);
                     break;
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
-                case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
+                case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -863,28 +849,37 @@ public class EditLog {
                 case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
-                    globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
+                    globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
                     break;
                 }
                 case OperationType.OP_REPLACE_TEMP_PARTITION: {
                     ReplacePartitionOperationLog replaceTempPartitionLog =
                             (ReplacePartitionOperationLog) journal.getData();
-                    globalStateMgr.replayReplaceTempPartition(replaceTempPartitionLog);
+                    globalStateMgr.getLocalMetastore().replayReplaceTempPartition(replaceTempPartitionLog);
                     break;
                 }
                 case OperationType.OP_INSTALL_PLUGIN: {
                     PluginInfo pluginInfo = (PluginInfo) journal.getData();
-                    globalStateMgr.replayInstallPlugin(pluginInfo);
+                    try {
+                        globalStateMgr.getPluginMgr().replayLoadDynamicPlugin(pluginInfo);
+                    } catch (Exception e) {
+                        LOG.warn("replay install plugin failed.", e);
+                    }
+
                     break;
                 }
                 case OperationType.OP_UNINSTALL_PLUGIN: {
                     PluginInfo pluginInfo = (PluginInfo) journal.getData();
-                    globalStateMgr.replayUninstallPlugin(pluginInfo);
+                    try {
+                        globalStateMgr.getPluginMgr().uninstallPlugin(pluginInfo.getName());
+                    } catch (Exception e) {
+                        LOG.warn("replay uninstall plugin failed.", e);
+                    }
                     break;
                 }
                 case OperationType.OP_SET_REPLICA_STATUS: {
                     SetReplicaStatusOperationLog log = (SetReplicaStatusOperationLog) journal.getData();
-                    globalStateMgr.replaySetReplicaStatus(log);
+                    globalStateMgr.getLocalMetastore().replaySetReplicaStatus(log);
                     break;
                 }
                 case OperationType.OP_REMOVE_ALTER_JOB_V2: {
@@ -913,7 +908,7 @@ public class EditLog {
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
-                    globalStateMgr.replayGlobalVariableV2(info);
+                    VariableMgr.replayGlobalVariableV2(info);
                     break;
                 }
                 case OperationType.OP_SWAP_TABLE: {
@@ -1015,10 +1010,29 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     break;
                 }
+                case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
+                    ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should expire cache here.
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
+                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
+                                histogramStatsMeta.getTableName(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    }
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
+                    ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
-                    globalStateMgr.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+                    globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
                     break;
                 }
                 case OperationType.OP_CREATE_CATALOG: {
@@ -1092,12 +1106,6 @@ public class EditLog {
                     globalStateMgr.getAuthenticationMgr().replayDropUser(userIdentity);
                     break;
                 }
-                case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                    SecurityIntegrationInfo info = (SecurityIntegrationInfo) journal.getData();
-                    globalStateMgr.getAuthenticationMgr().replayCreateSecurityIntegration(
-                            info.name, info.propertyMap);
-                    break;
-                }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getAuthorizationMgr().replayUpdateRolePrivilegeCollection(info);
@@ -1109,8 +1117,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_AUTH_UPGRADE_V2: {
-                    AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
-                    globalStateMgr.replayAuthUpgrade(info);
+                    // for compatibility reason, just ignore the auth upgrade log
                     break;
                 }
                 case OperationType.OP_MV_JOB_STATE: {
@@ -1153,6 +1160,50 @@ public class EditLog {
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
+                case OperationType.OP_CREATE_DICTIONARY: {
+                    Dictionary dictionary = (Dictionary) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayCreateDictionary(dictionary);
+                    break;
+                }
+                case OperationType.OP_DROP_DICTIONARY: {
+                    DropDictionaryInfo dropInfo = (DropDictionaryInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayDropDictionary(dropInfo.getDictionaryName());
+                    break;
+                }
+                case OperationType.OP_MODIFY_DICTIONARY_MGR: {
+                    DictionaryMgrInfo modifyInfo = (DictionaryMgrInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
+                    break;
+                }
+                case OperationType.OP_DECOMMISSION_DISK: {
+                    DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                    CancelDecommissionDiskInfo info = (CancelDecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayCancelDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_DISABLE_DISK: {
+                    DisableDiskInfo info = (DisableDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DISABLE_DISK: {
+                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayCancelDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
+                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                    PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
+                    GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
+                    break;
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1163,7 +1214,7 @@ public class EditLog {
             }
         } catch (Exception e) {
             JournalInconsistentException exception =
-                    new JournalInconsistentException("failed to load journal type " + opCode);
+                    new JournalInconsistentException(opCode, "failed to load journal type " + opCode);
             exception.initCause(e);
             throw exception;
         }
@@ -1173,22 +1224,22 @@ public class EditLog {
      * submit log to queue, wait for JournalWriter
      */
     protected void logEdit(short op, Writable writable) {
-        long start = System.nanoTime();
-        Future<Boolean> task = submitLog(op, writable, -1);
-        waitInfinity(start, task);
+        JournalTask task = submitLog(op, writable, -1);
+        waitInfinity(task);
     }
 
     /**
      * submit log in queue and return immediately
      */
-    private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
-        // do not check whether global state mgr is leader in non shared nothing mode,
+    private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        long startTimeNano = System.nanoTime();
+        // do not check whether global state mgr is leader in non shared-nothing mode,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
-                                 GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, but" +
-                GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
+                        GlobalStateMgr.getCurrentState().isLeader(),
+                "Current node is not leader, but " +
+                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1199,9 +1250,9 @@ public class EditLog {
             entity.write(buffer);
         } catch (IOException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialized: {}", e);
+            LOG.info("failed to serialize, ", e);
         }
-        JournalTask task = new JournalTask(buffer, maxWaitIntervalMs);
+        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
         /*
          * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.
@@ -1229,7 +1280,8 @@ public class EditLog {
     /**
      * wait for JournalWriter commit all logs
      */
-    public static void waitInfinity(long startTime, Future<Boolean> task) {
+    public static void waitInfinity(JournalTask task) {
+        long startTimeNano = task.getStartTimeNano();
         boolean result;
         int cnt = 0;
         while (true) {
@@ -1250,8 +1302,8 @@ public class EditLog {
 
         // for now if journal writer fails, it will exit directly, so this property should always be true.
         assert (result);
-        if (MetricRepo.isInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
+        if (MetricRepo.hasInit) {
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
         }
     }
 
@@ -1260,11 +1312,7 @@ public class EditLog {
     }
 
     public void logSaveTransactionId(long transactionId) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
-        } else {
-            logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
-        }
+        logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
@@ -1290,19 +1338,11 @@ public class EditLog {
     }
 
     public void logRecoverDb(RecoverInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
-        } else {
-            logEdit(OperationType.OP_RECOVER_DB, info);
-        }
+        logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
     }
 
     public void logAlterDb(DatabaseInfo dbInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo);
-        } else {
-            logEdit(OperationType.OP_ALTER_DB, dbInfo);
-        }
+        logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo);
     }
 
     public void logCreateTable(CreateTableInfo info) {
@@ -1354,19 +1394,11 @@ public class EditLog {
     }
 
     public void logRecoverPartition(RecoverInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
-        } else {
-            logEdit(OperationType.OP_RECOVER_PARTITION, info);
-        }
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
     }
 
     public void logModifyPartition(ModifyPartitionInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info);
-        } else {
-            logEdit(OperationType.OP_MODIFY_PARTITION, info);
-        }
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
@@ -1374,11 +1406,15 @@ public class EditLog {
     }
 
     public void logDropTable(DropInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_TABLE, info);
-        }
+        logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
+    }
+
+    public void logDisablePartitionRecovery(long partitionId) {
+        logEdit(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId));
+    }
+
+    public void logDisableTableRecovery(List<Long> tableIds) {
+        logEdit(OperationType.OP_DISABLE_TABLE_RECOVERY, new DisableTableRecoveryInfo(tableIds));
     }
 
     public void logEraseMultiTables(List<Long> tableIds) {
@@ -1386,19 +1422,11 @@ public class EditLog {
     }
 
     public void logRecoverTable(RecoverInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_RECOVER_TABLE, info);
-        }
+        logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
     }
 
     public void logDropRollup(DropInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_ROLLUP_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_ROLLUP, info);
-        }
+        logJsonObject(OperationType.OP_DROP_ROLLUP_V2, info);
     }
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
@@ -1406,11 +1434,11 @@ public class EditLog {
     }
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, info);
-        } else {
-            logEdit(OperationType.OP_FINISH_CONSISTENCY_CHECK, info);
-        }
+        logJsonObject(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, info);
+    }
+
+    public JournalTask logFinishConsistencyCheckNoWait(ConsistencyCheckInfo info) {
+        return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK, info, -1);
     }
 
     public void logAddComputeNode(ComputeNode computeNode) {
@@ -1418,11 +1446,7 @@ public class EditLog {
     }
 
     public void logAddBackend(Backend be) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_BACKEND_V2, be);
-        } else {
-            logEdit(OperationType.OP_ADD_BACKEND, be);
-        }
+        logJsonObject(OperationType.OP_ADD_BACKEND_V2, be);
     }
 
     public void logDropComputeNode(DropComputeNodeLog log) {
@@ -1430,43 +1454,23 @@ public class EditLog {
     }
 
     public void logDropBackend(Backend be) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
-        } else {
-            logEdit(OperationType.OP_DROP_BACKEND, be);
-        }
+        logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
     }
 
     public void logAddFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_ADD_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
     }
 
     public void logAddFirstFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_FIRST_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_ADD_FIRST_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_ADD_FIRST_FRONTEND_V2, fe);
     }
 
     public void logRemoveFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_REMOVE_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_REMOVE_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_REMOVE_FRONTEND_V2, fe);
     }
 
     public void logUpdateFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_UPDATE_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, fe);
     }
 
     public void logFinishMultiDelete(MultiDeleteInfo info) {
@@ -1474,43 +1478,27 @@ public class EditLog {
     }
 
     public void logAddReplica(ReplicaPersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
-        } else {
-            logEdit(OperationType.OP_ADD_REPLICA, info);
-        }
+        logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
     }
 
     public void logUpdateReplica(ReplicaPersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
-        } else {
-            logEdit(OperationType.OP_UPDATE_REPLICA, info);
-        }
+        logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
     }
 
     public void logDeleteReplica(ReplicaPersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
-        } else {
-            logEdit(OperationType.OP_DELETE_REPLICA, info);
-        }
+        logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
+    }
+
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
     }
 
     public void logTimestamp(Timestamp stamp) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
-        } else {
-            logEdit(OperationType.OP_TIMESTAMP, stamp);
-        }
+        logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
     }
 
     public void logLeaderInfo(LeaderInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
-        } else {
-            logEdit(OperationType.OP_LEADER_INFO_CHANGE, info);
-        }
+        logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {
@@ -1518,71 +1506,15 @@ public class EditLog {
     }
 
     public void logBackendStateChange(Backend be) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
-        } else {
-            logEdit(OperationType.OP_BACKEND_STATE_CHANGE, be);
-        }
-    }
-
-    public void logCreateUser(PrivInfo info) {
-        logEdit(OperationType.OP_CREATE_USER, info);
-    }
-
-    public void logNewDropUser(UserIdentity userIdent) {
-        logEdit(OperationType.OP_NEW_DROP_USER, userIdent);
-    }
-
-    public void logGrantPriv(PrivInfo info) {
-        logEdit(OperationType.OP_GRANT_PRIV, info);
-    }
-
-    public void logRevokePriv(PrivInfo info) {
-        logEdit(OperationType.OP_REVOKE_PRIV, info);
-    }
-
-    public void logGrantImpersonate(ImpersonatePrivInfo info) {
-        logEdit(OperationType.OP_GRANT_IMPERSONATE, info);
-    }
-
-    public void logRevokeImpersonate(ImpersonatePrivInfo info) {
-        logEdit(OperationType.OP_REVOKE_IMPERSONATE, info);
-    }
-
-    public void logSetPassword(PrivInfo info) {
-        logEdit(OperationType.OP_SET_PASSWORD, info);
-    }
-
-    public void logCreateRole(PrivInfo info) {
-        logEdit(OperationType.OP_CREATE_ROLE, info);
-    }
-
-    public void logDropRole(PrivInfo info) {
-        logEdit(OperationType.OP_DROP_ROLE, info);
-    }
-
-    public void logGrantRole(PrivInfo info) {
-        logEdit(OperationType.OP_GRANT_ROLE, info);
-    }
-
-    public void logRevokeRole(PrivInfo info) {
-        logEdit(OperationType.OP_REVOKE_ROLE, info);
+        logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_DB, databaseInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo);
     }
 
     public void logTableRename(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_TABLE, tableInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo);
     }
 
     public void logModifyViewDef(AlterViewInfo alterViewInfo) {
@@ -1590,43 +1522,23 @@ public class EditLog {
     }
 
     public void logRollupRename(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_ROLLUP, tableInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
     }
 
     public void logPartitionRename(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_PARTITION, tableInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
     }
 
     public void logGlobalVariable(SessionVariable variable) {
         logEdit(OperationType.OP_GLOBAL_VARIABLE, variable);
     }
 
-    public void logCreateCluster(Cluster cluster) {
-        logEdit(OperationType.OP_CREATE_CLUSTER, cluster);
-    }
-
     public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_BROKER_V2, info);
-        } else {
-            logEdit(OperationType.OP_ADD_BROKER, info);
-        }
+        logJsonObject(OperationType.OP_ADD_BROKER_V2, info);
     }
 
     public void logDropBroker(BrokerMgr.ModifyBrokerInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_BROKER_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_BROKER, info);
-        }
+        logJsonObject(OperationType.OP_DROP_BROKER_V2, info);
     }
 
     public void logDropAllBroker(String brokerName) {
@@ -1638,38 +1550,20 @@ public class EditLog {
     }
 
     public void logExportCreate(ExportJob job) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
-        } else {
-            logEdit(OperationType.OP_EXPORT_CREATE, job);
-        }
+        logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
     }
 
     public void logExportUpdateState(long jobId, ExportJob.JobState newState, long stateChangeTime,
                                      List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
-            logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
-        } else {
-            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
-            logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
-        }
-    }
-
-    public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
-        logEdit(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS, info);
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
+                snapshotPaths, exportTempPath, exportedFiles, failMsg);
+        logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
     }
 
     // for TransactionState
     public void logInsertTransactionState(TransactionState transactionState) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
-        } else {
-            logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
-        }
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
     }
 
     public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
@@ -1677,19 +1571,11 @@ public class EditLog {
     }
 
     public void logBackupJob(BackupJob job) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
-        } else {
-            logEdit(OperationType.OP_BACKUP_JOB, job);
-        }
+        logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
     }
 
     public void logCreateRepository(Repository repo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_REPOSITORY_V2, repo);
-        } else {
-            logEdit(OperationType.OP_CREATE_REPOSITORY, repo);
-        }
+        logJsonObject(OperationType.OP_CREATE_REPOSITORY_V2, repo);
     }
 
     public void logDropRepository(String repoName) {
@@ -1697,15 +1583,7 @@ public class EditLog {
     }
 
     public void logRestoreJob(RestoreJob job) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
-        } else {
-            logEdit(OperationType.OP_RESTORE_JOB, job);
-        }
-    }
-
-    public void logUpdateUserProperty(UserPropertyInfo propertyInfo) {
-        logEdit(OperationType.OP_UPDATE_USER_PROPERTY, propertyInfo);
+        logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
     }
 
     public void logTruncateTable(TruncateTableInfo info) {
@@ -1713,47 +1591,23 @@ public class EditLog {
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_ADD_TABLE, info);
-        }
-    }
-
-    public void logColocateRemoveTable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_REMOVE_TABLE, info);
+        logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
     }
 
     public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ, info);
-        }
+        logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
     }
 
     public void logColocateMarkUnstable(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_MARK_UNSTABLE, info);
-        }
+        logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
     }
 
     public void logColocateMarkStable(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_MARK_STABLE, info);
-        }
+        logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
     }
 
     public void logModifyTableColocate(TablePropertyInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
-        } else {
-            logEdit(OperationType.OP_MODIFY_TABLE_COLOCATE, info);
-        }
+        logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
@@ -1761,71 +1615,39 @@ public class EditLog {
     }
 
     public void logAddFunction(Function function) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function);
-        } else {
-            logEdit(OperationType.OP_ADD_FUNCTION, function);
-        }
+        logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function);
     }
 
     public void logDropFunction(FunctionSearchDesc function) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_FUNCTION_V2, function);
-        } else {
-            logEdit(OperationType.OP_DROP_FUNCTION, function);
-        }
+        logJsonObject(OperationType.OP_DROP_FUNCTION_V2, function);
     }
 
-    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
+    public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
-        } else {
-            logEdit(OperationType.OP_BACKEND_TABLETS_INFO, backendTabletsInfo);
-        }
+        logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
     }
 
     public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob);
-        } else {
-            logEdit(OperationType.OP_CREATE_ROUTINE_LOAD_JOB, routineLoadJob);
-        }
+        logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob);
     }
 
     public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation);
-        } else {
-            logEdit(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB, routineLoadOperation);
-        }
+        logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation);
     }
 
     public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
-        } else {
-            logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
-        }
+        logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
     }
 
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
-        } else {
-            logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
-        }
+        logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
     }
 
     public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation);
-        } else {
-            logEdit(OperationType.OP_END_LOAD_JOB, loadJobFinalOperation);
-        }
+        logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation);
     }
 
     public void logUpdateLoadJob(LoadJobStateUpdateInfo info) {
@@ -1841,43 +1663,27 @@ public class EditLog {
     }
 
     public void logCreateSmallFile(SmallFile info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
-        } else {
-            logEdit(OperationType.OP_CREATE_SMALL_FILE, info);
-        }
+        logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
     }
 
     public void logDropSmallFile(SmallFile info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_SMALL_FILE, info);
-        }
+        logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {
         logEdit(OperationType.OP_ALTER_JOB_V2, alterJob);
     }
 
-    public Future<Boolean> logAlterJobNoWait(AlterJobV2 alterJob) {
+    public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {
         return submitLog(OperationType.OP_ALTER_JOB_V2, alterJob, -1);
     }
 
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
-        } else {
-            logEdit(OperationType.OP_BATCH_ADD_ROLLUP, batchAlterJobV2);
-        }
+        logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
     }
 
     public void logModifyDistributionType(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_MODIFY_DISTRIBUTION_TYPE, tableInfo);
-        }
+        logJsonObject(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, tableInfo);
     }
 
     public void logDynamicPartition(ModifyTablePropertyOperationLog info) {
@@ -2008,6 +1814,14 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
     }
 
+    public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta);
+    }
+
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
@@ -2036,6 +1850,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log);
     }
 
+    public void logAlterMvBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log);
+    }
+
     public void logMvRename(RenameMaterializedViewLog log) {
         logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
     }
@@ -2050,6 +1868,10 @@ public class EditLog {
 
     public void logStarMgrOperation(StarMgrJournal journal) {
         logEdit(OperationType.OP_STARMGR, journal);
+    }
+
+    public JournalTask logStarMgrOperationNoWait(StarMgrJournal journal) {
+        return submitLog(OperationType.OP_STARMGR, journal, -1);
     }
 
     public void logCreateUser(
@@ -2070,24 +1892,11 @@ public class EditLog {
     }
 
     public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo);
-        } else {
-            logEdit(OperationType.OP_UPDATE_USER_PROP_V2, propertyInfo);
-        }
+        logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo);
     }
 
     public void logDropUser(UserIdentity userIdentity) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
-        } else {
-            logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
-        }
-    }
-
-    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
-        SecurityIntegrationInfo info = new SecurityIntegrationInfo(name, propertyMap);
-        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
+        logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
     }
 
     public void logUpdateUserPrivilege(
@@ -2118,10 +1927,6 @@ public class EditLog {
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
-    }
-
-    public void logAuthUpgrade(Map<String, Long> roleNameToId) {
-        logEdit(OperationType.OP_AUTH_UPGRADE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {
@@ -2176,7 +1981,44 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
     }
 
+    public void logReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+    }
+
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
         logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    }
+
+    public void logCreateDictionary(Dictionary info) {
+        logEdit(OperationType.OP_CREATE_DICTIONARY, info);
+    }
+
+    public void logDropDictionary(DropDictionaryInfo info) {
+        logEdit(OperationType.OP_DROP_DICTIONARY, info);
+    }
+
+    public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
+        logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+    }
+
+    public void logDecommissionDisk(DecommissionDiskInfo info) {
+        logEdit(OperationType.OP_DECOMMISSION_DISK, info);
+    }
+
+    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+    }
+
+    public void logDisableDisk(DisableDiskInfo info) {
+        logEdit(OperationType.OP_DISABLE_DISK, info);
+    }
+
+    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
+    }
+
+    public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
+        logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
     }
 }

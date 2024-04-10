@@ -20,6 +20,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "common/global_types.h"
 #include "common/logging.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
@@ -39,6 +40,7 @@ public:
     struct SlotDesc {
         std::string name;
         TypeDescriptor type;
+        SlotId id = -1;
     };
 
     static TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
@@ -49,7 +51,7 @@ public:
                 break;
             }
             TSlotDescriptorBuilder b2;
-            b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
+            b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(slot_descs[i].id).nullable(true);
             tuple_desc_builder.add_slot(b2.build());
         }
         tuple_desc_builder.build(&table_desc_builder);
@@ -69,10 +71,7 @@ public:
         for (int i = 0; i < tuple_desc->slots().size(); i++) {
             SlotDescriptor* slot = tuple_desc->slots()[i];
             HdfsScannerContext::ColumnInfo c;
-            c.col_name = slot->col_name();
-            c.col_idx = i;
-            c.slot_id = slot->id();
-            c.col_type = slot->type();
+            c.idx_in_chunk = i;
             c.slot_desc = slot;
             columns->emplace_back(c);
         }
@@ -86,7 +85,7 @@ public:
         ASSERT_EQ(expected->debug_columns(), actual->debug_columns());
         for (size_t i = 0; i < expected->num_columns(); i++) {
             const auto& expected_col = expected->get_column_by_index(i);
-            const auto& actual_col = expected->get_column_by_index(i);
+            const auto& actual_col = actual->get_column_by_index(i);
             if (expected_col->debug_string() != actual_col->debug_string()) {
                 std::cout << expected_col->debug_string() << std::endl;
                 std::cout << actual_col->debug_string() << std::endl;

@@ -6,6 +6,12 @@ displayed_sidebar: "Chinese"
 
 SHOW FILE 语句用于查看保存在数据库中的文件的信息。
 
+:::tip
+
+该操作需要用户有 File 所属数据库上的任意权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。当一个文件归属于一个数据库时，对该数据库拥有访问权限的用户都可以使用该文件。
+
+:::
+
 ## 语法
 
 ```SQL

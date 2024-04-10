@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch-[0-9].[0-9]'
+      - 'branch-[0-9].[0-9]*'
     types:
       - closed
   workflow_dispatch:

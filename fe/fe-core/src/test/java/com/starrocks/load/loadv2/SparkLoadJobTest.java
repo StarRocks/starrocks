@@ -218,11 +218,11 @@ public class SparkLoadJobTest {
                             @Injectable LeaderTaskExecutor executor) throws Exception {
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
                         (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
-                        anyLong, anyLong);
+                        anyLong, anyLong, anyLong);
                 result = transactionId;
                 pendingTask.init();
                 pendingTask.getSignature();
@@ -398,7 +398,7 @@ public class SparkLoadJobTest {
                 replica.getLastFailedVersion();
                 result = -1;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.commitTransaction(dbId, transactionId, (List<TabletCommitInfo>) any, (List<TabletFailInfo>) any,
                         (LoadJobFinalOperation) any);
@@ -410,6 +410,8 @@ public class SparkLoadJobTest {
 
         // check update etl finished
         Assert.assertEquals(JobState.LOADING, job.getState());
+        Assert.assertEquals(JobState.LOADING, job.getAcutalState());
+        Assert.assertNotEquals(-1, job.getLoadStartTimestamp());
         Assert.assertEquals(0, job.progress);
         Map<String, Pair<String, Long>> tabletMetaToFileInfo = Deencapsulation.getField(job, "tabletMetaToFileInfo");
         Assert.assertEquals(1, tabletMetaToFileInfo.size());
@@ -485,10 +487,8 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(tablet);
                 tablet.getId();
                 result = tabletId;
-                ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
             }
         };

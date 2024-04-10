@@ -136,7 +136,7 @@ Status ESScanReader::open() {
     Status status = _network_client.execute_post_request(_query, &_cached_response);
     VLOG(1) << "ES Query:" << _query;
     if (!status.ok() || _network_client.get_http_status() != 200) {
-        std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {}", status.get_error_msg());
+        std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {}", status.message());
         return Status::InternalError(err_msg);
     }
     VLOG(1) << "open _cached response: " << _cached_response;
@@ -188,7 +188,7 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser)
     Status status = scroll_parser->parse(response, _exactly_once);
     if (!status.ok()) {
         _eos = true;
-        LOG(WARNING) << status.get_error_msg();
+        LOG(WARNING) << status.message();
         return status;
     }
 

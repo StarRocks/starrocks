@@ -14,3 +14,22 @@ The following fields are provided in `load_tracking_logs`:
 | LABEL         | The label of the load job.                 |
 | DATABASE_NAME | The database that the load job belongs to. |
 | TRACKING_LOG  | Errors (if any) of the load job.           |
+
+:::tip
+To query the view `load_tracking_logs` you will need to filter on either a `JOB_ID` or a `LABEL`.
+
+You can retrieve the `JOB_ID` or `LABEL` of a load job from the view `information_schema.loads`.
+
+Example:
+
+```sql
+SELECT * from information_schema.load_tracking_logs WHERE label ='user_behavior'\G
+*************************** 1. row ***************************
+       JOB_ID: 10141
+        LABEL: user_behavior
+DATABASE_NAME: mydatabase
+ TRACKING_LOG: NULL
+         TYPE: BROKER
+1 row in set (0.02 sec)
+```
+:::

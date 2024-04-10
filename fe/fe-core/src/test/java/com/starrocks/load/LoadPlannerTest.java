@@ -32,6 +32,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
@@ -44,6 +45,8 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -95,7 +98,6 @@ public class LoadPlannerTest {
     private long loadMemLimit = 1000000;
     private long execMemLimit = 1000000;
 
-
     @Mocked
     Partition partition;
     @Mocked
@@ -142,7 +144,7 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -235,7 +237,7 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -261,6 +263,9 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -367,7 +372,7 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -399,6 +404,9 @@ public class LoadPlannerTest {
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 minTimes = 0;
                 result = null;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -449,6 +457,65 @@ public class LoadPlannerTest {
     }
 
     @Test
+    public void testColumnWithRowPartialUpdate(@Mocked GlobalStateMgr globalStateMgr,
+                                               @Mocked SystemInfoService systemInfoService,
+                                               @Injectable Database db, @Injectable OlapTable table) throws Exception {
+        new Expectations() {
+            {
+                table.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                table.hasRowStorageType();
+                result = true;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+            }
+        };
+
+        // column mappings
+        String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
+                "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
+                "columnMappingList");
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("path/k2=1/file1");
+        List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
+        DataDescription desc = new DataDescription("t2", null, files, columnNames,
+                null, null, "ORC", Lists.newArrayList("k2"),
+                false, columnMappingList, null, null);
+        Deencapsulation.invoke(desc, "analyzeColumns");
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "fileFormat", "ORC");
+        brokerFileGroup.parse(db, desc);
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
+        fileStatusesList.add(fileStatusList);
+
+        // plan
+        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, true, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 1);
+        planner.setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
+        try {
+            planner.plan();
+            Assert.fail("No exception throws");
+        } catch (DdlException e) {
+            Assert.assertEquals("column with row table only support row mode partial update", e.getMessage());
+        }
+    }
+
+    @Test
     public void testLoadWithOpColumnDefault(@Mocked GlobalStateMgr globalStateMgr,
                                             @Mocked SystemInfoService systemInfoService,
                                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
@@ -460,7 +527,7 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -484,6 +551,9 @@ public class LoadPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -547,7 +617,7 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -571,6 +641,9 @@ public class LoadPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -643,7 +716,7 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -678,6 +751,9 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f2, f3);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -753,7 +829,7 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -775,6 +851,9 @@ public class LoadPlannerTest {
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
                 returns(f1, f2, f3);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -806,7 +885,6 @@ public class LoadPlannerTest {
         List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
         fileStatusList.add(new TBrokerFileStatus("/path/file1", false, 128000000, true));
         fileStatusesList.add(fileStatusList);
-
 
         // plan
         LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
@@ -848,7 +926,7 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -882,6 +960,9 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -962,7 +1043,7 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -998,12 +1079,16 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
+
         LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql,
                 ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
@@ -1058,6 +1143,14 @@ public class LoadPlannerTest {
                     timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
                     brokerDesc, fileGroups, fileStatusesList, 1);
             planner.setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPSERT_MODE);
+            planner.plan();
+        }
+        {
+            // set condition update
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.setMergeConditionStr("v");
             planner.plan();
         }
         {

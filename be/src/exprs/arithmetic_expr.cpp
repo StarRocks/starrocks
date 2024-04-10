@@ -14,18 +14,24 @@
 
 #include "exprs/arithmetic_expr.h"
 
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
 #include <optional>
 
+#include "column/type_traits.h"
 #include "common/object_pool.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/binary_function.h"
 #include "exprs/decimal_binary_function.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
-#include "runtime/decimalv3.h"
-#include "util/pred_guard.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -118,12 +124,37 @@ public:
             return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type>(l, r);
         }
     }
+
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_op_name<OP>() + _children[1]->jit_func_name(state) + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
+            return Status::NotSupported("JIT of decimal arithmetic not support");
+        } else {
+            using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
+            using CppType = RunTimeCppType<Type>;
+            return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
+        }
+    }
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedArithmeticExpr ("
-            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
-            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+        out << "VectorizedArithmeticExpr [" << get_op_name<OP>() << "](lhs=" << _children[0]->type().debug_string()
+            << ", rhs=" << _children[1]->type().debug_string() << ", result=" << this->type().debug_string()
+            << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
     }
@@ -163,6 +194,55 @@ public:
         } else {
             return evaluate_internal<Type>(context, ptr);
         }
+    }
+
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::DIV) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += (is_float_type(Type) || _children[0]->is_constant() || _children[1]->is_constant());
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "/" + _children[1]->jit_func_name(state) + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
+            return Status::NotSupported("JIT of decimal arithmetic not support");
+        } else {
+            using ArithmeticOp = ArithmeticBinaryOperator<DivOp, Type>;
+            using CppType = RunTimeCppType<Type>;
+            return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
+        }
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedDivArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 
 private:
@@ -210,6 +290,55 @@ public:
             return VectorizedMod::template evaluate<Type>(l, r);
         }
     }
+
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::MOD) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += (is_float_type(Type) || _children[0]->is_constant() || _children[1]->is_constant());
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "%" + _children[1]->jit_func_name(state) + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
+            return Status::NotSupported("JIT of decimal arithmetic not support");
+        } else {
+            using ArithmeticOp = ArithmeticBinaryOperator<ModOp, Type>;
+            using CppType = RunTimeCppType<Type>;
+            return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
+        }
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedModArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
+    }
 };
 
 template <LogicalType Type>
@@ -220,6 +349,46 @@ public:
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
+    }
+
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
+        using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
+        datum.value = ArithmeticBitNot::generate_ir(jit_ctx->builder, datum.value);
+        return datum;
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedBitNotArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", result=" << this->type().debug_string()
+            << ", lhs_is_constant=" << _children[0]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 
@@ -233,6 +402,52 @@ public:
 
         using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
         return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    }
+
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_op_name<OP>() + _children[1]->jit_func_name(state) + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+
+        using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
+        using CppType = RunTimeCppType<Type>;
+        // TODO(Yueyang): handle TYPE_BIGINT.
+        return ArithmeticOp::template generate_ir<CppType, RunTimeCppType<TYPE_BIGINT>, CppType>(
+                context, jit_ctx->module, jit_ctx->builder, datums);
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedBitShiftArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 
@@ -305,7 +520,6 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
         SWITCH_INT_TYPE(BitOrOp);
     case TExprOpcode::BITXOR:
         SWITCH_INT_TYPE(BitXorOp);
-
 #undef CASE_FN
 
 #define CASE_FN(TYPE, OP) return new VectorizedDivArithmeticExpr<TYPE, OP>(node);

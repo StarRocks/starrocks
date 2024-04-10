@@ -25,6 +25,8 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
@@ -38,6 +40,8 @@
 #include "exprs/expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/runtime_filter_bank.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/RuntimeFilter_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -191,7 +195,8 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->search_ht_timer = _search_ht_timer;
     param->output_build_column_timer = _output_build_column_timer;
     param->output_probe_column_timer = _output_probe_column_timer;
-    param->output_slots = _output_slots;
+    param->build_output_slots = _output_slots;
+    param->probe_output_slots = _output_slots;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -424,38 +429,33 @@ void HashJoinNode::close(RuntimeState* state) {
 template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
 pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
+    // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
+    // return empty result in this case. Hash join cannot be divided into multiple
+    // partitions in this case. Otherwise, NULL value in right table will only occur
+    // in some partition hash table, and other partition hash table can output chunk.
+    // TODO: support nullaware left anti join with shuffle join
+    DCHECK(_join_type != TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN || _distribution_mode == TJoinDistributionMode::BROADCAST);
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
     } else {
-        // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
-        // return empty result in this case. Hash join cannot be divided into multiple
-        // partitions in this case. Otherwise, NULL value in right table will only occur
-        // in some partition hash table, and other partition hash table can output chunk.
-        if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
-        } else {
-            // Both HashJoin{Build, Probe}Operator are parallelized
-            // There are two ways of shuffle
-            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
-            // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
-            // there is no need to perform local shuffle again at receiver side
-            // 2. Otherwise, add LocalExchangeOperator
-            // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-            rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), rhs_operators,
-                                                                              _build_equivalence_partition_expr_ctxs);
-        }
+        // Both HashJoin{Build, Probe}Operator are parallelized
+        // There are two ways of shuffle
+        // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
+        // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+        // there is no need to perform local shuffle again at receiver side
+        // 2. Otherwise, add LocalExchangeOperator
+        // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
+        rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), rhs_operators,
+                                                                          _build_equivalence_partition_expr_ctxs);
     }
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
-    auto build_side_spill_channel_factory =
-            std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
+    auto build_side_spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() &&
         std::is_same_v<HashJoinBuilderFactory, SpillableHashJoinBuildOperatorFactory>) {
@@ -466,15 +466,11 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           _row_descriptor, child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(),
-                          _build_runtime_filters, _output_slots, _distribution_mode);
+                          _build_runtime_filters, _output_slots, _output_slots, _distribution_mode, false);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
-    // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
-    // Operators consuming the runtime filters will inspect this placeholder.
-    context->fragment_context()->runtime_filter_hub()->add_holder(_id);
-
     // Create a shared RefCountedRuntimeFilterCollector
-    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+    auto rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // In default query engine, we only build one hash table for join right child.
     // But for pipeline query engine, we will build `num_right_partitions` hash tables, so we need to enlarge the limit
 
@@ -509,12 +505,20 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
-    if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
-                                                                              context->degree_of_parallelism());
+    auto join_colocate_group = context->find_exec_group_by_plan_node_id(_id);
+    if (join_colocate_group->type() == ExecutionGroupType::COLOCATE) {
+        DCHECK(context->current_execution_group()->is_colocate_exec_group());
+        DCHECK_EQ(context->current_execution_group(), join_colocate_group);
+        context->set_current_execution_group(join_colocate_group);
     } else {
-        if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators);
+        // left child is colocate group, but current join is not colocate group
+        if (context->current_execution_group()->is_colocate_exec_group()) {
+            lhs_operators = context->interpolate_grouped_exchange(_id, lhs_operators);
+        }
+
+        if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
+            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
+                                                                                  context->degree_of_parallelism());
         } else {
             auto* rhs_source_op = context->source_operator(rhs_operators);
             auto* lhs_source_op = context->source_operator(lhs_operators);
@@ -523,13 +527,27 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
                                                                               _probe_equivalence_partition_expr_ctxs);
         }
     }
+
     lhs_operators.emplace_back(std::move(probe_op));
+    // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
+    // Operators consuming the runtime filters will inspect this placeholder.
+    if (context->is_colocate_group() && _distribution_mode == TJoinDistributionMode::COLOCATE) {
+        for (auto runtime_filter_build_desc : _build_runtime_filters) {
+            // local colocate won't generate global runtime filter
+            DCHECK(!runtime_filter_build_desc->has_remote_targets());
+            runtime_filter_build_desc->set_num_colocate_partition(num_right_partitions);
+        }
+        context->fragment_context()->runtime_filter_hub()->add_holder(_id, num_right_partitions);
+    } else {
+        context->fragment_context()->runtime_filter_hub()->add_holder(_id);
+    }
 
     if (limit() != -1) {
         lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
-    if (_hash_join_node.__isset.interpolate_passthrough && _hash_join_node.interpolate_passthrough) {
+    if (_hash_join_node.__isset.interpolate_passthrough && _hash_join_node.interpolate_passthrough &&
+        !context->is_colocate_group()) {
         lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
                                                                               context->degree_of_parallelism(), true);
     }

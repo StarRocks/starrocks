@@ -46,8 +46,8 @@ If you want to downgrade your StarRocks cluster to an earlier minor or major ver
 Before downgrading your StarRocks cluster, you must disable tablet clone.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
@@ -55,8 +55,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 After the downgrade, you can enable tablet clone again if the status of all BE nodes becomes `Alive`.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "10000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "500");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
@@ -67,13 +67,23 @@ Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a
 
 - **If you have enabled FQDN access**
 
-If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
+If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/management/enable_fqdn.md#rollback) for detailed instructions.
 
 ## Downgrade FE
 
 After the compatibility configuration and the availability test, you can downgrade the FE nodes. You must first downgrade the Follower FE nodes and then the Leader FE node.
 
-1. Navigate to the working directory of the FE node and stop the node.
+1. Create a metadata snapshot.
+
+   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a meatedata snapshot.
+
+   b. You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized. 
+
+   > **CAUTION**
+   >
+   > The ALTER SYSTEM CREATE IMAGE statement is supported in v2.5.3 and later. In earlier versions, you need to create a meatadata snapshot by restarting the Leader FE.
+
+2. Navigate to the working directory of the FE node and stop the node.
 
    ```Bash
    # Replace <fe_dir> with the deployment directory of the FE node.
@@ -81,7 +91,7 @@ After the compatibility configuration and the availability test, you can downgra
    ./bin/stop_fe.sh
    ```
 
-2. Replace the original deployment files under **bin**, **lib**, and **spark-dpp** with the ones of the earlier version.
+3. Replace the original deployment files under **bin**, **lib**, and **spark-dpp** with the ones of the earlier version.
 
    ```Bash
    mv lib lib.bak 
@@ -99,28 +109,23 @@ After the compatibility configuration and the availability test, you can downgra
    > 1. Copy the file **fe/lib/starrocks-bdb-je-18.3.13.jar** of the v3.0 deployment to the directory **fe/lib** of the v2.5 deployment.
    > 2. Delete the file **fe/lib/je-7.\*.jar**.
 
-3. Start the FE node.
+4. Start the FE node.
 
    ```Bash
    sh bin/start_fe.sh --daemon
    ```
 
-4. Check if the FE node is started successfully.
+5. Check if the FE node is started successfully.
 
    ```Bash
    ps aux | grep StarRocksFE
    ```
 
-5. Repeat the above procedures to downgrade other Follower FE nodes, and finally the Leader FE node.
+6. Repeat the above Step 2 to Step 5 to downgrade other Follower FE nodes, and finally the Leader FE node.
 
    > **CAUTION**
    >
-   > If you are downgrading StarRocks v3.0 to v2.5, you must follow these steps after the downgrade:
-   >
-   > 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
-   > 2. Wait for the new image to be synchronized to all Follower FEs.
-   >
-   > If you do not run this command, some of the downgrade operations may fail. ALTER SYSTEM CREATE IMAGE is supported from v2.5.3 and later.
+   > Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, repeat Step 1 to trigger a new snapshot before upgrading.
 
 ## Downgrade BE
 

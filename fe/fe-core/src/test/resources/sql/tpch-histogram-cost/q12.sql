@@ -1,32 +1,3 @@
-[sql]
-select
-    l_shipmode,
-    sum(case
-            when o_orderpriority = '1-URGENT'
-                or o_orderpriority = '2-HIGH'
-                then cast (1 as bigint)
-            else cast(0 as bigint)
-        end) as high_line_count,
-    sum(case
-            when o_orderpriority <> '1-URGENT'
-                and o_orderpriority <> '2-HIGH'
-                then cast (1 as bigint)
-            else cast(0 as bigint)
-        end) as low_line_count
-from
-    orders,
-    lineitem
-where
-        o_orderkey = l_orderkey
-  and l_shipmode in ('REG AIR', 'MAIL')
-  and l_commitdate < l_receiptdate
-  and l_shipdate < l_commitdate
-  and l_receiptdate >= date '1997-01-01'
-  and l_receiptdate < date '1998-01-01'
-group by
-    l_shipmode
-order by
-    l_shipmode ;
 [fragment statistics]
 PLAN FRAGMENT 0(F04)
 Output Exprs:25: L_SHIPMODE | 30: sum | 31: sum
@@ -153,9 +124,9 @@ actualRows=0, avgRowSize=30.0
 cardinality: 6508504
 column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6508504.027934344] ESTIMATE
-* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE
+* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] MCV: [[1997-06-01:270700][1998-01-17:269100][1995-09-18:267300][1996-11-29:266400][1995-09-26:265700]] ESTIMATE
 * L_COMMITDATE-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
-* L_RECEIPTDATE-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] ESTIMATE
+* L_RECEIPTDATE-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] MCV: [[1997-08-08:266100][1997-06-05:266000][1997-01-01:263800][1997-07-31:261800][1997-07-09:261400]] ESTIMATE
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]
 

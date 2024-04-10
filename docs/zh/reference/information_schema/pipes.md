@@ -6,6 +6,12 @@ displayed_sidebar: "Chinese"
 
 `pipes` 提供当前数据库或指定数据库下所有 Pipe 的详细信息。此视图自 StarRocks v3.2 版本起支持。
 
+:::note
+
+您可以通过 [SHOW PIPES](../../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) 命令查看当前数据库或指定数据库下 Pipe。该命令也是从 3.2 版本开始支持。
+
+:::
+
 `pipes` 提供以下字段：
 
 | **字段**      | **描述**                                                     |

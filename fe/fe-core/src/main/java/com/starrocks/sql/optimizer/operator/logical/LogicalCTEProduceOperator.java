@@ -90,7 +90,7 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
     }
 
     public static class Builder
-            extends LogicalOperator.Builder<LogicalCTEProduceOperator, LogicalValuesOperator.Builder> {
+            extends LogicalOperator.Builder<LogicalCTEProduceOperator, LogicalCTEProduceOperator.Builder> {
         @Override
         protected LogicalCTEProduceOperator newInstance() {
             return new LogicalCTEProduceOperator(-1);
@@ -101,7 +101,7 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
         }
 
         @Override
-        public LogicalValuesOperator.Builder withOperator(LogicalCTEProduceOperator operator) {
+        public LogicalCTEProduceOperator.Builder withOperator(LogicalCTEProduceOperator operator) {
             builder.cteId = operator.cteId;
             return super.withOperator(operator);
         }

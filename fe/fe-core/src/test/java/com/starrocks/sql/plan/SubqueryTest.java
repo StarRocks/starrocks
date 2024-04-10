@@ -235,10 +235,10 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "18:Project\n" +
+            assertContains(plan, "17:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:NESTLOOP JOIN\n" +
+                    "  16:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN");
@@ -254,10 +254,10 @@ public class SubqueryTest extends PlanTestBase {
                     "IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "18:Project\n" +
+            assertContains(plan, "17:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:NESTLOOP JOIN\n" +
+                    "  16:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN ");
@@ -273,10 +273,10 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  18:Project\n" +
+            assertContains(plan, "  17:Project\n" +
                     "  |  <slot 4> : 4: t1d\n" +
                     "  |  \n" +
-                    "  17:NESTLOOP JOIN\n" +
+                    "  16:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN ");
@@ -335,13 +335,13 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
-                "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''\n" +
                 "  |  \n" +
                 "  |----19:EXCHANGE");
         assertContains(plan, "13:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''");
     }
 
     @Test
@@ -982,7 +982,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (PARTITIONED)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 12: cast");
+                    "  |  equal join conjunct: 1: v1 = 13: cast");
         }
         {
             // Uncorrelated 2
@@ -996,7 +996,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 12: cast");
+                    "  |  equal join conjunct: 1: v1 = 13: cast");
         }
         {
             // Uncorrelated 3, multi subqueries
@@ -1011,11 +1011,11 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 18: cast");
+                    "  |  equal join conjunct: 1: v1 = 20: cast");
             assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 4: v4 = 17: cast");
+                    "  |  equal join conjunct: 4: v4 = 19: cast");
         }
         {
             // correlated 1
@@ -1170,7 +1170,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 12: v8\n" +
-                    "  |  equal join conjunct: 2: v2 = 13: v9");
+                    "  |  other join predicates: 13: v9 = 2: v2");
             assertContains(plan, "3:HASH JOIN\n" +
                     "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +

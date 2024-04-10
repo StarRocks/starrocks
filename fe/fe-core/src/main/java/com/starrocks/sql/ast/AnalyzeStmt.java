@@ -15,38 +15,45 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class AnalyzeStmt extends StatementBase {
     private final TableName tbl;
-    private List<String> columnNames;
+    private List<Expr> columns;
+    private List<String> columnNames = Lists.newArrayList();
     private final boolean isSample;
     private final boolean isAsync;
     private boolean isExternal = false;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
 
-    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
-                       boolean isSample, boolean isAsync,
-                       AnalyzeTypeDesc analyzeTypeDesc) {
-        this(tbl, columns, properties, isSample, isAsync, analyzeTypeDesc, NodePosition.ZERO);
-    }
-
-    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
+    public AnalyzeStmt(TableName tbl, List<Expr> columns, Map<String, String> properties,
                        boolean isSample, boolean isAsync,
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
-        this.columnNames = columns;
+        this.columns = columns;
         this.isSample = isSample;
         this.isAsync = isAsync;
         this.properties = properties;
         this.analyzeTypeDesc = analyzeTypeDesc;
+    }
+
+    public List<Expr> getColumns() {
+        return columns;
+    }
+
+    public List<Type> getColumnTypes() {
+        return columns.stream().map(Expr::getType).collect(Collectors.toList());
     }
 
     public List<String> getColumnNames() {

@@ -1,4 +1,7 @@
 -- name: test_bucket_agg
+set pipeline_dop=1;
+-- result:
+-- !result
 CREATE TABLE `t0` (
   `c0` bigint DEFAULT NULL,
   `c1` bigint DEFAULT NULL,
@@ -143,4 +146,75 @@ select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
 select count(*) from (select distinct c0 from t0 limit 100) tb;
 -- result:
 100
+-- !result
+CREATE TABLE `t1` (
+  `c0` string DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 96
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t1 select * from t1;
+-- result:
+-- !result
+select distinct c0 from t1 order by 1 limit 3;
+-- result:
+1
+10
+100
+-- !result
+select sum(c1), max(c1), min(c1), avg(c1) from t1 group by c0, c2 order by 1 limit 5;
+-- result:
+0	0	0	0.0
+2	1	1	1.0
+4	2	2	2.0
+6	3	3	3.0
+8	4	4	4.0
+-- !result
+select count(*) from (select distinct c0 from t1 limit 100) tb;
+-- result:
+100
+-- !result
+CREATE TABLE `t2` (
+  `c0` string DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 96
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 select * from t1 where crc32(c0) % 96 = 95;
+-- result:
+-- !result
+select distinct c0 from t2 order by 1 limit 3;
+-- result:
+1229
+1384
+1416
+-- !result
+select sum(c1), max(c1), min(c1), avg(c1) from t2 group by c0, c2 order by 1 limit 5;
+-- result:
+388	194	194	194.0
+396	198	198	198.0
+734	367	367	367.0
+900	450	450	450.0
+916	458	458	458.0
+-- !result
+select count(*) from (select distinct c0 from t2 limit 100) tb;
+-- result:
+39
 -- !result

@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -39,8 +40,16 @@ public class RowStoreUtils {
         Set<String> keyColumnSet = ImmutableSet.copyOf(keyColumns);
         Map<String, List<LiteralExpr>> keyToValues = new HashMap<>();
         for (Expr expr : conjuncts) {
+            // for simplify binary equals expr (#38582)
+            // pk_col = true will be transformed pk_col
+            if (expr instanceof SlotRef && ((SlotRef) expr).getDesc() != null) {
+                keyToValues.put(((SlotRef) expr).getDesc().getColumn().getName(),
+                        ImmutableList.of(new BoolLiteral(true)));
+                continue;
+            }
+
             Expr column = expr.getChild(0);
-            if (!(column instanceof SlotRef)) {
+            if (!(column instanceof SlotRef) && !(expr instanceof SlotRef)) {
                 continue;
             }
             String columnName = ((SlotRef) column).getDesc().getColumn().getName();

@@ -136,12 +136,12 @@ public class TypeManager {
         }
     }
 
-    public static Type getCompatibleTypeForBetweenAndIn(List<Type> types) {
+    public static Type getCompatibleTypeForBetweenAndIn(List<Type> types, boolean isBetween) {
         Preconditions.checkState(types.size() > 0);
         Type compatibleType = types.get(0);
 
         for (int i = 1; i < types.size(); i++) {
-            compatibleType = Type.getCmpType(compatibleType, types.get(i));
+            compatibleType = Type.getCmpType(compatibleType, types.get(i), isBetween);
         }
 
         if (Type.VARCHAR.equals(compatibleType)) {
@@ -167,7 +167,10 @@ public class TypeManager {
                     baseType = type1.isDecimalOfAnyVersion() ? type1 : type2;
                 }
             }
-
+            if (ConnectContext.get() != null && SessionVariableConstants.DOUBLE.equalsIgnoreCase(ConnectContext.get()
+                    .getSessionVariable().getCboEqBaseType())) {
+                baseType = Type.DOUBLE;
+            }
             if ((type1.isStringType() && type2.isExactNumericType()) ||
                     (type1.isExactNumericType() && type2.isStringType())) {
                 return baseType;

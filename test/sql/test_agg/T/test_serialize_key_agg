@@ -1,0 +1,15 @@
+-- name: test_serialize_key_agg
+create table t0 (
+    c0 STRING,
+    c1 STRING,
+    c2 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+select distinct c0, c1 from t0 order by c0, c1 desc limit 10;
+select distinct c0, c1 from (select * from t0 union all select space(1000000) as c0, space(1000000) as c1, space(1000000) as c2) tb order by c0, c1 desc limit 10;
+select length(c0), max(length(c1)), max(length(c2)) from (select * from t0 union all select space(1000000) as c0, space(1000000) as c1, space(1000000) as c2) tb group by c0 order by 1, 2 desc limit 10;
+insert into t0 SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+
+select max(length(c0)), max(length(c1)) from (select distinct c0, c1 from t0) tb;
+select max(length(c0)), max(length(c1)) from (select distinct c0, c1 from (select * from t0 union all select space(1000000) as c0, space(1000000) as c1, space(1000000) as c2) tb) tb order by 1, 2 desc limit 10;
+select length(c0), max(length(c1)), max(length(c2)) from (select * from t0 union all select space(1000000) as c0, space(1000000) as c1, space(1000000) as c2) tb group by c0, c1, c2 order by 1, 2 desc limit 10;

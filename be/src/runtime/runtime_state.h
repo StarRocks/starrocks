@@ -39,6 +39,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -50,6 +51,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/global_dict/parser.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -126,7 +128,8 @@ public:
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
     bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
-    int64_t timestamp_ms() const { return _timestamp_ms; }
+    int64_t timestamp_ms() const { return _timestamp_us / 1000; }
+    int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
     const std::string& user() const { return _user; }
@@ -138,6 +141,9 @@ public:
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
+    void set_query_mem_tracker(const std::shared_ptr<MemTracker>& query_mem_tracker) {
+        _query_mem_tracker = query_mem_tracker;
+    }
     const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
@@ -152,13 +158,16 @@ public:
     RuntimeProfile* runtime_profile() { return _profile.get(); }
     std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
+    RuntimeProfile* load_channel_profile() { return _load_channel_profile.get(); }
+    std::shared_ptr<RuntimeProfile> load_channel_profile_ptr() { return _load_channel_profile; }
+
     [[nodiscard]] Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
 
     // Appends error to the _error_log if there is space
-    bool log_error(const std::string& error);
+    bool log_error(std::string_view error);
 
     // If !status.ok(), appends the error to the _error_log
     void log_error(const Status& status);
@@ -207,13 +216,13 @@ public:
     // If 'failed_allocation_size' is not 0, then it is the size of the allocation (in
     // bytes) that would have exceeded the limit allocated for 'tracker'.
     // This value and tracker are only used for error reporting.
-    // If 'msg' is non-NULL, it will be appended to query_status_ in addition to the
+    // If 'msg' is not empty, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
     [[nodiscard]] Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
-                                                const std::string* msg = nullptr);
+                                                std::string_view msg = {});
 
-    [[nodiscard]] Status set_mem_limit_exceeded(const std::string& msg) {
-        return set_mem_limit_exceeded(nullptr, 0, &msg);
+    [[nodiscard]] Status set_mem_limit_exceeded(std::string_view msg) {
+        return set_mem_limit_exceeded(nullptr, 0, msg);
     }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
@@ -343,11 +352,19 @@ public:
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
     int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
     int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+    bool spill_enable_direct_io() const {
+        return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
+    }
+    double spill_rand_ratio() const { return _query_options.spill_rand_ratio; }
 
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
+    }
+
+    bool enable_hyperscan_vec() const {
+        return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
@@ -389,11 +406,15 @@ public:
 
     const GlobalDictMaps& get_load_global_dict_map() const;
 
+    DictOptimizeParser* mutable_dict_optimize_parser();
+
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
     [[nodiscard]] Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     [[nodiscard]] Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+
+    [[nodiscard]] Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -401,7 +422,6 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     [[nodiscard]] Status reset_epoch();
@@ -417,6 +437,30 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+    bool enable_wait_dependent_event() const {
+        return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
+    }
+
+    bool is_jit_enabled() const;
+
+    bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
+
+    void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
+
+    // CompilableExprType
+    // arithmetic -> 2, except /, %
+    // cast -> 4
+    // case -> 8
+    // cmp -> 16
+    // logical -> 32
+    // div -> 64
+    // mod -> 128
+    bool can_jit_expr(const int jit_label) {
+        return (_query_options.jit_level == 1) || ((_query_options.jit_level & jit_label));
+    }
+
+    std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -430,6 +474,7 @@ private:
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
     std::shared_ptr<RuntimeProfile> _profile;
+    std::shared_ptr<RuntimeProfile> _load_channel_profile;
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
     int _func_version = 0;
@@ -453,7 +498,7 @@ private:
     std::string _user;
 
     //Query-global timestamp_ms
-    int64_t _timestamp_ms = 0;
+    int64_t _timestamp_us = 0;
     std::string _timezone;
     cctz::time_zone _timezone_obj;
 
@@ -542,6 +587,7 @@ private:
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
+    DictOptimizeParser _dict_optimize_parser;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;

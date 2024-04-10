@@ -5,43 +5,43 @@ CREATE DATABASE test_create_table;
 USE test_create_table;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc INT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc INT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE NOT NULL AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE NOT NULL AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, 'Getting syntax error. Detail message: Generated Column must be nullable column.')
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, "Getting syntax error at line 1, column 95. Detail message: Unexpected input 'AS', the most similar input is {',', ')'}.")
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE DEFAULT "1.0" AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE DEFAULT "1.0" AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, "Getting syntax error at line 1, column 94. Detail message: Unexpected input 'AS', the most similar input is {',', ')'}.")
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns.')
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), mc_1 DOUBLE AS (mc) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), mc_1 DOUBLE AS (mc) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns.')
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc BIGINT AS (sum(id)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc BIGINT AS (sum(id)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Generated Column don't support aggregation function.")
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), job INT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), job INT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: All generated columns must be defined after ordinary columns.')
 -- !result
-CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Generated Column can not be KEY.')
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 SHOW CREATE TABLE t;
@@ -54,12 +54,11 @@ t	CREATE TABLE `t` (
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 DROP TABLE t;
@@ -75,7 +74,7 @@ CREATE DATABASE test_insert;
 USE test_insert;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1, [1,2], 0.0);
@@ -92,7 +91,7 @@ INSERT INTO t VALUES (1, [1,2]);
 INSERT INTO t (id, array_data) VALUES (2, [3,4]);
 -- result:
 -- !result
-CREATE TABLE t1 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t1 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t1 VALUES (3, [10,20]);
@@ -127,7 +126,7 @@ CREATE DATABASE test_materialized_column_in_materialized_view;
 USE test_materialized_column_in_materialized_view;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ASYNC AS SELECT id, mc FROM t;
@@ -161,7 +160,7 @@ CREATE DATABASE test_materialized_column_alter_table_with_concurrent_insert;
 USE test_materialized_column_alter_table_with_concurrent_insert;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 ALTER TABLE t MODIFY COLUMN mc BIGINT AS (id + 10);
@@ -182,14 +181,6 @@ INSERT INTO t VALUES (4);
 INSERT INTO t VALUES (5);
 -- result:
 -- !result
-SELECT * FROM t ORDER BY id;
--- result:
-1	1
-2	2
-3	3
-4	4
-5	5
--- !result
 function: wait_alter_table_finish()
 -- result:
 None
@@ -205,7 +196,7 @@ SELECT * FROM t ORDER BY id;
 DROP TABLE t;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 ALTER TABLE t DROP COLUMN mc;
@@ -226,14 +217,6 @@ INSERT INTO t VALUES (4);
 INSERT INTO t VALUES (5);
 -- result:
 -- !result
-SELECT * FROM t ORDER BY id;
--- result:
-1
-2
-3
-4
-5
--- !result
 function: wait_alter_table_finish()
 -- result:
 None
@@ -249,7 +232,7 @@ SELECT * FROM t ORDER BY id;
 DROP TABLE t;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 ALTER TABLE t ADD COLUMN name BIGINT AS (id + 10);
@@ -269,14 +252,6 @@ INSERT INTO t VALUES (4);
 -- !result
 INSERT INTO t VALUES (5);
 -- result:
--- !result
-SELECT * FROM t ORDER BY id;
--- result:
-1	1
-2	2
-3	3
-4	4
-5	5
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -303,7 +278,7 @@ CREATE DATABASE test_materialized_column_schema_change;
 USE test_materialized_column_schema_change;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, job INT NOT NULL, incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, job INT NOT NULL, incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1, 2, DEFAULT, [1,2]);
@@ -329,7 +304,7 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 INT AS (array_avg(array_data));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
@@ -372,7 +347,7 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 INT AS (array_avg(array_data));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
@@ -404,11 +379,11 @@ E: (1064, 'Getting syntax error. Detail message: Generated Column can not be KEY
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_2 INT;
 -- result:
-E: (1064, 'Unexpected exception: Can not modify a generated column to a non-generated column')
+E: (1064, 'Can not modify a generated column to a non-generated column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT AS (id);
 -- result:
-E: (1064, 'Unexpected exception: Can not modify a non-generated column to a generated column')
+E: (1064, 'Can not modify a non-generated column to a generated column')
 -- !result
 ALTER TABLE t DROP COLUMN mc_2;
 -- result:
@@ -430,16 +405,16 @@ CREATE DATABASE test_normal_column_schema_change;
 USE test_normal_column_schema_change;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc INT AS (job) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc INT AS (job) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column after Generated Column')
+E: (1064, 'Can not add column after Generated Column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Do not support modify column: job, because it associates with the generated column')
+E: (1064, 'Do not support modify column: job, because it associates with the generated column')
 -- !result
 ALTER TABLE t DROP COLUMN job;
 -- result:
@@ -468,12 +443,11 @@ t	CREATE TABLE `t` (
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 ALTER TABLE t DROP COLUMN mc;
@@ -510,7 +484,7 @@ CREATE DATABASE test_add_multiple_column;
 USE test_add_multiple_column;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1), (2), (3);
@@ -539,12 +513,10 @@ t	CREATE TABLE `t` (
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 ALTER TABLE t ADD COLUMN (newcol3 BIGINT DEFAULT "0", newcol4 BIGINT DEFAULT "0");
@@ -572,12 +544,10 @@ t	CREATE TABLE `t` (
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 1000);
@@ -594,7 +564,7 @@ CREATE DATABASE test_update;
 USE test_update;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1, 2, 3);
@@ -677,7 +647,7 @@ CREATE DATABASE test_schema_change_for_add_optimization;
 USE test_schema_change_for_add_optimization;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1, 2);
@@ -730,7 +700,7 @@ SELECT * FROM t;
 DROP TABLE t;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1, 2);
@@ -793,7 +763,7 @@ CREATE DATABASE test_schema_change_for_constant_expression;
 USE test_schema_change_for_constant_expression;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1),(2),(3);
@@ -854,7 +824,7 @@ SELECT * FROM t ORDER BY id;
 DROP TABLE t;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 INSERT INTO t VALUES (1),(2),(3);
@@ -925,20 +895,20 @@ CREATE DATABASE test_schema_change_for_after;
 USE test_schema_change_for_after;
 -- result:
 -- !result
-CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
 alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after testcol1;
 -- result:
-E: (1064, 'Unexpected exception: Column[xxx] does not found')
+E: (1064, 'Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after xxx;
 -- result:
-E: (1064, 'Unexpected exception: Column[xxx] does not found')
+E: (1064, 'Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after xxx;
 -- result:
-E: (1064, 'Unexpected exception: Column[xxx] does not found')
+E: (1064, 'Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10 after xxx, add column testcol2 BIGINT after xxx;
 -- result:
@@ -950,7 +920,7 @@ E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Det
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10, add column testcol2 BIGINT after testcol1;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column after Generated Column')
+E: (1064, 'Can not add column after Generated Column')
 -- !result
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after testcol1;
 -- result:
@@ -971,12 +941,10 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 alter table t0 add column testcol3 BIGINT after v1, add column testcol4 BIGINT after v1;
@@ -1000,12 +968,10 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 alter table t0 add column testcol5 BIGINT, add column testcol6 BIGINT as v1 * 10;
@@ -1031,14 +997,70 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 DROP DATABASE test_schema_change_for_after;
+-- result:
+-- !result
+-- name: test_compaction_after_adding_generated_column
+CREATE DATABASE test_compaction_after_adding_generated_column;
+-- result:
+-- !result
+USE test_compaction_after_adding_generated_column;
+-- result:
+-- !result
+CREATE TABLE `t` (
+  `c1` BIGINT NOT NULL COMMENT "",
+  `c2` BIGINT NOT NULL COMMENT "",
+  `c3` BIGINT as `c1` + `c2`
+) ENGINE=OLAP 
+PRIMARY KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t values (1,1),(2,2),(3,3),(4,4);
+-- result:
+-- !result
+ALTER TABLE t drop column c3;
+-- result:
+-- !result
+INSERT INTO t values (1,1),(2,2),(3,3),(4,4);
+-- result:
+-- !result
+ALTER TABLE t add column c4 BIGINT as c1 + c2 + 10;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT sleep(10);
+-- result:
+1
+-- !result
+[UC]ALTER TABLE t COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT * FROM t;
+-- result:
+1	1	12
+2	2	14
+3	3	16
+4	4	18
+-- !result
+DROP DATABASE test_compaction_after_adding_generated_column;
 -- result:
 -- !result

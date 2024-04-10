@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.starrocks.common.io.Text;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -158,17 +160,39 @@ public class EditLogTest {
     @Test
     public void testOpUpdateFrontend() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
-        List<Frontend> frontends = mgr.getFrontends(null);
+        List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
         JournalEntity journal = new JournalEntity();
         journal.setData(fe);
         journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
-        EditLog.loadJournal(mgr, journal);
-        List<Frontend> updatedFrontends = mgr.getFrontends(null);
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(mgr, journal);
+        List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
 
+    @Test
+    public void testLoadJournalException(@Mocked GlobalStateMgr globalStateMgr) {
+        JournalEntity journal = new JournalEntity();
+        journal.setOpCode(OperationType.OP_SAVE_NEXTID);
+        // set data to null, and it will throw NPE in loadJournal()
+        journal.setData(null);
+
+        EditLog editLog = new EditLog(null);
+        new Expectations() {
+            {
+                globalStateMgr.getEditLog();
+                result = editLog;
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journal);
+        } catch (JournalInconsistentException e) {
+            Assert.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
+        }
+    }
 }

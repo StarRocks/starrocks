@@ -23,9 +23,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CloudConfigurationConstants;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
@@ -39,6 +39,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
@@ -129,6 +131,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     // In replay phase, the check of storage volume existence can be skipped.
     // Because it has been checked when creating db.
     private boolean bindDbToStorageVolume(String svId, long dbId, boolean isReplay) {
+        if (svId == null) {
+            return false;
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
                 return false;
@@ -226,6 +231,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     // In replay phase, the check of storage volume existence can be skipped.
     // Because it has been checked when creating table.
     private boolean bindTableToStorageVolume(String svId, long tableId, boolean isReplay) {
+        if (svId == null) {
+            return false;
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) &&
                     !storageVolumeToTables.containsKey(svId) &&
@@ -329,9 +337,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<List<Long>> bindings = new ArrayList<>();
         List<Long> tableBindings = new ArrayList<>();
         List<Long> dbBindings = new ArrayList<>();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin().stream()
+                .filter(dbid -> dbid > NEXT_ID_INIT_VALUE).collect(Collectors.toList());
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
@@ -339,7 +348,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             }
             dbBindings.add(dbId);
             try {
-                List<Table> tables = GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db);
+                List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db);
                 for (Table table : tables) {
                     Long tableId = table.getId();
                     if (!tableToStorageVolume.containsKey(tableId) && table.isCloudNativeTableOrMaterializedView()) {

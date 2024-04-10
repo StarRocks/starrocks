@@ -2,7 +2,7 @@
 
 ## Description
 
-Retries to load all data files or a specific data file in a pipe.
+Retries to load all data files or a specific data file in a pipe. This command is supported from v3.2 onwards.
 
 ## Syntax
 
@@ -28,8 +28,16 @@ The following example retries to load all data files in a pipe named `user_behav
 ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY ALL;
 ```
 
-The following example retries to load the data file `s3://starrocks-datasets/user_behavior_ten_million_rows.parquet` in a pipe named `user_behavior_replica`:
+The following example retries to load the data file `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` in a pipe named `user_behavior_replica`:
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-datasets/user_behavior_ten_million_rows.parquet';
+ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-examples/user_behavior_ten_million_rows.parquet';
 ```
+
+## References
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)

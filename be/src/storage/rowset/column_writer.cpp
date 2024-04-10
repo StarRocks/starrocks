@@ -45,12 +45,15 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
+#include "storage/inverted/inverted_index_option.h"
+#include "storage/inverted/inverted_plugin_factory.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/json_column_writer.h"
 #include "storage/rowset/map_column_writer.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
@@ -160,6 +163,8 @@ public:
                 LOG(ERROR) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
                 return {};
             }
+            // before build(), update buffer length to the actual compressed size
+            _encode_buf.resize(r);
             return _encode_buf.build();
         } else if (_null_encoding == NullEncodingPB::LZ4_NULL) {
             const BlockCompressionCodec* codec = nullptr;
@@ -239,6 +244,7 @@ public:
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
+    Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); };
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
 
@@ -254,6 +260,49 @@ private:
     ColumnPtr _buf_column = nullptr;
 };
 
+class DictColumnWriter final : public ColumnWriter {
+public:
+    DictColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
+                     std::unique_ptr<ScalarColumnWriter> column_writer);
+
+    ~DictColumnWriter() override = default;
+
+    Status init() override { return _scalar_column_writer->init(); };
+
+    Status append(const Column& column) override;
+
+    // Speculate encoding and reset encoding
+    Status speculate_column_and_set_encoding(const Column& column);
+
+    // Speculate encoding
+    template <LogicalType Type>
+    inline EncodingTypePB speculate_encoding(const Column& column);
+
+    Status finish_current_page() override { return _scalar_column_writer->finish_current_page(); };
+
+    uint64_t estimate_buffer_size() override { return _scalar_column_writer->estimate_buffer_size(); };
+
+    // finish append data
+    Status finish() override;
+
+    Status write_data() override { return _scalar_column_writer->write_data(); };
+    Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
+    Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
+    Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
+
+    ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
+
+    bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
+
+    uint64_t total_mem_footprint() const override { return _scalar_column_writer->total_mem_footprint(); }
+
+private:
+    std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
+    bool _is_speculated = false;
+    ColumnPtr _buf_column = nullptr;
+};
+
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
                                                              const TabletColumn* column, WritableFile* wfile) {
     TypeInfoPtr type_info = get_type_info(*column);
@@ -261,10 +310,24 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
     if (is_string_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
         str_opts.need_speculate_encoding = true;
+        str_opts.field_name = column->name();
         auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, type_info, wfile);
         return std::make_unique<StringColumnWriter>(str_opts, std::move(type_info), std::move(column_writer));
+    } else if (enable_non_string_column_dict_encoding() &&
+               numeric_types_support_dict_encoding(delegate_type(column->type()))) {
+        DCHECK(column->type() != TYPE_VARCHAR);
+        DCHECK(column->type() != TYPE_CHAR);
+        ColumnWriterOptions dict_opts = opts;
+        dict_opts.need_speculate_encoding = true;
+        auto column_writer = std::make_unique<ScalarColumnWriter>(dict_opts, type_info, wfile);
+        return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
+    } else if (column->type() == LogicalType::TYPE_JSON) {
+        auto column_writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
+        return create_json_column_writer(opts, std::move(type_info), wfile, std::move(column_writer));
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
-        return std::make_unique<ScalarColumnWriter>(opts, std::move(type_info), wfile);
+        ColumnWriterOptions str_opts = opts;
+        str_opts.field_name = column->name();
+        return std::make_unique<ScalarColumnWriter>(str_opts, std::move(type_info), wfile);
     } else {
         switch (column->type()) {
         case LogicalType::TYPE_ARRAY:
@@ -336,7 +399,44 @@ Status ScalarColumnWriter::init() {
     }
     if (_opts.need_bloom_filter) {
         _has_index_builder = true;
-        RETURN_IF_ERROR(BloomFilterIndexWriter::create(BloomFilterOptions(), _type_info, &_bloom_filter_index_builder));
+        BloomFilterOptions bf_options;
+        if (_opts.tablet_index.contains(NGRAMBF)) {
+            bf_options.use_ngram = true;
+            const TabletIndex& ngram_bf_index = _opts.tablet_index[NGRAMBF];
+            const std::map<std::string, std::string>& index_properties = ngram_bf_index.index_properties();
+            auto it = index_properties.find(GRAM_NUM_KEY);
+            if (it != index_properties.end()) {
+                // Found the key "gram_num"
+                const std::string& gram_num = it->second; // The value corresponding to the key "gram_num"
+                bf_options.gram_num = std::stoi(gram_num);
+            }
+            it = index_properties.find(FPP_KEY);
+            if (it != index_properties.end()) {
+                // Found the key "bloom_filter_fpp"
+                const std::string& fpp = it->second; // The value corresponding to the key "bloom_filter_fpp"
+                bf_options.fpp = std::stod(fpp);
+            }
+            it = index_properties.find(CASE_SENSITIVE_KEY);
+            if (it != index_properties.end()) {
+                // Found the key "case_sensitive"
+                const std::string& case_sensitive = it->second; // The value corresponding to the key "case_sensitive"
+                bf_options.case_sensitive = (case_sensitive == "true");
+            }
+        }
+        RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_options, _type_info, &_bloom_filter_index_builder));
+    }
+    if (_opts.need_inverted_index) {
+        _has_index_builder = true;
+        TabletIndex& inverted_tablet_index = _opts.tablet_index.at(GIN);
+
+        ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(inverted_tablet_index))
+        ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type))
+        RETURN_IF_ERROR(inverted_plugin->create_inverted_index_writer(
+                _type_info, _opts.field_name, _opts.standalone_index_file_paths.at(GIN), &inverted_tablet_index,
+                &_inverted_index_builder));
+        if (_inverted_index_builder != nullptr) {
+            RETURN_IF_ERROR(_inverted_index_builder->init());
+        }
     }
     return Status::OK();
 }
@@ -360,6 +460,9 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
     }
     if (_bloom_filter_index_builder != nullptr) {
         size += _bloom_filter_index_builder->size();
+    }
+    if (_inverted_index_builder != nullptr) {
+        size += _inverted_index_builder->size();
     }
     return size;
 }
@@ -388,7 +491,11 @@ Status ScalarColumnWriter::write_data() {
         PageFooterPB footer;
         footer.set_type(DICTIONARY_PAGE);
         footer.set_uncompressed_size(dict_body->size());
-        footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+        if (_encoding_info->type() == TYPE_CHAR || _encoding_info->type() == TYPE_VARCHAR) {
+            footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+        } else {
+            footer.mutable_dict_page_footer()->set_encoding(BIT_SHUFFLE);
+        }
 
         PagePointer dict_pp;
         std::vector<Slice> body{Slice(*dict_body)};
@@ -455,6 +562,13 @@ Status ScalarColumnWriter::write_bitmap_index() {
 Status ScalarColumnWriter::write_bloom_filter_index() {
     if (_bloom_filter_index_builder != nullptr) {
         return _bloom_filter_index_builder->finish(_wfile, _opts.meta->add_indexes());
+    }
+    return Status::OK();
+}
+
+Status ScalarColumnWriter::write_inverted_index() {
+    if (_inverted_index_builder != nullptr) {
+        return _inverted_index_builder->finish();
     }
     return Status::OK();
 }
@@ -665,10 +779,12 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
                     INDEX_ADD_NULLS(_zone_map_index_builder, run);
                     INDEX_ADD_NULLS(_bitmap_index_builder, run);
                     INDEX_ADD_NULLS(_bloom_filter_index_builder, run);
+                    INDEX_ADD_NULLS(_inverted_index_builder, run);
                 } else {
                     INDEX_ADD_VALUES(_zone_map_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bitmap_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bloom_filter_index_builder, pdata, run);
+                    INDEX_ADD_VALUES(_inverted_index_builder, pdata, run);
                 }
                 pdata += type_info()->size() * run;
             }
@@ -676,6 +792,7 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
             INDEX_ADD_VALUES(_zone_map_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bitmap_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bloom_filter_index_builder, data, num_written);
+            INDEX_ADD_VALUES(_inverted_index_builder, data, num_written);
         }
 
         _next_rowid += num_written;
@@ -705,8 +822,9 @@ Status StringColumnWriter::append(const Column& column) {
     }
 
     if (_buf_column == nullptr) {
-        // first column size is greater than speculate size
-        if (column.size() >= config::dictionary_speculate_min_chunk_size) {
+        // First column size is greater than speculate size or byte size large than UINT32_MAX.
+        // Because if columns' byte size than UINT32_MAX, that will cause BinaryColumn<uint32_t> overflow
+        if (column.size() >= config::dictionary_speculate_min_chunk_size || column.byte_size() >= UINT32_MAX) {
             _is_speculated = true;
             speculate_column_and_set_encoding(column);
             return _scalar_column_writer->append(column);
@@ -716,16 +834,19 @@ Status StringColumnWriter::append(const Column& column) {
             return Status::OK();
         }
     }
-    _buf_column->append(column, 0, column.size());
-    if (_buf_column->size() < config::dictionary_speculate_min_chunk_size) {
-        return Status::OK();
-    } else {
+    if (column.size() + _buf_column->size() >= config::dictionary_speculate_min_chunk_size ||
+        column.byte_size() + _buf_column->byte_size() >= UINT32_MAX) {
+        // If it is predicted that _buf_column will exceed the limit after append column,
+        // skip append column
         _is_speculated = true;
         speculate_column_and_set_encoding(*_buf_column);
-        Status st = _scalar_column_writer->append(*_buf_column);
+        RETURN_IF_ERROR(_scalar_column_writer->append(*_buf_column));
         _buf_column.reset();
-        return st;
+        RETURN_IF_ERROR(_scalar_column_writer->append(column));
+    } else {
+        _buf_column->append(column, 0, column.size());
     }
+    return Status::OK();
 }
 
 inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& column) {
@@ -744,8 +865,6 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& 
 }
 
 inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
-    const size_t dictionary_min_rowcount = 256;
-
     auto row_count = bin_col.size();
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
@@ -810,6 +929,135 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
         }
     }
     return Status::OK();
+}
+
+DictColumnWriter::DictColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
+                                   std::unique_ptr<ScalarColumnWriter> column_writer)
+        : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
+          _scalar_column_writer(std::move(column_writer)) {}
+
+Status DictColumnWriter::append(const Column& column) {
+    if (_is_speculated) {
+        return _scalar_column_writer->append(column);
+    }
+
+    if (_buf_column == nullptr) {
+        // First column size is greater than speculate size or byte size large than UINT32_MAX.
+        // Because if columns' byte size than UINT32_MAX, that will cause BinaryColumn<uint32_t> overflow
+        if (column.size() >= config::dictionary_speculate_min_chunk_size || column.byte_size() >= UINT32_MAX) {
+            _is_speculated = true;
+            RETURN_IF_ERROR(speculate_column_and_set_encoding(column));
+            return _scalar_column_writer->append(column);
+        } else {
+            _buf_column = column.clone_empty();
+            _buf_column->append(column, 0, column.size());
+            return Status::OK();
+        }
+    }
+    if (column.size() + _buf_column->size() >= config::dictionary_speculate_min_chunk_size ||
+        column.byte_size() + _buf_column->byte_size() >= UINT32_MAX) {
+        // If it is predicted that _buf_column will exceed the limit after append column,
+        // skip append column
+        _is_speculated = true;
+        RETURN_IF_ERROR(speculate_column_and_set_encoding(*_buf_column));
+        RETURN_IF_ERROR(_scalar_column_writer->append(*_buf_column));
+        _buf_column.reset();
+        RETURN_IF_ERROR(_scalar_column_writer->append(column));
+    } else {
+        _buf_column->append(column, 0, column.size());
+    }
+    return Status::OK();
+}
+
+inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& column) {
+    Status st;
+    EncodingTypePB detect_encoding;
+    LogicalType logicalType = delegate_type(type_info()->type());
+    switch (logicalType) {
+    case TYPE_SMALLINT:
+        detect_encoding = speculate_encoding<TYPE_SMALLINT>(column);
+        break;
+    case TYPE_INT:
+        detect_encoding = speculate_encoding<TYPE_INT>(column);
+        break;
+    case TYPE_BIGINT:
+        detect_encoding = speculate_encoding<TYPE_BIGINT>(column);
+        break;
+    case TYPE_LARGEINT:
+        detect_encoding = speculate_encoding<TYPE_LARGEINT>(column);
+        break;
+    case TYPE_FLOAT:
+        detect_encoding = speculate_encoding<TYPE_FLOAT>(column);
+        break;
+    case TYPE_DOUBLE:
+        detect_encoding = speculate_encoding<TYPE_DOUBLE>(column);
+        break;
+    case TYPE_DATE:
+        detect_encoding = speculate_encoding<TYPE_DATE>(column);
+        break;
+    case TYPE_DATETIME:
+        detect_encoding = speculate_encoding<TYPE_DATETIME>(column);
+        break;
+    case TYPE_DECIMALV2:
+        detect_encoding = speculate_encoding<TYPE_DECIMALV2>(column);
+        break;
+    default:
+        return Status::InternalError(strings::Substitute("$0 type should not use dictionary encoding", logicalType));
+    }
+    st = _scalar_column_writer->set_encoding(detect_encoding);
+    CHECK(st.ok()) << st;
+    return st;
+}
+
+// The detection logic here uses a set to record the distinct values of a sample column. When the number
+// of distinct values exceeds row_count * ratio, dictionary encoding is no longer used.
+// Here, row_count is the number of elements in the sample column, and ratio is set by the user.
+template <LogicalType Type>
+inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column) {
+    using ColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
+    const ColumnType* numerical_col;
+    if (column.is_nullable()) {
+        const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
+        numerical_col = &down_cast<ColumnType&>(*data_col);
+    } else {
+        numerical_col = &down_cast<const ColumnType&>(column);
+    }
+
+    auto row_count = numerical_col->size();
+    auto ratio = config::dictionary_encoding_ratio_for_non_string_column;
+    auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
+
+    if (row_count > dictionary_min_rowcount) {
+        using CppType = typename RunTimeTypeTraits<Type>::CppType;
+        phmap::flat_hash_set<CppType> hash_set;
+        for (size_t i = 0; i < row_count; i++) {
+            CppType value = numerical_col->get_data()[i];
+            hash_set.insert(value);
+            if (hash_set.size() > max_card) {
+                return BIT_SHUFFLE;
+            }
+        }
+    }
+
+    return DICT_ENCODING;
+}
+
+Status DictColumnWriter::finish() {
+    if (_is_speculated) {
+        return _scalar_column_writer->finish();
+    }
+
+    _is_speculated = true;
+    if (_buf_column != nullptr) {
+        RETURN_IF_ERROR(speculate_column_and_set_encoding(*_buf_column));
+        Status st = _scalar_column_writer->append(*_buf_column);
+        _buf_column.reset();
+        if (!st.ok()) {
+            return st;
+        }
+    }
+
+    return _scalar_column_writer->finish();
 }
 
 } // namespace starrocks

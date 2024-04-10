@@ -48,14 +48,13 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
@@ -63,7 +62,13 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TResourceInfo;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -103,8 +108,7 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testAddJobByStmt(@Injectable Auth auth,
-                                 @Injectable TResourceInfo tResourceInfo,
+    public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
                                  @Mocked ConnectContext connectContext,
                                  @Mocked GlobalStateMgr globalStateMgr) throws UserException {
         String jobName = "job1";
@@ -138,16 +142,6 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new Expectations() {
-            {
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, PrivPredicate.LOAD);
-                minTimes = 0;
-                result = true;
-            }
-        };
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
 
@@ -172,8 +166,7 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testCreateJobAuthDeny(@Injectable Auth auth,
-                                      @Injectable TResourceInfo tResourceInfo,
+    public void testCreateJobAuthDeny(@Injectable TResourceInfo tResourceInfo,
                                       @Mocked ConnectContext connectContext,
                                       @Mocked GlobalStateMgr globalStateMgr) {
         String jobName = "job1";
@@ -197,16 +190,6 @@ public class RoutineLoadManagerTest {
                 typeName, customProperties);
         createRoutineLoadStmt.setOrigStmt(new OriginStatement("dummy", 0));
 
-        new Expectations() {
-            {
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, PrivPredicate.LOAD);
-                minTimes = 0;
-                result = false;
-            }
-        };
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         try {
             routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
@@ -307,15 +290,9 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-        };
-
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
-        routineLoadManager.takeBeTaskSlot();
+        routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
@@ -333,18 +310,12 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-        };
-
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
 
         // take tow slots
-        long beId1 = routineLoadManager.takeBeTaskSlot();
-        long beId2 = routineLoadManager.takeBeTaskSlot();
+        long beId1 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        long beId2 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertTrue(beId1 != beId2);
         Assert.assertTrue(beId1 != -1L);
         Assert.assertTrue(beId2 != -1L);
@@ -352,12 +323,12 @@ public class RoutineLoadManagerTest {
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot() > 0));
+            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot());
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID));
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L));
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L));
 
@@ -365,8 +336,8 @@ public class RoutineLoadManagerTest {
         ExecutorService es2 = Executors.newCachedThreadPool();
         for (int i = 0; i < Config.max_routine_load_task_num_per_be; i++) {
             es2.submit(() -> {
-                routineLoadManager.releaseBeTaskSlot(1L);
-                routineLoadManager.releaseBeTaskSlot(2L);
+                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
+                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L);
             });
         }
         es2.shutdown();
@@ -414,6 +385,48 @@ public class RoutineLoadManagerTest {
         Assert.assertEquals(routineLoadJob1, result.get(1));
         Assert.assertEquals(routineLoadJob3, result.get(2));
 
+    }
+
+    @Test
+    public void testSetRoutineLoadJobOtherMsg() {
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "test", 1L, 1L, "host:port",
+                "topic");
+        Map<Long, Integer> beTasksNum = routineLoadManager.getNodeTasksNum();
+        beTasksNum.put(1L, 0);
+        try {
+            routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
+
+        {
+            TxnCommitAttachment txnCommitAttachment = new InsertTxnCommitAttachment();
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo", txnCommitAttachment);
+        }
+
+        {
+            RLTaskTxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo", txnCommitAttachment);
+        }
+
+        {
+
+            TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = new TRLTaskTxnCommitAttachment();
+            rlTaskTxnCommitAttachment.setId(new TUniqueId());
+            rlTaskTxnCommitAttachment.setLoadedRows(100);
+            rlTaskTxnCommitAttachment.setFilteredRows(1);
+            rlTaskTxnCommitAttachment.setJobId(Deencapsulation.getField(routineLoadJob, "id"));
+            rlTaskTxnCommitAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+            TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+            Map<Integer, Long> kafkaProgress = Maps.newHashMap();
+            kafkaProgress.put(1, 100L); // start from 0, so rows number is 101, and consumed offset is 100
+            tKafkaRLTaskProgress.setPartitionCmtOffset(kafkaProgress);
+            rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+            TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo abc", txnCommitAttachment);
+            Assert.assertEquals(true, routineLoadJob.getOtherMsg().contains("foo abc"));
+        }
     }
 
     @Test
@@ -497,7 +510,6 @@ public class RoutineLoadManagerTest {
     public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
-                                        @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -527,12 +539,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -559,7 +565,6 @@ public class RoutineLoadManagerTest {
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
                                          @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database,
-                                         @Mocked Auth auth,
                                          @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -585,12 +590,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -603,7 +602,6 @@ public class RoutineLoadManagerTest {
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked Database database,
-                                       @Mocked Auth auth,
                                        @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -629,12 +627,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -750,7 +742,6 @@ public class RoutineLoadManagerTest {
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
-                                        @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -776,12 +767,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -789,7 +774,6 @@ public class RoutineLoadManagerTest {
 
         Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
     }
-
 
     @Test
     public void testLoadImageWithoutExpiredJob() throws Exception {

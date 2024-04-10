@@ -52,6 +52,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
         for (auto& column : _parent->_meta_scan_node.columns) {
             tablet_schema->append_column(TabletColumn(column));
         }
+        tablet_schema->generate_sort_key_idxes();
     }
     _reader_params.tablet_schema = std::move(tablet_schema);
     _reader_params.desc_tbl = &_parent->_desc_tbl;

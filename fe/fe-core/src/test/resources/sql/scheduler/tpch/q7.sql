@@ -1,59 +1,19 @@
-[sql]
-select
-    supp_nation,
-    cust_nation,
-    l_year,
-    sum(volume) as revenue
-from
-    (
-        select
-            n1.n_name as supp_nation,
-            n2.n_name as cust_nation,
-            extract(year from l_shipdate) as l_year,
-            l_extendedprice * (1 - l_discount) as volume
-        from
-            supplier,
-            lineitem,
-            orders,
-            customer,
-            nation n1,
-            nation n2
-        where
-                s_suppkey = l_suppkey
-          and o_orderkey = l_orderkey
-          and c_custkey = o_custkey
-          and s_nationkey = n1.n_nationkey
-          and c_nationkey = n2.n_nationkey
-          and (
-                (n1.n_name = 'CANADA' and n2.n_name = 'IRAN')
-                or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')
-            )
-          and l_shipdate between date '1995-01-01' and date '1996-12-31'
-    ) as shipping
-group by
-    supp_nation,
-    cust_nation,
-    l_year
-order by
-    supp_nation,
-    cust_nation,
-    l_year ;
 [scheduler]
 PLAN FRAGMENT 0(F18)
   DOP: 16
   INSTANCES
     INSTANCE(0-F18#0)
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 1(F17)
   DOP: 16
   INSTANCES
     INSTANCE(1-F17#0)
       DESTINATIONS: 0-F18#0
-      BE: 10003
+      BE: 10002
     INSTANCE(2-F17#1)
       DESTINATIONS: 0-F18#0
-      BE: 10002
+      BE: 10003
     INSTANCE(3-F17#2)
       DESTINATIONS: 0-F18#0
       BE: 10001
@@ -63,10 +23,10 @@ PLAN FRAGMENT 2(F16)
   INSTANCES
     INSTANCE(4-F16#0)
       DESTINATIONS: 1-F17#0,2-F17#1,3-F17#2
-      BE: 10001
+      BE: 10003
     INSTANCE(5-F16#1)
       DESTINATIONS: 1-F17#0,2-F17#1,3-F17#2
-      BE: 10003
+      BE: 10001
     INSTANCE(6-F16#2)
       DESTINATIONS: 1-F17#0,2-F17#1,3-F17#2
       BE: 10002
@@ -118,13 +78,13 @@ PLAN FRAGMENT 5(F10)
   INSTANCES
     INSTANCE(11-F10#0)
       DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
-      BE: 10001
+      BE: 10003
     INSTANCE(12-F10#1)
       DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
-      BE: 10002
+      BE: 10001
     INSTANCE(13-F10#2)
       DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
-      BE: 10003
+      BE: 10002
 
 PLAN FRAGMENT 6(F08)
   DOP: 16
@@ -511,4 +471,3 @@ PLAN FRAGMENT 10
      cardinality=1
      avgRowSize=16.0
 [end]
-

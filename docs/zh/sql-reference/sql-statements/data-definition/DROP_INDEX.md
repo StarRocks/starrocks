@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['suoyin']
 ---
 
 # DROP INDEX
@@ -7,6 +8,12 @@ displayed_sidebar: "Chinese"
 ## 功能
 
 删除指定表的某个 bitmap 索引。创建 bitmap 索引会占用额外的存储空间，所以不用的索引建议删除。删除索引后，存储空间会立即释放。
+
+:::tip
+
+该操作需要对应表的 ALTER 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 
@@ -24,7 +31,7 @@ DROP INDEX index_name ON [db_name.]table_name
 
 ## 示例
 
-例如为表`sales_records`中的`item_id`列创建位图索引，索引名称为`index3`。
+例如为表 `sales_records` 中的 `item_id` 列创建位图索引，索引名称为 `index3`。
 
 ```SQL
 CREATE INDEX index3 ON sales_records (item_id);

@@ -14,28 +14,32 @@
 
 package com.starrocks.server;
 
-import com.google.common.collect.ImmutableMap;
+import com.google.common.base.Preconditions;
+import com.staros.client.StarClientException;
+import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.WarehouseProcDir;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -43,13 +47,12 @@ public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
-
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
 
-    private Map<Long, Warehouse> idToWh = new HashMap<>();
-    private Map<String, Warehouse> nameToWh = new HashMap<>();
+    protected final Map<Long, Warehouse> idToWh = new HashMap<>();
+    protected final Map<String, Warehouse> nameToWh = new HashMap<>();
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public WarehouseManager() {
     }
@@ -57,33 +60,33 @@ public class WarehouseManager implements Writable {
     public void initDefaultWarehouse() {
         // gen a default warehouse
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
-                    DEFAULT_WAREHOUSE_NAME);
+            Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
         }
     }
 
-    public Warehouse getDefaultWarehouse() {
-        return getWarehouse(DEFAULT_WAREHOUSE_NAME);
+    public List<Warehouse> getAllWarehouses() {
+        return new ArrayList<>(nameToWh.values());
     }
 
     public Warehouse getWarehouse(String warehouseName) {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return nameToWh.get(warehouseName);
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse warehouse = nameToWh.get(warehouseName);
+            if (warehouse == null) {
+                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+            }
+            return warehouse;
         }
     }
 
     public Warehouse getWarehouse(long warehouseId) {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return idToWh.get(warehouseId);
-        }
-    }
-
-    public List<Long> getWarehouseIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            return new ArrayList<>(idToWh.keySet());
+            Warehouse warehouse = idToWh.get(warehouseId);
+            if (warehouse == null) {
+                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
+            }
+            return warehouse;
         }
     }
 
@@ -93,39 +96,115 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
-        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        Warehouse warehouse = getDefaultWarehouse();
-        warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
-                nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
-        return builder.build();
-    }
-
-    // not persist anything thereafter, so checksum ^= 0
-    public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
-        checksum ^= 0;
-        write(out);
-        return checksum;
-    }
-
-    public long loadWarehouses(DataInputStream dis, long checksum) throws IOException, DdlException {
-        int warehouseCount = 0;
-        try {
-            String s = Text.readString(dis);
-            WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
-            if (data != null && data.nameToWh != null) {
-                warehouseCount = data.nameToWh.size();
-            }
-            checksum ^= warehouseCount;
-            LOG.info("finished replaying WarehouseMgr from image");
-        } catch (EOFException e) {
-            LOG.info("no WarehouseMgr to replay.");
+    public List<Long> getAllComputeNodeIds(long warehouseId) {
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
         }
-        return checksum;
+
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        } catch (UserException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
-    public List<List<String>> getWarehousesInfo() {
-        return new WarehouseProcDir(this).fetchResult().getRows();
+    public List<Long> getAllComputeNodeIds(String warehouseName) {
+        Warehouse warehouse = nameToWh.get(warehouseName);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+        }
+
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        } catch (UserException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+        Warehouse warehouse = idToWh.get(warehouseId);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
+        }
+
+        try {
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+
+            Long nodeId;
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllBackendIdsByShard(shardInfo, true);
+            if (!ids.isEmpty()) {
+                nodeId = ids.iterator().next();
+                return nodeId;
+            } else {
+                return null;
+            }
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+        Warehouse warehouse = nameToWh.get(warehouseName);
+        if (warehouse == null) {
+            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+        }
+
+        try {
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+
+            Long nodeId;
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllBackendIdsByShard(shardInfo, true);
+            if (!ids.isEmpty()) {
+                nodeId = ids.iterator().next();
+                return nodeId;
+            } else {
+                return null;
+            }
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+        try {
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getShardInfo(tablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllBackendIdsByShard(shardInfo, true);
+        } catch (StarClientException e) {
+            return null;
+        }
+    }
+
+    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+        Warehouse warehouse = getWarehouse(warehouseName);
+        return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
+    }
+
+    public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+        Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+        if (computeNodeId == null) {
+            Warehouse warehouse = idToWh.get(warehouseId);
+            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+        }
+        Preconditions.checkNotNull(computeNodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
+    }
+
+    private final AtomicInteger nextComputeNodeIndex = new AtomicInteger(0);
+
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+        return nextComputeNodeIndex;
     }
 
     @Override

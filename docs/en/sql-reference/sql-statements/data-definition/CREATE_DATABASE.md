@@ -8,11 +8,19 @@ displayed_sidebar: "English"
 
 This statement is used to create databases.
 
+:::tip
+
+This operation requires the CREATE DATABASE privilege on the target catalog. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```sql
 CREATE DATABASE [IF NOT EXISTS] <db_name>
 ```
+
+`db_name`: the name of the database to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
 ## Examples
 

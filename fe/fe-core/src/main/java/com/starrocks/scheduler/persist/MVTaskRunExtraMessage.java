@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.scheduler.ExecuteOption;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
@@ -47,6 +48,14 @@ public class MVTaskRunExtraMessage implements Writable {
     // refreshed partitions of all the base tables which are optimized by optimizer and the real partitions in executing.
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
+
+    @SerializedName("nextPartitionStart")
+    private String nextPartitionStart;
+    @SerializedName("nextPartitionEnd")
+    private String nextPartitionEnd;
+
+    @SerializedName("executeOption")
+    private ExecuteOption executeOption = new ExecuteOption();
 
     public MVTaskRunExtraMessage() {
     }
@@ -124,6 +133,29 @@ public class MVTaskRunExtraMessage implements Writable {
         return GsonUtils.GSON.fromJson(json, MVTaskRunExtraMessage.class);
     }
 
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
+    }
+
+    public String getNextPartitionStart() {
+        return nextPartitionStart;
+    }
+
+    public void setNextPartitionStart(String nextPartitionStart) {
+        this.nextPartitionStart = nextPartitionStart;
+    }
+
+    public String getNextPartitionEnd() {
+        return nextPartitionEnd;
+    }
+
+    public void setNextPartitionEnd(String nextPartitionEnd) {
+        this.nextPartitionEnd = nextPartitionEnd;
+    }
 
     @Override
     public void write(DataOutput out) throws IOException {

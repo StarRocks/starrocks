@@ -270,7 +270,7 @@ PARTITION p7 VALUES [('1998-01-01'), ('1999-01-01')))
 DISTRIBUTED BY HASH(`lo_orderkey`)
 PROPERTIES 
 (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "colocate_with" = "groupxx1",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
@@ -289,7 +289,7 @@ The following two queries, Q1 and Q2, on the table `lineorder_flat` are semantic
 - Q1
 
   ```SQL
-  SELECT sum(lo_revenue)), year(lo_orderdate) AS year,p_brand
+  SELECT sum(lo_revenue), year(lo_orderdate) AS year,p_brand
   FROM lineorder_flat
   WHERE p_category = 'MFGR#12' AND s_region = 'AMERICA'
   GROUP BY year,p_brand
@@ -299,7 +299,7 @@ The following two queries, Q1 and Q2, on the table `lineorder_flat` are semantic
 - Q2
 
   ```SQL
-  SELECT year(lo_orderdate) AS year, p_brand, sum(lo_revenue))
+  SELECT year(lo_orderdate) AS year, p_brand, sum(lo_revenue)
   FROM lineorder_flat
   WHERE s_region = 'AMERICA' AND p_category = 'MFGR#12' AND 
      lo_orderdate >= '1993-01-01' AND lo_orderdate <= '1993-12-31'
@@ -334,7 +334,7 @@ PARTITION BY RANGE(ts)
 DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
 PROPERTIES
 (
-    "replication_num" = "1", 
+    "replication_num" = "3", 
     "storage_format" = "default"
 );
 ```
@@ -568,7 +568,7 @@ The parameters in the preceding API operations are as follows:
    DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
    PROPERTIES
    (
-       "replication_num" = "1",
+       "replication_num" = "3",
        "storage_format" = "DEFAULT",
        "enable_persistent_index" = "false"
    );

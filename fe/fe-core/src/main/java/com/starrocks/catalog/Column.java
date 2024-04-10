@@ -148,6 +148,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(dataType.isValid());
     }
 
+    public Column(String name, Type dataType, boolean isAllowNull, String comment) {
+        this(name, dataType, false, null, isAllowNull, null, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
+        Preconditions.checkArgument(dataType.isValid());
+    }
+
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
         this(name, type, isKey, aggregateType, false,
@@ -575,14 +580,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public DefaultValueType getDefaultValueType() {
-        if (defaultValue != null) {
-            return DefaultValueType.CONST;
-        } else if (defaultExpr != null) {
+        if (defaultExpr != null) {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 return DefaultValueType.CONST;
             } else {
                 return DefaultValueType.VARY;
             }
+        } else if (defaultValue != null) {
+            return DefaultValueType.CONST;
         }
         return DefaultValueType.NULL;
     }
@@ -593,20 +598,24 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // This function is only used to a const default value like "-1" or now().
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValue() {
+        if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                // current transaction time
+                if (ConnectContext.get() != null) {
+                    LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                            .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                    return localDateTime.format(DATE_TIME_FORMATTER);
+                } else {
+                    // should not run up here
+                    return LocalDateTime.now().format(DATE_TIME_FORMATTER);
+                }
+            }
+        }
+        
         if (defaultValue != null) {
             return defaultValue;
         }
-        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            // current transaction time
-            if (ConnectContext.get() != null) {
-                LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
-                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                return localDateTime.format(DATE_TIME_FORMATTER);
-            } else {
-                // should not run up here
-                return LocalDateTime.now().format(DATE_TIME_FORMATTER);
-            }
-        }
+
         return null;
     }
 
@@ -617,14 +626,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // This function is only used to a const default value like "-1" or now().
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValueWithTime(long currentTimestamp) {
+        if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
+                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                return localDateTime.format(DATE_TIME_FORMATTER);
+            }
+        }
+
         if (defaultValue != null) {
             return defaultValue;
         }
-        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
-                    .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-            return localDateTime.format(DATE_TIME_FORMATTER);
-        }
+
         return null;
     }
 
@@ -720,19 +733,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.isSameDefaultValue(other)) {
             return false;
         }
-
-        if (this.getType().isScalarType() && other.getType().isScalarType()) {
-            if (this.getStrLen() != other.getStrLen()) {
-                return false;
-            }
-            if (this.getPrecision() != other.getPrecision()) {
-                return false;
-            }
-            if (this.getScale() != other.getScale()) {
-                return false;
-            }
-        }
-
         if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
             return false;
         }
@@ -742,6 +742,29 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
 
         return comment == null ? other.comment == null : comment.equals(other.getComment());
+    }
+
+    public boolean isSchemaCompatible(Column other) {
+        if (!this.name.equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+        if (!this.getType().equals(other.getType())) {
+            return false;
+        }
+        if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&
+                AggregateType.isNullOrNone(other.getAggregationType())))) {
+            return false;
+        }
+        if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
+            return false;
+        }
+        if (this.isKey != other.isKey()) {
+            return false;
+        }
+        if (this.isAllowNull != other.isAllowNull) {
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -772,6 +795,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String getPhysicalName() {
         return physicalName != null ? physicalName : name;
+    }
+
+    public String getDirectPhysicalName() {
+        return physicalName != null ? physicalName : "";
     }
 
     public void renameColumn(String newName) {

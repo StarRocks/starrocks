@@ -1,32 +1,9 @@
-[sql]
-select
-    l_orderkey,
-    sum(l_extendedprice * (1 - l_discount)) as revenue,
-    o_orderdate,
-    o_shippriority
-from
-    customer,
-    orders,
-    lineitem
-where
-  c_mktsegment = 'HOUSEHOLD'
-  and c_custkey = o_custkey
-  and l_orderkey = o_orderkey
-  and o_orderdate < date '1995-03-11'
-  and l_shipdate > date '1995-03-11'
-group by
-    l_orderkey,
-    o_orderdate,
-    o_shippriority
-order by
-    revenue desc,
-    o_orderdate limit 10;
 [scheduler]
 PLAN FRAGMENT 0(F07)
   DOP: 16
   INSTANCES
     INSTANCE(0-F07#0)
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -75,13 +52,13 @@ PLAN FRAGMENT 2(F05)
   INSTANCES
     INSTANCE(4-F05#0)
       DESTINATIONS: 1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1
-      BE: 10003
+      BE: 10001
     INSTANCE(5-F05#1)
       DESTINATIONS: 1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1
       BE: 10002
     INSTANCE(6-F05#2)
       DESTINATIONS: 1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 3(F03)
   DOP: 16
@@ -282,4 +259,3 @@ PLAN FRAGMENT 4
      cardinality=1
      avgRowSize=24.0
 [end]
-

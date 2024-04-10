@@ -159,6 +159,16 @@ TEST_F(PosixFileSystemTest, iterate_dir) {
         ASSERT_STREQ("123", children[0].c_str());
         ASSERT_STREQ("abc", children[1].c_str());
     }
+    {
+        ASSERT_OK(FileSystem::Default()->iterate_dir(dir_path, [](std::string_view) {
+            errno = EBADF;
+            return false;
+        }));
+        ASSERT_OK(FileSystem::Default()->iterate_dir(dir_path, [](std::string_view) {
+            errno = EBADF;
+            return true;
+        }));
+    }
 
     // Delete non-empty directory, should fail.
     ASSERT_ERROR(FileSystem::Default()->delete_dir(dir_path));
@@ -225,6 +235,16 @@ TEST_F(PosixFileSystemTest, iterate_dir2) {
         }
         return true;
     }));
+
+    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](DirEntry entry) -> bool {
+        errno = EBADF;
+        return false;
+    }));
+
+    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](DirEntry entry) -> bool {
+        errno = EBADF;
+        return true;
+    }));
 }
 
 TEST_F(PosixFileSystemTest, test_delete_files) {
@@ -252,6 +272,8 @@ TEST_F(PosixFileSystemTest, test_delete_files) {
     EXPECT_OK(fs->delete_files(paths));
     EXPECT_TRUE(fs->path_exists(path1).is_not_found());
     EXPECT_TRUE(fs->path_exists(path2).is_not_found());
+    EXPECT_OK(fs->delete_dir_recursive(path1));
+    EXPECT_OK(fs->delete_dir_recursive(path2));
 }
 
 } // namespace starrocks

@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Other FAQs
+# Other FAQ
 
 This topic provides answers to some general questions.
 
@@ -192,7 +192,7 @@ Run the `select current_version();` command or the CLI command `./bin/show_fe_ve
 
 ## How to set the memory size of an FE?
 
-The metadata is stored in the memory used by the FE. You can set the memory size of the FE according to the number of tablets as shown in the table below. For example, if the number of tablets is below 1 million, you should allocate a minimum of 16 GB memory to the FE. You can configure the values of the parameters `-Xms` 和 `-Xmx` in the **JAVA_OPTS** configuration item in the **fe.conf** file, and the values of the parameters `-Xms` 和 `-Xmx` should be consistent. Note that the configuration should be same across all FEs because any of the FEs can be elected as a Leader.
+The metadata is stored in the memory used by the FE. You can set the memory size of the FE according to the number of tablets as shown in the table below. For example, if the number of tablets is below 1 million, you should allocate a minimum of 16 GB memory to the FE. You can configure the values of the parameters `-Xms` and `-Xmx` in the **JAVA_OPTS** configuration item in the **fe.conf** file, and the values of the parameters `-Xms` and `-Xmx` should be consistent. Note that the configuration should be same across all FEs because any of the FEs can be elected as a Leader.
 
 | Number of tablets    | Memory size of each FE |
 | -------------- | ----------- |

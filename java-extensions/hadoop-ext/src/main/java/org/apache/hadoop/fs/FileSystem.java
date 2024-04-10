@@ -593,18 +593,12 @@ public abstract class FileSystem extends Configured
             }
         }
 
-        HadoopExt.getInstance().rewriteConfiguration(conf);
-        UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
-        FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> {
-            String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
-            if (conf.getBoolean(disableCacheName, false)) {
-                LOGGER.debug("Bypassing cache to create filesystem {}", uri);
-                return createFileSystem(uri, conf);
-            }
-            return CACHE.get(uri, conf);
-        });
-        FileSystem fs2 = HadoopExt.getInstance().bindUGIToFileSystem(fs, ugi);
-        return fs2;
+        String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
+        if (conf.getBoolean(disableCacheName, false)) {
+            LOGGER.debug("Bypassing cache to create filesystem {}", uri);
+            return createFileSystem(uri, conf);
+        }
+        return CACHE.get(uri, conf);
     }
 
     /**
@@ -3731,7 +3725,7 @@ public abstract class FileSystem extends Configured
      * @return the initialized filesystem.
      * @throws IOException problems loading or initializing the FileSystem
      */
-    private static FileSystem createFileSystem(URI uri, Configuration conf)
+    private static FileSystem createFileSystemInternal(URI uri, Configuration conf)
             throws IOException {
         LOGGER.info(String.format("%s FileSystem.createFileSystem", HadoopExt.LOGGER_MESSAGE_PREFIX));
         Tracer tracer = FsTracer.get(conf);
@@ -3757,6 +3751,14 @@ public abstract class FileSystem extends Configured
             }
             return fs;
         }
+    }
+
+    private static FileSystem createFileSystem(URI uri, Configuration conf)
+            throws IOException {
+        HadoopExt.getInstance().rewriteConfiguration(conf);
+        UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
+        FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> createFileSystemInternal(uri, conf));
+        return fs;
     }
 
     /**

@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "column/column_access_path.h"
+#include "options.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
@@ -35,9 +36,9 @@ struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
+struct OlapScanRange;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
-
 // Params for TabletReader
 struct TabletReaderParams {
     enum class RangeStartOperation { GT = 0, GE, EQ };
@@ -57,9 +58,8 @@ struct TabletReaderParams {
     //     if config::disable_storage_page_cache is false, we use page cache
     bool use_page_cache = false;
 
-    // Allow this query to cache remote data on local disk or not.
-    // Only work for cloud native tablet(LakeTablet) now.
-    bool fill_data_cache = true;
+    // Options only applies to cloud-native table r/w IO
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;
@@ -84,6 +84,11 @@ struct TabletReaderParams {
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     bool use_pk_index = false;
+
+    int64_t splitted_scan_rows = 0;
+    int64_t scan_dop = 0;
+    TScanRange* scan_range = nullptr;
+    int32_t plan_node_id;
 
 public:
     std::string to_string() const;

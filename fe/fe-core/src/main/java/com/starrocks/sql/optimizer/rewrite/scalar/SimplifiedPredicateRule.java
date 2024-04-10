@@ -31,10 +31,13 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.text.StrTokenizer;
 
 import java.util.Arrays;
 import java.util.List;
@@ -328,11 +331,26 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
-        if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        if (left.isVariable() && left.equals(right)) {
             if (predicate.getBinaryType().equals(BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
             }
         }
+
+        if (predicate.getBinaryType().isEqual() && left.isConstantRef() && right.getType().isBoolean()) {
+            ConstantOperator constantOperator = (ConstantOperator) left;
+            if (constantOperator.isTrue()) {
+                return right;
+            }
+        } else if (predicate.getBinaryType().isEqual() && left.getType().isBoolean() && right.isConstantRef()) {
+            ConstantOperator constantOperator = (ConstantOperator) right;
+            if (constantOperator.isTrue()) {
+                return left;
+            }
+        }
+
         return predicate;
     }
 
@@ -348,8 +366,41 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedTimeFns(call);
         } else if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(call.getFnName())) {
             return simplifiedDateTrunc(call);
+        } else if (FunctionSet.COALESCE.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedCoalesce(call);
+        } else if (FunctionSet.JSON_QUERY.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedJsonQuery(call);
         }
         return call;
+    }
+
+    @Override
+    public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
+                                                     ScalarOperatorRewriteContext context) {
+        // make sure is like, not regexp
+        if (predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
+            return predicate;
+        }
+
+        ScalarOperator rightOp = predicate.getChild(1);
+
+        // make sure is constant column ref
+        if (!rightOp.isConstantRef()) {
+            return predicate;
+        }
+
+        // make sure is string literal
+        if (rightOp.getType() != Type.VARCHAR && rightOp.getType() != Type.CHAR) {
+            return predicate;
+        }
+
+        // make sure it didn't contain '%' and '_' both
+        String likeString =  ((ConstantOperator) predicate.getChild(1)).getVarchar();
+        if (likeString.contains("%") || likeString.contains("_")) {
+            return predicate;
+        }
+
+        return new BinaryPredicateOperator(BinaryType.EQ, predicate.getChild(0), rightOp);
     }
 
     // reduce `date_sub(date_add(x, 1), 2)` -> `date_sub(x, 1)`
@@ -406,6 +457,40 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         return call;
     }
 
+    private ScalarOperator simplifiedCoalesce(CallOperator call) {
+        return simplifiedCoalesce(call, false);
+    }
+
+    public static ScalarOperator simplifiedCoalesce(CallOperator call, boolean asFilter) {
+        ScalarOperator first = call.getChild(0);
+
+        // Find first not null arg.
+        int i = 1;
+        while (i < call.getChildren().size()) {
+            ScalarOperator child = call.getChild(i);
+            if (!ConstantOperator.NULL.equals(child)) {
+                break;
+            }
+            i++;
+        }
+
+        // All args from 1 to end is null
+        // coalesce(x, null, null, ...) equals to x.
+        if (i >= call.getChildren().size()) {
+            return first;
+        }
+
+        if (asFilter) {
+            // coalesce(x, false)/coalesce(x, null, ..., false) equals to x.
+            ScalarOperator notNull = call.getChild(i);
+            if (ConstantOperator.FALSE.equals(notNull)) {
+                return first;
+            }
+        }
+
+        return call;
+    }
+
     // Reduce array_map whose lambda functions is trivial
     // e.g. array_map((x,y)->x, arr1,arr2) is reduced to arr1
     private static ScalarOperator arrayMap(CallOperator call) {
@@ -430,5 +515,39 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         return ((ConstantOperator) call.getChild(0)).getBoolean() ? call.getChild(1) : call.getChild(2);
+    }
+
+    // fold json_query
+    // e.g. json_query(json_query(json_query(k1, '$.a'), '$.b'), '$.c') => json_query(k1, '$.a.b.c')
+    private static ScalarOperator simplifiedJsonQuery(CallOperator call) {
+        if (!(call.getChild(0) instanceof CallOperator)) {
+            return call;
+        }
+        CallOperator child = call.getChild(0).cast();
+        if (!FunctionSet.JSON_QUERY.equalsIgnoreCase(child.getFnName())) {
+            return call;
+        }
+
+        if (!child.getChild(1).isConstantRef() || !call.getChild(1).isConstantRef()) {
+            return call;
+        }
+
+        String path1 = ((ConstantOperator) child.getChild(1)).getVarchar();
+        String path2 = ((ConstantOperator) call.getChild(1)).getVarchar();
+
+        if (StringUtils.isBlank(path2) || StringUtils.contains(path2, "..") ||
+                StringUtils.countMatches(path2, "\"") % 2 != 0) {
+            // .. is recursive search in json path, not supported
+            // unpaired quota char
+            return call;
+        }
+
+        StrTokenizer tokenizer = new StrTokenizer(path2, '.', '"');
+        String[] result = tokenizer.getTokenArray();
+        int skip = result.length >= 1 && "$".equalsIgnoreCase(result[0]) ? 1 : 0;
+        path2 = Arrays.stream(result).skip(skip).collect(Collectors.joining("."));
+        String mergePath = path1 + (StringUtils.isBlank(path2) ? "" : "." + path2);
+        return new CallOperator(child.getFnName(), call.getType(), Lists.newArrayList(child.getChild(0),
+                ConstantOperator.createVarchar(mergePath)), child.getFunction());
     }
 }

@@ -20,6 +20,18 @@
 
 namespace starrocks {
 
+const std::string DEFAULT_FIELD_DELIM = "\001";
+const std::string DEFAULT_COLLECTION_DELIM = "\002";
+const std::string DEFAULT_MAPKEY_DELIM = "\003";
+// LF = Line Feed = '\n'
+const std::string LINE_DELIM_LF = "\n";
+// Most hive TextFile using LF as line delimiter
+const std::string DEFAULT_LINE_DELIM = LINE_DELIM_LF;
+// CR = Carriage Return = '\r'
+const std::string LINE_DELIM_CR = "\r";
+// TODO(SmithCruise) CR + LF, but we don't support it yet, because our code only support single char as line delimiter
+const std::string LINE_DELIM_CR_LF = "\r\n";
+
 // This class used by data lake(Hive, Iceberg,... etc), not for broker load.
 // Broker load plz refer to csv_scanner.cpp
 class HdfsTextScanner final : public HdfsScanner {
@@ -28,10 +40,12 @@ public:
     ~HdfsTextScanner() override = default;
 
     Status do_open(RuntimeState* runtime_state) override;
+    void do_update_counter(HdfsScanProfile* profile) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     Status parse_csv(int chunk_size, ChunkPtr* chunk);
+    int64_t estimated_mem_usage() const override;
 
 private:
     // create a reader or re init reader
@@ -50,7 +64,6 @@ private:
     std::vector<Column*> _column_raw_ptrs;
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
-    size_t _current_range_index = 0;
     // _materialize_slots_index_2_csv_column_index[0] = 5 means materialize_slots[0]->column index 5 in csv
     // materialize_slots is StarRocks' table definition, column index is the actual position in csv
     std::vector<size_t> _materialize_slots_index_2_csv_column_index;

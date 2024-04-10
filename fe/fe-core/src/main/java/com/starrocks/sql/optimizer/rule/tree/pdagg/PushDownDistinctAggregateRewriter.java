@@ -285,7 +285,10 @@ public class PushDownDistinctAggregateRewriter {
             // rewrite
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOp.getColumnRefMap());
             context.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
-            context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
+            Set<ColumnRefOperator> groupByUsedCols = context.groupBys.values().stream()
+                    .flatMap(v -> rewriter.rewrite(v).getColumnRefs().stream()).collect(Collectors.toSet());
+            context.groupBys.clear();
+            groupByUsedCols.forEach(col -> context.groupBys.put(col, col));
 
             if (projectOp.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef)) {
                 return context;

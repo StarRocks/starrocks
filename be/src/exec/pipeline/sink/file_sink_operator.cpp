@@ -16,7 +16,6 @@
 
 #include <utility>
 
-#include "column/chunk.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -45,7 +44,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -59,29 +58,17 @@ private:
 };
 
 Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
-    bool expected = false;
-    if (!_is_prepared.compare_exchange_strong(expected, true)) {
+    if (is_prepared()) {
         return Status::OK();
     }
-    auto dop = state->query_options().pipeline_dop;
 
+    auto dop = state->query_options().pipeline_dop;
     RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
                                                                    std::min(dop << 1, 1024), &_sender));
-
-    _state = state;
     _writer = std::make_shared<FileResultWriter>(_file_opts.get(), _output_expr_ctxs, parent_profile);
     RETURN_IF_ERROR(_writer->init(state));
 
-    bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
-                                                       &FileSinkIOBuffer::execute_io_task, this);
-    if (ret != 0) {
-        _exec_queue_id.reset();
-        return Status::InternalError("start execution queue error");
-    }
-    return Status::OK();
+    return SinkIOBuffer::prepare(state, parent_profile);
 }
 
 void FileSinkIOBuffer::close(RuntimeState* state) {
@@ -110,32 +97,13 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         _sender.reset();
 
-        auto st = _state->exec_env()->result_mgr()->cancel_at_time(
+        (void)_state->exec_env()->result_mgr()->cancel_at_time(
                 time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
-        st.permit_unchecked_error();
     }
     SinkIOBuffer::close(state);
 }
 
-void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        --_num_pending_chunks;
-        DCHECK(_num_pending_chunks >= 0);
-    });
-
-    // close is already done, just skip
-    if (_is_finished) {
-        return;
-    }
-
-    // cancelling has happened but close is not invoked
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 1) {
-            close(_state);
-        }
-        return;
-    }
-
+void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
             status = status.clone_and_prepend("open file writer failed, error");
@@ -145,14 +113,6 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
             return;
         }
         _is_writer_opened = true;
-    }
-
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 1);
-        close(_state);
-        return;
     }
 
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {

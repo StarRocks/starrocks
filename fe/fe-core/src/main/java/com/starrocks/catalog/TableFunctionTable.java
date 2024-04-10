@@ -17,11 +17,15 @@ package com.starrocks.catalog;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
 import com.starrocks.rpc.BackendServiceClient;
@@ -35,7 +39,6 @@ import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
@@ -55,6 +58,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -63,6 +67,16 @@ import static com.google.common.base.Verify.verify;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
+    public static final Set<String> SUPPORTED_FORMATS;
+    static {
+        SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        SUPPORTED_FORMATS.add("parquet");
+        SUPPORTED_FORMATS.add("orc");
+        SUPPORTED_FORMATS.add("csv");
+    }
+
+    private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
+    private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
 
     private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
@@ -72,15 +86,37 @@ public class TableFunctionTable extends Table {
 
     public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
 
+    public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
+    public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
+
+    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
+    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
+    public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
+    public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
+    public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
+    public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+
     private String path;
     private String format;
     private String compressionType;
+
+    private int autoDetectSampleFiles;
+    private int autoDetectSampleRows;
 
     private List<String> columnsFromPath = new ArrayList<>();
     private final Map<String, String> properties;
     @Nullable
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
+    private long targetMaxFileSize;
+
+    // CSV format options
+    private String csvColumnSeparator = "\t";
+    private String csvRowDelimiter = "\n";
+    private byte csvEnclose;
+    private byte csvEscape;
+    private long csvSkipHeader;
+    private boolean csvTrimSpace;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -109,8 +145,8 @@ public class TableFunctionTable extends Table {
 
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
-                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
-                              Map<String, String> properties) {
+            @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile, long targetMaxFileSize,
+            Map<String, String> properties) {
         super(TableType.TABLE_FUNCTION);
         verify(!Strings.isNullOrEmpty(path), "path is null or empty");
         verify(!(partitionColumnIDs != null && writeSingleFile));
@@ -120,6 +156,7 @@ public class TableFunctionTable extends Table {
         this.partitionColumnIDs = partitionColumnIDs;
         this.writeSingleFile = writeSingleFile;
         this.properties = properties;
+        this.targetMaxFileSize = targetMaxFileSize;
         super.setNewFullSchema(columns);
     }
 
@@ -155,6 +192,7 @@ public class TableFunctionTable extends Table {
         tTableFunctionTable.setFile_format(format);
         tTableFunctionTable.setWrite_single_file(writeSingleFile);
         tTableFunctionTable.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(compressionType));
+        tTableFunctionTable.setTarget_max_file_size(targetMaxFileSize);
         if (partitionColumnIDs != null) {
             tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
         }
@@ -184,7 +222,7 @@ public class TableFunctionTable extends Table {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
 
-        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
+        if (!SUPPORTED_FORMATS.contains(format.toLowerCase())) {
             throw new DdlException("not supported format: " + format);
         }
 
@@ -194,6 +232,62 @@ public class TableFunctionTable extends Table {
             for (String col : colsFromPath) {
                 columnsFromPath.add(col.trim());
             }
+        }
+
+        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
+            autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
+        } else {
+            try {
+                autoDetectSampleFiles = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_FILES));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+            }
+        }
+
+        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_ROWS)) {
+            autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
+        } else {
+            try {
+                autoDetectSampleRows = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_ROWS));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
+            csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
+            csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.enclose");
+            }
+            csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.escape");
+            }
+            csvEscape = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_SKIP_HEADER)) {
+            try {
+                csvSkipHeader = Integer.parseInt(properties.get(PROPERTY_CSV_SKIP_HEADER));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse csv.skip_header: ", e);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_TRIM_SPACE)) {
+            csvTrimSpace = Boolean.parseBoolean(properties.get(PROPERTY_CSV_TRIM_SPACE));
         }
     }
 
@@ -224,7 +318,7 @@ public class TableFunctionTable extends Table {
         }
 
         if (fileStatuses.isEmpty()) {
-            throw new DdlException("no file found with given path pattern: " + path);
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_FILES_FOUND, path);
         }
     }
 
@@ -233,6 +327,24 @@ public class TableFunctionTable extends Table {
         params.setUse_broker(false);
         params.setSrc_slot_ids(new ArrayList<>());
         params.setProperties(properties);
+        params.setSchema_sample_file_count(autoDetectSampleFiles);
+        params.setSchema_sample_file_row_count(autoDetectSampleRows);
+        params.setEnclose(csvEnclose);
+        params.setEscape(csvEscape);
+        params.setSkip_header(csvSkipHeader);
+        params.setTrim_space(csvTrimSpace);
+        params.setFlexible_column_mapping(true);
+        if (csvColumnSeparator.length() == 1) {
+            params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
+        } else if (csvColumnSeparator.length() > 1) {
+            params.setMulti_column_separator(csvColumnSeparator);
+        }
+
+        if (csvRowDelimiter.length() == 1) {
+            params.setRow_delimiter(csvRowDelimiter.getBytes()[0]);
+        } else if (csvRowDelimiter.length() > 1) {
+            params.setMulti_row_delimiter(csvRowDelimiter);
+        }
 
         try {
             THdfsProperties hdfsProperties = new THdfsProperties();
@@ -246,22 +358,10 @@ public class TableFunctionTable extends Table {
         brokerScanRange.setParams(params);
         brokerScanRange.setBroker_addresses(Lists.newArrayList());
 
-        TFileFormatType fileFormat;
-        switch (format.toLowerCase()) {
-            case "parquet":
-                fileFormat = TFileFormatType.FORMAT_PARQUET;
-                break;
-            case "orc":
-                fileFormat = TFileFormatType.FORMAT_ORC;
-                break;
-            default:
-                throw new TException("unsupported format: " + format);
-        }
-
         for (int i = 0; i < filelist.size(); ++i) {
             TBrokerRangeDesc rangeDesc = new TBrokerRangeDesc();
             rangeDesc.setFile_type(TFileType.FILE_BROKER);
-            rangeDesc.setFormat_type(fileFormat);
+            rangeDesc.setFormat_type(Load.getFormatType(format, filelist.get(i).path));
             rangeDesc.setPath(filelist.get(i).path);
             rangeDesc.setSplittable(filelist.get(i).isSplitable);
             rangeDesc.setStart_offset(0);
@@ -288,9 +388,9 @@ public class TableFunctionTable extends Table {
             return Lists.newArrayList();
         }
         TNetworkAddress address;
-        List<Long> nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        List<Long> nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
         if (RunMode.isSharedDataMode()) {
-            nodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+            nodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(true));
         }
         if (nodeIds.isEmpty()) {
             if (RunMode.isSharedNothingMode()) {
@@ -301,7 +401,7 @@ public class TableFunctionTable extends Table {
         }
 
         Collections.shuffle(nodeIds);
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
         address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
 
         PGetFileSchemaResult result;
@@ -372,7 +472,38 @@ public class TableFunctionTable extends Table {
         return partitionColumnIDs.stream().map(id -> fullSchema.get(id).getName()).collect(Collectors.toList());
     }
 
+    public List<Integer> getPartitionColumnIDs() {
+        if (partitionColumnIDs == null) {
+            return new ArrayList<>();
+        }
+        return Collections.unmodifiableList(partitionColumnIDs);
+    }
+
     public boolean isWriteSingleFile() {
         return writeSingleFile;
+    }
+
+    public String getCsvColumnSeparator() {
+        return csvColumnSeparator;
+    }
+
+    public String getCsvRowDelimiter() {
+        return csvRowDelimiter;
+    }
+
+    public byte getCsvEnclose() {
+        return csvEnclose;
+    }
+
+    public byte getCsvEscape() {
+        return csvEscape;
+    }
+
+    public long getCsvSkipHeader() {
+        return csvSkipHeader;
+    }
+
+    public Boolean getCsvTrimSpace() {
+        return csvTrimSpace;
     }
 }

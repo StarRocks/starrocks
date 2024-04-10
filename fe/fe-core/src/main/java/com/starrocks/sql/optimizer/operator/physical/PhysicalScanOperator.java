@@ -38,15 +38,19 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public abstract class PhysicalScanOperator extends PhysicalOperator {
-    protected final Table table;
+    protected Table table;
     protected List<ColumnRefOperator> outputColumns;
     /**
      * ColumnRefMap is the map from column reference to starrocks column in meta
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
-    protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimzeOption scanOptimzeOption;
+
+    protected PhysicalScanOperator(OperatorType type) {
+        super(type);
+    }
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -62,6 +66,10 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimzeOption = new ScanOptimzeOption();
 
+        updateOutputColumns();
+    }
+
+    protected void updateOutputColumns() {
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
             for (ScalarOperator scalarOperator : this.projection.getColumnRefMap().values()) {
@@ -164,5 +172,31 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
+    }
+
+    public abstract static class Builder<O extends PhysicalScanOperator, B extends PhysicalScanOperator.Builder>
+            extends PhysicalOperator.Builder<O, B> {
+        @Override
+        public B withOperator(O operator) {
+            super.withOperator(operator);
+            builder.table = operator.table;
+            builder.outputColumns = operator.outputColumns;
+            builder.colRefToColumnMetaMap = operator.colRefToColumnMetaMap;
+            builder.columnAccessPaths = operator.columnAccessPaths;
+            builder.scanOptimzeOption = operator.scanOptimzeOption;
+            return (B) this;
+        }
+
+        public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+            builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+            return (B) this;
+        }
+
+        @Override
+        public O build() {
+            O op = super.build();
+            op.updateOutputColumns();
+            return op;
+        }
     }
 }

@@ -101,6 +101,8 @@ public class BackupJobPrimaryKeyTest {
     private long repoId = 30000;
     private AtomicLong id = new AtomicLong(50000);
 
+    private static List<Path> pathsNeedToBeDeleted = Lists.newArrayList();
+
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
@@ -142,19 +144,21 @@ public class BackupJobPrimaryKeyTest {
     public static void start() {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
-        backupDir.mkdirs();
+        if (!backupDir.exists()) {
+            backupDir.mkdirs();
+        }
 
         MetricRepo.init();
     }
 
     @AfterClass
     public static void end() throws IOException {
-        Config.tmp_dir = "./";
-        File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
-        if (backupDir.exists()) {
-            Files.walk(BackupHandler.TEST_BACKUP_ROOT_DIR,
-                            FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                    .forEach(File::delete);
+        for (Path path : pathsNeedToBeDeleted) {
+            File backupDir = new File(path.toString());
+            if (backupDir.exists()) {
+                Files.walk(path, FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                        .forEach(File::delete);
+            }
         }
     }
 
@@ -343,6 +347,10 @@ public class BackupJobPrimaryKeyTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(BackupJobState.FINISHED, job.getState());
+
+        if (job.getLocalJobDirPath() != null) {
+            pathsNeedToBeDeleted.add(job.getLocalJobDirPath());
+        }
     }
 
     @Test
@@ -356,5 +364,9 @@ public class BackupJobPrimaryKeyTest {
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());
+
+        if (job.getLocalJobDirPath() != null) {
+            pathsNeedToBeDeleted.add(job.getLocalJobDirPath());
+        }
     }
 }

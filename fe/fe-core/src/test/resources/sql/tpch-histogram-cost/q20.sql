@@ -1,41 +1,3 @@
-[sql]
-select
-    s_name,
-    s_address
-from
-    supplier,
-    nation
-where
-        s_suppkey in (
-        select
-            ps_suppkey
-        from
-            partsupp
-        where
-                ps_partkey in (
-                select
-                    p_partkey
-                from
-                    part
-                where
-                        p_name like 'sienna%'
-            )
-          and ps_availqty > (
-            select
-                    0.5 * sum(l_quantity)
-            from
-                lineitem
-            where
-                    l_partkey = ps_partkey
-              and l_suppkey = ps_suppkey
-              and l_shipdate >= date '1993-01-01'
-              and l_shipdate < date '1994-01-01'
-        )
-    )
-  and s_nationkey = n_nationkey
-  and n_name = 'ARGENTINA'
-order by
-    s_name ;
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:2: S_NAME | 3: S_ADDRESS
@@ -48,8 +10,6 @@ cardinality: 40000
 column statistics:
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -159,7 +119,7 @@ OutPut Exchange Id: 18
 |  9 <-> [9: N_NATIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 |
 16:OlapScanNode
 table: nation, rollup: nation
@@ -169,7 +129,7 @@ partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 4(F01)
@@ -323,7 +283,7 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -338,6 +298,6 @@ probe runtime filters:
 column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-* L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-* L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0] ESTIMATE
+* L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
+* L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0] MCV: [[1993-08-04:264600][1993-08-17:263300][1993-10-28:262500][1993-04-22:261400][1993-07-07:260900]] ESTIMATE
 [end]

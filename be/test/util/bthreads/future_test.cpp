@@ -228,6 +228,15 @@ TEST(FutureTest, test_share03) {
     f2.get();
 }
 
+TEST(FutureTest, test_share04) {
+    Promise<std::string> p1;
+    SharedFuture<std::string> f1(p1.get_future());
+    SharedFuture<std::string> f2(f1);
+    p1.set_value("test");
+    EXPECT_EQ("test", f1.get());
+    EXPECT_EQ("test", f2.get());
+}
+
 TEST(FutureTest, test_valid) {
     Future<int> f0;
     EXPECT_TRUE(!f0.valid());

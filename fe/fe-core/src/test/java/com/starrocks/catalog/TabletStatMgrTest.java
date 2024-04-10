@@ -15,6 +15,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -27,6 +28,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -35,6 +37,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -42,6 +46,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -51,11 +56,56 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 public class TabletStatMgrTest {
     private static final long DB_ID = 1;
     private static final long TABLE_ID = 2;
     private static final long PARTITION_ID = 3;
     private static final long INDEX_ID = 4;
+
+    @Before
+    public void before() {
+        new MockUp<WarehouseManager>() {
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
+                return null;
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+    }
 
     @Test
     public void testUpdateLocalTabletStat(@Mocked GlobalStateMgr globalStateMgr, @Mocked Utils utils,
@@ -106,7 +156,7 @@ public class TabletStatMgrTest {
         tabletsStats.put(tablet2Id, tablet2Stat);
 
         new Expectations() {{
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
             }};
 
@@ -143,7 +193,7 @@ public class TabletStatMgrTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(DB_ID,     TABLE_ID, PARTITION_ID, INDEX_ID, 0, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, 0, TStorageMedium.HDD, true);
         index.addTablet(tablet1, tabletMeta);
         index.addTablet(tablet2, tabletMeta);
 
@@ -166,6 +216,7 @@ public class TabletStatMgrTest {
     @Test
     public void testUpdateLakeTabletStat(@Mocked SystemInfoService systemInfoService,
                                          @Mocked LakeService lakeService) {
+
         LakeTable table = createLakeTableForTest();
 
         long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
@@ -188,9 +239,10 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1000L;
             }
+
             @Mock
             public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
@@ -277,7 +329,7 @@ public class TabletStatMgrTest {
 
     @Test
     public void testUpdateLakeTabletStat2(@Mocked SystemInfoService systemInfoService,
-                                         @Mocked LakeService lakeService) {
+                                          @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
         long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
@@ -300,9 +352,10 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1000L;
             }
+
             @Mock
             public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
@@ -325,7 +378,7 @@ public class TabletStatMgrTest {
 
     @Test
     public void testUpdateLakeTabletStat3(@Mocked SystemInfoService systemInfoService,
-                                         @Mocked LakeService lakeService) {
+                                          @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
         long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
@@ -348,9 +401,10 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1000L;
             }
+
             @Mock
             public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
@@ -412,5 +466,42 @@ public class TabletStatMgrTest {
         Assert.assertEquals(0, tablet2.getDataSize(true));
         Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
         Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
+    }
+
+    @Test
+    public void testNoAliveNode(@Mocked SystemInfoService systemInfoService, @Mocked LakeService lakeService) {
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
+            }
+
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1000L;
+            }
+
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                return null;
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        assertDoesNotThrow(() -> {
+            Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+        });
     }
 }

@@ -40,7 +40,7 @@ public:
 
     Status remove(const std::string& key) override;
 
-    std::unordered_map<std::string, double> cache_stats() override;
+    const DataCacheMetrics cache_metrics(int level) override;
 
     void record_read_remote(size_t size, int64_t lateny_us) override;
 
@@ -48,9 +48,12 @@ public:
 
     Status shutdown() override;
 
+    DataCacheEngineType engine_type() override { return DataCacheEngineType::STARCACHE; }
+
 private:
     std::unique_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
+    bool _enable_tiered_cache = false;
 };
 
 // In order to split the starcache library to a separate registry for other users such as the cloud team,

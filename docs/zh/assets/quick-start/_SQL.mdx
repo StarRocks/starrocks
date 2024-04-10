@@ -1,0 +1,169 @@
+
+在 SQL 客户端中运行以下查询。
+
+#### 查询一：纽约市每小时交通事故数量
+
+```sql
+SELECT COUNT(*),
+       date_trunc("hour", crashdata.CRASH_DATE) AS Time
+FROM crashdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 200;
+```
+
+以下截取了部分输出数据：
+
+```plaintext
+|       14 | 2014-01-06 06:00:00 |
+|       16 | 2014-01-06 07:00:00 |
+# highlight-start
+|       43 | 2014-01-06 08:00:00 |
+|       44 | 2014-01-06 09:00:00 |
+|       21 | 2014-01-06 10:00:00 |
+# highlight-end
+|       28 | 2014-01-06 11:00:00 |
+|       34 | 2014-01-06 12:00:00 |
+|       31 | 2014-01-06 13:00:00 |
+|       35 | 2014-01-06 14:00:00 |
+|       36 | 2014-01-06 15:00:00 |
+|       33 | 2014-01-06 16:00:00 |
+|       40 | 2014-01-06 17:00:00 |
+|       35 | 2014-01-06 18:00:00 |
+|       23 | 2014-01-06 19:00:00 |
+|       16 | 2014-01-06 20:00:00 |
+|       12 | 2014-01-06 21:00:00 |
+|       17 | 2014-01-06 22:00:00 |
+|       14 | 2014-01-06 23:00:00 |
+|       10 | 2014-01-07 00:00:00 |
+|        4 | 2014-01-07 01:00:00 |
+|        1 | 2014-01-07 02:00:00 |
+|        3 | 2014-01-07 03:00:00 |
+|        2 | 2014-01-07 04:00:00 |
+|        6 | 2014-01-07 06:00:00 |
+|       16 | 2014-01-07 07:00:00 |
+# highlight-start
+|       41 | 2014-01-07 08:00:00 |
+|       37 | 2014-01-07 09:00:00 |
+|       33 | 2014-01-07 10:00:00 |
+# highlight-end
+```
+
+从结果可以看出，1 月 6 日和 7 日（正常工作日的周一和周二）的早高峰（08:00 至 10:00）每小时约有 40 起事故，较其他时间时间段事故数量明显更多。除此之外，晚高峰（17:00 左右）的事故数量也接近这个数字。
+
+#### 查询二：纽约市的平均气温
+
+```sql
+SELECT avg(HourlyDryBulbTemperature),
+       date_trunc("hour", weatherdata.DATE) AS Time
+FROM weatherdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 100;
+```
+
+以下截取了部分输出数据：
+
+```plaintext
++-------------------------------+---------------------+
+| avg(HourlyDryBulbTemperature) | Time                |
++-------------------------------+---------------------+
+|                            25 | 2014-01-01 00:00:00 |
+|                            25 | 2014-01-01 01:00:00 |
+|                            24 | 2014-01-01 02:00:00 |
+|                            24 | 2014-01-01 03:00:00 |
+|                            24 | 2014-01-01 04:00:00 |
+|                            24 | 2014-01-01 05:00:00 |
+|                            25 | 2014-01-01 06:00:00 |
+|                            26 | 2014-01-01 07:00:00 |
+```
+
+#### 查询三：能见度情况对驾驶安全的影响
+
+为了解能见度情况对驾驶安全的影响，需要对两张表格的 DATETIME 列进行 JOIN，分析在能见度不佳的情况下（0 到 1.0 英里之间）时的交通事故数量。
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyVisibility BETWEEN 0.0 AND 1.0
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+以下截取了部分输出数据：
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |       0.33 | 0.03          | 09 Jan 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+|      95 |     26 |       0.37 | 0.12          | 01 Mar 2015 15:00 |
+|      93 |     35 |       0.75 | 0.09          | 18 Jan 2015 09:00 |
+|      92 |     31 |       0.25 | 0.12          | 03 Feb 2014 10:00 |
+|      87 |   26.8 |        0.5 | 0.09          | 01 Mar 2015 16:00 |
+|      85 |     55 |       0.75 | 0.20          | 23 Dec 2015 17:00 |
+|      85 |     20 |       0.62 | 0.01          | 06 Jan 2015 11:00 |
+|      83 |   19.6 |       0.41 | 0.04          | 05 Mar 2015 13:00 |
+|      80 |     20 |       0.37 | 0.02          | 06 Jan 2015 10:00 |
+|      76 |   26.5 |       0.25 | 0.06          | 05 Mar 2015 09:00 |
+|      71 |     26 |       0.25 | 0.09          | 05 Mar 2015 10:00 |
+|      71 |   24.2 |       0.25 | 0.04          | 05 Mar 2015 11:00 |
+```
+
+从以上结果可以得出，在能见度较低的一小时内的最高交通事故数量是 129。
+
+当然，除了能见度因素外，还有其他因素需要考虑在内：
+
+- 2014 年 2 月 3 日是星期一（工作日）
+- 上午 8 点是早高峰时段
+- 当时正在下雨（一小时内降水量为 0.12 英寸）
+- 温度为 32 华氏度（水的冰点）
+
+#### 查询四：结冰情况对驾驶安全的影响
+
+由于路面上水大约会在 40 华氏度时开始转变为冰，因此以下查询分析了温度区间为 0 到 40 华氏度的交通事故数量。
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyDryBulbTemperature BETWEEN 0.0 AND 40.5 
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+以下截取了部分输出数据：
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     192 |     34 |        1.5 | 0.09          | 18 Jan 2015 08:00 |
+|     170 |     21 |       NULL |               | 21 Jan 2014 10:00 |
+|     145 |     19 |       NULL |               | 21 Jan 2014 11:00 |
+|     138 |   33.5 |          5 | 0.02          | 18 Jan 2015 07:00 |
+|     137 |     21 |       NULL |               | 21 Jan 2014 09:00 |
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |        0.7 | 0.04          | 09 Jan 2015 08:00 |
+|      98 |     16 |          8 | 0.00          | 06 Mar 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+```
+
+结果显示，2015 年 1 月 18 日发生了大量交通事故。虽然当天是星期天早晨，但根据 [weather.com](https://weather.com/storms/winter/news/northeast-storm-rain-snow-wind) 显示，当天下了一场大雪，导致许多交通事故。

@@ -119,7 +119,7 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 class WorkGroup : public std::enable_shared_from_this<WorkGroup> {
 public:
     WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit, size_t concurrency,
-              WorkGroupType type);
+              double spill_mem_limit_threshold, WorkGroupType type);
     WorkGroup(const TWorkGroup& twg);
     ~WorkGroup() = default;
 
@@ -134,6 +134,8 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
     const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
+
+    MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
     int64_t id() const { return _id; }
     int64_t version() const { return _version; }
@@ -231,8 +233,11 @@ private:
     int64_t _big_query_mem_limit = 0;
     int64_t _big_query_scan_rows_limit = 0;
     int64_t _big_query_cpu_nanos_limit = 0;
+    double _spill_mem_limit_threshold = 1.0;
+    int64_t _spill_mem_limit_bytes = -1;
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<starrocks::MemTracker> _connector_scan_mem_tracker = nullptr;
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
     WorkGroupScanSchedEntity _scan_sched_entity;

@@ -87,23 +87,23 @@ public class ColumnRenameTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = testDb.getTable("tbl1");
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
-        GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
 
         table = testDb.getTable("tbl2");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
-        GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
         table = testDb.getTable("tbl3");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
-        GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
         table = testDb.getTable("tbl4");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
-        GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
     }
 

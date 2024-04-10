@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -22,9 +23,9 @@ import org.junit.Test;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
-        MaterializedViewTestBase.setUp();
+        MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
@@ -112,5 +113,49 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "lineorder_flat_mv");
         PlanTestBase.assertNotContains(plan, "LO_ORDERDATE <= 19950100");
+    }
+
+    @Test
+    public void testPartitionPredicateWithRelatedMVsLimit() throws Exception {
+        int oldVal = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+        String query = "select sum(LO_EXTENDEDPRICE * LO_DISCOUNT) AS revenue\n" +
+                "from lineorder\n" +
+                "join dates on lo_orderdate = d_datekey\n" +
+                "where weekofyear(LO_ORDERDATE) = 6 AND LO_ORDERDATE >= 19940101 and LO_ORDERDATE <= 19941231\n" +
+                "and lo_discount between 5 and 7\n" +
+                "and lo_quantity between 26 and 35;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "lineorder_flat_mv");
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
+    }
+
+    @Test
+    public void testNestedMVRewriteWithSSB() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC every (interval 10 minute) AS\n" +
+                "select lo_orderkey, lo_custkey, p_partkey, p_name\n" +
+                "from lineorder join part on lo_partkey = p_partkey;";
+        String mv2 = "CREATE MATERIALIZED VIEW mv2 REFRESH ASYNC every (interval 10 minute) AS\n" +
+                "select c_custkey from customer group by c_custkey;";
+        String mv3 = "CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC every (interval 10 minute) AS\n" +
+                "select * from mv1 lo join mv2 cust on lo.lo_custkey = cust.c_custkey;";
+
+        connectContext.getSessionVariable().setQueryIncludingMVNames("mv1,mv2,mv3");
+        starRocksAssert.withMaterializedViews(ImmutableList.of(mv1, mv2, mv3), (obj) -> {
+            String query = "select *\n" +
+                    "from (\n" +
+                    "    select lo_orderkey, lo_custkey, p_partkey, p_name\n" +
+                    "    from lineorder\n" +
+                    "    join part on lo_partkey = p_partkey\n" +
+                    ") lo\n" +
+                    "join (\n" +
+                    "    select c_custkey\n" +
+                    "    from customer\n" +
+                    "    group by c_custkey\n" +
+                    ") cust\n" +
+                    "on lo.lo_custkey = cust.c_custkey;";
+            sql(query).contains("mv3");
+        });
+        connectContext.getSessionVariable().setQueryIncludingMVNames("");
     }
 }

@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-This SQL statement can：
+This SQL statement can:
 
 - Alter the name of an asynchronous materialized view.
 - Alter the refresh strategy of an asynchronous materialized view.
@@ -26,6 +26,13 @@ This SQL statement can：
   - `foreign_key_constraints`
   - `colocate_with`
   - All session variable-related properties. For information on session variables, see [System variables](../../../reference/System_variable.md).
+
+:::tip
+
+- This operation requires the ALTER privilege on the target materialized view. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+- ALTER MATERIALIZED VIEW does not support directly modifying the query statement used to build the materialized view. You can build a new materialized view and swap it with the original one using ALTER MATERIALIZED VIEW SWAP WITH.
+
+:::
 
 ## Syntax
 

@@ -30,11 +30,9 @@ public interface TransactionStateListener {
     // the edit log.
     void preWriteCommitLog(TransactionState txnState);
 
-    // This method is called by the FE master after changed the TransactionState to COMMITTED and persisted the edit log.
-    void postWriteCommitLog(TransactionState txnState);
-
     // This method is called by the FE master after changed the TransactionState to ABORTED and *AFTER* released the writer
     // lock of the DatabaseTransactionMgr.
     // It's *unsafe* to access mutable fields of txnState inside this function.
-    void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets);
+    void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+            List<TabletFailInfo> failedTablets);
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['CTAS']
 ---
 
 # CREATE TABLE AS SELECT
@@ -16,11 +17,13 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 
   ```SQL
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-  [(column_name [, column_name2, ...]]
+  [column_name1 [, column_name2, ...]]
+  [index_definition1 [, index_definition2, ...]]
   [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
+  [ORDER BY (column_name1 [, column_name2, ...])]
   [PROPERTIES ("key"="value", ...)]
   AS SELECT query
   [ ... ]
@@ -31,12 +34,14 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   ```SQL
   SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-  [(column_name [, column_name2, ...]]
+  [column_name1 [, column_name2, ...]]
+  [index_definition1 [, index_definition2, ...]]
   [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
-  [PROPERTIES ("key"="value", ...)]AS SELECT query
+  [ORDER BY (column_name1 [, column_name2, ...])]
+  [PROPERTIES ("key"="value", ...)] AS SELECT query
   [ ... ]
   ```
 
@@ -44,11 +49,13 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
-| column_name       | Yes          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column . StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
+| column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column. StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
+| index_definition| No          | Since v3.1.8, a bitmap index can be created for the new table. The syntax is `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'`. For more information about parameter descriptions and usage notes, see [Bitmap indexes](../../../table_design/indexes/Bitmap_index.md). |
 | key_desc          | No           | The syntax is `key_type ( <col_name1> [, <col_name2> , ...])`.<br />**Parameters**:<ul><li>`key_type`: [the key type of the new table](../../../table_design/table_types/table_types.md). Valid values: `DUPLICATE KEY` and `PRIMARY KEY`. Default value: `DUPLICATE KEY`.</li><li> `col_name`: the column to form the key.</li></ul> |
 | COMMENT           | No           | The comment of the new table.                                |
-| partition_desc    | No           | The partitioning method of the new table. If you do not specify this parameter, by default, the new table has no partition. For more information about partitioning, see CREATE TABLE. |
-| distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see CREATE TABLE. |
+| partition_desc    | No           | The partitioning method of the new table. By default, if you do not specify this parameter, the new table has no partition. For more information about partitioning, see [CREATE TABLE](./CREATE_TABLE.md#partition_desc). |
+| distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see [CREATE TABLE](./CREATE_TABLE.md#distribution_desc). |
+| ORDER BY | No | Since v3.1.8, a sort key can be specified for the new table if the new table is a Primary Key table. The sort key can be a combination of any columns. A Primary Key table is a table for which `PRIMARY KEY (xxx)` is specified at table creation.|
 | Properties        | No           | The properties of the new table.                             |
 | AS SELECT query   | Yes          | The query result.  You can specify columns in `... AS SELECT query`, for example, `... AS SELECT a, b, c FROM table_a;`. In this example, `a`, `b`, and `c` indicates the column names of the table that is queried. If you do not specify the column names of the new table, the column names of the new table are also `a`, `b`, and `c`. You can specify expressions in `... AS SELECT query`, for example, `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`. In this example, `a+1`, `b+2`, and `c*c` indicates the column names of the table that is queried, and `x`, `y`, and `z` indicates the column names of the new table. Note:  The number of columns in the new table need to be the same as the number of the columns specified in the SELECT statement . We recommend that you use column names that are easy to identify. |
 
@@ -116,7 +123,27 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-Example 4: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key](../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key. 
+Example 4: Synchronously query the `customer_id` and `first_name` columns in the table `customers` and create a new table `customers_new` based on the query result, and then insert the query result into the new table. Additionally, set the column names of the new table to `customer_id_new` and `first_name_new`. Also, build a bitmap index for the column `customer_id_new` in the new table.
+
+```SQL
+CREATE TABLE customers_new 
+(   customer_id_new,
+    first_name_new,
+    INDEX idx_bitmap_customer_id (customer_id_new) USING BITMAP
+) 
+AS SELECT customer_id,first_name FROM customers;
+```
+
+Example 5: Synchronously query a table `customers` and create a new table `customers_new` based on the query result, and then insert the query result into the new table. Additionally, specify the new table as a Primary Key table, and specify its sort key as `first_name` and `last_name`.
+
+```SQL
+CREATE TABLE customers_pk
+PRIMARY KEY (customer_id)
+ORDER BY (first_name,last_name)
+AS SELECT  * FROM customers;
+```
+
+Example 6: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key](../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key.
 
 ```SQL
 CREATE TABLE employee_new
@@ -128,7 +155,7 @@ FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
 GROUP BY order_id;
 ```
 
-Example 5: Synchronously query four tables, including `lineorder`, `customer`, `supplier`, and `part` and create a new table `lineorder_flat` based on the query result, and then insert the query result to the new table. Additionally, specify the partitioning method and bucketing method for the new table.
+Example 7: Synchronously query four tables, including `lineorder`, `customer`, `supplier`, and `part` and create a new table `lineorder_flat` based on the query result, and then insert the query result to the new table. Additionally, specify the partitioning method and bucketing method for the new table.
 
 ```SQL
 CREATE TABLE lineorder_flat
@@ -180,7 +207,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-Example 6: Asynchronously query the table `order_detail` and create a new table `order_statistics` based on the query result, and then insert the query result into the new table.
+Example 8: Asynchronously query the table `order_detail` and create a new table `order_statistics` based on the query result, and then insert the query result into the new table.
 
 ```plaintext
 SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;

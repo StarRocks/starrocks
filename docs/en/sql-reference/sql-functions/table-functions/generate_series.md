@@ -28,6 +28,8 @@ generate_series(start, end [,step])
 
 The three parameters must have the same data type, for example, `generate_series(INT start, INT end [, INT step])`.
 
+It supports named arguments from v3.3, where all parameters are input with names, like `name=>expr`, for example, `generate_series(start=>3, end=>7, step=>2)`. Named arguments can disorder arguments and optionally set default arguments, but can't mix with positional arguments.
+
 ## Return value
 
 Returns a series of values that have the same as the input parameters `start` and `end`.
@@ -139,8 +141,17 @@ SELECT * FROM t_numbers, generate_series(t_numbers.start, t_numbers.end, -1);
 |     9 |    6 |               6 |
 +-------+------+-----------------+
 ```
+Example 6: Generate a sequence of values within the range [2,5] in ascending order with the specified step `2`, using named arguments.
 
-The input row `(NULL, 10)` has a NULL value and zero rows are returned for this row.
+```SQL
+MySQL > select * from TABLE(generate_series(start=>2, end=>5, step=>2));
++-----------------+
+| generate_series |
++-----------------+
+|               2 |
+|               4 |
++-----------------+
+```
 
 ## keywords
 

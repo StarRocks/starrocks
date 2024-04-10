@@ -37,8 +37,9 @@ private:
     TDictQueryExpr _dict_query_expr;
 
     Schema _key_schema;
-    std::vector<SlotDescriptor*> _key_slots;
-    std::vector<SlotDescriptor*> _value_slot;
+    Schema _value_schema;
+    std::vector<SlotId> _key_slot_ids;
+    SlotId _value_slot_id;
     std::shared_ptr<TableReader> _table_reader;
 };
 } // namespace starrocks

@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to show the distribution status of a table or a partition replica.
 
-Syntax:
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
+## Syntax
 
 ```sql
 ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)]
