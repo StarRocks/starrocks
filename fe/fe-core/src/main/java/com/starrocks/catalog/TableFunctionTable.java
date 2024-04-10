@@ -68,12 +68,16 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class TableFunctionTable extends Table {
+    public static final String PARQUET = "parquet";
+    public static final String ORC = "orc";
+    public static final String CSV = "csv";
+
     public static final Set<String> SUPPORTED_FORMATS;
     static {
         SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        SUPPORTED_FORMATS.add("parquet");
-        SUPPORTED_FORMATS.add("orc");
-        SUPPORTED_FORMATS.add("csv");
+        SUPPORTED_FORMATS.add(PARQUET);
+        SUPPORTED_FORMATS.add(ORC);
+        SUPPORTED_FORMATS.add(CSV);
     }
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
@@ -286,6 +290,10 @@ public class TableFunctionTable extends Table {
         Preconditions.checkState(CompressionUtils.getConnectorSinkCompressionType(compressionType).isPresent());
         tTableFunctionTable.setCompression_type(CompressionUtils.getConnectorSinkCompressionType(compressionType).get());
         tTableFunctionTable.setTarget_max_file_size(targetMaxFileSize);
+        if (CSV.equalsIgnoreCase(format)) {
+            tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
+            tTableFunctionTable.setCsv_row_delimter(csvRowDelimiter);
+        }
         partitionColumnIDs.ifPresent(tTableFunctionTable::setPartition_column_ids);
         return tTableFunctionTable;
     }
