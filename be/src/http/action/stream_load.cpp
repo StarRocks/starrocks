@@ -586,8 +586,8 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         ctx->max_filter_ratio = strtod(http_req->header(HTTP_MAX_FILTER_RATIO).c_str(), nullptr);
     }
 
-    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty()) {
-        request.__set_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
+    if (!http_req->header(HTTP_COMPRESSION).empty()) {
+        request.__set_compression_type(http_req->header(HTTP_COMPRESSION));
     }
 
     // plan this load
