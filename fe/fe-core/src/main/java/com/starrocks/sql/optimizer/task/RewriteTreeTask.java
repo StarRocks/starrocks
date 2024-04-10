@@ -139,4 +139,8 @@ public class RewriteTreeTask extends OptimizerTask {
             root.setLogicalProperty(context.getRootProperty());
         }
     }
+
+    public boolean hasChange() {
+        return change > 0;
+    }
 }

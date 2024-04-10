@@ -734,9 +734,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);
             if (mapOperator instanceof SubfieldOperator && context.getOptExpression() != null) {
-                List<Operator> scanOperators = Utils.collectScanOperators(context.getOptExpression());
-                if (scanOperators.size() == 1) {
-                    addSubFiledStatistics(scanOperators.get(0), ImmutableMap.of(requiredColumnRefOperator,
+                Operator child = context.getOptExpression().inputAt(0).getOp();
+                if (child instanceof LogicalScanOperator || child instanceof PhysicalScanOperator) {
+                    addSubFiledStatistics(child, ImmutableMap.of(requiredColumnRefOperator,
                                     (SubfieldOperator) mapOperator), builder);
                     continue;
                 }
