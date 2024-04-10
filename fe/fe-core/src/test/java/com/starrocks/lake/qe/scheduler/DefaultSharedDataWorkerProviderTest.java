@@ -174,7 +174,7 @@ public class DefaultSharedDataWorkerProviderTest {
         WorkerProvider workerProvider = newWorkerProvider();
 
         Optional<Long> maxId = id2Backend.keySet().stream().max(Comparator.naturalOrder());
-        Assert.assertFalse(maxId.isEmpty());
+        Assert.assertTrue(maxId.isPresent());
         for (long id : id2AllNodes.keySet()) {
             ComputeNode worker = workerProvider.getWorkerById(id);
             if (nonAvailableWorkerId.contains(id)) {
