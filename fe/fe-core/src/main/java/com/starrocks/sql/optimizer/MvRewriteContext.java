@@ -114,6 +114,10 @@ public class MvRewriteContext {
         return joinDeriveContexts;
     }
 
+    public void clearJoinDeriveContexts() {
+        joinDeriveContexts.clear();
+    }
+
     public List<ColumnRefOperator> getEnforcedNonExistedColumns() {
         return enforcedNonExistedColumns;
     }

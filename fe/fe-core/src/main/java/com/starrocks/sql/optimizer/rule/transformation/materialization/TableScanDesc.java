@@ -76,6 +76,20 @@ public class TableScanDesc {
         return relationid;
     }
 
+    public boolean isCompatible(TableScanDesc other) {
+        if (isMatch(other)) {
+            return true;
+        }
+
+        JoinOperator joinOperator = getJoinType();
+        JoinOperator otherJoinOperator = other.getJoinType();
+        if (!MaterializedViewRewriter.JOIN_COMPATIBLE_MAP.containsKey(joinOperator) ||
+                !MaterializedViewRewriter.JOIN_COMPATIBLE_MAP.get(joinOperator).contains(otherJoinOperator)) {
+            return false;
+        }
+        return true;
+    }
+
     public boolean isMatch(TableScanDesc other) {
         boolean matched =  table.equals(other.table);
         if (!matched) {
@@ -93,14 +107,15 @@ public class TableScanDesc {
             return false;
         }
         if (joinOperator.isInnerJoin()) {
-            return otherJoinOperator.isInnerJoin() || otherJoinOperator.isLeftOuterJoin();
+            return otherJoinOperator.isInnerJoin()
+                    || (otherJoinOperator.isLeftOuterJoin() && other.isLeft);
         }
 
         // for
         // query: a inner join c
         // mv: a left outer join b inner join c
         if (joinOperator.isLeftOuterJoin()) {
-            return (otherJoinOperator.isInnerJoin())
+            return (isLeft && otherJoinOperator.isInnerJoin())
                     || (otherJoinOperator.isLeftOuterJoin() && isLeft == other.isLeft);
         }
 
