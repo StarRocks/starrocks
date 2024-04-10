@@ -10,7 +10,7 @@ You can define one or more generated columns to store the results of expressions
 
 It is also recommended to **evaluate the impact of generated columns on loading performance because computing expressions takes some time**. Additionally, it is advised to **[create generated columns at table creation](#create-generated-columns-at-table-creation-recommended) rather than adding or modifying them after table creation**. Because it is time-consuming and costly to add or modify generated columns after table creation.
 
-However, note that when data loads into tables with a generated column, the time and overhead may increase because StarRocks needs to perform additional computation to calculate the results based on the expression and writes the results into the generated column.
+However, note that when data is loaded into tables with a generated column, the time and overhead may increase because StarRocks needs to perform additional computation to calculate the results based on the expression and writes the results into the generated column.
 
 Currently, StarRocks's shared-data mode does not support generated columns.
 
@@ -24,7 +24,7 @@ Currently, StarRocks's shared-data mode does not support generated columns.
 <col_name> <data_type> [NULL] AS <expr> [COMMENT 'string']
 ```
 
-#### Create generated columns at table creation (Recommended)
+#### Create generated columns at table creation
 
 Create a table named `test_tbl1` with five columns of which columns `newcol1` and `newcol2` are generated columns whose values are computed by using the specified expressions and referencing the values of the regular columns `data_array` and `data_json` respectively.
 
@@ -53,7 +53,7 @@ DISTRIBUTED BY HASH(id);
 
 :::tip
 
-In most cases, the expressions frequently used during querying are determined after table creation, so generated columns are often added after table creation. Therefore, StarRocks optimizes the underlying logic of adding generated columns after table creation. When a generated column is added, StarRocks does not need to rewrite all the data. Instead, StarRocks only needs to write the data of the newly added generated column and associate that data with the existing physical data files, which greatly improves the efficiency of adding generated columns after table creation.
+In most cases, the expressions frequently used during querying are determined after table creation, so generated columns are often added after table creation. For performance purposes, the underlying logic for StarRocks to add generated columns after table creation is optimized. As such, when adding a generated column, StarRocks does not need to rewrite all the data. Instead, StarRocks only needs to write the data of the newly added generated column and associate that data with the existing physical data files, which greatly improves the efficiency of adding generated columns after table creation.
 
 :::
 

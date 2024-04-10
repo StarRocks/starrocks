@@ -22,7 +22,7 @@ StarRocks 存算分离模式暂时不支持该功能。
 col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 ```
 
-#### 建表时创建生成列（推荐）
+#### 建表时创建生成列
 
 创建表 `test_tbl1`，包含五列，其中列 `newcol1` 和 `newcol2` 是生成列，分别是引用普通列 `data_array` 和 `data_json` 通过计算表达式后生成的列。
 
