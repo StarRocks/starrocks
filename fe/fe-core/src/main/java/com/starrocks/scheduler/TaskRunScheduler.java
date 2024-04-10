@@ -57,8 +57,15 @@ public class TaskRunScheduler {
      * @param taskId: task id
      * @return: pending task run queue
      */
-    public Queue<TaskRun> getPendingTaskRuns(long taskId) {
+    public Queue<TaskRun> getPendingTaskRunsByTaskId(long taskId) {
         return pendingTaskRunMap.get(taskId);
+    }
+
+    /**
+     * Get the pending task run queue
+     */
+    public Queue<TaskRun> getPendingTaskRuns() {
+        return pendingTaskRunQueue;
     }
 
     /**
@@ -74,6 +81,18 @@ public class TaskRunScheduler {
             return false;
         }
         return pendingTaskRunMap.computeIfAbsent(taskRun.getTaskId(), ignored -> new PriorityBlockingQueue<>()).add(taskRun);
+    }
+
+    /**
+     * Remove a task run from pending queue
+     * @param taskRun: task run
+     * @return true if remove success, false if remove failed
+     */
+    public boolean removePendingTaskRunFromQueue(TaskRun taskRun) {
+        if (taskRun == null) {
+            return false;
+        }
+        return pendingTaskRunQueue.remove(taskRun);
     }
 
     /**
@@ -98,7 +117,11 @@ public class TaskRunScheduler {
         int currentRunning = runningTaskRunMap.size();
 
         List<TaskRun> runningTaskRuns = new ArrayList<>();
-        while (pendingTaskRunQueue.isEmpty()) {
+        while (!pendingTaskRunQueue.isEmpty()) {
+            if (currentRunning >= Config.task_runs_concurrency) {
+                break;
+            }
+
             TaskRun taskRun = pendingTaskRunQueue.poll();
             if (taskRun == null) {
                 continue;
@@ -112,22 +135,23 @@ public class TaskRunScheduler {
             }
 
             Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
-            if (taskRunQueue == null || taskRunQueue.isEmpty()) {
+            if (taskRunQueue == null) {
                 pendingTaskRunMap.remove(taskId);
                 continue;
             }
 
-            if (currentRunning >= Config.task_runs_concurrency) {
-                break;
-            }
             TaskRun pendingTaskRun = taskRunQueue.poll();
+            // remove task run from pending queue map
+            if (taskRunQueue.isEmpty()) {
+                pendingTaskRunMap.remove(taskId);
+            }
             action.accept(pendingTaskRun);
 
             runningTaskRunMap.put(taskId, pendingTaskRun);
             currentRunning++;
         }
 
-        for (TaskRun taskRun: runningTaskRuns) {
+        for (TaskRun taskRun : runningTaskRuns) {
             pendingTaskRunQueue.offer(taskRun);
         }
     }
