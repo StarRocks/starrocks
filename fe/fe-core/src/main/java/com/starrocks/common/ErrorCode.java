@@ -338,7 +338,32 @@ public enum ErrorCode {
      * 5600 - 5699: DML operation failure
      */
     ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
+<<<<<<< HEAD
             "No files were found matching the pattern(s) or path(s): '%s'");
+=======
+            "No files were found matching the pattern(s) or path(s): '%s'"),
+    ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
+            "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
+    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+
+    /**
+     * 10000 - 10099: warehouse
+     */
+    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist."),
+    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' already exists."),
+    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' is not available."),
+    ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
+            "No alive backend or compute node in warehouse '%s'."),
+    ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
+            "unsupported statement in shared_nothing mode")
+    ;
+
+    public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
+            " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
+>>>>>>> a78fc8ee01 ([Enhancement] Improve referenced column and column mapping expr invalid error message when getting load plan (#43650))
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
