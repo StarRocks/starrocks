@@ -234,6 +234,11 @@ public enum ErrorCode {
     ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
     ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
 
+    ERR_MISSING_KEY_COLUMNS(6014, new byte[] {'4', '2', '0', '0', '0'},
+            "missing key columns:%s for primary key table"),
+    ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
+            "missing dependency column for generated column %s"),
+
     /*
      * The following ErrorCode has been reviewed.
      * If you want to add an error code, please add it in the specific

@@ -66,6 +66,7 @@ public class InsertStmt extends DmlStmt {
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
     private List<String> targetColumnNames;
+    private boolean usePartialUpdate = false;
     private QueryStatement queryStatement;
     private String label = null;
 
@@ -77,7 +78,6 @@ public class InsertStmt extends DmlStmt {
 
     private Table targetTable;
 
-    private List<Column> targetColumns = Lists.newArrayList();
     private boolean isOverwrite;
     private long overwriteJobId = -1;
 
@@ -235,6 +235,14 @@ public class InsertStmt extends DmlStmt {
         return targetColumnNames;
     }
 
+    public void setUsePartialUpdate() {
+        this.usePartialUpdate = true;
+    }
+
+    public boolean usePartialUpdate() {
+        return this.usePartialUpdate;
+    }
+
     public void setTargetPartitionNames(PartitionNames targetPartitionNames) {
         this.targetPartitionNames = targetPartitionNames;
     }
@@ -245,10 +253,6 @@ public class InsertStmt extends DmlStmt {
 
     public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
-    }
-
-    public void setTargetColumns(List<Column> targetColumns) {
-        this.targetColumns = targetColumns;
     }
 
     public boolean isSpecifyKeyPartition() {
