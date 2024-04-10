@@ -7,7 +7,7 @@ USE test_create_table;
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc INT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE NOT NULL AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
@@ -304,7 +304,7 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 INT AS (array_avg(array_data));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
@@ -347,7 +347,7 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 INT AS (array_avg(array_data));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
