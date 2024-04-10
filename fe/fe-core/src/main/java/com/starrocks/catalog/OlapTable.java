@@ -2871,7 +2871,7 @@ public class OlapTable extends Table {
         if (isTemporaryTable()) {
             TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
             temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), name, id);
-            LOG.info("add temporary table, name[{}] id[{}] session[{}]", name, id, sessionId);
+            LOG.debug("add temporary table, name[{}] id[{}] session[{}]", name, id, sessionId);
         }
     }
 

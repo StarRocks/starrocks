@@ -811,7 +811,7 @@ public class StmtExecutor {
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
 
-        if (createTableCreatedByCTAS(createTableAsSelectStmt)) {
+        if (!createTableCreatedByCTAS(createTableAsSelectStmt)) {
             return;
         }
 

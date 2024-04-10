@@ -467,7 +467,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new MetaNotFoundException("Database not found");
             }
             db = this.fullNameToDb.get(dbName);
-            if (!isForceDrop && db.getTemporaryTables().size() > 0) {
+            if (!isForceDrop && !db.getTemporaryTables().isEmpty()) {
                 throw new DdlException("The database [" + dbName + "] " +
                         "cannot be dropped because there are still some temporary tables in it. " +
                         "If you want to forcibly drop, please use \"DROP DATABASE <database> FORCE.\"");
@@ -2286,27 +2286,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Database has been dropped when creating table/mv/view");
             }
 
-            if (table.isTemporaryTable()) {
-                if (!db.registerTemporaryTableUnlocked(table)) {
-                    if (!isSetIfNotExists) {
-                        table.delete(db.getId(), false);
-                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                                "table already exists");
-                    } else {
-                        LOG.info("Create temporary table[{}] which already exists", table.getName());
-                        return;
-                    }
-                }
-            } else {
-                if (!db.registerTableUnlocked(table)) {
-                    if (!isSetIfNotExists) {
-                        table.delete(db.getId(), false);
-                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                                "table already exists");
-                    } else {
-                        LOG.info("Create table[{}] which already exists", table.getName());
-                        return;
-                    }
+            if (!db.registerTableUnlocked(table)) {
+                if (!isSetIfNotExists) {
+                    table.delete(db.getId(), false);
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                            "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", table.getName());
+                    return;
                 }
             }
 
@@ -2328,13 +2315,11 @@ public class LocalMetastore implements ConnectorMetadata {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
+            db.registerTableUnlocked(table);
             if (table.isTemporaryTable()) {
-                db.registerTemporaryTableUnlocked(table);
                 TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
                 UUID sessionId = ((OlapTable) table).getSessionId();
                 temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
-            } else {
-                db.registerTableUnlocked(table);
             }
             table.onReload();
         } catch (Throwable e) {
@@ -5554,11 +5539,7 @@ public class LocalMetastore implements ConnectorMetadata {
             int tableSize = reader.readInt();
             for (int j = 0; j < tableSize; ++j) {
                 Table table = reader.readJson(Table.class);
-                if (table.isTemporaryTable()) {
-                    db.registerTemporaryTableUnlocked(table);
-                } else {
-                    db.registerTableUnlocked(table);
-                }
+                db.registerTableUnlocked(table);
             }
 
             idToDb.put(db.getId(), db);

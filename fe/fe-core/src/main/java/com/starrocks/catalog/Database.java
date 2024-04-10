@@ -288,25 +288,20 @@ public class Database extends MetaObject implements Writable {
         if (table == null) {
             return false;
         }
-        String tableName = table.getName();
-        if (nameToTable.containsKey(tableName)) {
-            return false;
+        if (table.isTemporaryTable()) {
+            long tableId = table.getId();
+            if (idToTable.containsKey(tableId)) {
+                return false;
+            }
+            idToTable.put(tableId, table);
         } else {
+            String tableName = table.getName();
+            if (nameToTable.containsKey(tableName)) {
+                return false;
+            }
             idToTable.put(table.getId(), table);
             nameToTable.put(table.getName(), table);
-            return true;
         }
-    }
-
-    public boolean registerTemporaryTableUnlocked(Table table) {
-        if (table == null) {
-            return false;
-        }
-        long tableId = table.getId();
-        if (idToTable.containsKey(tableId)) {
-            return false;
-        }
-        idToTable.put(tableId, table);
         return true;
     }
 
