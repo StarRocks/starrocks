@@ -32,6 +32,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -134,17 +135,23 @@ public class CoordinatorPreprocessor {
     // if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
     private boolean usedComputeNode = false;
 
+<<<<<<< HEAD
     private final Set<Integer> colocateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
     private final Set<TUniqueId> instanceIds = Sets.newHashSet();
+=======
+    private final WorkerProvider.Factory workerProviderFactory;
+    private WorkerProvider workerProvider;
+>>>>>>> 45fcfac536 ([BugFix] add DefaultSharedDataWorkerProvider for shared-data mode (#43489))
 
     private final TDescriptorTable descriptorTable;
     private final List<PlanFragment> fragments;
     private final List<ScanNode> scanNodes;
 
+<<<<<<< HEAD
     // populated in computeFragmentExecParams()
     private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
@@ -155,6 +162,11 @@ public class CoordinatorPreprocessor {
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
+=======
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+        workerProviderFactory = newWorkerProviderFactory();
+        this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
+>>>>>>> 45fcfac536 ([BugFix] add DefaultSharedDataWorkerProvider for shared-data mode (#43489))
 
     // used only by channel stream load, records the mapping from channel id to target BE's address
     private final Map<Integer, TNetworkAddress> channelIdToBEHTTP = Maps.newHashMap();
@@ -197,6 +209,7 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
         this.scanNodes = scanNodes;
         this.connectContext = StatisticUtils.buildConnectContext();
@@ -207,6 +220,11 @@ public class CoordinatorPreprocessor {
         this.usePipeline = true;
         this.descriptorTable = null;
         this.fragments = fragments;
+=======
+    CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes, ConnectContext context) {
+        workerProviderFactory = newWorkerProviderFactory();
+        this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
+>>>>>>> 45fcfac536 ([BugFix] add DefaultSharedDataWorkerProvider for shared-data mode (#43489))
 
         this.idToComputeNode = buildComputeNodeInfo();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
@@ -247,8 +265,17 @@ public class CoordinatorPreprocessor {
         return queryGlobals;
     }
 
+<<<<<<< HEAD
     public TNetworkAddress getCoordAddress() {
         return coordAddress;
+=======
+    private WorkerProvider.Factory newWorkerProviderFactory() {
+        if (RunMode.isSharedDataMode()) {
+            return new DefaultSharedDataWorkerProvider.Factory();
+        } else {
+            return new DefaultWorkerProvider.Factory();
+        }
+>>>>>>> 45fcfac536 ([BugFix] add DefaultSharedDataWorkerProvider for shared-data mode (#43489))
     }
 
     public TUniqueId getQueryId() {
