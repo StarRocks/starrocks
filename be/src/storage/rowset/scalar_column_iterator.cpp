@@ -376,13 +376,17 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
                                                         SparseRange<>* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
+        if (!_delete_partial_satisfied_pages.has_value()) {
+            _delete_partial_satisfied_pages.emplace();
+        }
+
         IndexReadOptions opts;
         opts.use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
         opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
-        RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
+        RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages.value(),
                                                  row_ranges, opts));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
@@ -615,8 +619,8 @@ int ScalarColumnIterator::dict_size() {
 }
 
 bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {
-    if (_reader->has_zone_map()) {
-        return _delete_partial_satisfied_pages.count(page_index) > 0;
+    if (_reader->has_zone_map() && _delete_partial_satisfied_pages.has_value()) {
+        return _delete_partial_satisfied_pages->contains(page_index);
     }
     // if there is no zone map should be treated as DEL_PARTIAL_SATISFIED
     return true;

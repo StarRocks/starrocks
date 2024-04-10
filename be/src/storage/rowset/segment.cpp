@@ -263,28 +263,32 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
-    // trying to prune the current segment by segment-level zone map
-    for (const auto& pair : read_options.predicates_for_zone_map) {
-        ColumnId column_id = pair.first;
-        const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
-                                                               : _tablet_schema->column(column_id);
-        auto column_unique_id = tablet_column.unique_id();
-        if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
-            continue;
-        }
-        if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
-            // skip segment zonemap filter when this segment has column files link to it.
-            if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
-                if (read_options.is_first_split_of_segment) {
-                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+
+    if (config::enable_index_segment_level_zonemap_filter) {
+        // trying to prune the current segment by segment-level zone map
+        for (const auto& pair : read_options.predicates_for_zone_map) {
+            ColumnId column_id = pair.first;
+            const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
+                                                                   : _tablet_schema->column(column_id);
+            auto column_unique_id = tablet_column.unique_id();
+            if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
+                continue;
+            }
+            if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
+                // skip segment zonemap filter when this segment has column files link to it.
+                if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
+                    if (read_options.is_first_split_of_segment) {
+                        read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+                    }
+                    return Status::EndOfFile(
+                            strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
+                } else {
+                    break;
                 }
-                return Status::EndOfFile(
-                        strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
-            } else {
-                break;
             }
         }
     }
+
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
