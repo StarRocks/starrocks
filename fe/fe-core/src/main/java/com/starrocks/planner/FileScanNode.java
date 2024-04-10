@@ -510,9 +510,12 @@ public class FileScanNode extends LoadScanNode {
             int limit = 3;
             List<String> allFilePaths =
                     fileGroups.stream().map(BrokerFileGroup::getFilePaths).flatMap(List::stream).collect(Collectors.toList());
-            List<String> filePaths = Lists.newArrayList(allFilePaths.subList(0, limit));
+            List<String> filePaths = Lists.newArrayList();
             if (allFilePaths.size() > limit) {
+                filePaths.addAll(allFilePaths.subList(0, limit));
                 filePaths.add("...");
+            } else {
+                filePaths.addAll(allFilePaths);
             }
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_FILES_FOUND, String.join(", ", filePaths));
         }
