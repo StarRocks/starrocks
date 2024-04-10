@@ -62,9 +62,10 @@ public:
     Cache* cache() { return _cache.get(); }
 
 private:
-    std::atomic<size_t> _memory_usage{0};
-    MemTracker* _mem_tracker = nullptr;
+    std::mutex _mutex;
+    size_t _memory_usage{0};
     std::unique_ptr<Cache> _cache;
+    std::unique_ptr<MemTracker> _mem_tracker;
 };
 
 class UpdateManager {
@@ -223,7 +224,6 @@ private:
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
-    std::unique_ptr<MemTracker> _block_cache_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
 

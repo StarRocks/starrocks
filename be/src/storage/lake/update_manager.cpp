@@ -55,9 +55,7 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
 
     const int64_t block_cache_mem_limit =
             update_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
-    _block_cache_mem_tracker =
-            std::make_unique<MemTracker>(block_cache_mem_limit, "lake_persistent_index_block_cache", mem_tracker);
-    _block_cache = std::make_unique<PersistentIndexBlockCache>(_block_cache_mem_tracker.get(), block_cache_mem_limit);
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, block_cache_mem_limit);
 }
 
 UpdateManager::~UpdateManager() {
@@ -75,9 +73,12 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 }
 
 PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
-        : _mem_tracker(mem_tracker), _cache(new_lru_cache(cache_limit)) {}
+        : _cache(new_lru_cache(cache_limit)) {
+    _mem_tracker = std::make_unique<MemTracker>(cache_limit, "lake_persistent_index_block_cache", mem_tracker);
+}
 
 void PersistentIndexBlockCache::update_memory_usage() {
+    std::lock_guard<std::mutex> lg(_mutex);
     size_t current_mem_usage = _cache->get_memory_usage();
     if (_memory_usage > current_mem_usage) {
         _mem_tracker->release(_memory_usage - current_mem_usage);
