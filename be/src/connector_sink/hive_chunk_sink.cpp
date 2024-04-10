@@ -97,6 +97,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
 
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
+        // ensure hive compatibility since hive 3 and lower version accepts specific encoding
+        ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";
+        ctx->options[formats::ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING] = "true";
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
                 std::move(fs), ctx->compression_type, ctx->options, ctx->data_column_names,
                 std::move(data_column_evaluators), std::nullopt, ctx->executor, runtime_state);

@@ -52,6 +52,11 @@ struct ParquetWriterOptions : FileWriterOptions {
     int64_t write_batch_size = 4096;
     int64_t rowgroup_size = 128L * 1024 * 1024; // 128MB
     std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
+    bool use_legacy_decimal_encoding = false;
+    bool use_int96_timestamp_encoding = false;
+
+    inline static std::string USE_LEGACY_DECIMAL_ENCODING = "use_legacy_decimal_encoding";
+    inline static std::string USE_INT96_TIMESTAMP_ENCODING = "use_int96_timestamp_encoding";
 };
 
 class ParquetFileWriter final : public FileWriter {
@@ -77,14 +82,18 @@ public:
 private:
     static StatusOr<::parquet::Compression::type> _convert_compression_type(TCompressionType::type type);
 
-    static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
+    arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
             const std::vector<FileColumnId>& file_column_ids);
 
-    static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
-                                                                       const TypeDescriptor& type_desc,
-                                                                       ::parquet::Repetition::type rep_type,
-                                                                       FileColumnId file_column_id);
+    arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
+                                                                const TypeDescriptor& type_desc,
+                                                                ::parquet::Repetition::type rep_type,
+                                                                FileColumnId file_column_id);
+
+    static int decimal_precision_to_byte_count(int precision) {
+        return std::ceil((std::log(std::pow(10, precision) - 1) / std::log(2) + 1) / 8);
+    }
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 

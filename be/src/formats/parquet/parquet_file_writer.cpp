@@ -41,8 +41,9 @@ namespace starrocks::formats {
 
 std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
     if (_rowgroup_writer == nullptr) {
-        _rowgroup_writer = std::make_unique<parquet::ChunkWriter>(_writer->AppendBufferedRowGroup(), _type_descs,
-                                                                  _schema, _eval_func);
+        _rowgroup_writer = std::make_unique<parquet::ChunkWriter>(
+                _writer->AppendBufferedRowGroup(), _type_descs, _schema, _eval_func,
+                _writer_options->use_legacy_decimal_encoding, _writer_options->use_int96_timestamp_encoding);
     }
     if (auto status = _rowgroup_writer->write(chunk.get()); !status.ok()) {
         return make_ready_future(std::move(status));
@@ -385,27 +386,39 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
                                                       ::parquet::Type::INT32, -1, file_column_id.field_id);
     }
     case TYPE_DATETIME: {
-        // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime values
-        return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type,
-                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
-                ::parquet::Type::INT64, -1, file_column_id.field_id);
+        // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime value
+        // Apache Hive version 3 or lower does not support reading timestamps encoded as INT64
+        if (_writer_options->use_int96_timestamp_encoding) {
+            return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::Type::INT96,
+                                                          ::parquet::ConvertedType::TIMESTAMP_MILLIS, -1,
+                                                          file_column_id.field_id);
+        } else {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type,
+                    ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+                    ::parquet::Type::INT64, -1, file_column_id.field_id);
+        }
     }
-    case TYPE_DECIMAL32: {
-        return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::INT32, -1, file_column_id.field_id);
-    }
-
-    case TYPE_DECIMAL64: {
-        return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::INT64, -1, file_column_id.field_id);
-    }
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
     case TYPE_DECIMAL128: {
+        // Apache Hive version 3 or lower does not support reading decimals encoded as INT32/INT64
+        if (!_writer_options->use_legacy_decimal_encoding) {
+            if (type_desc.type == TYPE_DECIMAL32) {
+                return ::parquet::schema::PrimitiveNode::Make(
+                        name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+                        ::parquet::Type::INT32, -1, file_column_id.field_id);
+            }
+            if (type_desc.type == TYPE_DECIMAL64) {
+                return ::parquet::schema::PrimitiveNode::Make(
+                        name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+                        ::parquet::Type::INT64, -1, file_column_id.field_id);
+            }
+        }
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16, file_column_id.field_id);
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, decimal_precision_to_byte_count(type_desc.precision),
+                file_column_id.field_id);
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
@@ -505,6 +518,14 @@ Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;
+    if (_options.contains(ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING)) {
+        _parsed_options->use_legacy_decimal_encoding =
+                boost::iequals(_options[ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING], "true");
+    }
+    if (_options.contains(ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING)) {
+        _parsed_options->use_int96_timestamp_encoding =
+                boost::iequals(_options[ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING], "true");
+    }
     return Status::OK();
 }
 

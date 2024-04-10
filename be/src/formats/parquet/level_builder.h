@@ -92,7 +92,8 @@ public:
     // A callback function that will receive results from caller
     using CallbackFunction = std::function<void(const LevelBuilderResult&)>;
 
-    LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr node);
+    LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr node, bool use_legacy_decimal_encoding,
+                 bool use_int96_timestamp_encoding);
 
     // Determine rep/def level information for the array.
     //
@@ -114,9 +115,10 @@ private:
                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                    const CallbackFunction& write_leaf_callback);
 
-    Status _write_decimal128_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                          const CallbackFunction& write_leaf_callback);
+    template <LogicalType lt>
+    Status _write_decimal_to_flba_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                               const CallbackFunction& write_leaf_callback);
 
     template <LogicalType lt>
     Status _write_byte_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
@@ -127,6 +129,7 @@ private:
                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                     const CallbackFunction& write_leaf_callback);
 
+    template <typename cpp_type>
     Status _write_datetime_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                         const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                         const CallbackFunction& write_leaf_callback);
@@ -157,6 +160,8 @@ private:
 private:
     TypeDescriptor _type_desc;
     ::parquet::schema::NodePtr _root;
+    bool _use_legacy_decimal_encoding = false;
+    bool _use_int96_timestamp_encoding = false;
 };
 
 } // namespace starrocks::parquet
