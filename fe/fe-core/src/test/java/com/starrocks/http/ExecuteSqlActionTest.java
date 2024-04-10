@@ -20,7 +20,6 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.json.JSONObject;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
@@ -33,15 +32,13 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     private static final String QUERY_EXECUTE_API = "/api/v1/catalogs/default_catalog/sql";
 
     @Override
-    @Before
-    public void setUp() {
-        super.setUp();
+    protected void doSetUp() throws Exception {
         MetricRepo.init();
         ExecuteEnv.setup();
     }
 
     @Test
-    public void test1ExecuteSqlSuccess() throws IOException {
+    public void test1ExecuteSqlSuccess() throws Exception {
         super.setUpWithCatalog();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"query\" :  \"kill 0\" }");

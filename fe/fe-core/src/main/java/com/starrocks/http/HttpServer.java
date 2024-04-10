@@ -92,6 +92,7 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -215,6 +216,8 @@ public class HttpServer {
         // external usage
         TableRowCountAction.registerAction(controller);
         TableSchemaAction.registerAction(controller);
+        com.starrocks.http.rest.v2.TableSchemaAction.registerAction(controller);
+        TablePartitionAction.registerAction(controller);
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);

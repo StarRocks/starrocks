@@ -115,19 +115,21 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
+    protected static final String ES_TABLE_NAME = "es_table";
+
     protected static long testBackendId1 = 1000;
     protected static long testBackendId2 = 1001;
     protected static long testBackendId3 = 1002;
 
-    private static long testReplicaId1 = 2000;
-    private static long testReplicaId2 = 2001;
-    private static long testReplicaId3 = 2002;
+    protected static long testReplicaId1 = 2000;
+    protected static long testReplicaId2 = 2001;
+    protected static long testReplicaId3 = 2002;
 
     protected static final long TEST_DB_ID = 100L;
     protected static final long TEST_TABLE_ID = 200L;
-    private static long testPartitionId = 201L;
+    protected static long testPartitionId = 201L;
     public static long testIndexId = TEST_TABLE_ID; // the base indexid == tableid
-    private static long tabletId = 400L;
+    protected static long tabletId = 400L;
 
     public static long testStartVersion = 12;
     public static int testSchemaHash = 93423942;
@@ -136,7 +138,6 @@ public abstract class StarRocksHttpTestCase {
 
     protected static String URI;
     protected static String BASE_URL;
-
     protected static final String AUTH_KEY = "Authorization";
     protected String rootAuth = Credentials.basic("root", "");
 
@@ -273,7 +274,7 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(table);
         OlapTable table1 = newTable(TABLE_NAME + 1);
         db.registerTableUnlocked(table1);
-        EsTable esTable = newEsTable("es_table");
+        EsTable esTable = newEsTable(ES_TABLE_NAME);
         db.registerTableUnlocked(esTable);
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
@@ -340,7 +341,7 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(table);
         OlapTable table1 = newTable(TABLE_NAME + 1);
         db.registerTableUnlocked(table1);
-        EsTable esTable = newEsTable("es_table");
+        EsTable esTable = newEsTable(ES_TABLE_NAME);
         db.registerTableUnlocked(esTable);
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
@@ -446,7 +447,7 @@ public abstract class StarRocksHttpTestCase {
     }
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
@@ -519,7 +520,7 @@ public abstract class StarRocksHttpTestCase {
         doSetUp();
     }
 
-    public void setUpWithCatalog() {
+    public void setUpWithCatalog() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
@@ -594,7 +595,7 @@ public abstract class StarRocksHttpTestCase {
         httpServer.shutDown();
     }
 
-    protected void doSetUp() {
+    protected void doSetUp() throws Exception {
 
     }
 

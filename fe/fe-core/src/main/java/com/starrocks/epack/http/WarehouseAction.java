@@ -51,7 +51,7 @@ public class WarehouseAction extends RestBaseAction {
         RestSuccessBaseResult<Result> res = new RestSuccessBaseResult<>(new Result(warehouseInfo.values()));
 
         response.setContentType("application/json");
-        response.getContent().append(res.toJsonString());
+        response.getContent().append(res.toJson());
         sendResult(request, response);
     }
 

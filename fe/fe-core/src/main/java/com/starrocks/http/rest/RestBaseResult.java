@@ -34,10 +34,8 @@
 
 package com.starrocks.http.rest;
 
-import com.google.gson.ExclusionStrategy;
-import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -55,10 +53,12 @@ public class RestBaseResult {
     // For compatibility, status still exists in /api/v1, removed in /api/v2 and later version.
     @Legacy
     public ActionStatus status;
+    @SerializedName("code")
     public String code;
     // For compatibility, msg still exists in /api/v1, removed in /api/v2 and later version.
     @Legacy
     public String msg;
+    @SerializedName("message")
     public String message;
 
     public RestBaseResult() {
@@ -85,18 +85,11 @@ public class RestBaseResult {
         return gson.toJson(this);
     }
 
-    public String toJsonString() {
-        Gson gson = new GsonBuilder().setExclusionStrategies(new ExclusionStrategy() {
-            @Override
-            public boolean shouldSkipField(FieldAttributes f) {
-                return f.getAnnotation(Legacy.class) != null;
-            }
+    public String getCode() {
+        return code;
+    }
 
-            @Override
-            public boolean shouldSkipClass(Class<?> clazz) {
-                return false;
-            }
-        }).create();
-        return gson.toJson(this);
+    public String getMessage() {
+        return message;
     }
 }
