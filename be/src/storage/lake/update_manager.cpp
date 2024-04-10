@@ -52,8 +52,12 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
     _index_cache.set_capacity(update_mem_limit);
-    _block_cache = std::make_unique<PersistentIndexBlockCache>(
-            mem_tracker, update_mem_limit * config::lake_pk_index_block_cache_limit);
+
+    const int64_t block_cache_mem_limit =
+            update_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
+    _block_cache_mem_tracker =
+            std::make_unique<MemTracker>(block_cache_mem_limit, "lake_persistent_index_block_cache", mem_tracker);
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(_block_cache_mem_tracker.get(), block_cache_mem_limit);
 }
 
 UpdateManager::~UpdateManager() {

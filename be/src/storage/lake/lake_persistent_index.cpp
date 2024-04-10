@@ -459,7 +459,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
 }
 
 size_t LakePersistentIndex::memory_usage() const {
-    size_t mem_usage = _memtable->memory_usage();
+    size_t mem_usage = 0;
+    if (_memtable != nullptr) {
+        mem_usage += _memtable->memory_usage();
+    }
     if (_immutable_memtable != nullptr) {
         mem_usage += _immutable_memtable->memory_usage();
     }

@@ -982,7 +982,7 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "5");
-CONF_mDouble(lake_pk_index_block_cache_limit, "0.1");
+CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

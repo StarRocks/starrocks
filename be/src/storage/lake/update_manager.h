@@ -223,6 +223,7 @@ private:
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
+    std::unique_ptr<MemTracker> _block_cache_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
 
