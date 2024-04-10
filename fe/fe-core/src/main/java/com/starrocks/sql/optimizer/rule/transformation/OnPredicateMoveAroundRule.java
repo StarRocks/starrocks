@@ -82,7 +82,7 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         ValueProperty rightValueProperty = rightChild.getValueProperty();
 
         OptExpression result = null;
-        if (joinOperator.getJoinType().isInnerJoin()) {
+        if (joinOperator.getJoinType().isInnerJoin() || joinOperator.getJoinType().isSemiJoin()) {
             List<ScalarOperator> toLeftPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, rightValueProperty, leftValueProperty, true))
                     .filter(Objects::nonNull)

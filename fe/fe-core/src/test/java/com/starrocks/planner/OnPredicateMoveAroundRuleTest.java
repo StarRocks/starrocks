@@ -70,6 +70,9 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
                 "on t1.t1a > t2.t1a and t1.t1b = t2.t1b and t1.t1c > t2.t1c and t1.id_datetime  < t2.id_datetime;";
         String expectPredicate = "12: t1b = 1, 11: t1a <= '中文', 13: t1c <= 1, 18: id_datetime >= '2021-01-01 00:00:00'";
         argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
+        argumentsList.add(Arguments.of(String.format(templateSql, "left semi"), expectPredicate));
+        argumentsList.add(Arguments.of(String.format(templateSql, "right semi"), expectPredicate));
+
 
         expectPredicate = "11: t1a <= '中文', 12: t1b = 1, 13: t1c <= 1, 18: id_datetime >= '2021-01-01 00:00:00'";
         argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));

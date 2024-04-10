@@ -25,6 +25,13 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
+/**
+ * ValueProperty is used to store the value property info of a column or expr.
+ * For a sql like `select col_a, col_b, col_c from table where col_a > 10 and col_b + col_c = 20`,
+ * we can get the value property of col_a, col_b + col_c from the where clause like
+ * col_a -> {predicateDesc : col_a > 10, rangeDesc : [10, +inf)}
+ * col_b + col_c -> {predicateDesc : col_b + col_c = 20, rangeDesc : [20, 20]}
+ */
 public class ValueProperty {
 
     private Map<ScalarOperator, ValueWrapper> valueMap;
