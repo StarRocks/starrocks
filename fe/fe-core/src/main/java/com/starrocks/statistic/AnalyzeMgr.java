@@ -373,6 +373,23 @@ public class AnalyzeMgr implements Writable {
                 histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn()));
     }
 
+    public void refreshConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
+                                                              List<String> columns, boolean async) {
+        Table table;
+        try {
+            table = MetaUtils.getTable(catalogName, dbName, tableName);
+        } catch (Exception e) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorHistogramStatistics(table, columns);
+        if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorHistogramStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
+        }
+    }
+
     public void clearStatisticFromDroppedTable() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         Set<Long> tables = new HashSet<>();

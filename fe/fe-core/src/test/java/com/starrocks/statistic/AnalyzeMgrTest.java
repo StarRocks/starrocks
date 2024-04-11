@@ -18,7 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;

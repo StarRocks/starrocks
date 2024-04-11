@@ -101,7 +101,7 @@ OutPut Exchange Id: 16
 |  32 <-> substring[([5: C_PHONE, VARCHAR, false], 1, 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; result nullable: true]
 |  cardinality: 1500000
 |  column statistics:
-|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
+|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] MCV: [[3863.78:400][5610.32:400][-101.79:400][1237.93:400][5209.06:400]] ESTIMATE
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |
 13:HASH JOIN
@@ -114,7 +114,7 @@ OutPut Exchange Id: 16
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 3750000.0] ESTIMATE
 |  * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
+|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] MCV: [[3863.78:400][5610.32:400][-101.79:400][1237.93:400][5209.06:400]] ESTIMATE
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 3750000.0] ESTIMATE
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |
@@ -143,7 +143,7 @@ OutPut Exchange Id: 12
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 3750000.0] ESTIMATE
 |  * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
+|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] MCV: [[3863.78:400][5610.32:400][-101.79:400][1237.93:400][5209.06:400]] ESTIMATE
 |
 10:NESTLOOP JOIN
 |  join op: INNER JOIN
@@ -154,7 +154,7 @@ OutPut Exchange Id: 12
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 3750000.0] ESTIMATE
 |  * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
+|  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] MCV: [[3863.78:400][5610.32:400][-101.79:400][1237.93:400][5209.06:400]] ESTIMATE
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----9:EXCHANGE
@@ -173,7 +173,7 @@ probe runtime filters:
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 7500000.0] ESTIMATE
 * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-* C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
+* C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] MCV: [[3863.78:400][5610.32:400][-101.79:400][1237.93:400][5209.06:400]] ESTIMATE
 
 PLAN FRAGMENT 4(F04)
 
@@ -214,7 +214,7 @@ OutPut Exchange Id: 06
 |  15 <-> [15: C_ACCTBAL, DOUBLE, false]
 |  cardinality: 6815795
 |  column statistics:
-|  * C_ACCTBAL-->[0.0, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
+|  * C_ACCTBAL-->[0.0, 9999.99, 0.0, 8.0, 137439.0] MCV: [[3863.78:400][5610.32:400][3123.67:400][1237.93:400][487.64:400]] ESTIMATE
 |
 3:OlapScanNode
 table: customer, rollup: customer
@@ -225,7 +225,7 @@ actualRows=0, avgRowSize=23.0
 cardinality: 6815795
 column statistics:
 * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-* C_ACCTBAL-->[0.0, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
+* C_ACCTBAL-->[0.0, 9999.99, 0.0, 8.0, 137439.0] MCV: [[3863.78:400][5610.32:400][3123.67:400][1237.93:400][487.64:400]] ESTIMATE
 
 PLAN FRAGMENT 6(F00)
 
