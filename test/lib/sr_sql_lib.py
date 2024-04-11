@@ -294,7 +294,7 @@ class StarrocksSQLApiLib(object):
     def get_crash_log(self, ip):
         log.warning("Get crash log from %s" % ip)
         cmd = (
-            f'cd {self.cluster_path}/be/log/; grep -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
+            f'cd {self.cluster_path}/be/log/; grep -B100 -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
         )
         crash_log = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=False)
         return crash_log["result"]
