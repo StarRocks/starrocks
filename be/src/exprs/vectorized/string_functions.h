@@ -272,10 +272,31 @@ public:
      */
     DEFINE_VECTORIZED_FN(split);
 
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.h
     static Status split_prepare(starrocks_udf::FunctionContext* context,
                                 starrocks_udf::FunctionContext::FunctionStateScope scope);
     static Status split_close(starrocks_udf::FunctionContext* context,
                               starrocks_udf::FunctionContext::FunctionStateScope scope);
+=======
+    static Status split_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status split_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+    * @param: [array_string, delimiter]
+    * @paramType: [ArrayBinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
+    DEFINE_VECTORIZED_FN(str_to_map_v1);
+
+    /**
+    * @param: [string, delimiter, map_delimiter]
+    * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
+    DEFINE_VECTORIZED_FN(str_to_map);
+    static Status str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+>>>>>>> 42115e6a5e ([BugFix] Fix the concurrency bug of str_to_map (#43901)):be/src/exprs/string_functions.h
 
     /**
      * @param: [string_value, delimiter, field]
