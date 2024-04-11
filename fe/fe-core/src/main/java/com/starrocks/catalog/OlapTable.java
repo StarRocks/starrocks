@@ -2802,7 +2802,6 @@ public class OlapTable extends Table {
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }
-        // property is set false by default
         return false;
     }
 

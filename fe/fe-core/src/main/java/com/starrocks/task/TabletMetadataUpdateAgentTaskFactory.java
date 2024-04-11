@@ -22,8 +22,12 @@ import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletSchema;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -100,6 +104,13 @@ public class TabletMetadataUpdateAgentTaskFactory {
     public static TabletMetadataUpdateAgentTask createPrimaryIndexCacheExpireTimeUpdateTask(long backendId,
             List<Pair<Long, Integer>> expireTimes) {
         return new UpdatePrimaryIndexCacheExpireTimeTask(backendId, requireNonNull(expireTimes, "expireTimes is null"));
+    }
+
+    public static TabletMetadataUpdateAgentTask createTabletSchemaUpdateTask(long backendId,
+                                                                             List<Long> tabletIds,
+                                                                             TTabletSchema tabletSchema,
+                                                                             boolean createSchemaFile) {
+        return new UpdateTabletSchemaTask(backendId, tabletIds, tabletSchema, createSchemaFile);
     }
 
     private static class UpdatePartitionIdTask extends TabletMetadataUpdateAgentTask {
@@ -242,6 +253,40 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 metaInfo.setPrimary_index_cache_expire_sec(pair.second);
                 metaInfo.setMeta_type(TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
                 metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateTabletSchemaTask extends TabletMetadataUpdateAgentTask {
+        private final List<Long> tablets;
+        private final TTabletSchema tabletSchema;
+        private final boolean createSchemaFile;
+
+        private UpdateTabletSchemaTask(long backendId, List<Long> tablets, TTabletSchema tabletSchema,
+                                       boolean createSchemaFile) {
+            super(backendId, tablets.hashCode());
+            this.tablets = new ArrayList<>(tablets);
+            this.tabletSchema = Objects.requireNonNull(tabletSchema, "tabletSchema is null");
+            this.createSchemaFile = createSchemaFile;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return new HashSet<>(tablets);
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            boolean create = createSchemaFile;
+            List<TTabletMetaInfo> metaInfos = new ArrayList<>(tablets.size());
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setTablet_schema(tabletSchema);
+                metaInfos.add(metaInfo);
+                metaInfo.setCreate_schema_file(create);
+                create = false;
             }
             return metaInfos;
         }
