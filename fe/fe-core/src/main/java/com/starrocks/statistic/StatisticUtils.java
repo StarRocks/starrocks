@@ -18,6 +18,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -177,8 +180,8 @@ public class StatisticUtils {
 
                         statisticExecutor.collectStatistics(statsConnectCtx,
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        new ArrayList<>(collectPartitionIds), null, analyzeType,
-                                        StatsConstants.ScheduleType.ONCE,
+                                        new ArrayList<>(collectPartitionIds), null, null,
+                                        analyzeType, StatsConstants.ScheduleType.ONCE,
                                         analyzeStatus.getProperties()), analyzeStatus, false);
                     });
         } catch (Throwable e) {
@@ -478,7 +481,12 @@ public class StatisticUtils {
     }
 
     public static String quoting(String identifier) {
-        return "`" + identifier + "`";
+        String[] splits = identifier.split("\\.");
+        StringBuilder sb = new StringBuilder();
+        for (String split : splits) {
+            sb.append("`").append(split).append("`.");
+        }
+        return sb.substring(0, sb.length() - 1);
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
@@ -504,5 +512,16 @@ public class StatisticUtils {
 
         List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
         GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+    }
+
+    // only support collect statistics for slotRef and subfield expr
+    public static String getColumnName(Table table, Expr column) {
+        String colName;
+        if (column instanceof SlotRef) {
+            colName = table.getColumn(((SlotRef) column).getColumnName()).getName();
+        } else {
+            colName = ((SubfieldExpr) column).getPath();
+        }
+        return colName;
     }
 }

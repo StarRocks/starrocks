@@ -1720,7 +1720,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
-
     @VarAttr(name = ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN)
     private boolean enableStatsToOptimizeSkewJoin = true;
 

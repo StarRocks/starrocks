@@ -45,25 +45,39 @@ import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public abstract class StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     protected final Database db;
     protected final Table table;
-    protected final List<String> columns;
+    protected final List<String> columnNames;
+    protected final List<Type> columnTypes;
 
     protected final StatsConstants.AnalyzeType type;
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
 
-    protected StatisticsCollectJob(Database db, Table table, List<String> columns,
+    protected StatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                    Map<String, String> properties) {
         this.db = db;
         this.table = table;
-        this.columns = columns;
+        this.columnNames = columnNames;
+        this.columnTypes = columnNames.stream().map(table::getColumn).map(Column::getType).collect(Collectors.toList());
+        this.type = type;
+        this.scheduleType = scheduleType;
+        this.properties = properties;
+    }
 
+    protected StatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
+                                   StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                   Map<String, String> properties) {
+        this.db = db;
+        this.table = table;
+        this.columnNames = columnNames;
+        this.columnTypes = columnTypes;
         this.type = type;
         this.scheduleType = scheduleType;
         this.properties = properties;
@@ -94,8 +108,12 @@ public abstract class StatisticsCollectJob {
         return table;
     }
 
-    public List<String> getColumns() {
-        return columns;
+    public List<Type> getColumnTypes() {
+        return columnTypes;
+    }
+
+    public List<String> getColumnNames() {
+        return columnNames;
     }
 
     public StatsConstants.AnalyzeType getType() {
@@ -152,9 +170,9 @@ public abstract class StatisticsCollectJob {
         throw new DdlException(context.getState().getErrorMessage());
     }
 
-    protected String getMinMaxFunction(Column column, String name, boolean isMax) {
+    protected String getMinMaxFunction(Type columnType, String name, boolean isMax) {
         String fn = isMax ? "MAX" : "MIN";
-        if (column.getPrimitiveType().isCharFamily()) {
+        if (columnType.getPrimitiveType().isCharFamily()) {
             fn = fn + "(LEFT(" + name + ", 200))";
         } else {
             fn = fn + "(" + name + ")";
@@ -193,11 +211,11 @@ public abstract class StatisticsCollectJob {
         return fe;
     }
 
-    public static String fullAnalyzeGetDataSize(Column column) {
-        if (column.getPrimitiveType().isCharFamily()) {
-            return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(column.getName()) + ")), 0)";
+    public static String fullAnalyzeGetDataSize(String columnName, Type columnType) {
+        if (columnType.getPrimitiveType().isCharFamily()) {
+            return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(columnName) + ")), 0)";
         }
-        long typeSize = column.getType().getTypeSize();
+        long typeSize = columnType.getTypeSize();
         return "COUNT(1) * " + typeSize;
     }
 }
