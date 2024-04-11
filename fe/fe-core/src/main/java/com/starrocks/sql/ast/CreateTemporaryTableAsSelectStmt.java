@@ -17,22 +17,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-import java.util.UUID;
 
 public class CreateTemporaryTableAsSelectStmt extends CreateTableAsSelectStmt {
 
     public CreateTemporaryTableAsSelectStmt(CreateTemporaryTableStmt createTemporaryTableStmt,
                                             List<String> columnNames, QueryStatement queryStatement, NodePosition pos) {
         super(createTemporaryTableStmt, columnNames, queryStatement, pos);
-    }
-
-    public void setSessionId(UUID sessionId) {
-        CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) getCreateTableStmt();
-        createTemporaryTableStmt.setSessionId(sessionId);
-    }
-
-    public UUID getSessionId() {
-        CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) getCreateTableStmt();
-        return createTemporaryTableStmt.getSessionId();
     }
 }

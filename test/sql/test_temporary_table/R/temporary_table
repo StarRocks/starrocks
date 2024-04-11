@@ -239,3 +239,16 @@ select * from `t` into outfile "oss://${oss_bucket}/test_temporary_table/${uuid0
 -- result:
 E: (1064, "Getting analyzing error. Detail message: temporary table doesn't support select outfile statement.")
 -- !result
+-- name: test_abnormal_drop
+drop temporary table `a`.`b`.`c`;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: drop temporary table can only be execute under default catalog.')
+-- !result
+drop temporary table `b`.`c`;
+-- result:
+E: (5501, "Getting analyzing error. Detail message: Unknown database 'b'.")
+-- !result
+drop temporary table `c`;
+-- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'c'.")
+-- !result

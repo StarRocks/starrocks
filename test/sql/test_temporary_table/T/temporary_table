@@ -93,3 +93,8 @@ create temporary table `t` (
     `c2` int
 ) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
 select * from `t` into outfile "oss://${oss_bucket}/test_temporary_table/${uuid0}/" properties("aws.s3.access_key"="${oss_ak}","aws.s3.secret_key"="${oss_sk}","aws.s3.endpoint"="${oss_endpoint}");
+
+-- name: test_abnormal_drop
+drop temporary table `a`.`b`.`c`;
+drop temporary table `b`.`c`;
+drop temporary table `c`;
