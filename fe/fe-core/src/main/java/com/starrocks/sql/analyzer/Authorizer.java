@@ -25,7 +25,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.epack.privilege.AccessControllerEPack;
+import com.starrocks.epack.authorization.AccessControllerEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;

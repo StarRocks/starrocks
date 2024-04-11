@@ -4,8 +4,8 @@ package com.starrocks.epack.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.epack.privilege.Policy;
-import com.starrocks.epack.privilege.SecurityPolicyMgr;
+import com.starrocks.epack.authorization.Policy;
+import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.sql.analyzer.AnalyzerUtilsEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;

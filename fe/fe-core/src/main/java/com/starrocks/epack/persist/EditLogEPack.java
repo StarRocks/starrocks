@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.epack.persist;
 
-import com.starrocks.epack.privilege.AuthenticationMgrEPack;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;

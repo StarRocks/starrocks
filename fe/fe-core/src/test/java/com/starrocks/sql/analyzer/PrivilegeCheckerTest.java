@@ -46,6 +46,7 @@ import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.lake.StarOSAgent;
@@ -3397,9 +3398,9 @@ public class PrivilegeCheckerTest {
                 "revoke create warehouse on system from test",
                 "Access denied; you need (at least one of) the CREATE WAREHOUSE privilege(s) on SYSTEM for this operation");
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
-            public Warehouse getWarehouse(String warehouseName) {
+            public Warehouse getWarehouseAllowNull(String warehouseName) {
                 return new LocalWarehouse(12343L, "waa", 11L, "no comments");
             }
         };

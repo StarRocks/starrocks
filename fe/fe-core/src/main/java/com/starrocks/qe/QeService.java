@@ -86,6 +86,7 @@ public class QeService {
     }
 
     private SSLContext createSSLContext() throws Exception {
+        // TODO(yiming): refactor, replace this method with `SslUtils#createSSLContext()`
         KeyStore keyStore = KeyStore.getInstance("JKS");
         try (InputStream keyStoreIS = new FileInputStream(Config.ssl_keystore_location)) {
             keyStore.load(keyStoreIS, Config.ssl_keystore_password.toCharArray());

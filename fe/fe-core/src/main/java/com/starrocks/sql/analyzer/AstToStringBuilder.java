@@ -80,7 +80,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
-import com.starrocks.epack.privilege.ObjectTypeEPack;
+import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyType;

@@ -3,9 +3,9 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.catalog.BaseTableInfo;
-import com.starrocks.epack.privilege.PolicyAppliedContext;
-import com.starrocks.epack.privilege.SecurityPolicyMgr;
-import com.starrocks.epack.privilege.TableUID;
+import com.starrocks.epack.authorization.PolicyAppliedContext;
+import com.starrocks.epack.authorization.SecurityPolicyMgr;
+import com.starrocks.epack.authorization.TableUID;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.ConnectContext;

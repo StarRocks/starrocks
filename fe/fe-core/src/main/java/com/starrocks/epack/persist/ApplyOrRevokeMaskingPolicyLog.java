@@ -5,8 +5,8 @@ package com.starrocks.epack.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.epack.privilege.MaskingPolicyContext;
-import com.starrocks.epack.privilege.TableUID;
+import com.starrocks.epack.authorization.MaskingPolicyContext;
+import com.starrocks.epack.authorization.TableUID;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;

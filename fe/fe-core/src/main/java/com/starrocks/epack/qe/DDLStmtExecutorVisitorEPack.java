@@ -14,8 +14,8 @@
 package com.starrocks.epack.qe;
 
 import com.starrocks.common.ErrorReport;
-import com.starrocks.epack.privilege.AuthenticationMgrEPack;
-import com.starrocks.epack.privilege.SecurityPolicyMgr;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
+import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;

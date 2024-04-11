@@ -39,6 +39,7 @@ public class LdapSecurity {
             return false;
         }
 
+        // TODO(yiming): refactor, replace these logic with `LDAPSecurityIntegration#createDirContextOnConnection`
         String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
                 Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();
@@ -76,6 +77,7 @@ public class LdapSecurity {
             return false;
         }
 
+        // TODO(yiming): refactor, replace these logic with `LDAPSecurityIntegration#createDirContextOnConnection`
         String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
                 Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();

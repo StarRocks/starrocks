@@ -1240,7 +1240,7 @@ public class ScalarOperatorFunctions {
         ConnectContext connectContext = ConnectContext.get();
 
         for (Long roleId : connectContext.getCurrentRoleIds()) {
-            manager.getRecursiveRole(roleNames, roleId);
+            roleNames.addAll(manager.getAllPredecessorRoleNames(roleId));
         }
 
         return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));

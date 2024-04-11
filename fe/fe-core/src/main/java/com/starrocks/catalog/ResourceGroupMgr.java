@@ -21,7 +21,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.epack.privilege.PrivilegeBuiltinConstantsEPack;
+import com.starrocks.epack.authorization.PrivilegeBuiltinConstantsEPack;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;

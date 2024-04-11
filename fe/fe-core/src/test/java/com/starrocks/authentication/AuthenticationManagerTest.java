@@ -16,7 +16,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.epack.privilege.AuthenticationMgrEPack;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;

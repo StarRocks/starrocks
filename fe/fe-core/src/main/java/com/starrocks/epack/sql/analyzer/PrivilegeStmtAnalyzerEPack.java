@@ -16,7 +16,7 @@ package com.starrocks.epack.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.epack.privilege.ObjectTypeEPack;
+import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.qe.ConnectContext;
