@@ -134,11 +134,8 @@ public class SchemaInfo {
             }
             // when doing schema change, some modified column has a prefix in name.
             // this prefix is only used in FE, not visible to BE, so we should remove this prefix.
-            if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length()));
-            }
-            if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
-                tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length()));
+            if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PREFIX.length()));
             }
             tColumns.add(tColumn);
         }
