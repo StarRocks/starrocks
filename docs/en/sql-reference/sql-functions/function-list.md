@@ -29,6 +29,7 @@ You can find a built-in function based on the following categories:
   - [Struct functions](#struct-functions)
   - [Table functions](#table-functions)
   - [Utility functions](#utility-functions)
+  - [Dictionary functions](#dictionary-functions)
 
 ## Aggregate functions
 
@@ -77,7 +78,6 @@ You can find a built-in function based on the following categories:
 - [array_concat](./array-functions/array_concat.md)
 - [array_contains](./array-functions/array_contains.md)
 - [array_contains_all](./array-functions/array_contains_all.md)
-- [array_contains_seq](./array-functions/array_contains_seq.md)
 - [array_cum_sum](./array-functions/array_cum_sum.md)
 - [array_difference](./array-functions/array_difference.md)
 - [array_distinct](./array-functions/array_distinct.md)
