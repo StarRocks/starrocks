@@ -99,6 +99,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
@@ -207,7 +208,7 @@ public class MvUtils {
     // get all ref table scan descs within and below root
     // the operator tree must match the rule pattern we define and now we only support SPJG pattern tree rewrite.
     // so here LogicalScanOperator's children must be LogicalScanOperator or LogicalJoinOperator
-    public static List<TableScanDesc> getTableScanDescs(OptExpression root) {
+    public static List<TableScanDesc> getTableScanDescs(OptExpression root, ColumnRefFactory refFactory) {
         TableScanContext scanContext = new TableScanContext();
         OptExpressionVisitor joinFinder = new OptExpressionVisitor<Void, TableScanContext>() {
             @Override
@@ -223,7 +224,8 @@ public class MvUtils {
                 LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
                 Table table = scanOperator.getTable();
                 Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
-                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false);
+                Integer relationId = getRelationId(scanOperator);
+                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false, relationId);
                 context.getTableScanDescs().add(tableScanDesc);
                 scanContext.getTableIdMap().put(table, ++id);
                 return null;
@@ -237,8 +239,9 @@ public class MvUtils {
                         LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
+                        Integer relationId = getRelationId(scanOperator);
                         TableScanDesc tableScanDesc = new TableScanDesc(
-                                table, id, scanOperator, optExpression, i == 0);
+                                table, id, scanOperator, optExpression, i == 0, relationId);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
@@ -246,6 +249,15 @@ public class MvUtils {
                     }
                 }
                 return null;
+            }
+
+            private Integer getRelationId(LogicalScanOperator scanOperator) {
+                Optional<ColumnRefOperator> columnOpt =
+                        scanOperator.getColRefToColumnMetaMap().keySet().stream().findFirst();
+                Preconditions.checkState(columnOpt.isPresent());
+                Integer relationId = refFactory.getRelationId(columnOpt.get().getId());
+                Preconditions.checkState(relationId != -1);
+                return relationId;
             }
         };
 
