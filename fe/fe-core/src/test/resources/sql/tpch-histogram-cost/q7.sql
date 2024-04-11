@@ -185,11 +185,7 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-01-01', [19: L_SHIPDATE, DATE, false] <= '1996-12-31'
 partitionsRatio=1/1, tabletsRatio=20/20
-<<<<<<< HEAD
-tabletList=10289,10291,10293,10295,10297,10299,10301,10303,10305,10307 ...
-=======
 tabletList=10286,10288,10290,10292,10294,10296,10298,10300,10302,10304 ...
->>>>>>> 69af8fb181 ([Feature] Support query histogram stats for hive table (#42693))
 actualRows=0, avgRowSize=32.0
 cardinality: 182702669
 probe runtime filters:
@@ -212,11 +208,7 @@ OutPut Exchange Id: 17
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-<<<<<<< HEAD
-tabletList=10187
-=======
 tabletList=10184
->>>>>>> 69af8fb181 ([Feature] Support query histogram stats for hive table (#42693))
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 column statistics:
@@ -263,11 +255,7 @@ OutPut Exchange Id: 13
 table: orders, rollup: orders
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-<<<<<<< HEAD
-tabletList=10215,10217,10219,10221,10223,10225,10227,10229,10231,10233
-=======
 tabletList=10212,10214,10216,10218,10220,10222,10224,10226,10228,10230
->>>>>>> 69af8fb181 ([Feature] Support query histogram stats for hive table (#42693))
 actualRows=0, avgRowSize=16.0
 cardinality: 150000000
 probe runtime filters:
@@ -318,11 +306,7 @@ OutPut Exchange Id: 10
 table: customer, rollup: customer
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-<<<<<<< HEAD
-tabletList=10238,10240,10242,10244,10246,10248,10250,10252,10254,10256
-=======
 tabletList=10235,10237,10239,10241,10243,10245,10247,10249,10251,10253
->>>>>>> 69af8fb181 ([Feature] Support query histogram stats for hive table (#42693))
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
 probe runtime filters:
@@ -356,11 +340,7 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: 46: N_NAME IN ('CANADA', 'IRAN')
 partitionsRatio=1/1, tabletsRatio=1/1
-<<<<<<< HEAD
-tabletList=10261
-=======
 tabletList=10258
->>>>>>> 69af8fb181 ([Feature] Support query histogram stats for hive table (#42693))
 actualRows=0, avgRowSize=29.0
 cardinality: 25
 column statistics:
@@ -378,15 +358,6 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
 partitionsRatio=1/1, tabletsRatio=1/1
-<<<<<<< HEAD
-tabletList=10261
-actualRows=0, avgRowSize=29.0
-cardinality: 25
-column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-[end]
-=======
 tabletList=10258
 actualRows=0, avgRowSize=29.0
 cardinality: 25
@@ -394,4 +365,3 @@ column statistics:
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 [end]
->>>>>>> 69af8fb181 ([Feature] Support query histogram stats for hive table (#42693))
