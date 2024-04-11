@@ -178,8 +178,9 @@ Status StatisticResultWriter::_fill_dict_statistic_data(int version, const Colum
     for (int i = 0; i < num_rows; ++i) {
         data_list[i].__set_meta_version(versioncolumn->get_data()[i]);
         if (!dictColumnViewer.is_null(i)) {
-            data_list[i].__set_dict(from_json_string<TGlobalDict>(
-                    std::string(dictColumnViewer.value(i).data, dictColumnViewer.value(i).size)));
+            TGlobalDict dict;
+            thrift_from_json_string(&dict, std::string(dictColumnViewer.value(i).data, dictColumnViewer.value(i).size));
+            data_list[i].__set_dict(dict);
         }
     }
 

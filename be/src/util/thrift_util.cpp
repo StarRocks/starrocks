@@ -149,4 +149,24 @@ bool t_network_address_comparator(const TNetworkAddress& a, const TNetworkAddres
 
     return false;
 }
+
+void thrift_from_json_string(::apache::thrift::TBase* base, const std::string& json_val) {
+    using namespace apache::thrift::transport;
+    using namespace apache::thrift::protocol;
+    auto* buffer = new TMemoryBuffer((uint8_t*)json_val.c_str(), (uint32_t)json_val.size());
+    std::shared_ptr<TTransport> trans(buffer);
+    TJSONProtocol protocol(trans);
+    base->read(&protocol);
+}
+
+std::string thrift_to_json_string(const ::apache::thrift::TBase* base) {
+    using namespace apache::thrift::transport;
+    using namespace apache::thrift::protocol;
+    auto* buffer = new TMemoryBuffer();
+    std::shared_ptr<TTransport> trans(buffer);
+    TJSONProtocol protocol(trans);
+    base->write(&protocol);
+    return buffer->getBufferAsString();
+}
+
 } // namespace starrocks

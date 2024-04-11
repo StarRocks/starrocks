@@ -25,6 +25,12 @@ namespace starrocks {
 
 class JniScanner : public HdfsScanner {
 public:
+    struct CreateOptions {
+        const FSOptions* fs_options = nullptr;
+        const HiveTableDescriptor* hive_table = nullptr;
+        const THdfsScanRange* scan_range = nullptr;
+    };
+
     JniScanner(std::string factory_class, std::map<std::string, std::string> params)
             : _jni_scanner_params(std::move(params)), _jni_scanner_factory_class(std::move(factory_class)) {}
 
@@ -35,7 +41,8 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    bool is_jni_scanner() override { return true; }
+    virtual void update_jni_scanner_params();
+    Status reinterpret_status(const Status& st) override { return st; }
 
 protected:
     Status fill_empty_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list);
@@ -56,8 +63,6 @@ private:
     static Status _check_jni_exception(JNIEnv* env, const std::string& message);
 
     Status _init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_state);
-
-    void _init_profile(const HdfsScannerParams& scanner_params) {}
 
     Status _init_jni_method(JNIEnv* env);
 
@@ -106,10 +111,9 @@ private:
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
 
-class HiveJniScanner : public JniScanner {
-public:
-    HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
-            : JniScanner(std::move(factory_class), std::move(params)) {}
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-};
+std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options);
+
 } // namespace starrocks
