@@ -158,6 +158,8 @@ public:
     bool segment_zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& predicates) const;
 
     // prerequisite: at least one predicate in |predicates| support bloom filter.
+    // Consider the relation among |predicates| is disjunction,
+    // that is, keep the row_ranges that satisfy any predicate in predicates.
     Status original_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
                                  const IndexReadOptions& opts);
 
