@@ -45,7 +45,7 @@ A set of optional parameters that specify how to execute the pipe. Format: `"key
 | Property      | Default value | Description                                                  |
 | :------------ | :------------ | :----------------------------------------------------------- |
 | AUTO_INGEST   | `TRUE`        | Whether to enable automatic incremental data loads. Valid values: `TRUE` and `FALSE`. If you set this parameter to `TRUE`, automatic incremental data loads are enabled. If you set this parameter to `FALSE`, the system loads only the source data file content specified at job creation and subsequent new or updated file content will not be loaded. For a bulk load, you can set this parameter to `FALSE`. |
-| POLL_INTERVAL | `10` (second) | The polling interval for automatic incremental data loads.   |
+| POLL_INTERVAL | `300` second | The polling interval for automatic incremental data loads.   |
 | BATCH_SIZE    | `1GB`         | The size of data to be loaded as a batch. If you do not include a unit in the parameter value, the default unit byte is used. |
 | BATCH_FILES   | `256`         | The number of source data files to be loaded as a batch.     |
 
