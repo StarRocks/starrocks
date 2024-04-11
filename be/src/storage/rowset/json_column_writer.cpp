@@ -35,7 +35,7 @@
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
 #include "types/logical_type.h"
-#include "util/json_util.h"
+#include "util/json_flattener.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -193,10 +193,10 @@ void FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
         _flat_columns.emplace_back(NullableColumn::create(JsonColumn::create(), NullColumn::create()));
     }
 
-    JsonFlater flater(_flat_paths);
+    JsonFlattener flattener(_flat_paths);
 
     for (auto& col : json_datas) {
-        flater.flatten(col.get(), &_flat_columns);
+        flattener.flatten(col.get(), &_flat_columns);
     }
 
     // recode null column in 1st
