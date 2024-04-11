@@ -47,17 +47,34 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
+    public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN_NO_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN, true);
+    public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN_NO_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN, true);
+    public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN_NO_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN, true);
+
     public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN);
+
     final OperatorType scanOperatorType;
+    final boolean hasProjectOperator;
+
+    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType, boolean withoutProject) {
+        super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
+                .addChildren(Pattern.create(logicalOperatorType)));
+        hasProjectOperator = false;
+        scanOperatorType = logicalOperatorType;
+    }
 
     private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, logicalOperatorType)));
+        hasProjectOperator = true;
         scanOperatorType = logicalOperatorType;
     }
 
@@ -150,13 +167,23 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         return optExpression;
     }
 
+    private LogicalScanOperator getScanOperator(final OptExpression input) {
+        LogicalScanOperator scanOperator = null;
+        if (hasProjectOperator) {
+            scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+        } else {
+            scanOperator = (LogicalScanOperator) input.getInputs().get(0).getOp();
+        }
+        return scanOperator;
+    }
+
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         if (!context.getSessionVariable().isEnableRewriteSimpleAggToHdfsScan()) {
             return false;
         }
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-        LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+        LogicalScanOperator scanOperator = getScanOperator(input);
 
         // no limit
         if (scanOperator.getLimit() != -1) {
@@ -217,7 +244,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-        LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+        LogicalScanOperator scanOperator = getScanOperator(input);
         OptExpression result = buildAggScanOperator(aggregationOperator, scanOperator, context);
         return Lists.newArrayList(result);
     }

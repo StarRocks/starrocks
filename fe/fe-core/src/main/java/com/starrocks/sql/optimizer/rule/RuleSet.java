@@ -376,9 +376,6 @@ public class RuleSet {
                 new RewriteHllCountDistinctRule(),
                 new RewriteDuplicateAggregateFnRule(),
                 new RewriteSimpleAggToMetaScanRule(),
-                RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
-                RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
-                RewriteSimpleAggToHDFSScanRule.FILE_SCAN,
                 new RewriteSumByAssociativeRule(),
                 new RewriteCountIfFunction()
         ));
@@ -417,9 +414,9 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.ALL_MV_REWRITE, Stream.concat(
-                REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
-                REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
-                        .collect(Collectors.toList()));
+                        REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
+                        REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
+                .collect(Collectors.toList()));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_EMPTY_OPERATOR, ImmutableList.of(
                 PruneEmptyScanRule.OLAP_SCAN,
@@ -463,6 +460,9 @@ public class RuleSet {
                 new PushDownAggToMetaScanRule(),
                 new PushDownFlatJsonMetaToMetaScanRule(),
                 new RewriteSimpleAggToMetaScanRule(),
+                RewriteSimpleAggToHDFSScanRule.FILE_SCAN,
+                RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
+                RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
                 new MinMaxCountOptOnScanRule()
         ));
     }
