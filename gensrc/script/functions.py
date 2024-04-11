@@ -317,7 +317,19 @@ vectorized_functions = [
     [30260, 'concat_ws', True, True, 'VARCHAR', ['VARCHAR', 'VARCHAR', '...'], 'StringFunctions::concat_ws'],
     [30270, 'find_in_set', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
     [30310, 'split_part', True, True, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
+<<<<<<< HEAD
     [30311, 'split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
+=======
+    [30311, 'split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split',
+     'StringFunctions::split_prepare', 'StringFunctions::split_close'],
+    [30312, 'substring_index', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'],
+     'StringFunctions::substring_index'],
+    # v1 is deprecated
+    [30316, 'str_to_map', True, False, 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],
+     'StringFunctions::str_to_map_v1'],
+    [30317, 'str_to_map', True, False, 'MAP_VARCHAR_VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'StringFunctions::str_to_map', 'StringFunctions::str_to_map_prepare', 'StringFunctions::str_to_map_close'],
+>>>>>>> 42115e6a5e ([BugFix] Fix the concurrency bug of str_to_map (#43901))
 
     [30320, 'regexp_extract', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'],
      'StringFunctions::regexp_extract',

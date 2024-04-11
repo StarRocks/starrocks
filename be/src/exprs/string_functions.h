@@ -287,6 +287,25 @@ public:
     static Status split_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
+<<<<<<< HEAD
+=======
+    * @param: [array_string, delimiter]
+    * @paramType: [ArrayBinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
+    DEFINE_VECTORIZED_FN(str_to_map_v1);
+
+    /**
+    * @param: [string, delimiter, map_delimiter]
+    * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
+    DEFINE_VECTORIZED_FN(str_to_map);
+    static Status str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+>>>>>>> 42115e6a5e ([BugFix] Fix the concurrency bug of str_to_map (#43901))
      * @param: [string_value, delimiter, field]
      * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
      * @return: BinaryColumn

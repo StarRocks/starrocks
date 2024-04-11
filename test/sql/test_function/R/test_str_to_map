@@ -1,0 +1,11 @@
+-- name: test_str_to_map
+CREATE TABLE t1(c1 INT, c2 STRING) DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) BUCKETS 20;
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series from TABLE(generate_series(1, 10000));
+-- result:
+-- !result
+select sum(cardinality(str_to_map(c2, ",", ":"))) from t1;
+-- result:
+10000
+-- !result
