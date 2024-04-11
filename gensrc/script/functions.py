@@ -323,7 +323,7 @@ vectorized_functions = [
     [30316, 'str_to_map', True, False, 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],
      'StringFunctions::str_to_map_v1'],
     [30317, 'str_to_map', True, False, 'MAP_VARCHAR_VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'StringFunctions::str_to_map'],
+     'StringFunctions::str_to_map', 'StringFunctions::str_to_map_prepare', 'StringFunctions::str_to_map_close'],
 
     [30320, 'regexp_extract', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'],
      'StringFunctions::regexp_extract',
