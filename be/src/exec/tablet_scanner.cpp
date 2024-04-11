@@ -172,8 +172,8 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
         _predicate_free_pool.emplace_back(std::move(p));
     }
 
-    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool));
+    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool, _predicates));
 
     // Range
     for (auto key_range : *key_ranges) {

@@ -249,9 +249,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
 
     {
-        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                     *_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _not_push_down_predicates));
     }
 
     // Range
