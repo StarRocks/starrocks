@@ -431,7 +431,10 @@ OperatorFactoryPtr DataSink::_create_exchange_sink_operator(pipeline::PipelineBu
 
     bool is_pipeline_level_shuffle = false;
     int32_t dest_dop = 1;
-    bool enable_pipeline_level_shuffle = context->runtime_state()->query_ctx()->enable_pipeline_level_shuffle();
+    bool disable_pipeline_shuffle =
+            stream_sink.__isset.disable_pipeline_shuffle && stream_sink.disable_pipeline_shuffle;
+    bool enable_pipeline_level_shuffle =
+            context->runtime_state()->query_ctx()->enable_pipeline_level_shuffle() && !disable_pipeline_shuffle;
     if (enable_pipeline_level_shuffle &&
         (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
          sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED)) {

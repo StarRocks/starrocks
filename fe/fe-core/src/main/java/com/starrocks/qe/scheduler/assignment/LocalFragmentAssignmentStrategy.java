@@ -203,6 +203,10 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                                 sv.getGroupExecutionMaxGroups());
                         maxDop = Math.max(maxDop, expectedDop);
                         logicalDop = Math.min(bucketSeqsOfInstance.size(), maxDop);
+                        // Align logical dop to physical dop integer multiplier
+                        // For a bucket shuffle join, the hash table corresponding to 
+                        // the i-th probe is i % build_dop (physical dop).
+                        logicalDop = (logicalDop / expectedPhysicalDop) * expectedPhysicalDop;
                     }
                     List<List<Integer>> bucketSeqsPerDriverSeq = ListUtil.splitBySize(bucketSeqsOfInstance, logicalDop);
                     instance.setPipelineDop(expectedPhysicalDop);
