@@ -18,6 +18,8 @@ import com.google.common.collect.Maps;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +33,9 @@ import java.util.function.Consumer;
  * The task run with higher priority or older created time will be scheduled first.
  */
 public class TaskRunScheduler {
+    private static final Logger LOG = LogManager.getLogger(TaskRunScheduler.class);
 
+    // TODO: Refactor this to find a better way to store the task runs.
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
     private final Map<Long, Queue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
@@ -142,20 +146,25 @@ public class TaskRunScheduler {
                 continue;
             }
 
+            // remove task run from pending task run map
             Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
             if (taskRunQueue == null) {
                 pendingTaskRunMap.remove(taskId);
-                continue;
+            } else {
+                TaskRun taskRunInMap = taskRunQueue.poll();
+                if (!taskRun.equals(taskRunInMap)) {
+                    LOG.warn("task run is not equal, taskRun: {}, taskRun in map: {}", taskRun, taskRunInMap);
+                }
+                // remove task run from pending queue map
+                if (taskRunQueue.isEmpty()) {
+                    pendingTaskRunMap.remove(taskId);
+                }
             }
 
-            TaskRun pendingTaskRun = taskRunQueue.poll();
-            // remove task run from pending queue map
-            if (taskRunQueue.isEmpty()) {
-                pendingTaskRunMap.remove(taskId);
-            }
-            action.accept(pendingTaskRun);
+            action.accept(taskRun);
 
-            runningTaskRunMap.put(taskId, pendingTaskRun);
+            // put it into running task run map
+            runningTaskRunMap.put(taskId, taskRun);
             currentRunning++;
         }
 
