@@ -22,6 +22,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
@@ -120,7 +121,7 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testUpdatePartitonMetaFailed() {
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
