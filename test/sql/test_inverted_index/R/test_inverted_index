@@ -1,4 +1,10 @@
 -- name: test_basic_create_index
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_test_basic_create_index_pk` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `id2` bigint(20) NOT NULL COMMENT "",
@@ -117,6 +123,12 @@ DROP TABLE t_test_basic_create_index_dup;
 -- result:
 -- !result
 -- name: test_query_gin_index
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_test_gin_index_query` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `query_none_analyzer` varchar(255) NOT NULL COMMENT "",
@@ -176,6 +188,12 @@ drop table t_test_gin_index_query;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_none
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_single_predicate_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -280,6 +298,12 @@ DROP TABLE t_gin_index_single_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_english
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_single_predicate_english` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -371,6 +395,12 @@ DROP TABLE t_gin_index_single_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_none
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_multiple_predicate_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -463,6 +493,12 @@ DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_english
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_multiple_predicate_english` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -506,6 +542,12 @@ DROP TABLE t_gin_index_multiple_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_compaction
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_compaction_none_base` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -667,6 +709,12 @@ DROP TABLE t_gin_index_compaction_english_cumu;
 -- result:
 -- !result
 -- name: test_gin_index_type
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_type_1` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `test_column` varchar(255) NULL COMMENT "",
@@ -777,6 +825,12 @@ PROPERTIES (
 E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
 -- !result
 -- name: test_clone_for_gin
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_clone_for_gin` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -810,6 +864,12 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 2	ABC
 -- !result
 -- name: test_complex_predicate_for_gin
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_complex_predicate_for_gin_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
