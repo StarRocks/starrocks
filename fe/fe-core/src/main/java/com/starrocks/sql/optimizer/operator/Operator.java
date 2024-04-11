@@ -23,8 +23,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class Operator {
@@ -67,6 +69,8 @@ public abstract class Operator {
     // used by view based mv rewrite
     // eg: LogicalViewScanOperator is logically equivalent to the operator build from the view
     protected Operator equivalentOp;
+
+    protected DomainProperty domainProperty;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -181,8 +185,24 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
+    public DomainProperty getDomainProperty(List<OptExpression> inputs) {
+        if (domainProperty == null) {
+            domainProperty = deriveDomainProperty(inputs);
+        }
+
+        if (projection != null) {
+            domainProperty = domainProperty.projectDomainProperty(projection.getColumnRefMap());
+        }
+
+        return domainProperty;
+    }
+
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         throw new UnsupportedOperationException();
+    }
+
+    protected DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        return new DomainProperty(Map.of());
     }
 
     protected RowOutputInfo projectInputRow(RowOutputInfo inputRow) {

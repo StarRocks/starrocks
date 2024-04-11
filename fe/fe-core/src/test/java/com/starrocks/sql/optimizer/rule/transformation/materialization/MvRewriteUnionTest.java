@@ -184,20 +184,24 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 120";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "join_union_mv_1");
-        PlanTestBase.assertContains(plan2, "  |----5:HASH JOIN\n" +
-                "  |    |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |    |  colocate: false, reason: \n" +
-                "  |    |  equal join conjunct: 18: deptno = 15: deptno\n" +
-                "  |    |  other predicates: 15: deptno >= 100");
+        PlanTestBase.assertContains(plan2, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 18: deptno = 15: deptno\n" +
+                "  |  other predicates: 15: deptno >= 100");
         PlanTestBase.assertContainsIgnoreColRefs(plan2, "2:OlapScanNode\n" +
                 "     TABLE: emps2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 15: deptno < 120, 15: deptno >= 100\n" +
+                "     PREDICATES: 15: deptno >= 100, 15: deptno < 120\n" +
                 "     partitions=1/1");
         PlanTestBase.assertContainsIgnoreColRefs(plan2, "1:OlapScanNode\n" +
                 "     TABLE: depts2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 18: deptno < 120, 18: deptno >= 100");
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "  |----5:OlapScanNode\n" +
+                "  |       TABLE: depts2\n" +
+                "  |       PREAGGREGATION: ON\n" +
+                "  |       PREDICATES: 20: deptno >= 100, 20: deptno < 120");
     }
 
     @Test
