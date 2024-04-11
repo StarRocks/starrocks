@@ -30,7 +30,6 @@ public class TaskContext {
     private final PhysicalPropertySet requiredProperty;
     private ColumnRefSet requiredColumns;
     private double upperBoundCost;
-    private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
     private List<PhysicalOlapScanOperator> allPhysicalOlapScanOperators;
 
     public TaskContext(OptimizerContext context,
@@ -41,7 +40,6 @@ public class TaskContext {
         this.requiredProperty = physicalPropertySet;
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = cost;
-        this.allLogicalOlapScanOperators = Collections.emptyList();
         this.allPhysicalOlapScanOperators = Collections.emptyList();
     }
 
@@ -67,14 +65,6 @@ public class TaskContext {
 
     public void setUpperBoundCost(double upperBoundCost) {
         this.upperBoundCost = upperBoundCost;
-    }
-
-    public void setAllLogicalOlapScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
-        this.allLogicalOlapScanOperators = allScanOperators;
-    }
-
-    public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
-        return allLogicalOlapScanOperators;
     }
 
     public void setAllPhysicalOlapScanOperators(List<PhysicalOlapScanOperator> allScanOperators) {
