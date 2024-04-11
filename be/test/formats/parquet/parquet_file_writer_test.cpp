@@ -247,7 +247,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDecimal) {
         chunk->append_column(col1, chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
-        std::vector<int128_t> int128_nums{-1, 1, 0, 1};
+        std::vector<int128_t> int128_nums{-999999999999, 999999999999, 0, 1};
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col2, chunk->num_columns());
@@ -299,7 +299,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDecimalCompatibleWithHiveReader) {
         chunk->append_column(col1, chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
-        std::vector<int128_t> int128_nums{-1, 1, 0, 1};
+        std::vector<int128_t> int128_nums{-999999999999, 999999999999, 0, 1};
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col2, chunk->num_columns());

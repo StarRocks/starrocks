@@ -165,34 +165,6 @@ public:
     }
 
     template <typename T>
-    static T byte_width(T value) {
-        if constexpr (std::is_same_v<T, __int128>) {
-            return BigEndian::FromHost128(value);
-        } else if constexpr (std::is_same_v<T, unsigned __int128>) {
-            return BigEndian::FromHost128(value);
-        } else if constexpr (std::is_same_v<T, int64_t>) {
-            return BigEndian::FromHost64(value);
-        } else if constexpr (std::is_same_v<T, uint64_t>) {
-            return BigEndian::FromHost64(value);
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            return BigEndian::FromHost32(value);
-        } else if constexpr (std::is_same_v<T, uint32_t>) {
-            return BigEndian::FromHost32(value);
-        } else if constexpr (std::is_same_v<T, int16_t>) {
-            return BigEndian::FromHost16(value);
-        } else if constexpr (std::is_same_v<T, uint16_t>) {
-            return BigEndian::FromHost16(value);
-        } else if constexpr (std::is_same_v<T, int8_t>) {
-            return value;
-        } else if constexpr (std::is_same_v<T, uint8_t>) {
-            return value;
-        } else {
-            static_assert(std::is_integral_v<T>, "endian change should be integer type");
-            return value;
-        }
-    }
-
-    template <typename T>
     static T big_endian_to_host(T value) {
         if constexpr (std::is_same_v<T, __int128>) {
             return BigEndian::ToHost128(value);
