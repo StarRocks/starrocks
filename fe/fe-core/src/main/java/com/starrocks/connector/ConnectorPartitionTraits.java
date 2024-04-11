@@ -244,7 +244,7 @@ public abstract class ConnectorPartitionTraits {
         }
 
         protected List<PartitionInfo> getPartitions(List<String> names) {
-            throw new NotImplementedException("Only support hive/jdbc");
+            throw new NotImplementedException("Only support hive/paimon/jdbc");
         }
 
         @Override
@@ -543,57 +543,21 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
-                                                    MaterializedView.AsyncRefreshContext context) {
-            PaimonTable baseTable = (PaimonTable) table;
-            Set<String> result = Sets.newHashSet();
-            for (BaseTableInfo baseTableInfo : baseTables) {
-                if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
-                    continue;
-                }
-                Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getOptionalMetadata(baseTable.getCatalogName());
-                if (!connectorMetadata.isPresent()) {
-                    LOG.error("Get paimon connectorMetadata failed : {}", baseTable.getCatalogName());
-                    throw new RuntimeException("Get paimon connectorMetadata failed :" + baseTable.getCatalogName());
-                }
-                Map<String, MaterializedView.BasePartitionInfo> partitionVersionMap =
-                        context.getBaseTableRefreshInfo(baseTableInfo);
-                Set<String> partitions = Sets.newHashSet(getPartitionNames());
-                long mvLatestSnapShotID = Long.MIN_VALUE;
-                for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : partitionVersionMap.entrySet()) {
-                    if (entry.getValue() != null) {
-                        mvLatestSnapShotID = Math.max(mvLatestSnapShotID, entry.getValue().getVersion());
-                    }
-                    // If there are partitions deleted, return all latest partitions.
-                    if (!partitions.contains(entry.getKey())) {
-                        result.addAll(partitions);
-                        LOG.info("Get paimon updated partition names {}, partition {} has been deleted, return all.",
-                                baseTables, entry.getKey());
-                        return result;
-                    }
-                }
-                for (String part : partitions) {
-                    if (!partitionVersionMap.containsKey(part)) {
-                        result.add(part);
-                    }
-                }
-                ConnectorMetadata metadata = connectorMetadata.get();
-                List<PartitionInfo> changedPartitionInfo = metadata.getChangedPartitionInfo(baseTable,
-                        mvLatestSnapShotID);
-                for (PartitionInfo partitionInfo : changedPartitionInfo) {
-                    com.starrocks.connector.paimon.Partition info =
-                            (com.starrocks.connector.paimon.Partition) partitionInfo;
-                    // Change log record partition which has been deleted.
-                    if (!partitions.contains(info.getPartitionName())) {
-                        continue;
-                    }
-                    result.add(info.getPartitionName());
-                }
-            }
-            LOG.debug("Get updated partition name of paimon table result: {}", result);
-            return result;
+        public List<PartitionInfo> getPartitions(List<String> partitionNames) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(paimonTable.getCatalogName(), table, partitionNames);
         }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                    getPartitionNameWithPartitionInfo();
+            return partitionNameWithPartition.values().stream()
+                            .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
+                            .max(Long::compareTo);
+        }
+
     }
 
     static class OdpsPartitionTraits extends DefaultTraits {
