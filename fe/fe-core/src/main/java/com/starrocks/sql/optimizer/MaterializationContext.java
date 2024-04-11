@@ -275,7 +275,7 @@ public class MaterializationContext {
             // mv: a inner join b inner join c
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getJoinOptExpression() != null
-                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isCompatible(queryScanDesc))) {
+                        && mvTableScanDescs.stream().noneMatch(scanDesc -> scanDesc.isCompatible(queryScanDesc))) {
                     logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
                             "at least one same join type should be existed");
                     return false;

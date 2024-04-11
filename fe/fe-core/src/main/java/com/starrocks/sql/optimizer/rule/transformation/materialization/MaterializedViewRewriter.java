@@ -733,7 +733,10 @@ public class MaterializedViewRewriter {
                 rewriteContext.setQueryEquivalenceClasses(newQueryEc);
 
                 // should check join type here to support join derive rewrite
-                processJoinDeriveForViewDelta(relationIdMapping);
+                boolean ret = processJoinDeriveForViewDelta(relationIdMapping);
+                if (!ret) {
+                    continue;
+                }
             }
 
             // construct query based view EC
