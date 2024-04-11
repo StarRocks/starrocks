@@ -328,12 +328,17 @@ public:
         _num_datacache_write_time_ns.fetch_add(write_time, std::memory_order_relaxed);
     }
 
+    void update_num_datacache_count(const int64_t count) {
+        _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
+    }
+
     void update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
         TLoadDataCacheMetrics metrics{};
         metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
         metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
         metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
         metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
+        metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
 
         const BlockCache* cache = BlockCache::instance();
         TDataCacheMetrics t_metrics{};
@@ -602,6 +607,7 @@ private:
     std::atomic<int64_t> _num_datacache_read_time_ns{0};
     std::atomic<int64_t> _num_datacache_write_bytes{0};
     std::atomic<int64_t> _num_datacache_write_time_ns{0};
+    std::atomic<int64_t> _num_datacache_count{0};
 
     std::atomic<int64_t> _num_print_error_rows{0};
     std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows

@@ -28,9 +28,7 @@ import java.util.List;
 public class DataCacheSelectMetricsTest {
     private final long megabyte = 1024 * 1024L;
     private final long gigabyte = 1024 * megabyte;
-
     private final long second = 1000000000L;
-
     private final long be1Id = 77778L;
     private final long be2Id = 77779L;
 
@@ -51,6 +49,7 @@ public class DataCacheSelectMetricsTest {
         be1.setRead_time_ns(second);
         be1.setWrite_bytes(gigabyte);
         be1.setWrite_time_ns(10 * second);
+        be1.setCount(1);
 
         TDataCacheMetrics dataCacheMetrics = new TDataCacheMetrics();
         dataCacheMetrics.setMem_quota_bytes(gigabyte);
@@ -67,6 +66,7 @@ public class DataCacheSelectMetricsTest {
         be2.setRead_time_ns(2 * second);
         be2.setWrite_bytes(2 * gigabyte);
         be2.setWrite_time_ns(35 * second);
+        be2.setCount(1);
 
         be2.setMetrics(dataCacheMetrics);
         LoadDataCacheMetrics be2Metrics = LoadDataCacheMetrics.buildFromThrift(be2);
@@ -79,14 +79,14 @@ public class DataCacheSelectMetricsTest {
         rows = dataCacheSelectMetrics.getShowResultSet(true).getResultRows();
         for (List<String> row : rows) {
             if (row.get(0).equals("127.0.0.2")) {
-                Assert.assertEquals("127.0.0.2,SUCCESS,1MB,1GB,10s,50.00%", String.join(",", row));
+                Assert.assertEquals("127.0.0.2,SUCCESS,1MB,1s,1GB,10s,50.00%", String.join(",", row));
             }
             if (row.get(0).equals("127.0.0.3")) {
-                Assert.assertEquals("127.0.0.3,SUCCESS,2MB,2GB,35s,50.00%", String.join(",", row));
+                Assert.assertEquals("127.0.0.3,SUCCESS,2MB,2s,2GB,35s,50.00%", String.join(",", row));
             }
         }
 
-        Assert.assertEquals("AlreadyCachedSize: 3MB, WriteCacheSize: 3GB, AvgWriteCacheTime: 22.5s, TotalCacheUsage: 50.00%",
+        Assert.assertEquals("AlreadyCachedSize: 3MB, AvgReadCacheTime: 1.5s, WriteCacheSize: 3GB, AvgWriteCacheTime: 22.5s, TotalCacheUsage: 50.00%",
                 dataCacheSelectMetrics.toString());
     }
 }

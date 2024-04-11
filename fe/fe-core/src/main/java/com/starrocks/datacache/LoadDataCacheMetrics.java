@@ -26,15 +26,19 @@ public class LoadDataCacheMetrics {
     private final ByteSizeValue writeBytes;
     private final TimeValue writeTimeNs;
 
+    // The number of metrics merged
+    private final long count;
+
     private final DataCacheMetrics lastDataCacheMetrics;
 
     private LoadDataCacheMetrics(ByteSizeValue readBytes, TimeValue readTimeNs, ByteSizeValue writeBytes,
-                                 TimeValue writeTimeNs,
+                                 TimeValue writeTimeNs, long count,
                                  DataCacheMetrics lastDataCacheMetrics) {
         this.readBytes = readBytes;
         this.readTimeNs = readTimeNs;
         this.writeBytes = writeBytes;
         this.writeTimeNs = writeTimeNs;
+        this.count = count;
         this.lastDataCacheMetrics = lastDataCacheMetrics;
     }
 
@@ -47,8 +51,9 @@ public class LoadDataCacheMetrics {
                 new ByteSizeValue(before.getWriteBytes().getBytes() + now.getWriteBytes().getBytes());
         TimeValue mergedWriteTimeNs =
                 new TimeValue(before.getWriteTimeNs().nanos() + now.getWriteTimeNs().nanos(), TimeUnit.NANOSECONDS);
+        long mergedCount = before.getCount() + now.getCount();
         return new LoadDataCacheMetrics(mergedReadBytes, mergedReadTimeNs, mergedWriteBytes, mergedWriteTimeNs,
-                now.getLastDataCacheMetrics());
+                mergedCount, now.getLastDataCacheMetrics());
     }
 
     public static LoadDataCacheMetrics buildFromThrift(TLoadDataCacheMetrics tLoadDataCacheMetrics) {
@@ -56,6 +61,7 @@ public class LoadDataCacheMetrics {
         long readTimeNs = 0;
         long writeBytes = 0;
         long writeTimeNs = 0;
+        long count = 0;
         DataCacheMetrics dataCacheMetrics;
         if (tLoadDataCacheMetrics.isSetRead_bytes()) {
             readBytes = tLoadDataCacheMetrics.read_bytes;
@@ -69,6 +75,9 @@ public class LoadDataCacheMetrics {
         if (tLoadDataCacheMetrics.isSetWrite_time_ns()) {
             writeTimeNs = tLoadDataCacheMetrics.write_time_ns;
         }
+        if (tLoadDataCacheMetrics.isSetCount()) {
+            count = tLoadDataCacheMetrics.count;
+        }
 
         if (tLoadDataCacheMetrics.isSetMetrics()) {
             dataCacheMetrics = DataCacheMetrics.buildFromThrift(tLoadDataCacheMetrics.metrics);
@@ -77,7 +86,7 @@ public class LoadDataCacheMetrics {
         }
 
         return new LoadDataCacheMetrics(new ByteSizeValue(readBytes), new TimeValue(readTimeNs, TimeUnit.NANOSECONDS),
-                new ByteSizeValue(writeBytes), new TimeValue(writeTimeNs, TimeUnit.NANOSECONDS), dataCacheMetrics);
+                new ByteSizeValue(writeBytes), new TimeValue(writeTimeNs, TimeUnit.NANOSECONDS), count, dataCacheMetrics);
     }
 
     public ByteSizeValue getReadBytes() {
@@ -94,6 +103,10 @@ public class LoadDataCacheMetrics {
 
     public TimeValue getWriteTimeNs() {
         return writeTimeNs;
+    }
+
+    public long getCount() {
+        return count;
     }
 
     public DataCacheMetrics getLastDataCacheMetrics() {

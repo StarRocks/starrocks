@@ -43,8 +43,9 @@ public class DataCacheSelectMetrics {
             .addColumn(new Column("BE_IP", ScalarType.createVarcharType()))
             .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
             .addColumn(new Column("ALREADY_CACHED_SIZE", ScalarType.createVarcharType()))
+            .addColumn(new Column("AVG_READ_CACHE_TIME", ScalarType.createVarcharType()))
             .addColumn(new Column("WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
-            .addColumn(new Column("WRITE_CACHE_TIME", ScalarType.createVarcharType()))
+            .addColumn(new Column("AVG_WRITE_CACHE_TIME", ScalarType.createVarcharType()))
             .addColumn(new Column("TOTAL_CACHE_USAGE", ScalarType.createVarcharType()))
             .build();
 
@@ -84,8 +85,11 @@ public class DataCacheSelectMetrics {
             row.add("SUCCESS");
 
             row.add(metrics.getReadBytes().toString());
+            row.add(new TimeValue(metrics.getReadTimeNs().getNanos() / metrics.getCount(),
+                    TimeUnit.NANOSECONDS).toString());
             row.add(metrics.getWriteBytes().toString());
-            row.add(metrics.getWriteTimeNs().toString());
+            row.add(new TimeValue(metrics.getWriteTimeNs().getNanos() / metrics.getCount(),
+                    TimeUnit.NANOSECONDS).toString());
             row.add(String.format("%.2f%%", metrics.getLastDataCacheMetrics().getCacheUsage() * 100));
 
             rows.add(row);
@@ -97,6 +101,7 @@ public class DataCacheSelectMetrics {
         long alreadyCachedSize = 0;
         long writeCacheSize = 0;
         long writeCacheTime = 0;
+        long totalCount = 0;
         long totalCacheSize = 0;
         long totalUsedCacheSize = 0;
 
@@ -105,6 +110,7 @@ public class DataCacheSelectMetrics {
             alreadyCachedSize += metrics.getReadBytes().getBytes();
             writeCacheSize += metrics.getWriteBytes().getBytes();
             writeCacheTime += metrics.getWriteTimeNs().getNanos();
+            totalCount += metrics.getCount();
             totalCacheSize += metrics.getLastDataCacheMetrics().getDiskQuotaBytes().getBytes() +
                     metrics.getLastDataCacheMetrics().getMemQuoteBytes().getBytes();
             totalUsedCacheSize += metrics.getLastDataCacheMetrics().getDiskUsedBytes().getBytes() +
@@ -120,8 +126,8 @@ public class DataCacheSelectMetrics {
         row.add(new ByteSizeValue(writeCacheSize).toString());
 
         // get avg write cache time
-        Double avgWriteCacheTime = Math.ceil((double) writeCacheTime / beMetrics.size());
-        row.add(new TimeValue(avgWriteCacheTime.longValue(), TimeUnit.NANOSECONDS).toString());
+        long avgWriteCacheTime = writeCacheTime / totalCount;
+        row.add(new TimeValue(avgWriteCacheTime, TimeUnit.NANOSECONDS).toString());
 
         row.add(String.format("%.2f%%", ((double) totalUsedCacheSize / totalCacheSize) * 100));
         return new ShowResultSet(SIMPLE_META_DATA, rows);
@@ -130,29 +136,34 @@ public class DataCacheSelectMetrics {
     @Override
     public String toString() {
         long alreadyCachedSize = 0;
+        long readCacheTime = 0;
         long writeCacheSize = 0;
         long writeCacheTime = 0;
+        long totalCount = 0;
         long totalCacheSize = 0;
         long totalUsedCacheSize = 0;
 
         for (Map.Entry<Long, LoadDataCacheMetrics> entry : beMetrics.entrySet()) {
             LoadDataCacheMetrics metrics = entry.getValue();
             alreadyCachedSize += metrics.getReadBytes().getBytes();
+            readCacheTime += metrics.getReadTimeNs().getNanos();
             writeCacheSize += metrics.getWriteBytes().getBytes();
             writeCacheTime += metrics.getWriteTimeNs().getNanos();
+            totalCount += metrics.getCount();
             totalCacheSize += metrics.getLastDataCacheMetrics().getDiskQuotaBytes().getBytes() +
                     metrics.getLastDataCacheMetrics().getMemQuoteBytes().getBytes();
             totalUsedCacheSize += metrics.getLastDataCacheMetrics().getDiskUsedBytes().getBytes() +
                     metrics.getLastDataCacheMetrics().getMemUsedBytes().getBytes();
         }
 
-        // get avg write cache time
-        Double avgWriteCacheTime = Math.ceil((double) writeCacheTime / beMetrics.size());
+        // get avg read/write cache time
+        long avgReadCacheTime = readCacheTime / totalCount;
+        long avgWriteCacheTime = writeCacheTime / totalCount;
 
         return String.format(
-                "AlreadyCachedSize: %s, WriteCacheSize: %s, AvgWriteCacheTime: %s, TotalCacheUsage: %.2f%%",
-                new ByteSizeValue(alreadyCachedSize), new ByteSizeValue(writeCacheSize),
-                new TimeValue(avgWriteCacheTime.longValue(), TimeUnit.NANOSECONDS),
+                "AlreadyCachedSize: %s, AvgReadCacheTime: %s, WriteCacheSize: %s, AvgWriteCacheTime: %s, TotalCacheUsage: %.2f%%",
+                new ByteSizeValue(alreadyCachedSize), new TimeValue(avgReadCacheTime, TimeUnit.NANOSECONDS),
+                new ByteSizeValue(writeCacheSize), new TimeValue(avgWriteCacheTime, TimeUnit.NANOSECONDS),
                 ((double) totalUsedCacheSize / totalCacheSize) * 100);
     }
 }

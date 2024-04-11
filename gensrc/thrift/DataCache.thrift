@@ -40,5 +40,7 @@ struct TLoadDataCacheMetrics {
     2: optional i64 read_time_ns;
     3: optional i64 write_bytes;
     4: optional i64 write_time_ns;
-    5: optional TDataCacheMetrics metrics;
+    // the number of metrics merged
+    5: optional i64 count;
+    6: optional TDataCacheMetrics metrics;
 }

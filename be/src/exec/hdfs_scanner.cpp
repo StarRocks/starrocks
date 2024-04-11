@@ -352,6 +352,7 @@ void HdfsScanner::update_counter() {
             _runtime_state->update_num_datacache_read_time_ns(stats.read_cache_ns);
             _runtime_state->update_num_datacache_write_bytes(stats.write_cache_bytes);
             _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
+            _runtime_state->update_num_datacache_count(1);
         }
     }
     if (_shared_buffered_input_stream) {
