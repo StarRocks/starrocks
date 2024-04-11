@@ -38,4 +38,8 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type cod
     }
 }
 
+int decimal_precision_to_byte_count(int precision) {
+    return std::ceil((std::log(std::pow(10, precision) - 1) / std::log(2) + 1) / 8);
+}
+
 } // namespace starrocks::parquet

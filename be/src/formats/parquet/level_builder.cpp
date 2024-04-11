@@ -29,6 +29,7 @@
 #include "gutil/casts.h"
 #include "gutil/endian.h"
 #include "util/defer_op.h"
+#include "utils.h"
 
 namespace starrocks::parquet {
 
@@ -48,12 +49,25 @@ inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     return raw_column;
 }
 
-LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root, bool use_legacy_decimal_encoding,
-                           bool use_int96_timestamp_encoding)
+LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root, const std::string& timezone,
+                           bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
         : _type_desc(std::move(type_desc)),
           _root(std::move(root)),
+          _timezone(timezone),
           _use_legacy_decimal_encoding(use_legacy_decimal_encoding),
           _use_int96_timestamp_encoding(use_int96_timestamp_encoding) {}
+
+Status LevelBuilder::init() {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(_timezone, ctz)) {
+        return Status::InternalError(fmt::format("can not find cctz time zone {}", timezone));
+    }
+
+    const auto tp = std::chrono::system_clock::now();
+    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
+    _offset = al.offset;
+    return Status::OK();
+}
 
 Status LevelBuilder::write(const LevelBuilderContext& ctx, const ColumnPtr& col,
                            const CallbackFunction& write_leaf_callback) {
@@ -115,7 +129,7 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
     }
     case TYPE_DATETIME: {
         if (_use_int96_timestamp_encoding) {
-            return _write_datetime_column_chunk<int96_t>(ctx, type_desc, node, col, write_leaf_callback);
+            return _write_datetime_column_chunk<::parquet::Int96>(ctx, type_desc, node, col, write_leaf_callback);
         } else {
             return _write_datetime_column_chunk<int64_t>(ctx, type_desc, node, col, write_leaf_callback);
         }
@@ -242,22 +256,15 @@ Status LevelBuilder::_write_decimal_to_flba_column_chunk(const LevelBuilderConte
     for (size_t i = 0; i < col->size(); i++) {
         // unscaled number must be encoded as two's complement using big-endian byte order (the most significant byte
         // is the zeroth element). See https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
-        if constexpr (std::is_same_v<cpp_type, int32_t>) {
-            values[i] = BigEndian::FromHost32(data_col[i]);
-        } else if constexpr (std::is_same_v<cpp_type, int64_t>) {
-            values[i] = BigEndian::FromHost64(data_col[i]);
-        } else if constexpr (std::is_same_v<cpp_type, int128_t>) {
-            values[i] = BigEndian::FromHost128(data_col[i]);
-        } else {
-            CHECK(false) << "unreachable";
-        }
+        values[i] = BitUtil::big_endian<cpp_type>(data_col[i]);
     }
 
     auto flba_values = new ::parquet::FixedLenByteArray[col->size()];
     DeferOp flba_defer([&] { delete[] flba_values; });
 
+    size_t padding = sizeof(cpp_type) - decimal_precision_to_byte_count(type_desc.precision);
     for (size_t i = 0; i < col->size(); i++) {
-        flba_values[i].ptr = reinterpret_cast<const uint8_t*>(values + i);
+        flba_values[i].ptr = reinterpret_cast<const uint8_t*>(values + i) + padding;
     }
 
     write_leaf_callback(LevelBuilderResult{
@@ -346,7 +353,18 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
-        values[i] = static_cast<cpp_type>(data_col[i].to_unix_second() * 1000);
+        if constexpr (std::is_same_v<cpp_type, int64_t>) {
+            values[i] = data_col[i].to_unix_second() * 1000;
+        } else if constexpr (std::is_same_v<cpp_type, ::parquet::Int96>) {
+            // normalize to utc
+            auto timestamp = timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, _offset);
+            auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
+            auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);
+            *date = timestamp::to_julian(timestamp);
+            *nanosecond = timestamp::to_time(timestamp) * 1000;
+        } else {
+            CHECK(false) << "unreachable";
+        }
     }
 
     write_leaf_callback(LevelBuilderResult{

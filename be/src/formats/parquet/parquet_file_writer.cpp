@@ -36,13 +36,14 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
+#include "utils.h"
 
 namespace starrocks::formats {
 
 std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
     if (_rowgroup_writer == nullptr) {
         _rowgroup_writer = std::make_unique<parquet::ChunkWriter>(
-                _writer->AppendBufferedRowGroup(), _type_descs, _schema, _eval_func,
+                _writer->AppendBufferedRowGroup(), _type_descs, _schema, _eval_func, _writer_options->time_zone,
                 _writer_options->use_legacy_decimal_encoding, _writer_options->use_int96_timestamp_encoding);
     }
     if (auto status = _rowgroup_writer->write(chunk.get()); !status.ok()) {
@@ -390,8 +391,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
         // Apache Hive version 3 or lower does not support reading timestamps encoded as INT64
         if (_writer_options->use_int96_timestamp_encoding) {
             return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::Type::INT96,
-                                                          ::parquet::ConvertedType::TIMESTAMP_MILLIS, -1,
-                                                          file_column_id.field_id);
+                                                          ::parquet::ConvertedType::NONE, -1, file_column_id.field_id);
         } else {
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type,
@@ -417,7 +417,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
         }
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, _decimal_precision_to_byte_count(type_desc.precision),
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, parquet::decimal_precision_to_byte_count(type_desc.precision),
                 file_column_id.field_id);
     }
     case TYPE_STRUCT: {
@@ -526,6 +526,9 @@ Status ParquetFileWriterFactory::init() {
         _parsed_options->use_int96_timestamp_encoding =
                 boost::iequals(_options[ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING], "true");
     }
+#ifndef BE_TEST
+    _parsed_options->time_zone = _runtime_state->timezone();
+#endif
     return Status::OK();
 }
 

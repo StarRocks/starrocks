@@ -52,6 +52,7 @@ struct ParquetWriterOptions : FileWriterOptions {
     int64_t write_batch_size = 4096;
     int64_t rowgroup_size = 128L * 1024 * 1024; // 128MB
     std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
+    std::string time_zone = TimezoneUtils::default_time_zone;
     bool use_legacy_decimal_encoding = false;
     bool use_int96_timestamp_encoding = false;
 
@@ -90,10 +91,6 @@ private:
                                                                 const TypeDescriptor& type_desc,
                                                                 ::parquet::Repetition::type rep_type,
                                                                 FileColumnId file_column_id);
-
-    static int _decimal_precision_to_byte_count(int precision) {
-        return std::ceil((std::log(std::pow(10, precision) - 1) / std::log(2) + 1) / 8);
-    }
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 

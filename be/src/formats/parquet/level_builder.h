@@ -92,8 +92,10 @@ public:
     // A callback function that will receive results from caller
     using CallbackFunction = std::function<void(const LevelBuilderResult&)>;
 
-    LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr node, bool use_legacy_decimal_encoding,
-                 bool use_int96_timestamp_encoding);
+    LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr node, const std::string& timezone,
+                 bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding);
+
+    Status init();
 
     // Determine rep/def level information for the array.
     //
@@ -160,6 +162,8 @@ private:
 private:
     TypeDescriptor _type_desc;
     ::parquet::schema::NodePtr _root;
+    std::string _timezone;
+    int _offset{0};
     bool _use_legacy_decimal_encoding = false;
     bool _use_int96_timestamp_encoding = false;
 };

@@ -16,6 +16,8 @@
 
 #include <parquet/arrow/writer.h>
 
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -31,12 +33,13 @@ namespace starrocks::parquet {
 
 ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
                          const std::shared_ptr<::parquet::schema::GroupNode>& schema,
-                         const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func,
+                         const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func, std::string timezone,
                          bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
         : _rg_writer(rg_writer),
           _type_descs(type_descs),
           _schema(schema),
           _eval_func(eval_func),
+          _timezone(std::move(timezone)),
           _use_legacy_decimal_encoding(use_legacy_decimal_encoding),
           _use_int96_timestamp_encoding(use_int96_timestamp_encoding) {
     int num_columns = rg_writer->num_columns();
@@ -60,8 +63,9 @@ Status ChunkWriter::write(Chunk* chunk) {
 
     for (size_t i = 0; i < _type_descs.size(); i++) {
         ASSIGN_OR_RETURN(auto col, _eval_func(chunk, i));
-        auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i), _use_legacy_decimal_encoding,
+        auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i), _timezone, _use_legacy_decimal_encoding,
                                           _use_int96_timestamp_encoding);
+        RETURN_IF_ERROR(level_builder.init());
         RETURN_IF_ERROR(level_builder.write(ctx, col, write_leaf_column));
     }
 
