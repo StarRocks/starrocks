@@ -86,7 +86,8 @@ public class DataCacheSelectMetricsTest {
             }
         }
 
-        Assert.assertEquals("AlreadyCachedSize: 3MB, AvgReadCacheTime: 1.5s, WriteCacheSize: 3GB, AvgWriteCacheTime: 22.5s, TotalCacheUsage: 50.00%",
-                dataCacheSelectMetrics.toString());
+        Assert.assertEquals(
+                "AlreadyCachedSize: 3MB, AvgReadCacheTime: 1.5s, WriteCacheSize: 3GB, AvgWriteCacheTime: 22.5s, " +
+                        "TotalCacheUsage: 50.00%", dataCacheSelectMetrics.toString());
     }
 }
