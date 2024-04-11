@@ -43,8 +43,8 @@ class ChunkWriter {
 public:
     ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
                 const std::shared_ptr<::parquet::schema::GroupNode>& schema,
-                const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func, bool use_legacy_decimal_encoding=false,
-                bool use_int96_timestamp_encoding=false);
+                const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func,
+                bool use_legacy_decimal_encoding = false, bool use_int96_timestamp_encoding = false);
 
     Status write(Chunk* chunk);
 

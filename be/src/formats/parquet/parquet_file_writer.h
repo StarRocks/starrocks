@@ -91,7 +91,7 @@ private:
                                                                 ::parquet::Repetition::type rep_type,
                                                                 FileColumnId file_column_id);
 
-    static int decimal_precision_to_byte_count(int precision) {
+    static int _decimal_precision_to_byte_count(int precision) {
         return std::ceil((std::log(std::pow(10, precision) - 1) / std::log(2) + 1) / 8);
     }
 
