@@ -27,12 +27,11 @@ class CacheKey;
 class DelVector;
 class Segment;
 class TabletSchema;
+class TabletMetadataPB;
+class TxnLogPB;
 } // namespace starrocks
 
 namespace starrocks::lake {
-
-class TabletMetadataPB;
-class TxnLogPB;
 
 using CacheValue =
         std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,

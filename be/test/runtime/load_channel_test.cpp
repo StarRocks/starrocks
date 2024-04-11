@@ -118,8 +118,8 @@ public:
         tablet3->set_tablet_id(10089);
     }
 
-    std::unique_ptr<lake::TabletMetadata> new_tablet_metadata(int64_t tablet_id) {
-        auto metadata = std::make_unique<lake::TabletMetadata>();
+    std::unique_ptr<TabletMetadata> new_tablet_metadata(int64_t tablet_id) {
+        auto metadata = std::make_unique<TabletMetadata>();
         metadata->set_id(tablet_id);
         metadata->set_version(1);
         //

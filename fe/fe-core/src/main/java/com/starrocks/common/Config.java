@@ -236,6 +236,38 @@ public class Config extends ConfigBase {
     public static String big_query_log_delete_age = "7d";
 
     /**
+     * profile_log_dir:
+     * This specifies FE profile log dir.
+     * <p>
+     * profile_log_roll_num:
+     * Maximal FE log files to be kept within a profile_log_roll_interval.
+     * <p>
+     * profile_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * profile_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 minutes
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static boolean enable_profile_log = true;
+    @ConfField
+    public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int profile_log_roll_num = 10;
+    @ConfField
+    public static String profile_log_roll_interval = "DAY";
+    @ConfField
+    public static String profile_log_delete_age = "7d";
+    @ConfField
+    public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
+
+    /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
      * in the query detail when enable_collect_query_detail_info is true.
@@ -1150,6 +1182,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view_spill = true;
 
+    @ConfField(mutable = true, comment = "whether to collect metrics for materialized view by default")
+    public static boolean enable_materialized_view_metrics_collect = true;
+
     /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,
@@ -1218,7 +1253,7 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = true;
+    public static boolean memory_tracker_enable = false;
 
     /**
      * Decide how often to track the memory usage of the FE process
@@ -1431,7 +1466,6 @@ public class Config extends ConfigBase {
     public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
-     * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
      */
@@ -1439,7 +1473,6 @@ public class Config extends ConfigBase {
     public static double tablet_sched_balance_load_score_threshold = 0.1; // 10%
 
     /**
-     * For DiskAndTabletLoadBalancer:
      * if all backends disk usage is lower than this threshold, disk balance will never happen
      */
     @ConfField(mutable = true, aliases = {"balance_load_disk_safe_threshold"})
@@ -1479,6 +1512,16 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
+
+    /**
+     * Doing num based balance may break the disk size balance,
+     * but the maximum gap between disks cannot exceed
+     * tablet_sched_distribution_balance_threshold_ratio * tablet_sched_balance_load_score_threshold
+     * If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value.
+     * If you want the tablet distribution to be more balanced, increase this value.
+     */
+    @ConfField(mutable = true)
+    public static double tablet_sched_num_based_balance_threshold_ratio = 0.5;
 
     @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
     public static long tablet_report_drop_tablet_delay_sec = 120;
@@ -2695,9 +2738,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = true;
 
-    // This configuration will be removed after the shared data mode supports fast schema evolution
     @ConfField(mutable = true)
-    public static boolean experimental_enable_fast_schema_evolution_in_shared_data = false;
+    public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;

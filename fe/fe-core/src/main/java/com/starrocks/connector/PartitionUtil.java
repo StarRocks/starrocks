@@ -102,7 +102,7 @@ public class PartitionUtil {
     }
 
     public static PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
-                                                  Table.TableType tableType) throws AnalysisException {
+                                                          Table.TableType tableType) throws AnalysisException {
         return ConnectorPartitionTraits.build(tableType).createPartitionKeyWithType(values, types);
     }
 
@@ -268,7 +268,8 @@ public class PartitionUtil {
      * Return table's partition name to partition key range's mapping:
      * - for native base table, just return its range partition map;
      * - for external base table, convert external partition to normalized partition.
-     * @param table : the ref base table of materialized view
+     *
+     * @param table           : the ref base table of materialized view
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
@@ -282,7 +283,7 @@ public class PartitionUtil {
     }
 
     // check the partitionColumn exist in the partitionColumns
-    private static int checkAndGetPartitionColumnIndex(List<Column> partitionColumns, Column partitionColumn)
+    public static int checkAndGetPartitionColumnIndex(List<Column> partitionColumns, Column partitionColumn)
             throws AnalysisException {
         int partitionColumnIndex = -1;
         for (int index = 0; index < partitionColumns.size(); ++index) {
@@ -301,8 +302,8 @@ public class PartitionUtil {
     /**
      * NOTE:
      * this method may generate the same partition name:
-     *   partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
-     *   partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
     public static String generateMVPartitionName(PartitionKey partitionKey) {
         String partitionName = "p" + partitionKey.getKeys().get(0).getStringValue();
@@ -322,20 +323,28 @@ public class PartitionUtil {
     public static Set<String> getMVPartitionName(Table table, Column partitionColumn,
                                                  List<String> partitionNames,
                                                  boolean isListPartition,
-                                                 Expr partitionExpr)
-            throws AnalysisException {
+                                                 Expr partitionExpr) throws AnalysisException {
+
         if (isListPartition) {
-            return Sets.newHashSet(getMVPartitionNameWithList(table, partitionColumn, partitionNames).keySet());
+            Map<String, List<List<String>>> partitionNameWithList = getMVPartitionNameWithList(table, partitionColumn,
+                    partitionNames);
+            return Sets.newHashSet(partitionNameWithList.keySet());
         } else {
-            if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
-                return Sets.newHashSet(getRangePartitionMapOfExternalTable(
-                        table, partitionColumn, partitionNames, partitionExpr).keySet());
-            } else if (table.isJDBCTable()) {
-                return Sets.newHashSet(PartitionUtil.getRangePartitionMapOfJDBCTable(
-                        table, partitionColumn, partitionNames, partitionExpr).keySet());
-            } else {
-                throw new DmlException("Can not get partition range from table with type : %s", table.getType());
-            }
+            Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(table, partitionColumn,
+                    partitionNames, partitionExpr);
+            return Sets.newHashSet(partitionNameWithRange.keySet());
+        }
+    }
+
+    public static Map<String, Range<PartitionKey>> getMVPartitionNameWithRange(Table table, Column partitionColumn,
+                                                                               List<String> partitionNames,
+                                                                               Expr partitionExpr) throws AnalysisException {
+        if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
+            return getRangePartitionMapOfExternalTable(table, partitionColumn, partitionNames, partitionExpr);
+        } else if (table.isJDBCTable()) {
+            return PartitionUtil.getRangePartitionMapOfJDBCTable(table, partitionColumn, partitionNames, partitionExpr);
+        } else {
+            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
         }
     }
 
@@ -562,9 +571,9 @@ public class PartitionUtil {
     }
 
     private static void putRangeToMvPartitionRangeMapForJDBCTable(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
-                                                      String partitionName,
-                                                      PartitionKey lastPartitionKey,
-                                                      PartitionKey upperBound) {
+                                                                  String partitionName,
+                                                                  PartitionKey lastPartitionKey,
+                                                                  PartitionKey upperBound) {
         Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionName));
         mvPartitionRangeMap.put(partitionName, Range.openClosed(lastPartitionKey, upperBound));
     }

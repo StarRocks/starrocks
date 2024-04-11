@@ -878,6 +878,40 @@ TEST_F(TabletUpdatesTest, apply_with_merge_condition_pindex) {
     test_apply(true, true);
 }
 
+TEST_F(TabletUpdatesTest, apply_with_pk_dump) {
+    const int N = 10000;
+    int64_t old_config = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 1000;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(64);
+    for (int i = 0; i < 64; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto version = i + 2;
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size() + 1));
+
+    // Ensure the persistent meta is correct.
+    test_pk_dump(rowsets.size());
+    config::l0_max_mem_usage = old_config;
+}
+
 void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index) {
     const int N = 100;
     _tablet = create_tablet(rand(), rand());
@@ -3201,6 +3235,47 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
     ASSERT_EQ(3, rowsets.size());
+}
+
+TEST_F(TabletUpdatesTest, test_apply_concurrent_with_on_rowset_finish) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    int32_t version = 2;
+    {
+        auto rs0 = create_rowset(_tablet, keys);
+        auto st = _tablet->rowset_commit(version, rs0);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version++));
+    }
+    std::vector<std::thread> _workers;
+    _workers.emplace_back([&]() {
+        // apply version
+        for (int i = 0; i < 50; i++) {
+            auto rs0 = create_rowset(_tablet, keys);
+            auto st = _tablet->rowset_commit(version, rs0);
+            ASSERT_TRUE(st.ok()) << st.to_string();
+            ASSERT_EQ(version, _tablet->updates()->max_version());
+            ASSERT_EQ(version, _tablet->updates()->version_history_count());
+            ASSERT_EQ(N, read_tablet(_tablet, version++));
+        }
+    });
+    _workers.emplace_back([&]() {
+        // on_rowset_finish
+        for (int i = 0; i < 50; i++) {
+            auto rs0 = create_rowset(_tablet, keys);
+            StorageEngine::instance()->update_manager()->on_rowset_finished(_tablet.get(), rs0.get());
+        }
+    });
+    for (auto& each : _workers) {
+        each.join();
+    }
 }
 
 } // namespace starrocks

@@ -128,8 +128,8 @@ LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
-                                      const ::starrocks::lake::PublishVersionRequest* request,
-                                      ::starrocks::lake::PublishVersionResponse* response,
+                                      const ::starrocks::PublishVersionRequest* request,
+                                      ::starrocks::PublishVersionResponse* response,
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -186,7 +186,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
             TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
 
-            StatusOr<lake::TabletMetadataPtr> res;
+            StatusOr<TabletMetadataPtr> res;
             if (std::chrono::system_clock::now() < timeout_deadline) {
                 res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, commit_time);
             } else {
@@ -244,7 +244,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
 void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
                                                        const int64_t* txn_ids, const int64_t* log_versions,
                                                        size_t txn_size,
-                                                       ::starrocks::lake::PublishLogVersionResponse* response) {
+                                                       ::starrocks::PublishLogVersionResponse* response) {
     auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(tablet_size);
     bthread::Mutex response_mtx;
@@ -280,8 +280,8 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
     latch.wait();
 }
 void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* controller,
-                                          const ::starrocks::lake::PublishLogVersionRequest* request,
-                                          ::starrocks::lake::PublishLogVersionResponse* response,
+                                          const ::starrocks::PublishLogVersionRequest* request,
+                                          ::starrocks::PublishLogVersionResponse* response,
                                           ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -307,8 +307,8 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
 }
 
 void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcController* controller,
-                                                const ::starrocks::lake::PublishLogVersionBatchRequest* request,
-                                                ::starrocks::lake::PublishLogVersionResponse* response,
+                                                const ::starrocks::PublishLogVersionBatchRequest* request,
+                                                ::starrocks::PublishLogVersionResponse* response,
                                                 ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -336,8 +336,8 @@ void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcControlle
 }
 
 void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
-                                const ::starrocks::lake::AbortTxnRequest* request,
-                                ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) {
+                                const ::starrocks::AbortTxnRequest* request, ::starrocks::AbortTxnResponse* response,
+                                ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     (void)controller;
 
@@ -375,9 +375,8 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controller,
-                                    const ::starrocks::lake::DeleteTabletRequest* request,
-                                    ::starrocks::lake::DeleteTabletResponse* response,
-                                    ::google::protobuf::Closure* done) {
+                                    const ::starrocks::DeleteTabletRequest* request,
+                                    ::starrocks::DeleteTabletResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -411,9 +410,8 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
 }
 
 void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controller,
-                                     const ::starrocks::lake::DeleteTxnLogRequest* request,
-                                     ::starrocks::lake::DeleteTxnLogResponse* response,
-                                     ::google::protobuf::Closure* done) {
+                                     const ::starrocks::DeleteTxnLogRequest* request,
+                                     ::starrocks::DeleteTxnLogResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -474,8 +472,8 @@ void remove_path(const std::string& path) {
 }; // namespace drop_table_helper
 
 void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
-                                 const ::starrocks::lake::DropTableRequest* request,
-                                 ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) {
+                                 const ::starrocks::DropTableRequest* request, ::starrocks::DropTableResponse* response,
+                                 ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -534,8 +532,8 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::lake::DeleteDataRequest* request,
-                                  ::starrocks::lake::DeleteDataResponse* response, ::google::protobuf::Closure* done) {
+                                  const ::starrocks::DeleteDataRequest* request,
+                                  ::starrocks::DeleteDataResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -587,9 +585,8 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* controller,
-                                       const ::starrocks::lake::TabletStatRequest* request,
-                                       ::starrocks::lake::TabletStatResponse* response,
-                                       ::google::protobuf::Closure* done) {
+                                       const ::starrocks::TabletStatRequest* request,
+                                       ::starrocks::TabletStatResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -656,8 +653,8 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
 }
 
 void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* controller,
-                                           const ::starrocks::lake::LockTabletMetadataRequest* request,
-                                           ::starrocks::lake::LockTabletMetadataResponse* response,
+                                           const ::starrocks::LockTabletMetadataRequest* request,
+                                           ::starrocks::LockTabletMetadataResponse* response,
                                            ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -665,8 +662,8 @@ void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* co
 }
 
 void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* controller,
-                                             const ::starrocks::lake::UnlockTabletMetadataRequest* request,
-                                             ::starrocks::lake::UnlockTabletMetadataResponse* response,
+                                             const ::starrocks::UnlockTabletMetadataRequest* request,
+                                             ::starrocks::UnlockTabletMetadataResponse* response,
                                              ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -674,8 +671,8 @@ void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* 
 }
 
 void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,
-                                       const ::starrocks::lake::UploadSnapshotsRequest* request,
-                                       ::starrocks::lake::UploadSnapshotsResponse* response,
+                                       const ::starrocks::UploadSnapshotsRequest* request,
+                                       ::starrocks::UploadSnapshotsResponse* response,
                                        ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -705,8 +702,8 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
 }
 
 void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* controller,
-                                        const ::starrocks::lake::RestoreSnapshotsRequest* request,
-                                        ::starrocks::lake::RestoreSnapshotsResponse* response,
+                                        const ::starrocks::RestoreSnapshotsRequest* request,
+                                        ::starrocks::RestoreSnapshotsResponse* response,
                                         ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
@@ -735,9 +732,8 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
     latch.wait();
 }
 
-void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
-                              const ::starrocks::lake::CompactRequest* request,
-                              ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) {
+void LakeServiceImpl::compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
+                              ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -758,8 +754,8 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* controller,
-                                       const ::starrocks::lake::AbortCompactionRequest* request,
-                                       ::starrocks::lake::AbortCompactionResponse* response,
+                                       const ::starrocks::AbortCompactionRequest* request,
+                                       ::starrocks::AbortCompactionResponse* response,
                                        ::google::protobuf::Closure* done) {
     TEST_SYNC_POINT("LakeServiceImpl::abort_compaction:enter");
 
@@ -777,9 +773,8 @@ void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* contro
     st.to_protobuf(response->mutable_status());
 }
 
-void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
-                             const ::starrocks::lake::VacuumRequest* request,
-                             ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
+void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, const ::starrocks::VacuumRequest* request,
+                             ::starrocks::VacuumResponse* response, ::google::protobuf::Closure* done) {
     static bthread::Mutex s_mtx;
     static std::unordered_set<int64_t> s_vacuuming_partitions;
 
@@ -825,8 +820,8 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::lake::VacuumFullRequest* request,
-                                  ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
+                                  const ::starrocks::VacuumFullRequest* request,
+                                  ::starrocks::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
     auto thread_pool = vacuum_thread_pool(_env);

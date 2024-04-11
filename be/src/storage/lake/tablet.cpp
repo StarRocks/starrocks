@@ -104,8 +104,8 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
-StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t index_id) {
-    return _mgr->get_tablet_schema_by_id(_id, index_id);
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
+    return _mgr->get_tablet_schema_by_id(_id, schema_id);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -158,7 +158,7 @@ std::string Tablet::root_location() const {
 }
 
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
-    auto txn_log = std::make_shared<lake::TxnLog>();
+    auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
@@ -191,8 +191,9 @@ int64_t Tablet::data_size() {
 }
 
 size_t Tablet::num_rows() const {
-    int64_t version = _version_hint;
-    auto num_rows = _mgr->get_tablet_num_rows(_id, &version);
+    // set_version_hint should be called before to avoid list tablet metadata
+    DCHECK(_version_hint != 0);
+    auto num_rows = _mgr->get_tablet_num_rows(_id, _version_hint);
     if (num_rows.ok()) {
         return num_rows.value();
     } else {

@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.base.Preconditions;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
@@ -86,6 +87,18 @@ public class WarehouseManager implements Writable {
                 ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
             }
             return warehouse;
+        }
+    }
+
+    public Warehouse getWarehouseAllowNull(String warehouseName) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.get(warehouseName);
+        }
+    }
+
+    public Warehouse getWarehouseAllowNull(long warehouseId) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return idToWh.get(warehouseId);
         }
     }
 
@@ -192,6 +205,11 @@ public class WarehouseManager implements Writable {
 
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+        if (computeNodeId == null) {
+            Warehouse warehouse = idToWh.get(warehouseId);
+            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+        }
+        Preconditions.checkNotNull(computeNodeId);
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
 

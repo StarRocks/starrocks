@@ -45,6 +45,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -381,8 +382,11 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
+
+        String warehouseName = Config.lake_compaction_warehouse;
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, Config.lake_compaction_default_timeout_second);
+                loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)
@@ -450,6 +454,22 @@ public class CompactionScheduler extends Daemon {
                 break;
             }
         }
+    }
+
+    protected ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+        return runningCompactions;
+    }
+
+    public boolean existCompaction(long txnId) {
+        for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = getRunningCompactions().entrySet().iterator();
+                iterator.hasNext(); ) {
+            Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
+            CompactionJob job = entry.getValue();
+            if (job.getTxnId() == txnId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static class SynchronizedCircularQueue<E> {

@@ -107,8 +107,9 @@ Status init_datacache(GlobalEnv* global_env) {
         cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
         cache_options.enable_checksum = config::datacache_checksum_enable;
         cache_options.enable_direct_io = config::datacache_direct_io_enable;
-        cache_options.enable_cache_adaptor = starrocks::config::datacache_adaptor_enable;
+        cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
         cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
+        cache_options.scheduler_threads_per_cpu = starrocks::config::datacache_scheduler_threads_per_cpu;
         cache_options.engine = config::datacache_engine;
         return cache->init(cache_options);
     }
@@ -212,7 +213,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         options.num_threads = config::brpc_num_threads;
     }
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
-    const auto service_name = "starrocks.lake.LakeService";
+    const auto service_name = "starrocks.LakeService";
     const auto methods = {
             "abort_txn",     "abort_compaction", "compact",         "drop_table",          "delete_data",
             "delete_tablet", "get_tablet_stats", "publish_version", "publish_log_version", "publish_log_version_batch",

@@ -38,8 +38,10 @@ import unittest
 import uuid
 from typing import List, Dict
 
+from fuzzywuzzy import fuzz
 import pymysql as _mysql
 import requests
+from cup import shell
 from nose import tools
 from cup import log
 from requests.auth import HTTPBasicAuth
@@ -47,6 +49,7 @@ from requests.auth import HTTPBasicAuth
 from lib import skip
 from lib import data_delete_lib
 from lib import data_insert_lib
+from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
@@ -59,6 +62,11 @@ common_result_path = os.path.join(root_path, "common/result")
 LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
+CRASH_DIR = os.path.join(root_path, "crash_logs")
+if not os.path.exists(CRASH_DIR):
+    os.mkdir(CRASH_DIR)
+
+LOG_LEVEL = logging.INFO
 
 
 class Filter(logging.Filter):
@@ -67,7 +75,7 @@ class Filter(logging.Filter):
     """
 
     # pylint: disable= super-init-not-called
-    def __init__(self, msg_level=logging.WARNING):
+    def __init__(self, msg_level=LOG_LEVEL):
         super().__init__()
         self.msg_level = msg_level
 
@@ -79,7 +87,7 @@ class Filter(logging.Filter):
             except Exception:
                 record.msg = str(record.msg).replace(secret_v, '${%s}' % secret_k)
 
-        if record.levelno >= self.msg_level:
+        if record.levelno < self.msg_level:
             return False
         return True
 
@@ -93,7 +101,7 @@ def self_print(msg):
 
 
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
-log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
+log.init_comlog("sql", LOG_LEVEL, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, bprint_console=False, gen_wf=False)
 logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
@@ -125,10 +133,15 @@ class StarrocksSQLApiLib(object):
         self.mysql_port = ""
         self.mysql_user = ""
         self.mysql_password = ""
+        self.http_port = ""
+        self.host_user = ""
+        self.host_password = ""
+        self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
 
         # for t/r record
+        self.case_info = None
         self.log = []
         self.res_log = []
 
@@ -137,6 +150,12 @@ class StarrocksSQLApiLib(object):
             self.read_conf("conf/sr.conf")
         else:
             self.read_conf(config_path)
+
+        if os.environ.get("keep_alive") == "True":
+            self.keep_alive = True
+        else:
+            self.keep_alive = False
+        self.run_info = os.environ.get("run_info", "")
 
     def __del__(self):
         pass
@@ -147,7 +166,191 @@ class StarrocksSQLApiLib(object):
 
     def tearDown(self):
         """tear down"""
-        pass
+        self.keep_cluster_alive()
+
+    def keep_cluster_alive(self):
+        """
+        check crash msg in case logs, and recover alive
+        """
+        if not self.keep_alive:
+            return
+
+        # check if case result contains crash msg: "StarRocks process failed"
+        crash_msg_list = ["StarRocks process failed"]
+        contains_crash_msg = self.check_case_result_contains_crash(crash_msg_list, self.res_log)
+        # wait util be exit
+        if contains_crash_msg:
+            self.wait_until_be_exit()
+
+        # if cluster status is abnormal, get crash log
+        cluster_status_dict = self.get_cluster_status()
+
+        if isinstance(cluster_status_dict, str):
+            if cluster_status_dict == 'abnormal':
+                log.error("FE status is abnormal!")
+
+            return
+
+        if cluster_status_dict["status"] != "abnormal":
+            log.info("Cluster status OK!")
+            return
+
+        # TODO: 判断是不是巡检，不然不需要创建issue
+
+        # analyse be crash info
+        log.warning("Cluster status is abnormal, begin to get crash log...")
+        be_crash_log = self.get_crash_log(cluster_status_dict["ip"][0])
+
+        if be_crash_log != "":
+            crash_similarity = self.get_crash_log_similarity(be_crash_log)
+
+            if crash_similarity >= 90:
+                log.info("Crash log is similarity, skip create issue")
+            else:
+                log.info("Max similarity is %f, create new issue" % crash_similarity)
+                cur_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                with open(f"{CRASH_DIR}/crash_{cur_time}.log", "w") as f:
+                    f.writelines(be_crash_log)
+
+                be_crash_case = self.case_info.name
+
+                title = f"[{self.run_info}] SQL-Tester crash"
+                run_link = os.environ.get('WORKFLOW_URL', '')
+                body = (
+                        """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
+                        % (be_crash_case, be_crash_log, cluster_status_dict["version"], cluster_status_dict["ip"][0], run_link)
+                )
+                assignee = os.environ.get("ISSUE_AUTHOR")
+                repo = os.environ.get("GITHUB_REPOSITORY")
+                label = os.environ.get("ISSUE_LABEL")
+                create_issue_res = GitHubApi.create_issue(title, body, label, assignee)
+                log.info(create_issue_res)
+        else:
+            log.warning("Crash log is empty, please check. cluster status is %s" % cluster_status_dict)
+
+        # after create issue, restart crash be
+        start_be_status = "success"
+        for crash_be_ip in cluster_status_dict["ip"]:
+            res = self.start_be(crash_be_ip)
+            if res != 0:
+                start_be_status = "fail"
+                print("BE start failed, please check, ip: %s" % crash_be_ip)
+                break
+        time.sleep(20)
+        cluster_dict = self.get_cluster_status()
+        if len(cluster_dict["ip"]) != 0:
+            log.error("BE start failed, please check, ip: %s" % cluster_dict["ip"])
+
+    def start_be(self, ip):
+        # backup be.out
+        cur_time = datetime.datetime.now().strftime("%H_%M")
+        cmd = "cd %s/be/log/; mv be.out be.out.%s" % (self.cluster_path, cur_time)
+        backup_res = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
+        if backup_res["exitstatus"] != 0 or backup_res["remote_exitstatus"] != 0:
+            log.error("Backup be.out error in host: %s, msg: %s" % (ip, backup_res))
+
+        # be status is not alive and the process exit failed
+        timeout = 300
+        while timeout >= 0:
+            cmd = "ps -ef | grep starrocks_be | grep -v grep"
+            stop_res = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
+            if stop_res["remote_exitstatus"] == 1:
+                break
+
+            time.sleep(5)
+            timeout -= 5
+
+        if timeout < 0:
+            print("BE exit timeout for 300s after crash, ip: %s" % ip)
+            return -1
+
+        time.sleep(10)
+        cmd = (
+            f". ~/.bash_profile; cd {self.cluster_path}/be; ulimit -c unlimited; export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1;sh bin/start_be.sh --daemon"
+        )
+        start_res = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
+        if start_res["exitstatus"] != 0 or start_res["remote_exitstatus"] != 0:
+            log.error("Start be error, msg: %s" % start_res)
+            return -1
+
+        return 0
+
+    @staticmethod
+    def get_crash_log_similarity(target_crash_log):
+        files_list = os.listdir(CRASH_DIR)
+        crash_log_list = []
+        similarity = 0
+        for crash_file in files_list:
+            with open("%s/%s" % (CRASH_DIR, crash_file), "r") as f:
+                crash_log = "\n".join(f.readlines())
+                crash_log_list.append(crash_log)
+
+        for crash_log in crash_log_list:
+            cur_similarity = fuzz.ratio(crash_log, target_crash_log)
+            similarity = cur_similarity if cur_similarity > similarity else similarity
+
+        return similarity
+
+    def get_crash_log(self, ip):
+        log.warning("Get crash log from %s" % ip)
+        cmd = (
+            f'cd {self.cluster_path}/be/log/; grep -B100 -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
+        )
+        crash_log = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=False)
+        return crash_log["result"]
+
+    def wait_until_be_exit(self):
+        """
+        wait until be was exited
+        """
+        log.warning("Wait be exit...")
+        timeout = 60
+        while timeout > 0:
+            status_dict = self.get_cluster_status()
+
+            if status_dict == 'abnormal':
+                # fe abnormal
+                return
+
+            elif status_dict["status"] == "abnormal":
+                return
+
+            else:
+                time.sleep(5)
+                timeout -= 1
+
+        return
+
+    def get_cluster_status(self):
+        cmd = f"curl http://root:@{self.mysql_host}:{self.http_port}/api/show_proc?path=/backends"
+        res = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=30, shell=True
+        )
+        if res.returncode != 0:
+            log.warning("Show backends cmd execute failed, cmd: %s, err_msg: %s" % (cmd, res.stderr))
+            return "abnormal"
+
+        status_dict = {"ip": [], "status": "normal"}
+        for be_info_dict in json.loads(res.stdout):
+            status_dict["version"] = be_info_dict["Version"]
+            if be_info_dict["Alive"] == "false":
+                status_dict["ip"].append(be_info_dict["IP"])
+                status_dict["status"] = "abnormal"
+
+        return status_dict
+
+    @staticmethod
+    def check_case_result_contains_crash(crash_msg_list, case_result_logs):
+        """
+        scan case result logs, return whether contain crash msg
+        """
+        case_result_logs_str = "\n".join(case_result_logs)
+
+        for crash_msg in crash_msg_list:
+            if crash_msg in case_result_logs_str:
+                return True
+
+        return False
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -162,6 +365,9 @@ class StarrocksSQLApiLib(object):
         self.mysql_user = config_parser.get("mysql-client", "user")
         self.mysql_password = config_parser.get("mysql-client", "password")
         self.http_port = config_parser.get("mysql-client", "http_port")
+        self.host_user = config_parser.get("mysql-client", "host_user")
+        self.host_password = config_parser.get("mysql-client", "host_password")
+        self.cluster_path = config_parser.get("mysql-client", "cluster_path")
 
         # read replace info
         for rep_key, rep_value in config_parser.items("replace"):
@@ -435,7 +641,7 @@ class StarrocksSQLApiLib(object):
         log.info("shell cmd: %s" % shell)
 
         cmd_res = subprocess.run(
-            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=1800, shell=True
+            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=120, shell=True
         )
 
         log.info("shell result: code: %s, stdout: %s" % (cmd_res.returncode, cmd_res.stdout))
@@ -499,7 +705,7 @@ class StarrocksSQLApiLib(object):
                 try:
                     res = ast.literal_eval(res.replace("null", "None"))
                 except Exception as e:
-                    log.warn("converse array error: %s, %s" % (res, e))
+                    log.warning("converse array error: %s, %s" % (res, e))
 
         return res, res_for_log
 
@@ -563,7 +769,7 @@ class StarrocksSQLApiLib(object):
                     tools.assert_true(re.match(exp_std, act_std, flags=re.S),
                                       "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
                 except Exception as e:
-                    log.warn("Try to treat res as regex, failed!\n:%s" % e)
+                    log.warning("Try to treat res as regex, failed!\n:%s" % e)
 
                 tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
 
@@ -598,7 +804,7 @@ class StarrocksSQLApiLib(object):
                         try:
                             expect_res = ast.literal_eval(exp.replace("null", "None"))
                         except Exception as e:
-                            log.warn("converse array error: %s, %s" % (exp, e))
+                            log.warning("converse array error: %s, %s" % (exp, e))
                             expect_res = str(exp)
 
                     tools.assert_equal(type(expect_res), type(act), "exp and act results' type not match")
@@ -629,7 +835,7 @@ class StarrocksSQLApiLib(object):
                     )
                     return
             except Exception as e:
-                log.warn("analyse result before check error, %s" % e)
+                log.warning("analyse result before check error, %s" % e)
 
             # check str
             log.info("[check type]: Str")
@@ -737,7 +943,7 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(use_res["status"], "use db: [%s] error" % T_R_DB)
 
         self.execute_sql("set group_concat_max_len = 1024000;", True)
-        
+
         # get records
         query_sql = """
         select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
@@ -1067,7 +1273,7 @@ class StarrocksSQLApiLib(object):
             if status != "PENDING":
                 break
             time.sleep(0.5)
-    
+
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
         wait alter table job finish and return status
@@ -1197,7 +1403,7 @@ class StarrocksSQLApiLib(object):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             encoding="utf-8",
-            timeout=1800,
+            timeout=120,
         )
 
         log.info(cmd_res)
@@ -1458,9 +1664,9 @@ class StarrocksSQLApiLib(object):
             "ADMIN SET REPLICA STATUS PROPERTIES('tablet_id' = '%s', 'backend_id' = '%s', 'status' = 'bad')" % (tablet_id, backend_id),
             True,
         )
-        
+
         time.sleep(20)
-        
+
         while True:
             res = self.execute_sql(
                 "SHOW TABLET FROM %s" % table_name,

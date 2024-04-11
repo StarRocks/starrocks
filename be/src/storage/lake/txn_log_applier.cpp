@@ -20,7 +20,6 @@
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
@@ -30,6 +29,31 @@
 #include "util/trace.h"
 
 namespace starrocks::lake {
+
+namespace {
+Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
+                            TabletManager* tablet_mgr) {
+    for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
+        if (alter_meta.has_enable_persistent_index()) {
+            auto update_mgr = tablet_mgr->update_mgr();
+            metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
+            update_mgr->set_enable_persistent_index(metadata->id(), alter_meta.enable_persistent_index());
+            // Try remove index from index cache
+            // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
+            // because the primary index is available in cache
+            // But it will be remove from index cache after apply is finished
+            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
+        }
+        if (alter_meta.has_tablet_schema()) {
+            VLOG(2) << "old schema: " << metadata->schema().DebugString()
+                    << " new schema: " << alter_meta.tablet_schema().DebugString();
+            metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
+        }
+    }
+    return Status::OK();
+}
+} // namespace
+
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
     PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
@@ -80,7 +104,8 @@ public:
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
         if (log.has_op_alter_metadata()) {
-            RETURN_IF_ERROR(apply_alter_meta_log(log.op_alter_metadata()));
+            DCHECK_EQ(_base_version + 1, _new_version);
+            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
         }
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication(), log.txn_id()));
@@ -89,15 +114,15 @@ public:
     }
 
     Status finish() override {
-        // Must call `commit_primary_index` before `finalize`,
-        // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
+        // Must call `commit` before `finalize`,
+        // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
-        RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
-        Status st = _builder.finalize(_max_txn_id);
-        if (st.ok()) {
-            _has_finalized = true;
+        if (_index_entry != nullptr) {
+            RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
         }
-        return st;
+        RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
+        _has_finalized = true;
+        return Status::OK();
     }
 
 private:
@@ -196,34 +221,6 @@ private:
         return Status::OK();
     }
 
-    Status apply_alter_meta_log(const TxnLogPB_OpAlterMetadata& op_alter_metas) {
-        DCHECK_EQ(_base_version + 1, _new_version);
-        for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
-            if (alter_meta.has_enable_persistent_index()) {
-                // this should always be true,
-                // for FE will check whether the value of `enable_persisent_index` is changed or not
-                // then send the alter task to BE
-                if (_metadata->enable_persistent_index() != alter_meta.enable_persistent_index()) {
-                    _metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
-
-                    _tablet.update_mgr()->set_enable_persistent_index(_tablet.id(),
-                                                                      alter_meta.enable_persistent_index());
-                    // Try remove index from index cache
-                    // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
-                    // because the primary index is available in cache
-                    // But it will be remove from index cache after apply is finished
-                    (void)_tablet.update_mgr()->index_cache().try_remove_by_key(_tablet.id());
-                } else {
-                    LOG(WARNING) << strings::Substitute(
-                            "alter_meta_log not need to apply, for enable_persistent_index is the same, which is $0, "
-                            "base_version: $1, new_version: $2",
-                            _metadata->enable_persistent_index(), _base_version, _new_version);
-                }
-            }
-        }
-        return Status::OK();
-    }
-
     Status apply_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
         if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
             LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
@@ -316,6 +313,9 @@ public:
         }
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication()));
+        }
+        if (log.has_op_alter_metadata()) {
+            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
         }
         return Status::OK();
     }

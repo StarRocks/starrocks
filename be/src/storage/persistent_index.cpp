@@ -2514,20 +2514,21 @@ Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const S
 Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
     // put all kvs in one shard
     std::vector<std::vector<KVRef>> kvs_by_shard(1);
+    std::vector<std::unique_ptr<ImmutableIndexShard>> shard_ptrs(_shards.size());
     for (size_t shard_idx = 0; shard_idx < _shards.size(); shard_idx++) {
         const auto& shard_info = _shards[shard_idx];
         if (shard_info.size == 0) {
             // skip empty shard
             continue;
         }
-        auto shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
-        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
-        RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
-                                                shard_info.bytes));
+        shard_ptrs[shard_idx] = std::make_unique<ImmutableIndexShard>(shard_info.npage);
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard_ptrs[shard_idx]->pages.data(), shard_info.bytes));
+        RETURN_IF_ERROR(shard_ptrs[shard_idx]->decompress_pages(_compression_type, shard_info.npage,
+                                                                shard_info.uncompressed_size, shard_info.bytes));
         if (shard_info.key_size != 0) {
-            RETURN_IF_ERROR(_get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard));
+            RETURN_IF_ERROR(_get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard_ptrs[shard_idx]));
         } else {
-            RETURN_IF_ERROR(_get_varlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard));
+            RETURN_IF_ERROR(_get_varlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard_ptrs[shard_idx]));
         }
     }
 
@@ -3035,6 +3036,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     RETURN_IF_ERROR(_delete_expired_index_file(
             l0_version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+    _calc_memory_usage();
     return Status::OK();
 }
 
@@ -3111,12 +3113,10 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     DCHECK(_l0 != nullptr);
     RETURN_IF_ERROR(_l0->load(l0_meta));
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _l1_merged_num.clear();
-        _has_l1 = false;
-    }
+
+    _l1_vec.clear();
+    _l1_merged_num.clear();
+    _has_l1 = false;
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path =
@@ -3128,18 +3128,13 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         if (!l1_st.ok()) {
             return l1_st.status();
         }
-        {
-            std::unique_lock wrlock(_lock);
-            _l1_vec.emplace_back(std::move(l1_st).value());
-            _l1_merged_num.emplace_back(-1);
-            _has_l1 = true;
-        }
+        _l1_vec.emplace_back(std::move(l1_st).value());
+        _l1_merged_num.emplace_back(-1);
+        _has_l1 = true;
     }
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_versions.clear();
-        _l2_vec.clear();
-    }
+
+    _l2_versions.clear();
+    _l2_vec.clear();
     if (index_meta.l2_versions_size() > 0) {
         DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
@@ -3148,12 +3143,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
                     index_meta.l2_versions(i).minor_number(), index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
-            {
-                std::unique_lock wrlock(_lock);
-                _l2_versions.emplace_back(
-                        EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
-                _l2_vec.emplace_back(std::move(l2_index));
-            }
+            _l2_versions.emplace_back(EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
+            _l2_vec.emplace_back(std::move(l2_index));
         }
     }
     // if reload, don't update _usage_and_size_by_key_length
@@ -3440,6 +3431,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
     }
+    _calc_memory_usage();
 
     LOG(INFO) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
                                      _version.minor_number());
@@ -3658,6 +3650,7 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
             }
         }
     }
+    _calc_memory_usage();
 
     return Status::OK();
 }
@@ -3810,6 +3803,13 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     return _flush_advance_or_append_wal(n, keys, nullptr, nullptr);
 }
 
+Status PersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
+                                const std::vector<uint32_t>& replace_idxes) {
+    std::vector<size_t> tmp_replace_idxes(replace_idxes.begin(), replace_idxes.end());
+    RETURN_IF_ERROR(_l0->replace(keys, values, tmp_replace_idxes));
+    return _flush_advance_or_append_wal(n, keys, values, &tmp_replace_idxes);
+}
+
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                                      const std::vector<uint32_t>& src_rssid,
                                                      std::vector<uint32_t>* failed) {
@@ -3863,11 +3863,8 @@ Status PersistentIndex::flush_advance() {
         LOG(ERROR) << "load tmp l1 failed, file_path: " << l1_tmp_file << ", status:" << l1_st.status();
         return l1_st.status();
     }
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.emplace_back(std::move(l1_st).value());
-        _l1_merged_num.emplace_back(1);
-    }
+    _l1_vec.emplace_back(std::move(l1_st).value());
+    _l1_merged_num.emplace_back(1);
 
     // clear l0
     _l0->clear();
@@ -4579,18 +4576,14 @@ Status PersistentIndex::_merge_compaction_advance() {
     RETURN_IF_ERROR(writer->finish());
     std::vector<std::unique_ptr<ImmutableIndex>> new_l1_vec;
     std::vector<int> new_l1_merged_num;
-    size_t merge_num = 0;
-    {
-        std::unique_lock wrlock(_lock);
-        merge_num = _l1_merged_num[merge_l1_start_idx];
-        for (int i = 0; i < merge_l1_start_idx; i++) {
-            new_l1_vec.emplace_back(std::move(_l1_vec[i]));
-            new_l1_merged_num.emplace_back(_l1_merged_num[i]);
-        }
+    size_t merge_num = _l1_merged_num[merge_l1_start_idx];
+    for (int i = 0; i < merge_l1_start_idx; i++) {
+        new_l1_vec.emplace_back(std::move(_l1_vec[i]));
+        new_l1_merged_num.emplace_back(_l1_merged_num[i]);
+    }
 
-        for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
-            _l1_vec[i]->destroy();
-        }
+    for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
+        _l1_vec[i]->destroy();
     }
 
     const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
@@ -4604,11 +4597,8 @@ Status PersistentIndex::_merge_compaction_advance() {
     }
     new_l1_vec.emplace_back(std::move(l1_st).value());
     new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.swap(new_l1_vec);
-        _l1_merged_num.swap(new_l1_merged_num);
-    }
+    _l1_vec.swap(new_l1_vec);
+    _l1_merged_num.swap(new_l1_merged_num);
     _l0->clear();
     return Status::OK();
 }
@@ -4848,6 +4838,7 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         RETURN_IF_ERROR(_delete_expired_index_file(
                 l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+        _calc_memory_usage();
     }
     (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
@@ -4903,7 +4894,6 @@ double PersistentIndex::major_compaction_score(const PersistentIndexMetaPB& inde
 }
 
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
-    std::unique_lock wrlock(_lock);
     _cancel_major_compaction = true;
 
     auto tablet_schema_ptr = tablet->tablet_schema();
@@ -4946,6 +4936,7 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     PagePointerPB* data = snapshot->mutable_data();
     data->set_offset(0);
     data->set_size(0);
+    _calc_memory_usage();
 
     return Status::OK();
 }
@@ -5052,12 +5043,9 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     _dump_snapshot = true;
 
     // clear l1
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _usage_and_size_by_key_length.clear();
-        _l1_merged_num.clear();
-    }
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
     _has_l1 = false;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
@@ -5078,11 +5066,8 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
         }
     }
     // clear l2
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_vec.clear();
-        _l2_versions.clear();
-    }
+    _l2_vec.clear();
+    _l2_versions.clear();
 
     // Init PersistentIndexMetaPB
     //   1. reset |version| |key_size|
@@ -5137,6 +5122,17 @@ Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* 
         RETURN_IF_ERROR(_l0->pk_dump(dump, level));
     }
     return Status::OK();
+}
+
+void PersistentIndex::_calc_memory_usage() {
+    size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
+    for (int i = 0; i < _l1_vec.size(); i++) {
+        memory_usage += _l1_vec[i]->memory_usage();
+    }
+    for (int i = 0; i < _l2_vec.size(); i++) {
+        memory_usage += _l2_vec[i]->memory_usage();
+    }
+    _memory_usage.store(memory_usage);
 }
 
 } // namespace starrocks

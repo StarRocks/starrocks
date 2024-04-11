@@ -14,17 +14,46 @@
 
 #pragma once
 
+#include "storage/lake/tablet_metadata.h"
 #include "storage/persistent_index.h"
 
 namespace starrocks {
+class TxnLogPB;
+class TxnLogPB_OpCompaction;
+
+namespace sstable {
+class Iterator;
+class TableBuilder;
+} // namespace sstable
 
 namespace lake {
 
 using KeyIndex = size_t;
 using KeyIndexSet = std::set<KeyIndex>;
+class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
+
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
+
+class KeyValueMerger {
+public:
+    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder)
+            : _key(std::move(key)), _builder(builder) {}
+
+    Status merge(const std::string& key, const std::string& value);
+
+    void finish() { flush(); }
+
+private:
+    void flush();
+
+private:
+    std::string _key;
+    sstable::TableBuilder* _builder;
+    std::list<IndexValueWithVer> _index_value_vers;
+};
 
 // LakePersistentIndex is not thread-safe.
 // Caller should take care of the multi-thread safety
@@ -35,6 +64,8 @@ public:
     ~LakePersistentIndex();
 
     DISALLOW_COPY(LakePersistentIndex);
+
+    Status init(const PersistentIndexSstableMetaPB& sstable_meta);
 
     // batch get
     // |n|: size of key/value array
@@ -75,7 +106,14 @@ public:
 
     Status minor_compact();
 
-    Status major_compact(int64_t min_retain_version);
+    Status major_compact(int64_t min_retain_version, TxnLogPB* txn_log);
+
+    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+
+    void commit(MetaFileBuilder* builder);
+
+    Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
+                                 const MetaFileBuilder* builder);
 
 private:
     Status flush_memtable();
@@ -102,6 +140,10 @@ private:
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
+    std::unique_ptr<sstable::Iterator> prepare_merging_iterator();
+
+    Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
+
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
     std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
@@ -109,6 +151,7 @@ private:
     int64_t _tablet_id{0};
     // The size of sstables is not expected to be too large.
     // In major compaction, some sstables will be picked to be merged into one.
+    // sstables are ordered with the smaller version on the left.
     std::vector<std::unique_ptr<PersistentIndexSstable>> _sstables;
 };
 

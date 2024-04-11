@@ -16,10 +16,10 @@ package com.starrocks.sql;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -84,10 +84,10 @@ class OptimisticVersionTest extends PlanTestBase {
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(starRocksAssert.getCtx(), insertStmt);
 
         // normal planner
-        Locker locker = new Locker();
-        StatementPlanner.lock(locker, dbs);
-        new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx());
-        StatementPlanner.unLock(locker, dbs);
+        PlannerMetaLocker locker = new PlannerMetaLocker(starRocksAssert.getCtx(), insertStmt);
+        StatementPlanner.lock(locker);
+        new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
+        StatementPlanner.unLock(locker);
 
         // retry but failed
         new MockUp<OptimisticVersion>() {
@@ -97,11 +97,11 @@ class OptimisticVersionTest extends PlanTestBase {
             }
         };
         try {
-            StatementPlanner.lock(locker, dbs);
+            StatementPlanner.lock(locker);
             assertThrows(StarRocksPlannerException.class, () ->
-                    new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx()));
+                    new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx()));
         } finally {
-            StatementPlanner.unLock(locker, dbs);
+            StatementPlanner.unLock(locker);
         }
 
         // retry and succeed
@@ -118,10 +118,10 @@ class OptimisticVersionTest extends PlanTestBase {
             }
         };
         try {
-            StatementPlanner.lock(locker, dbs);
-            new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx());
+            StatementPlanner.lock(locker);
+            new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
         } finally {
-            StatementPlanner.unLock(locker, dbs);
+            StatementPlanner.unLock(locker);
         }
 
     }

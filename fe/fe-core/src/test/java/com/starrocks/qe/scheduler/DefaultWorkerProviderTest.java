@@ -17,12 +17,10 @@ package com.starrocks.qe.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -32,7 +30,6 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -148,87 +145,6 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
-    public void testCaptureAvailableWorkersForSharedData() {
-        String prevRunMode = Config.run_mode;
-        try {
-            Config.run_mode = "shared_data";
-            RunMode.detectRunMode();
-
-            long deadBEId = 1L;
-            long deadCNId = 11L;
-            long inBlacklistBEId = 3L;
-            long inBlacklistCNId = 13L;
-            Set<Long> nonAvailableWorkerId = ImmutableSet.of(deadBEId, deadCNId, inBlacklistBEId, inBlacklistCNId);
-            id2Backend.get(deadBEId).setAlive(false);
-            id2ComputeNode.get(deadCNId).setAlive(false);
-            new MockUp<SimpleScheduler>() {
-                @Mock
-                public boolean isInBlocklist(long backendId) {
-                    return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
-                }
-            };
-
-            Reference<Integer> nextComputeNodeIndex = new Reference<>(0);
-            new MockUp<DefaultWorkerProvider>() {
-                @Mock
-                int getNextComputeNodeIndex() {
-                    int next = nextComputeNodeIndex.getRef();
-                    nextComputeNodeIndex.setRef(next + 1);
-                    return next;
-                }
-            };
-
-            new MockUp<WarehouseManager>() {
-                @Mock
-                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
-                    return id2ComputeNode;
-                }
-
-                @Mock
-                public List<Long> getAllComputeNodeIds(long warehouseId) {
-                    return new ArrayList<>(id2ComputeNode.keySet());
-                }
-            };
-
-            new MockUp<SystemInfoService>() {
-                @Mock
-                public ComputeNode getBackendOrComputeNode(long nodeId) {
-                    return id2ComputeNode.get(nodeId);
-                }
-            };
-
-            DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
-            DefaultWorkerProvider workerProvider;
-            List<Integer> numUsedComputeNodesList = ImmutableList.of(100, 0, -1, 1, 2, 3, 4, 5, 6);
-            for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-                // Reset nextComputeNodeIndex.
-                nextComputeNodeIndex.setRef(0);
-
-                workerProvider =
-                        workerProviderFactory.captureAvailableWorkers(
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false,
-                                numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-
-                for (long id = 0; id < 15; id++) {
-                    ComputeNode worker = workerProvider.getWorkerById(id);
-                    ComputeNode backend = workerProvider.getBackend(id);
-                    // SHARED_DATA MODE considers backends and compute nodes the same.
-                    Assert.assertEquals(backend, worker);
-                    if (nonAvailableWorkerId.contains(id) || !id2ComputeNode.containsKey(id)) {
-                        Assert.assertNull(worker);
-                    } else {
-                        Assert.assertNotNull("id=" + id, worker);
-                        Assert.assertEquals(id, worker.getId());
-                    }
-                }
-            }
-        } finally {
-            Config.run_mode = prevRunMode;
-            RunMode.detectRunMode();
-        }
-    }
-
-    @Test
     public void testSelectWorker() throws UserException {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
@@ -309,6 +225,8 @@ public class DefaultWorkerProviderTest {
 
     private static <C extends ComputeNode> void testGetBackendHelper(DefaultWorkerProvider workerProvider,
                                                                      Map<Long, C> availableId2Worker) {
+        // not allow using backup node
+        Assert.assertFalse(workerProvider.allowUsingBackupNode());
         for (long id = -1; id < 16; id++) {
             ComputeNode backend = workerProvider.getBackend(id);
             boolean isContained = workerProvider.isDataNodeAvailable(id);
@@ -320,6 +238,8 @@ public class DefaultWorkerProviderTest {
                 Assert.assertEquals(availableId2Worker.get(id), backend);
                 Assert.assertTrue(isContained);
             }
+            // chooseBackupNode always returns -1
+            Assert.assertEquals(-1, workerProvider.selectBackupWorker(id));
         }
     }
 

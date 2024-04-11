@@ -91,13 +91,6 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 #endif
     RETURN_IF_ERROR(_get_footer());
 
-    RETURN_IF_ERROR(_build_split_tasks());
-    if (_scanner_ctx->split_tasks.size() > 0) {
-        _scanner_ctx->has_split_tasks = true;
-        _is_file_filtered = true;
-        return Status::OK();
-    }
-
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
     _meta_helper = _build_meta_helper();
@@ -108,7 +101,16 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     if (_is_file_filtered) {
         return Status::OK();
     }
+
     _prepare_read_columns();
+
+    RETURN_IF_ERROR(_build_split_tasks());
+    if (_scanner_ctx->split_tasks.size() > 0) {
+        _scanner_ctx->has_split_tasks = true;
+        _is_file_filtered = true;
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
 }

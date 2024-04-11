@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -53,14 +52,12 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
     private void withPartialScanMv(StarRocksAssert.ExceptionRunnable runner) {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
-                        "DISTRIBUTED BY RANDOM\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 6\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "AS SELECT l_orderkey, l_suppkey, l_shipdate FROM hive0.partitioned_db.lineitem_par as a;",
                 (obj) -> {
                     String mvName = (String) obj;
-                    cluster.runSql(DB_NAME,
-                            String.format("refresh materialized view %s with sync mode", mvName));
-                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    refreshMaterializedViewWithPartition(DB_NAME, mvName, "1998-01-01", "1998-01-05");
                     mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                             ImmutableList.of("l_shipdate=1998-01-02"));
                     runner.run();
@@ -70,15 +67,13 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
     private void withPartialAggregateMv(StarRocksAssert.ExceptionRunnable runner) {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
-                        "DISTRIBUTED BY RANDOM\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 6\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "AS SELECT l_shipdate, l_orderkey, sum(l_suppkey) FROM " +
                         " hive0.partitioned_db.lineitem_par as a GROUP BY l_orderkey, l_shipdate;",
                 (obj) -> {
                     String mvName = (String) obj;
-                    cluster.runSql(DB_NAME,
-                            String.format("refresh materialized view %s with sync mode", mvName));
-                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    refreshMaterializedViewWithPartition(DB_NAME, mvName, "1998-01-01", "1998-01-05");
                     mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                             ImmutableList.of("l_shipdate=1998-01-02"));
                     runner.run();
@@ -88,16 +83,17 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
     private void withPartialJoinMv(StarRocksAssert.ExceptionRunnable runner) {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
-                        "DISTRIBUTED BY RANDOM\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 3\n" +
                         "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"" +
+                        ")\n" +
                         "AS SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
                         "   hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
                         " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate;",
                 (obj) -> {
                     String mvName = (String) obj;
-                    cluster.runSql(DB_NAME,
-                            String.format("refresh materialized view %s with sync mode", mvName));
-                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    refreshMaterializedViewWithPartition(DB_NAME, mvName, "1998-01-01", "1998-01-05");
                     mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                             ImmutableList.of("l_shipdate=1998-01-02"));
                     runner.run();
@@ -116,9 +112,9 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                 String[] expects = {
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     partitions=1/6\n" +
+                                "     partitions=1/4\n" +
                                 "     rollup: mv0\n" +
-                                "     tabletRatio=2/2",
+                                "     tabletRatio=6/6",
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
@@ -153,34 +149,36 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                 };
                 String[] expects = {
                         "     TABLE: lineitem_par\n" +
-                                "     PARTITION PREDICATES: 25: l_shipdate = '1998-01-02'\n" +
-                                "     partitions=1/6",
+                                "     PARTITION PREDICATES: 25: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
+                                "     partitions=2/6",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 22: l_shipdate >= '1998-01-02'\n" +
-                                "     partitions=5/6\n" +
+                                "     partitions=3/4\n" +
                                 "     rollup: mv0\n" +
-                                "     tabletRatio=10/10", // case 1
+                                "     tabletRatio=18/18", // case 1
                         "     TABLE: lineitem_par\n" +
-                                "     PARTITION PREDICATES: 26: l_shipdate != '1998-01-01', 26: l_shipdate = '1998-01-02'\n" +
-                                "     partitions=1/6",
+                                "     PARTITION PREDICATES: 26: l_shipdate != '1998-01-01', 26: l_shipdate " +
+                                "IN ('1998-01-02', '1998-01-05')\n" +
+                                "     partitions=2/6",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 23: l_shipdate != '1998-01-01'\n" +
-                                "     partitions=5/6\n" +
+                                "     partitions=3/4\n" +
                                 "     rollup: mv0\n" +
-                                "     tabletRatio=10/10", // case 2
+                                "     tabletRatio=18/18", // case 2
                         "     TABLE: lineitem_par\n" +
-                                "     PARTITION PREDICATES: 26: l_shipdate >= '1998-01-02', 26: l_shipdate = '1998-01-02'\n" +
+                                "     PARTITION PREDICATES: 26: l_shipdate >= '1998-01-02', 26: l_shipdate " +
+                                "IN ('1998-01-02', '1998-01-05')\n" +
                                 "     NON-PARTITION PREDICATES: 25: l_suppkey > 1\n" +
                                 "     MIN/MAX PREDICATES: 25: l_suppkey > 1\n" +
-                                "     partitions=1/6",
+                                "     partitions=2/6",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 23: l_shipdate >= '1998-01-02', 22: l_suppkey > 1\n" +
-                                "     partitions=5/6\n" +
+                                "     partitions=3/4\n" +
                                 "     rollup: mv0\n" +
-                                "     tabletRatio=10/10", // case 3
+                                "     tabletRatio=18/18", // case 3
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
@@ -206,14 +204,14 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: date_trunc('month', 22: l_shipdate) = '1998-01-01'\n" +
-                                "     partitions=5/6\n" +
+                                "     partitions=3/4\n" +
                                 "     rollup: mv0\n" +
-                                "     tabletRatio=10/10",
+                                "     tabletRatio=18/18",
                         "     TABLE: lineitem_par\n" +
                                 "     PARTITION PREDICATES: date_trunc('month', 25: l_shipdate) = '1998-01-01', " +
-                                "25: l_shipdate = '1998-01-02'\n" +
+                                "25: l_shipdate IN (NULL, '1998-01-02', '1998-01-05')\n" +
                                 "     NO EVAL-PARTITION PREDICATES: date_trunc('month', 25: l_shipdate) = '1998-01-01'\n" +
-                                "     partitions=1/6"
+                                "     partitions=2/6"
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
@@ -296,45 +294,46 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testTransparentRewriteWithJoinMv() {
+    public void testTransparentRewriteWithJoinMv1() {
         withPartialJoinMv(() -> {
-            {
-                String[] sqls = {
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate='1998-01-01';",
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate='1998-01-01' and a.l_suppkey > 100;",
-                };
-                for (String query : sqls) {
-                    String plan = getFragmentPlan(query);
-                    PlanTestBase.assertNotContains(plan, ":UNION");
-                    PlanTestBase.assertContains(plan, "mv0");
-                }
+            String[] sqls = {
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate='1998-01-01';",
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate='1998-01-01' and a.l_suppkey > 100;",
+            };
+            for (String query : sqls) {
+                String plan = getFragmentPlan(query, "MV");
+                PlanTestBase.assertNotContains(plan, ":UNION");
+                PlanTestBase.assertContains(plan, "mv0");
             }
+        });
+    }
 
-            {
-                String[] sqls = {
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate >= '1998-01-01';",
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate != '1998-01-01' and a.l_suppkey > 100;",
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate <= '1998-01-05' and a.l_suppkey > 100;",
-                };
-                for (String query : sqls) {
-                    String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
-                }
+    @Test
+    public void testTransparentRewriteWithJoinMv2() {
+        withPartialJoinMv(() -> {
+            String[] sqls = {
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate >= '1998-01-01';",
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate != '1998-01-01' and a.l_suppkey > 100;",
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate <= '1998-01-05' and a.l_suppkey > 100;",
+            };
+            for (String query : sqls) {
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
             }
         });
     }

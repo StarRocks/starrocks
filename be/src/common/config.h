@@ -960,6 +960,8 @@ CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
+// The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
+CONF_mInt32(lake_compaction_check_valid_interval_minutes, "30"); // 30 minutes
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -978,6 +980,8 @@ CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
+CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
+CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "5");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1059,15 +1063,24 @@ CONF_Bool(datacache_direct_io_enable, "false");
 CONF_Int64(datacache_max_concurrent_inserts, "1500000");
 // Total memory limit for in-flight cache jobs.
 // Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
-CONF_Int64(datacache_max_flying_memory_mb, "256");
-// Whether to use datacache adaptor, which will skip reading cache when disk overload is high.
-CONF_Bool(datacache_adaptor_enable, "true");
-// A factor to control the io traffic between cache and network. The larger this parameter,
-// the more requests will be sent to the network.
+// If zero, the datacache module will automatically calculate a resonable default value based on block size.
+CONF_Int64(datacache_max_flying_memory_mb, "2");
+// An io adaptor factor to control the io traffic between cache and network.
+// The larger this parameter, the more requests will be sent to the network.
 // Usually there is no need to modify it.
-CONF_Int64(datacache_skip_read_factor, "1");
+CONF_Double(datacache_skip_read_factor, "1.0");
 // Whether to use block buffer to hold the datacache block data.
 CONF_Bool(datacache_block_buffer_enable, "true");
+// To control how many threads will be created for datacache synchronous tasks.
+// For the default value, it means for every 8 cpu, one thread will be created.
+CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
+// To control whether cache raw data both in memory and disk.
+// If true, the raw data will be written to the tiered cache composed of memory cache and disk cache,
+// and the memory cache hotter data than disk.
+// If false, the raw data will be written to disk directly and read from disk without promotion.
+// For object data, such as parquet footer object, which can only be cached in memory are not affected
+// by this configuration.
+CONF_Bool(datacache_tiered_cache_enable, "true");
 // DataCache engines, alternatives: cachelib, starcache.
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
@@ -1196,6 +1209,11 @@ CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
 // otherwise, StarRocks will use zone map for one column filter
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
+CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
+CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+CONF_mBool(enable_index_bloom_filter, "true");
+CONF_mBool(enable_index_bitmap_filter, "true");
+
 CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
 
@@ -1256,4 +1274,8 @@ CONF_mInt32(olap_string_max_length, "1048576");
 // if mem_limit < 16 GB, disable JIT.
 // else it = min(mem_limit*0.01, 1GB)
 CONF_mInt64(jit_lru_cache_size, "0");
+
+CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
+CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
+CONF_mInt64(arrow_read_batch_size, "4096");
 } // namespace starrocks::config

@@ -996,7 +996,7 @@ public class AlterJobMgr {
         }
     }
 
-    public AlterHandler getSchemaChangeHandler() {
+    public SchemaChangeHandler getSchemaChangeHandler() {
         return this.schemaChangeHandler;
     }
 

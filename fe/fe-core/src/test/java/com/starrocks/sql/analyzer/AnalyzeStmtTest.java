@@ -93,13 +93,25 @@ public class AnalyzeStmtTest {
         createTblStmtStr = "create table db.tb2(kk1 int, kk2 json) "
                 + "DUPLICATE KEY(kk1) distributed by hash(kk1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
+
+        String createStructTableSql = "CREATE TABLE struct_a(\n" +
+                "a INT, \n" +
+                "b STRUCT<a INT, c INT> COMMENT 'smith',\n" +
+                "c STRUCT<a INT, b DOUBLE>,\n" +
+                "d STRUCT<a INT, b ARRAY<STRUCT<a INT, b DOUBLE>>, c STRUCT<a INT>>,\n" +
+                "struct_a STRUCT<struct_a STRUCT<struct_a INT>, other INT> COMMENT 'alias test'\n" +
+                ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createStructTableSql);
     }
 
     @Test
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertNull(analyzeStmt.getColumnNames());
+        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
     }
 
     @Test
@@ -126,7 +138,26 @@ public class AnalyzeStmtTest {
 
         sql = "analyze table test.t0";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertNull(analyzeStmt.getColumnNames());
+        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+    }
+
+    @Test
+    public void testStructColumns() {
+        String sql = "analyze table db.struct_a (b.a, b.c)";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[b.a, b.c]", analyzeStmt.getColumnNames().toString());
+
+        sql = "analyze table db.struct_a (d.c.a)";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[d.c.a]", analyzeStmt.getColumnNames().toString());
+
+        sql = "analyze table db.struct_a update histogram on b.a, b.c, d.c.a with 256 buckets";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[b.a, b.c, d.c.a]", analyzeStmt.getColumnNames().toString());
+
+        sql = "analyze table db.struct_a drop histogram on b.a, b.c, d.c.a";
+        DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[b.a, b.c, d.c.a]", dropHistogramStmt.getColumnNames().toString());
     }
 
     @Test
@@ -183,6 +214,7 @@ public class AnalyzeStmtTest {
         Table table = testDb.getTable("t0");
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
+                Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
@@ -190,7 +222,8 @@ public class AnalyzeStmtTest {
                 ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), nativeAnalyzeJob).toString());
 
         ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
-                "t1", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                "t1", Lists.newArrayList(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.FINISH,
                 LocalDateTime.MIN);
         Assert.assertEquals("[-1, hive0, partitioned_db, t1, ALL, FULL, ONCE, {}, FINISH, None, ]",
@@ -262,7 +295,7 @@ public class AnalyzeStmtTest {
                         "FROM column_statistics WHERE table_id = %d and column_name = \"v2\" " +
                         "GROUP BY db_id, table_id, column_name"), table.getId(), table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
-                        Lists.newArrayList(v1, v2)));
+                        Lists.newArrayList("v1", "v2"), Lists.newArrayList(v1.getType(), v2.getType())));
 
         Assert.assertEquals(String.format(
                 "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
@@ -411,7 +444,7 @@ public class AnalyzeStmtTest {
                 "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk2\" " +
                 "GROUP BY db_id, table_id, column_name";
         String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
-                Lists.newArrayList(kk1, kk2));
+                Lists.newArrayList("kk1", "kk2"), Lists.newArrayList(kk1.getType(), kk2.getType()));
         Assert.assertTrue(Pattern.matches(pattern, content));
     }
 

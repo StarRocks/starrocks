@@ -136,7 +136,7 @@ public class ExportMgr implements MemoryTrackable {
         return job;
     }
 
-    public ExportJob getExportJob(String dbName, UUID queryId) throws AnalysisException {
+    public ExportJob getExportJob(String dbName, UUID queryId) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();

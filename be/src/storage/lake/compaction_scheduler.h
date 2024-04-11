@@ -31,13 +31,13 @@ class Closure;
 } // namespace google::protobuf
 
 namespace starrocks {
+class CompactRequest;
+class CompactResponse;
 class ThreadPool;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
-class CompactRequest;
-class CompactResponse;
 class CompactionScheduler;
 class CompactionTask;
 class TabletManager;
@@ -49,8 +49,8 @@ class TabletManager;
 // `CompactResponse` will be sent to the FE.
 class CompactionTaskCallback {
 public:
-    explicit CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
-                                    lake::CompactResponse* response, ::google::protobuf::Closure* done);
+    explicit CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
+                                    CompactResponse* response, ::google::protobuf::Closure* done);
 
     ~CompactionTaskCallback();
 
@@ -82,8 +82,8 @@ private:
 
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
-    const lake::CompactRequest* _request;
-    lake::CompactResponse* _response;
+    const CompactRequest* _request;
+    CompactResponse* _response;
     ::google::protobuf::Closure* _done;
     Status _status;
     int64_t _timeout_deadline_ms;
@@ -360,5 +360,7 @@ inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
     }
     DCHECK(*context == nullptr);
 }
+
+bool compaction_should_cancel(CompactionTaskContext* context);
 
 } // namespace starrocks::lake

@@ -495,6 +495,7 @@ struct TColumnAccessPath {
     2: optional Exprs.TExpr path
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
+    5: optional Types.TTypeDesc type_desc
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -749,6 +750,9 @@ struct TAggregationNode {
   27: optional bool use_sort_agg
 
   28: optional bool use_per_bucket_optimize
+
+  // enable runtime limit, pipelines share one limit
+  29: optional bool enable_pipeline_share_limit = false
 }
 
 struct TRepeatNode {

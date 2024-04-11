@@ -40,6 +40,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -67,7 +68,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.HdfsScanNode;
@@ -82,6 +83,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -111,7 +113,6 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -134,6 +135,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.needToRefreshTable;
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 
 /**
@@ -173,7 +176,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         SUCCESS,
         FAILED,
         EMPTY,
-        TOTAL
     }
 
     // for testing
@@ -206,9 +208,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         prepare(context);
 
         Preconditions.checkState(materializedView != null);
-        MaterializedViewMetricsEntity mvEntity =
+        IMaterializedViewMetricsEntity mvEntity =
                 MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(materializedView.getMvId());
-        mvEntity.increaseRefreshJobStatus(RefreshJobStatus.TOTAL);
 
         ConnectContext connectContext = context.getCtx();
         try {
@@ -225,7 +226,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
-    private RefreshJobStatus doMvRefresh(TaskRunContext context, MaterializedViewMetricsEntity mvEntity)
+    private RefreshJobStatus doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity)
             throws Exception {
         int retryNum = 0;
         boolean checked = false;
@@ -406,11 +407,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         InsertStmt insertStmt = generateInsertAst(mvToRefreshedPartitions, materializedView, ctx);
 
         // 4. Analyze and prepare partition
-        List<Database> dbs = Lists.newArrayList(AnalyzerUtils.collectAllDatabase(ctx, insertStmt).values());
-        Locker locker = new Locker();
+        PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
         ExecPlan execPlan = null;
         try {
-            locker.lockDatabases(dbs, LockType.READ);
+            StatementPlanner.lock(locker);
 
             insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView, ctx);
             // Must set execution id before StatementPlanner.plan
@@ -420,7 +420,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);
             throw e;
         } finally {
-            locker.unlockDatabases(dbs, LockType.READ);
+            StatementPlanner.unLock(locker);
         }
 
         QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
@@ -880,10 +880,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MVActiveChecker.tryToActivate(materializedView);
             LOG.info("Activated the MV before refreshing: {}", materializedView.getName());
         }
+
+        IMaterializedViewMetricsEntity mvEntity =
+                MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(materializedView.getMvId());
         if (!materializedView.isActive()) {
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     materializedView.getName(), mvId, materializedView.getInactiveReason());
             LOG.warn(errorMsg);
+            mvEntity.increaseRefreshJobStatus(RefreshJobStatus.FAILED);
             throw new DmlException(errorMsg);
         }
         // wait util transaction is visible for mv refresh task
@@ -1104,10 +1108,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         mvContext.setRefBaseTableListPartitionMap(baseListPartitionMap);
     }
 
-    private boolean needToRefreshTable(Table table) {
-        return CollectionUtils.isNotEmpty(materializedView.getUpdatedPartitionNamesOfTable(table, false));
-    }
-
     private static boolean supportPartitionRefresh(Table table) {
         return ConnectorPartitionTraits.build(table).supportPartitionRefresh();
     }
@@ -1123,7 +1123,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (!supportPartitionRefresh(snapshotTable)) {
                 return true;
             }
-            if (needToRefreshTable(snapshotTable)) {
+            if (needToRefreshTable(materializedView, snapshotTable)) {
                 return true;
             }
         }
@@ -1147,7 +1147,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
-            if (needToRefreshTable(snapshotTable)) {
+            if (needToRefreshTable(materializedView, snapshotTable)) {
                 return true;
             }
         }
@@ -1337,12 +1337,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // step1: check updated partition names in the ref base table and add it to the refresh candidate
-        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(refBaseTable, false);
-        if (updatePartitionNames == null) {
+        MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(materializedView, refBaseTable, false, false);
+        if (mvBaseTableUpdateInfo == null) {
             return mvRangePartitionNames;
         }
 
         // step2: fetch the corresponding materialized view partition names as the need to refresh partitions
+        Set<String> updatePartitionNames = mvBaseTableUpdateInfo.getToRefreshPartitionNames();
         Set<String> result = getMVPartitionNamesByBasePartitionNames(refBaseTable, updatePartitionNames);
         result.retainAll(mvRangePartitionNames);
         return result;

@@ -105,6 +105,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
     if (_need_split) {
         std::vector<BaseTabletSharedPtr> tablets;
         auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
+        // to avoid list tablet metadata by set version_hint
+        tablet_shared_ptr->set_version_hint(_tablet_metadata->version());
         tablets.emplace_back(tablet_shared_ptr);
 
         std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;

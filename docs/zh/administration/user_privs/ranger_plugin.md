@@ -12,7 +12,7 @@ Apache Ranger 提供以下核心模块：
 - Agent Plugin：嵌入到 Hadoop 生态圈组件的 Plugin，定期从 Ranger Admin 拉取安全策略，存储在本地文件中。当用户访问组件时，Plugin 会根据安全策略对请求进行安全评估，将结果反馈给相应组件。
 - User Sync：用于拉取用户和用户组的信息，将用户和用户组的权限数据同步到 Ranger 的数据库中。
 
-除了原生的 RBAC 权限系统，StarRocks 3.1 及后续版本还支持通过 Apache Ranger 来进行访问控制，提供更高层次的数据安全保障。目前 StarRocks 在能力上支持：
+除了原生的 RBAC 权限系统，StarRocks 3.1.9 及后续版本还支持通过 Apache Ranger 来进行访问控制。目前 StarRocks 在能力上支持：
 
 - 通过 Ranger 创建 Access policy、Masking policy、Row-level filter policy。
 - 支持 Ranger 审计日志。
@@ -31,7 +31,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 - 全部使用 Ranger 进行权限管理，在 StarRocks Service 内统一管理内表、外表及所有对象。
 - 全部使用 Ranger 进行权限管理。对于内表及内部对象，在 StarRocks Service 内管理；对于 External Catalog，无需额外创建，直接复用对应外部数据源对应的 Ranger Service。
-- External Catalog 使用 Ranger 进行权限管理，复用外部数据源对应的 Ranger Service；内部对象及内部表在 StarRocks 内部进行授权。
+- External Catalog 使用 Ranger 进行权限管理，复用外部数据源对应的 Ranger Service；内部对象及内部表使用StarRocks 原生 RBAC 鉴权模式，不集成 Ranger。
 
 **权限管理流程：**
 
@@ -49,7 +49,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
   如果显示 `Connected to <ip>`，则表示连接成功。
 
-## 集成过程
+## 在 Ranger 上集成 StarRocks Service
 
 ### 安装 ranger-starrocks-plugin（可选）
 
@@ -73,20 +73,24 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 ### 在 Ranger Admin 上配置 StarRocks Service
 
+:::note
+本步骤的目的是在 Ranger Admin 上配置 StarRocks 服务，通过 Ranger 对 StarRocks 的对象进行权限管控。
+:::
+
 1. 拷贝 [ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
 
    ```SQL
    wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
    ```
 
-  :::note 
-  如果您不需要开启 Ranger 的自动补全功能，即在上一步骤中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
+   :::note
+   如果您不需要开启 Ranger 的自动补全功能，即在上一步骤中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
 
-  ```JSON
-  "implClass": "",
-  ```
+   ```JSON
+   "implClass": "",
+   ```
 
-  :::
+   :::
 
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
@@ -100,7 +104,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    ![home](../../assets/ranger_home.png)
 
-4. 点击 **STARROKCS** 后的加号 (`+`) 配置 StarRocks Service 信息。
+4. 点击 **STARROCKS** 后的加号 (`+`) 配置 StarRocks Service 信息。
 
    ![service config](../../assets/ranger_service_details.png)
 
@@ -152,14 +156,16 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ...
    ```
 
-7. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
+7. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
+
+8. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-8. 重启所有 FE。
+9. 重启所有 FE。
 
    ```SQL
    -- 回到 FE 文件夹内
@@ -173,7 +179,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 对于 External Catalog，可以复用外部 Service（如 Hive Service）实现访问控制。StarRocks 支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外表时，会直接根据对应外表的 Service 来进行访问控制。用户权限与 Ranger 同名用户一致。
 
-1. 将 Hive 的 Ranger 相关配置文件 (`[ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml)` 和 `[ranger-hive-audit.xml]https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml`) 拷贝至所有 FE 机器的 `fe/conf` 文件下。
+1. 将 Hive 的 Ranger 相关配置文件 [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) 和 [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) 拷贝至所有 FE 机器的 `fe/conf` 文件下。
 2. 重启所有 FE。
 3. 配置 Catalog。
 

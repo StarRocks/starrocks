@@ -61,6 +61,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
@@ -99,6 +101,7 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
@@ -503,7 +506,18 @@ public class FileScanNode extends LoadScanNode {
         Preconditions.checkState(fileStatusesList.size() == fileGroups.size());
 
         if (isLoad() && filesAdded == 0) {
-            throw new UserException("No source file in this table(" + targetTable.getName() + ").");
+            // return at most 3 paths to users
+            int limit = 3;
+            List<String> allFilePaths =
+                    fileGroups.stream().map(BrokerFileGroup::getFilePaths).flatMap(List::stream).collect(Collectors.toList());
+            List<String> filePaths = Lists.newArrayList();
+            if (allFilePaths.size() > limit) {
+                filePaths.addAll(allFilePaths.subList(0, limit));
+                filePaths.add("...");
+            } else {
+                filePaths.addAll(allFilePaths);
+            }
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_FILES_FOUND, String.join(", ", filePaths));
         }
 
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {
