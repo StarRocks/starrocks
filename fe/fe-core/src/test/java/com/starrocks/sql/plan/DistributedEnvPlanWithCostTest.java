@@ -1513,4 +1513,63 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertCContains(plan, "C_NAME-->[-Infinity, Infinity, 0.0, 25.0, 600000.0] ESTIMATE",
                 "C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testOneTabletDistinctAgg() throws Exception {
+        String sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: sum), group_concat(2: name, ',')\n" +
+                "  |  group by: 1: id\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(1: id)\n" +
+                "  |  group by: 1: id, 2: name\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: skew_table");
+
+        sql = "select n_name,count(distinct n_regionkey,n_name) from nation group by n_name";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "6:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(6: count)\n" +
+                "  |  group by: 2: N_NAME\n" +
+                "  |  \n" +
+                "  5:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    HASH_PARTITIONED: 2: N_NAME\n" +
+                "\n" +
+                "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(if(3: N_REGIONKEY IS NULL, NULL, 2: N_NAME))\n" +
+                "  |  group by: 2: N_NAME\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "  |  \n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    HASH_PARTITIONED: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "\n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+>>>>>>> 654fe83fba ([BugFix] fix One tablet property cause multi stage agg result wrong (#43842))
 }
