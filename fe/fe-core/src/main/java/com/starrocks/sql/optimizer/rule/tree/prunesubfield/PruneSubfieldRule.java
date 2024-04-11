@@ -175,6 +175,10 @@ public class PruneSubfieldRule extends TransformationRule {
             visit(cast.getChild(0), context);
             if (cast.getChild(0).getType().isJsonType() && (cast.getChild(0) instanceof CallOperator)) {
                 CallOperator childCall = cast.getChild(0).cast();
+                if (!FunctionSet.JSON_QUERY.equalsIgnoreCase(childCall.getFnName()) &&
+                        childCall.getChildren().size() != 2) {
+                    return cast;
+                }
                 if (SUPPORT_GET_TYPE.containsKey(cast.getType().getPrimitiveType())) {
                     Function func = SUPPORT_GET_TYPE.get(cast.getType().getPrimitiveType());
                     return new CallOperator(func.functionName(), cast.getType(), childCall.getChildren(), func);

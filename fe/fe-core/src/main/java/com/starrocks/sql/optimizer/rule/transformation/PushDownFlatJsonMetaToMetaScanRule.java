@@ -19,11 +19,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -31,7 +29,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -84,12 +81,8 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
-
-
-        Map<ColumnRefOperator, ScalarOperator> projectMapping = Maps.newHashMap();
 
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         List<ColumnRefOperator> newAggGroupBys = Lists.newArrayList();
@@ -99,19 +92,17 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
 
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : agg.getAggregations().entrySet()) {
             CallOperator aggCall = kv.getValue();
+            ColumnRefOperator metaRef = kv.getKey();
             if (!aggCall.getFnName().equals(FunctionSet.FLAT_JSON_META)) {
                 newAggCalls.put(kv.getKey(), kv.getValue());
-                projectMapping.put(kv.getKey(), kv.getKey());
                 continue;
             }
             ColumnRefOperator usedColumn = aggCall.getColumnRefs().get(0);
             String metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
-            ColumnRefOperator metaRef = columnRefFactory.create(metaColumnName, Type.ARRAY_VARCHAR, false);
             aggColumnIdToNames.put(metaRef.getId(), metaColumnName);
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
             newScanColumnRefs.put(metaRef, c);
             newAggGroupBys.add(metaRef);
-            projectMapping.put(kv.getKey(), metaRef);
         }
 
         LogicalMetaScanOperator newMetaScan =
@@ -120,9 +111,7 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
                 agg.getType(), newAggGroupBys, newAggCalls);
 
-        LogicalProjectOperator newProject = new LogicalProjectOperator(projectMapping);
         // all used columns from aggCalls are from newMetaScan, we can remove the old project directly.
-        return Lists.newArrayList(OptExpression.create(newProject,
-                OptExpression.create(newAggOperator, OptExpression.create(newMetaScan))));
+        return Lists.newArrayList(OptExpression.create(newAggOperator, OptExpression.create(newMetaScan)));
     }
 }

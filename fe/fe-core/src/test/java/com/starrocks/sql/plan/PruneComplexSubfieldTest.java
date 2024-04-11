@@ -1095,6 +1095,10 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select cast(j1->'a' as bigint) from js0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "get_json_int(2: j1, 'a')");
+
+        sql = "select 1 from js0 where CAST(PARSE_JSON('')  AS STRING) = 'asdf'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(parse_json('') AS VARCHAR(65533)) = 'asdf'");
     }
 
     @Test
@@ -1102,5 +1106,12 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select get_json_bool(j1, 'a') from js0";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+    }
+
+    @Test
+    public void testJsonBigintDouble() throws Exception {
+        String sql = "select get_json_int(j1, 'a'), get_json_double(j1, 'a') from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a(double)]");
     }
 }
