@@ -31,6 +31,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
@@ -117,19 +118,34 @@ public class MvPartitionCompensator {
     public static MVCompensation getMvCompensation(OptExpression queryPlan,
                                                    MaterializationContext mvContext) {
         SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
-        Set<String> mvPartitionNameToRefresh = mvContext.getMvPartitionNamesToRefresh();
+        MvUpdateInfo mvUpdateInfo = mvContext.getMvUpdateInfo();
+        Set<String> mvPartitionNameToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
         // If mv contains no partitions to refresh, no need compensate
         if (Objects.isNull(mvPartitionNameToRefresh) || mvPartitionNameToRefresh.isEmpty()) {
+            logMVRewrite(mvContext, "MV has no partitions to refresh, no need compensate");
             return MVCompensation.createNoCompensateState(sessionVariable);
         }
+
+        // If no partition table and columns, no need compensate
+        MaterializedView mv = mvContext.getMv();
+        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        if (partitionTableAndColumns == null) {
+            logMVRewrite(mvContext, "MV's partition table and columns is null, unknown state");
+            return MVCompensation.createUnkownState(sessionVariable);
+        }
+        Table refBaseTable = partitionTableAndColumns.first;
+
         // If ref table contains no partitions to refresh, no need compensate.
         // If the mv is partitioned and non-ref table need refresh, then all partitions need to be refreshed,
         // it can not be a candidate.
-        Set<String> refTablePartitionNameToRefresh = mvContext.getRefTableUpdatePartitionNames();
-        if (Objects.isNull(refTablePartitionNameToRefresh) || refTablePartitionNameToRefresh.isEmpty()) {
-            // NOTE: This should not happen: `mvPartitionNameToRefresh` is not empty, so `refTablePartitionNameToRefresh`
-            // should not empty. Return true in the situation to avoid bad cases.
+        Set<String> refTablePartitionNameToRefresh = mvUpdateInfo.getBaseTableToRefreshPartitionNames(refBaseTable);
+        if (refTablePartitionNameToRefresh == null) {
+            logMVRewrite(mvContext, "MV's ref base to refresh partition is null, unknown state");
             return MVCompensation.createUnkownState(sessionVariable);
+        }
+        if (refTablePartitionNameToRefresh.isEmpty()) {
+            logMVRewrite(mvContext, "MV's ref base to refresh partition is empty, no need compensate");
+            return MVCompensation.createNoCompensateState(sessionVariable);
         }
 
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryPlan);
@@ -141,15 +157,7 @@ public class MvPartitionCompensator {
             return MVCompensation.createUnkownState(sessionVariable);
         }
 
-        // If no partition table and columns, no need compensate
-        MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
-        if (partitionTableAndColumns == null) {
-            return MVCompensation.createUnkownState(sessionVariable);
-        }
-
         // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
-        Table refBaseTable = partitionTableAndColumns.first;
         LogicalScanOperator refScanOperator = getRefBaseTableScanOperator(scanOperators, refBaseTable);
         if (refScanOperator == null) {
             return MVCompensation.createUnkownState(sessionVariable);
@@ -159,6 +167,7 @@ public class MvPartitionCompensator {
         // If table's not partitioned, no need compensate
         if (table.isUnPartitioned()) {
             // TODO: Support this later.
+            logMVRewrite(mvContext, "MV's is un-partitioned, unknown state");
             return MVCompensation.createUnkownState(sessionVariable);
         }
 
@@ -294,6 +303,7 @@ public class MvPartitionCompensator {
         }
         return refTableCompensatePartitionKeys;
     }
+
     /**
      * Get all refreshed partitions' plan of the materialized view.
      * @param mvContext: materialized view context
@@ -335,6 +345,10 @@ public class MvPartitionCompensator {
         }
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvContext);
         OptExpression newMvQueryPlan = duplicator.duplicate(compensateMvQueryPlan);
+        if (newMvQueryPlan == null) {
+            logMVRewrite(mvContext, "Duplicate compensate query plan failed");
+            return null;
+        }
         deriveLogicalProperty(newMvQueryPlan);
         List<ColumnRefOperator> orgMvQueryOutputColumnRefs = mvContext.getMvOutputColumnRefs();
         List<ColumnRefOperator> mvQueryOutputColumnRefs = duplicator.getMappedColumns(orgMvQueryOutputColumnRefs);
@@ -408,7 +422,7 @@ public class MvPartitionCompensator {
     public static OptExpression getMvTransparentPlan(MaterializationContext mvContext,
                                                      MVCompensation mvCompensation,
                                                      List<ColumnRefOperator> expectOutputColumns) {
-        Preconditions.checkState(mvCompensation.isTransparentRewrite());
+        Preconditions.checkState(mvCompensation.getState().isCompensate());
         final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
         final MaterializedView mv = mvContext.getMv();
         final List<ColumnRefOperator> originalOutputColumns = expectOutputColumns == null ?

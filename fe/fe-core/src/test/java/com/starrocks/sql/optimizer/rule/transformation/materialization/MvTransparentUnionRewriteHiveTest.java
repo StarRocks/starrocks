@@ -307,7 +307,7 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                             "WHERE a.l_shipdate='1998-01-01' and a.l_suppkey > 100;",
             };
             for (String query : sqls) {
-                String plan = getFragmentPlan(query);
+                String plan = getFragmentPlan(query, "MV");
                 PlanTestBase.assertNotContains(plan, ":UNION");
                 PlanTestBase.assertContains(plan, "mv0");
             }
