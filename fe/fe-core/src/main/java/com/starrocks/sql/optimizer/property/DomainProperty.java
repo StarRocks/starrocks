@@ -57,48 +57,48 @@ public class DomainProperty {
     }
 
     public DomainProperty projectDomainProperty(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
-        Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap();
+        Map<ScalarOperator, DomainWrapper> newDomainMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
             if (domainMap.containsKey(entry.getValue()) && !entry.getValue().equals(entry.getKey())) {
                 ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(entry.getValue(), entry.getKey()));
                 ScalarOperator rewriteResult = shuttle.rewrite(domainMap.get(entry.getValue()).getPredicateDesc());
-                newValueMap.put(entry.getKey(), new DomainWrapper(rewriteResult));
+                newDomainMap.put(entry.getKey(), new DomainWrapper(rewriteResult));
             }
         }
         ColumnRefSet outputCols = new ColumnRefSet(columnRefMap.keySet());
         for (Map.Entry<ScalarOperator, DomainWrapper> entry : domainMap.entrySet()) {
-            if (!newValueMap.containsKey(entry.getKey()) && outputCols.containsAll(entry.getKey().getUsedColumns())) {
-                newValueMap.put(entry.getKey(), entry.getValue());
+            if (!newDomainMap.containsKey(entry.getKey()) && outputCols.containsAll(entry.getKey().getUsedColumns())) {
+                newDomainMap.put(entry.getKey(), entry.getValue());
             }
         }
-        return new DomainProperty(newValueMap);
+        return new DomainProperty(newDomainMap);
     }
 
     public DomainProperty filterDomainProperty(DomainProperty filterDomainProperty) {
-        Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap(domainMap);
+        Map<ScalarOperator, DomainWrapper> newDomainMap = Maps.newHashMap(domainMap);
 
         for (Map.Entry<ScalarOperator, DomainWrapper> entry : filterDomainProperty.domainMap.entrySet()) {
             if (domainMap.containsKey(entry.getKey())) {
-                newValueMap.put(entry.getKey(), domainMap.get(entry.getKey()).andValueWrapper(entry.getValue()));
+                newDomainMap.put(entry.getKey(), domainMap.get(entry.getKey()).andValueWrapper(entry.getValue()));
             } else {
-                newValueMap.put(entry.getKey(), entry.getValue());
+                newDomainMap.put(entry.getKey(), entry.getValue());
             }
         }
-        return new DomainProperty(newValueMap);
+        return new DomainProperty(newDomainMap);
     }
 
     public static DomainProperty mergeDomainProperty(List<DomainProperty> domainPropertyList) {
-        Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap();
+        Map<ScalarOperator, DomainWrapper> newDomainMap = Maps.newHashMap();
         for (DomainProperty domainProperty : domainPropertyList) {
             for (Map.Entry<ScalarOperator, DomainWrapper> entry : domainProperty.domainMap.entrySet()) {
-                if (newValueMap.containsKey(entry.getKey())) {
-                    newValueMap.put(entry.getKey(), newValueMap.get(entry.getKey()).orValueWrapper(entry.getValue()));
+                if (newDomainMap.containsKey(entry.getKey())) {
+                    newDomainMap.put(entry.getKey(), newDomainMap.get(entry.getKey()).orValueWrapper(entry.getValue()));
                 } else {
-                    newValueMap.put(entry.getKey(), entry.getValue());
+                    newDomainMap.put(entry.getKey(), entry.getValue());
                 }
             }
         }
-        return new DomainProperty(newValueMap);
+        return new DomainProperty(newDomainMap);
     }
 
     public static class DomainWrapper {

@@ -187,20 +187,20 @@ public class LogicalAggregationOperator extends LogicalOperator {
         }
         DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
 
-        Map<ScalarOperator, DomainProperty.DomainWrapper> newValueMap = Maps.newHashMap();
+        Map<ScalarOperator, DomainProperty.DomainWrapper> newDomainMap = Maps.newHashMap();
         for (ColumnRefOperator groupByKey : groupingKeys) {
             if (childDomainProperty.contains(groupByKey)) {
-                newValueMap.put(groupByKey, childDomainProperty.getValueWrapper(groupByKey));
+                newDomainMap.put(groupByKey, childDomainProperty.getValueWrapper(groupByKey));
             }
         }
 
         ColumnRefSet groupByCols = new ColumnRefSet(groupingKeys);
         for (Map.Entry<ScalarOperator, DomainProperty.DomainWrapper> entry : childDomainProperty.getDomainMap().entrySet()) {
-            if (!newValueMap.containsKey(entry.getKey()) && groupByCols.containsAll(entry.getKey().getUsedColumns())) {
-                newValueMap.put(entry.getKey(), entry.getValue());
+            if (!newDomainMap.containsKey(entry.getKey()) && groupByCols.containsAll(entry.getKey().getUsedColumns())) {
+                newDomainMap.put(entry.getKey(), entry.getValue());
             }
         }
-        DomainProperty domainProperty = new DomainProperty(newValueMap);
+        DomainProperty domainProperty = new DomainProperty(newDomainMap);
         if (predicate != null) {
             DomainPropertyDeriver deriver = new DomainPropertyDeriver();
             DomainProperty property = deriver.derive(predicate);
