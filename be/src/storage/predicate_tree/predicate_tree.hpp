@@ -351,4 +351,23 @@ inline Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate_or(CompoundN
     return Status::OK();
 }
 
+// ------------------------------------------------------------------------------------
+// CompoundNodeContext
+// ------------------------------------------------------------------------------------
+
+template <CompoundNodeType Type>
+const ColumnPredicateMap& CompoundNodeContext::cid_to_col_preds(const PredicateCompoundNode<Type>& node) const {
+    if (_cached_cid_to_col_preds.has_value()) {
+        return _cached_cid_to_col_preds.value();
+    }
+
+    auto& cid_to_col_preds = _cached_cid_to_col_preds.emplace();
+    for (const auto& [cid, col_children] : node.col_children_map()) {
+        for (const auto& child : col_children) {
+            cid_to_col_preds[cid].emplace_back(child.col_pred());
+        }
+    }
+    return cid_to_col_preds;
+}
+
 } // namespace starrocks

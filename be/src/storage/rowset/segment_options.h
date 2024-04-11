@@ -53,7 +53,7 @@ public:
     std::vector<SeekRange> ranges;
 
     PredicateTree pred_tree;
-    std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+    PredicateTree pred_tree_for_zone_map;
 
     DisjunctivePredicates delete_predicates;
 

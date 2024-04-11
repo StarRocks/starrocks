@@ -77,8 +77,8 @@ public:
     ordinal_t num_rows() const override { return _num_rows; }
 
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override;
+                                                    const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                    CompoundNodeType pred_relation) override;
 
     bool all_page_dict_encoded() const override { return false; }
 

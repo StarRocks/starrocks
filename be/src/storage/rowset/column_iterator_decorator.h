@@ -46,8 +46,9 @@ public:
     ordinal_t get_current_ordinal() const override { return _parent->get_current_ordinal(); }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override {
-        return _parent->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation) override {
+        return _parent->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation);
     }
 
     Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,

@@ -472,7 +472,8 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 auto iter = _del_predicates.find(cid);
                 del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
                 SparseRange<> r;
-                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
+                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
+                                                                                   CompoundNodeType::AND));
                 size_t prev_size = _scan_range.span_size();
                 SparseRange<> res;
                 res.set_sorted(_scan_range.is_sorted());
@@ -807,6 +808,78 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
     return res;
 }
 
+struct ZoneMapFilterEvaluator {
+    template <CompoundNodeType Type>
+    StatusOr<std::optional<SparseRange<>>> operator()(const PredicateCompoundNode<Type>& node) {
+        std::optional<SparseRange<>> row_ranges = std::nullopt;
+
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            const auto iter = del_preds.find(cid);
+            const ColumnPredicate* del_pred = iter != del_preds.end() ? &(iter->second) : nullptr;
+
+            SparseRange<> cur_row_ranges;
+            RETURN_IF_ERROR(
+                    column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges, Type));
+            _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
+        }
+
+        if constexpr (Type == CompoundNodeType::AND) {
+            if (!has_apply_only_del_columns) {
+                has_apply_only_del_columns = true;
+
+                for (const auto& cid : del_columns) {
+                    if (cid_to_col_preds.contains(cid)) {
+                        continue;
+                    }
+
+                    const auto iter = del_preds.find(cid);
+                    if (iter == del_preds.end()) {
+                        continue;
+                    }
+                    const ColumnPredicate* del_pred = &(iter->second);
+
+                    SparseRange<> cur_row_ranges;
+                    RETURN_IF_ERROR(
+                            column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges, Type));
+                    _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
+                }
+            }
+        }
+
+        for (const auto& child : node.compound_children()) {
+            ASSIGN_OR_RETURN(auto cur_row_ranges_opt, child.visit(*this));
+            if (cur_row_ranges_opt.has_value()) {
+                _merge_row_ranges<Type>(row_ranges, cur_row_ranges_opt.value());
+            }
+        }
+
+        return row_ranges;
+    }
+
+    template <CompoundNodeType Type>
+    void _merge_row_ranges(std::optional<SparseRange<>>& dest, SparseRange<>& source) {
+        if (!dest.has_value()) {
+            dest = std::move(source);
+        } else {
+            if constexpr (Type == CompoundNodeType::AND) {
+                dest.value() &= source;
+            } else {
+                dest.value() |= source;
+            }
+        }
+    }
+
+    const PredicateTree& pred_tree;
+    std::vector<std::unique_ptr<ColumnIterator>>& column_iterators;
+
+    const std::map<ColumnId, ColumnOrPredicate>& del_preds;
+    const std::set<ColumnId>& del_columns;
+    bool has_apply_only_del_columns = false;
+};
+
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
     RETURN_IF(!config::enable_index_page_level_zonemap_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
@@ -821,9 +894,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // `c1=1 and c2=100` and `c1=100 and c2=200`, the group result
     // will be a mapping of `c1` to predicate `c1=1 or c1=100` and a
     // mapping of `c2` to predicate `c2=100 or c2=200`.
-    std::set<ColumnId> columns;
-    _opts.delete_predicates.get_column_ids(&columns);
-    for (ColumnId cid : columns) {
+    std::set<ColumnId> del_columns;
+    _opts.delete_predicates.get_column_ids(&del_columns);
+    for (ColumnId cid : del_columns) {
         std::vector<const ColumnPredicate*> preds;
         for (size_t i = 0; i < _opts.delete_predicates.size(); i++) {
             _opts.delete_predicates[i].predicates_of_column(cid, &preds);
@@ -835,26 +908,14 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // -------------------------------------------------------------
     // prune data pages by zone map index.
     // -------------------------------------------------------------
-    for (const auto& pair : _cid_to_predicates) {
-        columns.insert(pair.first);
+
+    ASSIGN_OR_RETURN(auto hit_row_ranges,
+                     _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
+                             _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates, del_columns}));
+    if (hit_row_ranges.has_value()) {
+        zm_range &= hit_row_ranges.value();
     }
 
-    std::vector<const ColumnPredicate*> query_preds;
-    for (ColumnId cid : columns) {
-        auto iter1 = _opts.predicates_for_zone_map.find(cid);
-        if (iter1 != _opts.predicates_for_zone_map.end()) {
-            query_preds = iter1->second;
-        } else {
-            query_preds.clear();
-        }
-
-        const ColumnPredicate* del_pred;
-        auto iter = _del_predicates.find(cid);
-        del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
-        SparseRange<> r;
-        RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(query_preds, del_pred, &r));
-        zm_range = zm_range.intersection(r);
-    }
     StarRocksMetrics::instance()->segment_rows_read_by_zone_map.increment(zm_range.span_size());
     size_t prev_size = _scan_range.span_size();
     _scan_range = _scan_range.intersection(zm_range);
