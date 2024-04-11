@@ -1304,7 +1304,7 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalHistogramStatsMetaAndData(
                     StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table, columns);
-            GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
+            GlobalStateMgr.getCurrentStatisticStorage().expireConnectorHistogramStatistics(table, columns);
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());

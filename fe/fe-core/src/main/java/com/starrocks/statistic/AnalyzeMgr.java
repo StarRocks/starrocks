@@ -382,11 +382,11 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
+        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorHistogramStatistics(table, columns);
         if (async) {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columns);
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorHistogramStatistics(table, columns);
         } else {
-            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
         }
     }
 

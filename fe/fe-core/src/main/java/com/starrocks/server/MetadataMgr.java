@@ -427,7 +427,7 @@ public class MetadataMgr {
                 GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columnNames);
 
         Map<String, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
+                GlobalStateMgr.getCurrentStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
 
         Statistics.Builder statistics = Statistics.builder();
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
