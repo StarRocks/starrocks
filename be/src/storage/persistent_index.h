@@ -702,6 +702,14 @@ public:
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   IOStat* stat = nullptr);
 
+    // batch replace without return old values
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |replace_indexes|: The index of the |keys| array that need to replace.
+    virtual Status replace(size_t n, const Slice* keys, const IndexValue* values,
+                           const std::vector<uint32_t>& replace_indexes);
+
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer

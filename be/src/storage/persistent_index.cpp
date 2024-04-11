@@ -3797,6 +3797,13 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     return _flush_advance_or_append_wal(n, keys, nullptr, nullptr);
 }
 
+Status PersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
+                                const std::vector<uint32_t>& replace_idxes) {
+    std::vector<size_t> tmp_replace_idxes(replace_idxes.begin(), replace_idxes.end());
+    RETURN_IF_ERROR(_l0->replace(keys, values, tmp_replace_idxes));
+    return _flush_advance_or_append_wal(n, keys, values, &tmp_replace_idxes);
+}
+
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                                      const std::vector<uint32_t>& src_rssid,
                                                      std::vector<uint32_t>* failed) {
