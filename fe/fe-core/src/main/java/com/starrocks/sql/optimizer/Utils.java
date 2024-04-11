@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -52,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
@@ -768,5 +770,27 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    public static void calculateStatistics(OptExpression expr, OptimizerContext context) {
+        for (OptExpression child : expr.getInputs()) {
+            calculateStatistics(child, context);
+        }
+        // Do not calculate statistics for LogicalTreeAnchorOperator
+        if (expr.getOp() instanceof LogicalTreeAnchorOperator) {
+            return;
+        }
+
+        ExpressionContext expressionContext = new ExpressionContext(expr);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
+                expressionContext, context.getColumnRefFactory(), context);
+        try {
+            statisticsCalculator.estimatorStats();
+        } catch (Exception e) {
+            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            return;
+        }
+
+        expr.setStatistics(expressionContext.getStatistics());
     }
 }
