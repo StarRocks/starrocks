@@ -170,16 +170,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         }
     }
 
-    // Note: ignore the parameter "base_tablet_id" of `TCreateTabletReq`, because we don't support linked schema
-    // change, there is no need to keep the column unique id consistent between the new tablet and base tablet.
-    std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-    uint32_t next_unique_id = req.tablet_schema.columns.size();
-    for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
-        col_idx_to_unique_id[col_idx] = col_idx;
-    }
-    RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-            req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
-            req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
+    auto compress_type = req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME;
+    RETURN_IF_ERROR(
+            convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));
     if (req.create_schema_file) {
         RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     }
@@ -505,19 +498,18 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     return schema;
 }
 
-StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_id, int64_t index_id) {
-    auto global_cache_key = global_schema_cache_key(index_id);
+StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id) {
+    auto global_cache_key = global_schema_cache_key(schema_id);
     auto schema = _metacache->lookup_tablet_schema(global_cache_key);
     TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.1", &schema);
     if (schema != nullptr) {
         return schema;
     }
     // else: Cache miss, read the schema file
-    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(index_id));
+    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
     auto schema_or = load_and_parse_schema_file(schema_file_path);
     TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.2", &schema_or);
     if (schema_or.ok()) {
-        VLOG(3) << "Got tablet schema of id " << index_id << " for tablet " << tablet_id;
         schema = std::move(schema_or).value();
         // Save the schema into the in-memory cache, use the schema id as the cache key
         _metacache->cache_tablet_schema(global_cache_key, schema, 0 /*TODO*/);
