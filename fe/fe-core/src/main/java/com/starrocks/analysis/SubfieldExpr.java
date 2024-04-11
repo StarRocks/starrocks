@@ -99,25 +99,6 @@ public class SubfieldExpr extends Expr {
     public boolean isSelfMonotonic() {
         return children.get(0).isSelfMonotonic();
     }
-<<<<<<< HEAD
-=======
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        SubfieldExpr that = (SubfieldExpr) o;
-        return Objects.equals(fieldNames, that.fieldNames) && this.copyFlag == that.copyFlag;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), fieldNames, copyFlag);
-    }
 
     public String getPath() {
         String childPath = getChildPath();
@@ -130,5 +111,4 @@ public class SubfieldExpr extends Expr {
         }
         return children.get(0).toSqlImpl();
     }
->>>>>>> a75d40ce2a ([Enhancement] Support analyze subfield of struct type (#43551))
 }

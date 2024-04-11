@@ -340,16 +340,11 @@ public class StatisticExecutor {
                 ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
                         db.getFullName(), table.getName(), statsJob.getColumnNames(), statsJob.getType(),
                         analyzeStatus.getStartTime(), statsJob.getProperties());
-<<<<<<< HEAD
-                GlobalStateMgr.getCurrentAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
-                        db.getFullName(), table.getName(), statsJob.getColumns(), refreshAsync);
-=======
+
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                         .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
                                 db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
->>>>>>> a75d40ce2a ([Enhancement] Support analyze subfield of struct type (#43551))
             }
         }
         return analyzeStatus;

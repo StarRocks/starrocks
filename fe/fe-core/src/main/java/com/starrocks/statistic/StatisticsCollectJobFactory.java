@@ -229,12 +229,8 @@ public class StatisticsCollectJobFactory {
     }
 
     private static void createExternalAnalyzeJob(List<StatisticsCollectJob> allTableJobMap, ExternalAnalyzeJob job,
-<<<<<<< HEAD
-                                                 Database db, Table table, List<String> columns)  {
-=======
                                                  Database db, Table table, List<String> columnNames,
                                                  List<Type> columnTypes) {
->>>>>>> a75d40ce2a ([Enhancement] Support analyze subfield of struct type (#43551))
         if (table == null) {
             return;
         }
@@ -270,11 +266,7 @@ public class StatisticsCollectJobFactory {
                 columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
             }
             List<ConnectorTableColumnStats> columnStatisticList =
-<<<<<<< HEAD
-                    GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
-=======
-                    GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columnNames);
->>>>>>> a75d40ce2a ([Enhancement] Support analyze subfield of struct type (#43551))
+                    GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columnNames);
             List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
                     filter(columnStatistic -> !columnStatistic.isUnknown()).collect(Collectors.toList());
 

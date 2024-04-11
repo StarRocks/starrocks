@@ -124,15 +124,9 @@ public class StatisticAutoCollector extends FrontendDaemon {
         }
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
-<<<<<<< HEAD
-                Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(),
-                ScheduleStatus.PENDING, LocalDateTime.MIN);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(nativeAnalyzeJob);
-=======
                 Collections.emptyList(), Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE,
                 Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(nativeAnalyzeJob);
->>>>>>> a75d40ce2a ([Enhancement] Support analyze subfield of struct type (#43551))
     }
 
     private boolean checkoutAnalyzeTime(LocalTime now) {
