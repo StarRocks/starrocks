@@ -57,7 +57,7 @@ protected:
 };
 
 template <typename Derived>
-class PredicateBaseNodeHelper : public PredicateBaseNode {
+class PredicateNodeFactory : public PredicateBaseNode {
 public:
     template <typename Vistor, typename... Args>
     auto visit(Vistor&& visitor, Args&&... args) const {
@@ -74,7 +74,7 @@ private:
     const Derived* derived() const { return static_cast<const Derived*>(this); }
 };
 
-class PredicateColumnNode final : public PredicateBaseNodeHelper<PredicateColumnNode> {
+class PredicateColumnNode final : public PredicateNodeFactory<PredicateColumnNode> {
 public:
     explicit PredicateColumnNode(const ColumnPredicate* col_pred) : _col_pred(DCHECK_NOTNULL(col_pred)) {}
 
@@ -101,7 +101,7 @@ struct CompoundNodeTraits<CompoundNodeType::OR> {
 };
 
 template <CompoundNodeType Type>
-class PredicateCompoundNode final : public PredicateBaseNodeHelper<PredicateCompoundNode<Type>> {
+class PredicateCompoundNode final : public PredicateNodeFactory<PredicateCompoundNode<Type>> {
 public:
     static constexpr auto DualType = CompoundNodeTraits<Type>::DualType;
 
