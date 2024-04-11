@@ -14,14 +14,14 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -57,24 +57,23 @@ public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
-                                                   List<String> columnNames) {
+                                                   List<String> columnNames) throws AnalysisException {
         if (table == null) {
             // Statistical information query is an unlocked operation,
             // so it is possible for the table to be deleted while the code is running
             return Collections.emptyList();
         }
-        List<Column> columns = Lists.newArrayList();
+        List<Type> columnTypes = Lists.newArrayList();
         for (String colName : columnNames) {
-            Column column = table.getColumn(colName);
-            Preconditions.checkState(column != null);
-            columns.add(column);
+            columnTypes.add(StatisticUtils.getQueryStatisticsColumnType(table, colName));
         }
-        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(tableUUID, columns);
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(tableUUID, columnNames, columnTypes);
         return executeStatisticDQL(context, sql);
     }
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context,
-                                                   Long dbId, Long tableId, List<String> columnNames) {
+                                                   Long dbId, Long tableId, List<String> columnNames)
+            throws AnalysisException {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
@@ -103,14 +102,12 @@ public class StatisticExecutor {
                 return Collections.emptyList();
             }
 
-            List<Column> columns = Lists.newArrayList();
+            List<Type> columnTypes = Lists.newArrayList();
             for (String colName : columnNames) {
-                Column column = table.getColumn(colName);
-                Preconditions.checkState(column != null);
-                columns.add(column);
+                columnTypes.add(StatisticUtils.getQueryStatisticsColumnType(table, colName));
             }
 
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columns);
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames, columnTypes);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }

@@ -139,4 +139,16 @@ public class SubfieldOperator extends ScalarOperator {
     public ColumnRefSet getUsedColumns() {
         return getChild(0).getUsedColumns();
     }
+
+    public String getPath() {
+        String childPath = getChildPath();
+        return childPath + "." + Joiner.on('.').join(fieldNames);
+    }
+
+    private String getChildPath() {
+        if (children.get(0) instanceof ColumnRefOperator) {
+            return ((ColumnRefOperator) children.get(0)).getName();
+        }
+        return children.get(0).toString();
+    }
 }

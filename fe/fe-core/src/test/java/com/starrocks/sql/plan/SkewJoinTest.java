@@ -17,7 +17,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
+import com.starrocks.statistic.MockHistogramStatisticStorage;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -38,7 +38,7 @@ public class SkewJoinTest extends PlanTestBase {
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
 
         int scale = 100;
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
@@ -187,17 +187,52 @@ public class SkewJoinTest extends PlanTestBase {
         String sql = "select struct_tbl.c0, struct_tbl.c2.a, t3.c2 from default_catalog.test.struct_tbl " +
                 "join[skew|test.struct_tbl.c1.a(1,2)] hive0.partitioned_db.t3 on c1.a = t3.c1 ";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "1:Project\n" +
-                "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN " +
-                "24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: round ELSE 0 END\n" +
-                "  |  <slot 18> : 2: c1.a[true]\n" +
-                "  |  <slot 19> : 3: c2.a[false]\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 21> : 2: c1.a[true]\n" +
-                "  |  <slot 22> : rand()\n" +
-                "  |  <slot 23> : 22: rand * 1000.0\n" +
-                "  |  <slot 24> : round(23: multiply)");
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 11: rand_col = 18: rand_col\n" +
+                "  |  equal join conjunct: 10: expr = 5: c1");
+        // exchange join on predicate child
+        sql = "select struct_tbl.c0, struct_tbl.c2.a, t3.c2 from default_catalog.test.struct_tbl " +
+                "join[skew|test.struct_tbl.c1.a(1,2)] hive0.partitioned_db.t3 on t3.c1 = c1.a";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 11: rand_col = 18: rand_col\n" +
+                "  |  equal join conjunct: 10: expr = 5: c1");
+        // will add cast at the predicate
+        sql = "select struct_tbl.c0, struct_tbl.c2.a, t0.v2 from default_catalog.test.struct_tbl " +
+                "join[skew|test.struct_tbl.c1.a(1,2)] test.t0 on c1.a = t0.v1 ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                "  |  equal join conjunct: 9: cast = 5: v1");
+
+        sql = "select struct_tbl.c0, struct_tbl.c2.a, t0.v2 from default_catalog.test.struct_tbl " +
+                "join[skew|test.struct_tbl.c1.a(1,2)] test.t0 on t0.v1 = c1.a ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                "  |  equal join conjunct: 9: cast = 5: v1",
+                "<slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: " +
+                        "round ELSE 0 END");
+    }
+
+    @Test
+    public void testSkewJoinWithStructTypeStats() throws Exception {
+        String sql = "select col_struct.c0, col_struct.c1.c11 from hive0.subfield_db.subfield join hive0.partitioned_db.t3 " +
+                "on subfield.col_struct.c1.c11 = t3.c1";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                "  |  equal join conjunct: 9: expr = 3: c1");
     }
 
     @Test

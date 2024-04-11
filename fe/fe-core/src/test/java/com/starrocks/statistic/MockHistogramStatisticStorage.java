@@ -15,6 +15,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonArray;
@@ -24,6 +25,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -49,18 +51,22 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
-public class MockTPCHHistogramStatisticStorage implements StatisticStorage {
+public class MockHistogramStatisticStorage implements StatisticStorage {
     private final Map<String, Map<String, ColumnStatistic>> tableStatistics;
     private final Map<String, Histogram> histogramStatistics;
+    private final Map<String, Integer> tableRowCount;
 
     private final int tpchScala;
 
-    public MockTPCHHistogramStatisticStorage(int tpchScala) {
-        tableStatistics = new CaseInsensitiveMap<>();
-        histogramStatistics = new CaseInsensitiveMap<>();
+    public MockHistogramStatisticStorage(int tpchScala) {
+        this.tableStatistics = new CaseInsensitiveMap<>();
+        this.histogramStatistics = new CaseInsensitiveMap<>();
+        this.tableRowCount = new CaseInsensitiveMap<>();
         this.tpchScala = tpchScala;
         mockTpchStatistics();
         mockTpchHistogramStatistics();
+        mockSubfieldStatistics();
+        mockSubfieldHistogramStatistics();
     }
 
     private void mockTpchStatistics() {
@@ -278,6 +284,27 @@ public class MockTPCHHistogramStatisticStorage implements StatisticStorage {
         addHistogramStatistis("n_name", Type.STRING, 1);
     }
 
+    private void mockSubfieldStatistics() {
+        CaseInsensitiveMap<String, ColumnStatistic> tableSubfield = new CaseInsensitiveMap<>();
+        tableSubfield.put("col_struct.c0", new ColumnStatistic(1, 100, 0, 8, 100));
+        tableSubfield.put("col_struct.c1.c11", new ColumnStatistic(1, 1000, 0, 8, 200));
+        tableStatistics.put("subfield", tableSubfield);
+        tableRowCount.put("subfield", 500);
+    }
+
+    private void mockSubfieldHistogramStatistics() {
+        histogramStatistics.put("col_struct.c0", new Histogram(Lists.newArrayList(
+                new Bucket(1, 10, 10L, 3L),
+                new Bucket(11, 20, 10L, 3L),
+                new Bucket(21, 30, 10L, 3L)
+        ), ImmutableMap.of("2", 15L, "22", 14L, "32", 12L)));
+        histogramStatistics.put("col_struct.c1.c11", new Histogram(Lists.newArrayList(
+                new Bucket(1, 100, 10L, 3L),
+                new Bucket(101, 200, 10L, 3L),
+                new Bucket(201, 300, 10L, 3L)
+        ), ImmutableMap.of("200", 15L, "220", 14L, "320", 12L)));
+    }
+
     private void addHistogramStatistis(String fileName, Type type, int scala) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/tpch-histogram-cost/histogram-stats/" + fileName + ".json");
@@ -340,6 +367,19 @@ public class MockTPCHHistogramStatisticStorage implements StatisticStorage {
             }
         }
         return histogramMap;
+    }
+
+    @Override
+    public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
+        List<ConnectorTableColumnStats> connectorTableColumnStats = Lists.newArrayList();
+        for (String col : columns) {
+            Histogram histogram = histogramStatistics.get(col);
+            ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(getColumnStatistic(table, col)).
+                    setHistogram(histogram).build();
+            long rowCount = tableRowCount.getOrDefault(table.getName(), -1);
+            connectorTableColumnStats.add(new ConnectorTableColumnStats(columnStatistic, rowCount));
+        }
+        return connectorTableColumnStats;
     }
 
     private LocalDateTime formatDateFromString(String dateStr) {

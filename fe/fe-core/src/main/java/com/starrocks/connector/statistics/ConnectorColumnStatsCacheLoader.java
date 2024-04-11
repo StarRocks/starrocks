@@ -18,11 +18,9 @@ package com.starrocks.connector.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnBasicStatsCacheLoader;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -117,11 +115,13 @@ public class ConnectorColumnStatsCacheLoader implements
         return asyncLoad(key, executor);
     }
 
-    public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, String column) {
+    public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, String column)
+            throws AnalysisException {
         return queryStatisticsData(context, tableUUID, ImmutableList.of(column));
     }
 
-    public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, List<String> columns) {
+    public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, List<String> columns)
+            throws AnalysisException {
         Table table = getTableByUUID(tableUUID);
         return statisticExecutor.queryStatisticSync(context, tableUUID, table, columns);
     }
@@ -129,15 +129,12 @@ public class ConnectorColumnStatsCacheLoader implements
     private ConnectorTableColumnStats convert2ColumnStatistics(String tableUUID, TStatisticData statisticData)
             throws AnalysisException {
         Table table = getTableByUUID(tableUUID);
-        Column column = table.getColumn(statisticData.columnName);
-        if (column == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);
-        }
+        Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
 
         String[] splits = tableUUID.split("\\.");
 
         ColumnStatistic columnStatistic = ColumnBasicStatsCacheLoader.buildColumnStatistics(statisticData, splits[0],
-                splits[1], splits[3], column);
+                splits[1], splits[3], statisticData.columnName, columnType);
         return new ConnectorTableColumnStats(columnStatistic, statisticData.rowCount);
     }
 }
