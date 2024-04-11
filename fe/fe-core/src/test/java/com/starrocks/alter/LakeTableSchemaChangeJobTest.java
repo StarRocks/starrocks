@@ -44,8 +44,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.Cluster;
-import com.starrocks.epack.warehouse.LocalWarehouse;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
@@ -70,7 +68,6 @@ import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -92,21 +89,16 @@ import static com.starrocks.catalog.TabletInvertedIndex.NOT_EXIST_TABLET_META;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
-    @Mocked
     private ConnectContext connectContext;
     private LakeTableSchemaChangeJob schemaChangeJob;
     private Database db;
     private LakeTable table;
     private List<Long> shadowTabletIds = new ArrayList<>();
 
-    @Mocked
-    private WarehouseManagerEPack warehouseMgr;
-
     public LakeTableSchemaChangeJobTest() {
         connectContext = new ConnectContext(null);
         connectContext.setStartTime();
         connectContext.setThreadLocalInfo();
-        warehouseMgr = new WarehouseManagerEPack();
     }
 
     /**
@@ -119,22 +111,6 @@ public class LakeTableSchemaChangeJobTest {
                 connectContext.getCurrentWarehouseId();
                 result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                 minTimes = 0;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManagerEPack.DEFAULT_CLUSTER_ID,
-                        "An internal warehouse contains all compute nodes in this system");
-            }
-
-            @Mock
-            public Warehouse getAvailbleWarehouse(long warehouseId) throws WarehouseUnavailableException {
-                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManagerEPack.DEFAULT_CLUSTER_ID,
-                        "An internal warehouse contains all compute nodes in this system");
             }
         };
 
@@ -164,7 +140,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
@@ -321,7 +297,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
@@ -1083,7 +1059,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testShow() {
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouseAllowNull(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
@@ -1100,7 +1076,7 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeHandler.addAlterJobV2(alterJobV2);
         System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouseAllowNull(long warehouseId) {
                 return null;
