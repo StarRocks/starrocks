@@ -88,15 +88,11 @@ public class AnalyzeStmtAnalyzer {
                     StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
 
-<<<<<<< HEAD
-    static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-=======
     public static boolean isSupportedHistogramAnalyzeTableType(Table table) {
         return table.isNativeTableOrMaterializedView() || table.isHiveTable();
     }
 
-    static class AnalyzeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
->>>>>>> c7ab986937 ([Feature] Support collect Hive histogram statistics (#42186))
+    static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

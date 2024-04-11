@@ -16,11 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
-=======
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
->>>>>>> c7ab986937 ([Feature] Support collect Hive histogram statistics (#42186))
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;

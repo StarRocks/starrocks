@@ -1301,12 +1301,6 @@ public class StmtExecutor {
         if (dropHistogramStmt.isExternal()) {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
 
-<<<<<<< HEAD
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr()
-                .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
-=======
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalHistogramStatsMetaAndData(
                     StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table,
                     dropHistogramStmt.getColumnNames());
@@ -1319,9 +1313,8 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                     .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(),
                             Sets.newHashSet(table.getId()));
-            GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+            GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
         }
->>>>>>> c7ab986937 ([Feature] Support collect Hive histogram statistics (#42186))
     }
 
     private void handleKillAnalyzeStmt() {

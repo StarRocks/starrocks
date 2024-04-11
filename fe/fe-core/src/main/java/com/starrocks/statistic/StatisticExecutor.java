@@ -298,16 +298,6 @@ public class StatisticExecutor {
         // update StatisticsCache
         statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
-<<<<<<< HEAD
-            for (String columnName : statsJob.getColumns()) {
-                HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
-                        table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
-                        statsJob.getProperties());
-                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(
-                        histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
-                        Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
-=======
             if (table.isNativeTableOrMaterializedView()) {
                 for (String columnName : statsJob.getColumns()) {
                     HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
@@ -327,7 +317,6 @@ public class StatisticExecutor {
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(histogramStatsMeta);
                     // todo(ywb): refresh external histogram statistics cache
                 }
->>>>>>> c7ab986937 ([Feature] Support collect Hive histogram statistics (#42186))
             }
         } else {
             if (table.isNativeTableOrMaterializedView()) {
