@@ -2,7 +2,7 @@
 
 -- Setup configs.
 set scan_or_to_union_limit = 1;
-set enable_show_predicate_tree_in_profile = true;
+-- set enable_show_predicate_tree_in_profile = true;
 set enable_profile = true;
 set enable_async_profile=false;
 
