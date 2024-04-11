@@ -89,7 +89,7 @@ public:
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
-    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_id(int64_t index_id);
+    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_id(int64_t schema_id);
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 

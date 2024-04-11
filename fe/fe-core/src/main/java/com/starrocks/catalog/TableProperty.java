@@ -886,7 +886,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildUseFastSchemaEvolution() {
         useFastSchemaEvolution = Boolean.parseBoolean(
-            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
         return this;
     }
 

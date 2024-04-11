@@ -122,14 +122,14 @@ public class MVColumnItem {
     public Column toMVColumn(OlapTable olapTable) {
         Column baseColumn = olapTable.getBaseColumn(name);
         Column result;
-        boolean useFastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
+        boolean hasUniqueId = olapTable.getMaxColUniqueId() >= 0;
         if (baseColumn == null) {
             result = new Column(name, type, isKey, aggregationType, isAllowNull,
                     null, "");
             if (defineExpr != null) {
                 result.setDefineExpr(defineExpr);
             }
-            if (useFastSchemaEvolution) {
+            if (hasUniqueId) {
                 int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
                 result.setUniqueId(nextUniqueId);
             }
