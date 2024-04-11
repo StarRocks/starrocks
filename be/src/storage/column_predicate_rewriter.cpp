@@ -469,7 +469,7 @@ Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool, const 
                                                         ColumnPredicateMap* dst_pred_map) {
     DCHECK(dst_pred_map != nullptr);
     for (auto& [cid, src_preds] : src_pred_map) {
-        auto& dst_preds = dst_pred_map->emplace({cid, {}}).first->second;
+        auto& dst_preds = dst_pred_map->insert({cid, {}}).first->second;
 
         for (const auto* src_pred : src_preds) {
             RETURN_IF_ERROR(_rewrite_predicate(pool, src_pred, dst_preds));
