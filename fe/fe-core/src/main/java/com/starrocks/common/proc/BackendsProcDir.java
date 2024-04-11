@@ -224,8 +224,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 if (status != DataCacheMetrics.Status.DISABLED) {
                     backendInfo.add(String.format("Status: %s, DiskUsage: %s, MemUsage: %s",
                             dataCacheMetrics.get().getStatus(),
-                            dataCacheMetrics.get().getDiskUsage(),
-                            dataCacheMetrics.get().getMemUsage()));
+                            dataCacheMetrics.get().getDiskUsageStr(),
+                            dataCacheMetrics.get().getMemUsageStr()));
                 } else {
                     // DataCache is disabled
                     backendInfo.add(String.format("Status: %s", DataCacheMetrics.Status.DISABLED));
