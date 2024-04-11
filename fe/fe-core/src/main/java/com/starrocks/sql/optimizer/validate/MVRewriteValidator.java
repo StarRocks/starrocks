@@ -34,7 +34,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.collectMaterializedViews;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getAllJoinOperators;
 
 public class MVRewriteValidator {
     private static final MVRewriteValidator INSTANCE = new MVRewriteValidator();

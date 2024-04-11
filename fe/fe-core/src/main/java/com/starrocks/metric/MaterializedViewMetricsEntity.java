@@ -130,7 +130,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 "total matched materialized view's query count");
         metrics.add(counterQueryMatchedTotal);
         // text based rewrite
-        counterQueryTextBasedMatchedTotal= new LongCounterMetric("mv_query_total_text_based_matched_count",
+        counterQueryTextBasedMatchedTotal = new LongCounterMetric("mv_query_total_text_based_matched_count",
                 MetricUnit.REQUESTS, "total text based matched materialized view's query count");
         metrics.add(counterQueryTextBasedMatchedTotal);
 
