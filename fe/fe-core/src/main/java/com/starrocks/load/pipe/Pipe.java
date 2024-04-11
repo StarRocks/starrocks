@@ -76,8 +76,8 @@ public class Pipe implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(Pipe.class);
 
-    public static final int DEFAULT_POLL_INTERVAL = 10;
-    public static final long DEFAULT_BATCH_SIZE = 1 << 30;
+    public static final int DEFAULT_POLL_INTERVAL = 60 * 5; // 5 minutes
+    public static final long DEFAULT_BATCH_SIZE = 1 << 30; // 1 GB
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
