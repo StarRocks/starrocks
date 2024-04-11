@@ -294,7 +294,7 @@ public class AnalyzeStmtTest {
                         "FROM column_statistics WHERE table_id = %d and column_name = \"v2\" " +
                         "GROUP BY db_id, table_id, column_name"), table.getId(), table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
-                        Lists.newArrayList(v1, v2)));
+                        Lists.newArrayList("v1", "v2"), Lists.newArrayList(v1.getType(), v2.getType())));
 
         Assert.assertEquals(String.format(
                 "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
@@ -443,7 +443,7 @@ public class AnalyzeStmtTest {
                 "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk2\" " +
                 "GROUP BY db_id, table_id, column_name";
         String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
-                Lists.newArrayList(kk1, kk2));
+                Lists.newArrayList("kk1", "kk2"), Lists.newArrayList(kk1.getType(), kk2.getType()));
         Assert.assertTrue(Pattern.matches(pattern, content));
     }
 

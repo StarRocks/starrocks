@@ -421,8 +421,10 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_UKFK_JOIN);
         deriveLogicalProperty(tree);
 
-        skewJoinOptimize(tree, rootTaskContext);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
+        // apply skew join optimize after push down join on expression to child project,
+        // we need to compute the stats of child project(like subfield).
+        skewJoinOptimize(tree, rootTaskContext);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         // @todo: resolve recursive optimization question:
@@ -637,8 +639,13 @@ public class Optimizer {
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {
         SkewJoinOptimizeRule rule = new SkewJoinOptimizeRule();
+        // merge projects before calculate statistics
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new MergeTwoProjectRule());
         Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, rule);
+        if (ruleRewriteOnlyOnce(tree, rootTaskContext, rule)) {
+            // skew join generate new join and on predicate, need to push down join on expression to child project again
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
+        }
     }
 
     private OptExpression pruneSubfield(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -840,13 +847,15 @@ public class Optimizer {
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }
 
-    private void ruleRewriteOnlyOnce(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
+    private boolean ruleRewriteOnlyOnce(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
         if (optimizerConfig.isRuleDisable(rule.type())) {
-            return;
+            return false;
         }
         List<Rule> rules = Collections.singletonList(rule);
-        context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, true));
+        RewriteTreeTask rewriteTreeTask = new RewriteTreeTask(rootTaskContext, tree, rules, true);
+        context.getTaskScheduler().pushTask(rewriteTreeTask);
         context.getTaskScheduler().executeTasks(rootTaskContext);
+        return rewriteTreeTask.hasChange();
     }
 
     private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {
