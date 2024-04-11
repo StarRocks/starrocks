@@ -594,7 +594,7 @@ public:
         }
         return dump->finish_pindex_kvs(dump_pb);
     }
-};
+}; // namespace starrocks
 
 struct StringHasher1 {
     size_t operator()(const string& v) const { return XXH3_64bits(v.data(), v.length()); }
@@ -758,7 +758,7 @@ public:
         }
         return dump->finish_pindex_kvs(dump_pb);
     }
-};
+}; // namespace starrocks
 
 class ShardByLengthSliceHashIndex : public HashIndex {
 private:
@@ -896,7 +896,7 @@ public:
                                     ->replace(rssid, rowid_start, indexes, idx_begin, idx_end, pks));
         }
         return Status::OK();
-    }
+    } // namespace starrocks
 
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,

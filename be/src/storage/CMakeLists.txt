@@ -241,8 +241,11 @@ add_library(Storage STATIC
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
     lake/persistent_index_sstable.cpp
+    lake/lake_primary_key_compaction_conflict_resolver.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
+    rows_mapper.cpp
+    primary_key_compaction_conflict_resolver.cpp
     inverted/index_descriptor.hpp
     inverted/inverted_index_iterator.cpp
     inverted/inverted_index_iterator.cpp

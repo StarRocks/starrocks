@@ -296,6 +296,8 @@ public:
 
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
+    bool enable_light_pk_compaction_publish();
+
 protected:
     static StorageEngine* _s_instance;
 
