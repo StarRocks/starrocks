@@ -212,3 +212,14 @@ select count(l.c0),sum(length(l.c0)), sum(length(l.c1)) from tstring l right joi
 -- result:
 16384	61108	61096
 -- !result
+set spill_mem_table_size=1000;
+-- result:
+-- !result
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 > 400000;
+-- result:
+9600
+-- !result
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 < 400000;
+-- result:
+404095
+-- !result

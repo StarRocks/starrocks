@@ -28,11 +28,7 @@ public:
     virtual ~SpillOutputDataStream() = default;
     virtual Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size) = 0;
     virtual Status flush() = 0;
-    int32_t next_sequence_id() { return _next_sequence_id++; }
     virtual bool is_remote() const = 0;
-
-private:
-    int32_t _next_sequence_id{};
 };
 using SpillOutputDataStreamPtr = std::shared_ptr<SpillOutputDataStream>;
 SpillOutputDataStreamPtr create_spill_output_stream(Spiller* spiller, BlockGroup* block_group,
