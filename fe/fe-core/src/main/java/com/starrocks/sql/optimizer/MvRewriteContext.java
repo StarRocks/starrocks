@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
 
 import java.util.List;
 
@@ -46,6 +47,9 @@ public class MvRewriteContext {
     private List<ColumnRefOperator> enforcedNonExistedColumns;
 
     private List<JoinDeriveContext> joinDeriveContexts;
+
+    private List<TableScanDesc> queryTableScanDescs;
+    private List<TableScanDesc> mvTableScanDescs;
 
 
     public MvRewriteContext(
@@ -110,11 +114,31 @@ public class MvRewriteContext {
         return joinDeriveContexts;
     }
 
+    public void clearJoinDeriveContexts() {
+        joinDeriveContexts.clear();
+    }
+
     public List<ColumnRefOperator> getEnforcedNonExistedColumns() {
         return enforcedNonExistedColumns;
     }
 
     public void setEnforcedNonExistedColumns(List<ColumnRefOperator> enforcedNonExistedColumns) {
         this.enforcedNonExistedColumns = enforcedNonExistedColumns;
+    }
+
+    public List<TableScanDesc> getQueryTableScanDescs() {
+        return queryTableScanDescs;
+    }
+
+    public void setQueryTableScanDescs(List<TableScanDesc> queryTableScanDescs) {
+        this.queryTableScanDescs = queryTableScanDescs;
+    }
+
+    public List<TableScanDesc> getMvTableScanDescs() {
+        return mvTableScanDescs;
+    }
+
+    public void setMvTableScanDescs(List<TableScanDesc> mvTableScanDescs) {
+        this.mvTableScanDescs = mvTableScanDescs;
     }
 }
