@@ -141,10 +141,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
 
     // all shadow indexes should have this prefix in name
-    public static final String SHADOW_NAME_PRFIX = "__starrocks_shadow_";
-    // before version 1.18, use "__doris_shadow_" as shadow index prefix
-    // check "__doris_shadow_" to prevent compatibility problems
-    public static final String SHADOW_NAME_PRFIX_V1 = "__doris_shadow_";
+    public static final String SHADOW_NAME_PREFIX = "__starrocks_shadow_";
 
     public SchemaChangeHandler() {
         super("schema change");
@@ -600,7 +597,7 @@ public class SchemaChangeHandler extends AlterHandler {
                  * And if the column type is not changed, the same column name is still to the same column type,
                  * so no need to add prefix.
                  */
-                modColumn.setName(SHADOW_NAME_PRFIX + originalModColumnName);
+                modColumn.setName(SHADOW_NAME_PREFIX + originalModColumnName);
             }
 
             if (KeysType.AGG_KEYS == olapTable.getKeysType() || KeysType.UNIQUE_KEYS == olapTable.getKeysType() ||

@@ -1620,7 +1620,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
                     tColumn.setColumn_name(
-                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
                     column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
                     columnsDesc.add(tColumn);
                 }
