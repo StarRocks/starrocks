@@ -1575,9 +1575,10 @@ Status SegmentIterator::_init_global_dict_decoder() {
 
 Status SegmentIterator::_rewrite_predicates() {
     //
-    ColumnPredicateRewriter rewriter(_column_iterators, _cid_to_predicates, _schema, _predicate_need_rewrite,
-                                     _predicate_columns, _scan_range);
-    RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool));
+    ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
+                                     _scan_range);
+    RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
+    _cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
 
     // for each delete predicate,
     // If the global dictionary optimization is enabled for the column,
@@ -1778,7 +1779,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     std::vector<ColumnId> bitmap_columns;
     std::vector<SparseRange<>> bitmap_ranges;
     std::vector<bool> has_is_null_predicate;
-    std::vector<const ColumnPredicate*> erased_preds;
+    std::unordered_set<const ColumnPredicate*> erased_preds;
 
     size_t mul_selected = 1;
     size_t mul_cardinality = 1;
@@ -1795,7 +1796,7 @@ Status SegmentIterator::_apply_bitmap_index() {
             Status st = pred->seek_bitmap_dictionary(bitmap_iter, &r);
             if (st.ok()) {
                 selected &= r;
-                erased_preds.emplace_back(pred);
+                erased_preds.emplace(pred);
                 has_is_null |= (pred->type() == PredicateType::kIsNull);
             } else if (!st.is_cancelled()) {
                 return st;
@@ -1849,10 +1850,18 @@ Status SegmentIterator::_apply_bitmap_index() {
     // ---------------------------------------------------------
     // Erase predicates that hit bitmap index.
     // ---------------------------------------------------------
-    for (const ColumnPredicate* pred : erased_preds) {
-        PredicateList& pred_list = _cid_to_predicates[pred->column_id()];
-        pred_list.erase(std::find(pred_list.begin(), pred_list.end(), pred));
-    }
+    PredicateAndNode new_root;
+    PredicateAndNode useless_root;
+    _opts.pred_tree.release_root().partition_move(
+            [&](const auto& node_var) {
+                return node_var.visit(overloaded{
+                        [&](const PredicateColumnNode& node) { return !erased_preds.contains(node.col_pred()); },
+                        [&](const auto&) { return true; },
+                });
+            },
+            &new_root, &useless_root);
+    _opts.pred_tree = PredicateTree::create(std::move(new_root));
+    _cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
 
     _opts.stats->rows_bitmap_index_filtered += (input_rows - _scan_range.span_size());
     return Status::OK();
