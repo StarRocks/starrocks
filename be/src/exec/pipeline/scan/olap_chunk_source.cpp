@@ -213,17 +213,23 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_range_pruner =
             OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(parser, &preds));
-    _decide_chunk_size(!preds.empty());
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _not_push_down_predicates.add(p.get());
+
+    ASSIGN_OR_RETURN(auto pred_tree, _scan_ctx->conjuncts_manager().get_predicate_tree(parser, _predicate_free_pool));
+    _decide_chunk_size(!pred_tree.empty());
+    PredicateAndNode pushdown_pred_root;
+    PredicateAndNode non_pushdown_pred_root;
+    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
+                                    &pushdown_pred_root, &non_pushdown_pred_root);
+    _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+    _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
+
+    for (const auto& [_, col_nodes] : _non_pushdown_pred_tree.root().col_children_map()) {
+        for (const auto& col_node : col_nodes) {
+            _not_push_down_predicates.add(col_node.col_pred());
         }
-        _predicate_free_pool.emplace_back(std::move(p));
     }
+    // TODO(liuzihe): support OR predicate.
+    DCHECK(_non_pushdown_pred_tree.root().compound_children().empty());
 
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
@@ -610,7 +616,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);

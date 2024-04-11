@@ -14,7 +14,34 @@
 
 #include "segment_options.h"
 
+#include "storage/predicate_tree/predicate_tree.hpp"
+
 namespace starrocks {
+
+struct PredicateTreeConverter {
+    template <CompoundNodeType ParentType>
+    Status operator()(const PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) {
+        const auto* col_pred = node.col_pred();
+        const auto cid = col_pred->column_id();
+        const ColumnPredicate* new_col_pred;
+        RETURN_IF_ERROR(col_pred->convert_to(&new_col_pred, get_type_info(new_types[cid]), obj_pool));
+        parent.add_child(PredicateColumnNode{new_col_pred});
+        return Status::OK();
+    }
+
+    template <CompoundNodeType Type, CompoundNodeType ParentType>
+    Status operator()(const PredicateCompoundNode<Type>& node, PredicateCompoundNode<ParentType>& parent) {
+        PredicateCompoundNode<Type> new_node;
+        for (const auto& child : node.children()) {
+            RETURN_IF_ERROR(child.visit(*this, new_node));
+        }
+        parent.add_child(std::move(new_node));
+        return Status::OK();
+    }
+
+    const std::vector<LogicalType>& new_types;
+    ObjectPool* obj_pool;
+};
 
 Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types,
                                       ObjectPool* obj_pool) const {
@@ -26,15 +53,9 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     }
 
     // predicates
-    for (auto& pair : predicates) {
-        auto cid = pair.first;
-        int num_preds = pair.second.size();
-        std::vector<const ColumnPredicate*> new_preds(num_preds, nullptr);
-        for (int i = 0; i < num_preds; ++i) {
-            RETURN_IF_ERROR(pair.second[i]->convert_to(&new_preds[i], get_type_info(new_types[cid]), obj_pool));
-        }
-        dst->predicates.emplace(pair.first, std::move(new_preds));
-    }
+    PredicateAndNode new_pred_root;
+    RETURN_IF_ERROR(pred_tree.visit(PredicateTreeConverter{new_types, obj_pool}, new_pred_root));
+    dst->pred_tree = PredicateTree::create(std::move(new_pred_root));
 
     // delete predicates
     RETURN_IF_ERROR(delete_predicates.convert_to(&dst->delete_predicates, new_types, obj_pool));
@@ -61,20 +82,7 @@ std::string SegmentReadOptions::debug_string() const {
         ss << ranges[i].debug_string();
     }
     ss << "],predicates=[";
-    int i = 0;
-    for (auto& pair : predicates) {
-        if (i++ != 0) {
-            ss << ",";
-        }
-        ss << "{id=" << pair.first << ",pred=[";
-        for (int j = 0; j < pair.second.size(); ++j) {
-            if (j != 0) {
-                ss << ",";
-            }
-            ss << pair.second[j]->debug_string();
-        }
-        ss << "]}";
-    }
+    ss << pred_tree.root().debug_string();
     ss << "],delete_predicates={";
     ss << "},unsafe_tablet_schema_ref={";
     ss << "},use_page_cache=" << use_page_cache;
