@@ -699,6 +699,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
 
+    public static final String ENABLE_PREDICATE_MOVE_AROUND = "enable_predicate_move_around";
+
     public static final String JIT_LEVEL = "jit_level";
 
     /**
@@ -1917,6 +1919,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
     private String chooseExecuteInstancesMode = LOCALITY.name();
+
+    @VarAttr(name = ENABLE_PREDICATE_MOVE_AROUND)
+    private boolean enablePredicateMoveAround = true;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -3621,6 +3626,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableConnectorSplitIoTasks(boolean v) {
         enableConnectorSplitIoTasks = v;
+    }
+
+    public boolean isEnablePredicateMoveAround() {
+        return enablePredicateMoveAround;
+    }
+
+    public void setEnablePredicateMoveAround(boolean enablePredicateMoveAround) {
+        this.enablePredicateMoveAround = enablePredicateMoveAround;
     }
 
     // Serialize to thrift object

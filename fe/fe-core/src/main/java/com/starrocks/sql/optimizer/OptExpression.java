@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -145,6 +146,10 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
+    public DomainProperty getDomainProperty() {
+        return op.getDomainProperty(inputs);
+    }
+
     public void initRowOutputInfo() {
         for (OptExpression optExpression : inputs) {
             optExpression.initRowOutputInfo();
@@ -242,11 +247,11 @@ public class OptExpression {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
+        sb.append('\n');
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
 
-        sb.append('\n');
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
