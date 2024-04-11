@@ -111,7 +111,7 @@ public:
 
     Status on_commited();
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
 
     Status abort();
 
