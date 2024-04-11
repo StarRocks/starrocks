@@ -128,4 +128,226 @@ void PredicateCompoundNode<Type>::partition_move(Vistor&& cond, PredicateAndNode
     }
 }
 
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate(CompoundNodeContexts& contexts, const Chunk* chunk,
+                                                                     uint8_t* selection, uint16_t from,
+                                                                     uint16_t to) const;
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate_and(CompoundNodeContexts& contexts,
+                                                                         const Chunk* chunk, uint8_t* selection,
+                                                                         uint16_t from, uint16_t to) const;
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate_or(CompoundNodeContexts& contexts,
+                                                                        const Chunk* chunk, uint8_t* selection,
+                                                                        uint16_t from, uint16_t to) const;
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate(CompoundNodeContexts& contexts, const Chunk* chunk,
+                                                                    uint8_t* selection, uint16_t from,
+                                                                    uint16_t to) const;
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate_and(CompoundNodeContexts& contexts,
+                                                                        const Chunk* chunk, uint8_t* selection,
+                                                                        uint16_t from, uint16_t to) const;
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate_or(CompoundNodeContexts& contexts,
+                                                                       const Chunk* chunk, uint8_t* selection,
+                                                                       uint16_t from, uint16_t to) const;
+
+// ------------------------------------------------------------------------------------
+// PredicateAndNode
+// ------------------------------------------------------------------------------------
+
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate(CompoundNodeContexts& contexts, const Chunk* chunk,
+                                                                     uint8_t* selection, uint16_t from,
+                                                                     uint16_t to) const {
+    const auto num_rows = to - from;
+    if (empty()) {
+        memset(selection + from, 1, num_rows);
+        return Status::OK();
+    }
+
+    auto& node_ctx = contexts[id()];
+
+    if (!node_ctx.and_context.has_value()) {
+        auto& ctx = node_ctx.and_context.emplace();
+        ctx.non_vec_children.reserve(_col_children_map.size());
+        ctx.vec_children.reserve(num_children());
+
+        for (const auto& [_, col_children] : _col_children_map) {
+            for (const auto& child : col_children) {
+                if (!child.col_pred()->can_vectorized()) {
+                    ctx.non_vec_children.emplace_back(&child);
+                } else {
+                    ctx.vec_children.emplace_back(&child);
+                }
+            }
+        }
+        for (const auto& child : _compound_children) {
+            ctx.vec_children.emplace_back(&child);
+        }
+    }
+    auto& ctx = node_ctx.and_context.value();
+
+    // Evaluate vectorized predicates first.
+    bool first = true;
+    bool contains_true = true;
+    for (const auto& child : ctx.vec_children) {
+        if (first) {
+            first = false;
+            RETURN_IF_ERROR(
+                    child.visit([&](const auto& pred) { return pred.evaluate(contexts, chunk, selection, from, to); }));
+        } else {
+            RETURN_IF_ERROR(child.visit(
+                    [&](const auto& pred) { return pred.evaluate_and(contexts, chunk, selection, from, to); }));
+        }
+
+        contains_true = SIMD::count_nonzero(selection + from, num_rows);
+        if (!contains_true) {
+            break;
+        }
+    }
+
+    // Evaluate non-vectorized predicates using evaluate_branchless.
+    if (contains_true && !ctx.non_vec_children.empty()) {
+        auto& selected_idx_buffer = node_ctx.selected_idx_buffer;
+        if (UNLIKELY(selected_idx_buffer.size() < to)) {
+            selected_idx_buffer.resize(to);
+        }
+        auto* selected_idx = selected_idx_buffer.data();
+
+        uint16_t selected_size = 0;
+        if (first) {
+            // When there is no any vectorized predicate, should initialize selected_idx in a vectorized way.
+            selected_size = to - from;
+            for (uint16_t i = from, j = 0; i < to; ++i, ++j) {
+                selected_idx[j] = i;
+            }
+        } else {
+            for (uint16_t i = from; i < to; ++i) {
+                selected_idx[selected_size] = i;
+                selected_size += selection[i];
+            }
+        }
+
+        for (const auto& col_pred : ctx.non_vec_children) {
+            ASSIGN_OR_RETURN(selected_size, col_pred->evaluate_branchless(chunk, selected_idx, selected_size));
+            if (selected_size == 0) {
+                break;
+            }
+        }
+
+        memset(&selection[from], 0, to - from);
+        for (uint16_t i = 0; i < selected_size; ++i) {
+            selection[selected_idx[i]] = 1;
+        }
+    }
+
+    return Status::OK();
+}
+
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate_and(CompoundNodeContexts& contexts,
+                                                                         const Chunk* chunk, uint8_t* selection,
+                                                                         uint16_t from, uint16_t to) const {
+    for (const auto& child : children()) {
+        RETURN_IF_ERROR(
+                child.visit([&](const auto& pred) { return pred.evaluate_and(contexts, chunk, selection, from, to); }));
+    }
+    return Status::OK();
+}
+
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate_or(CompoundNodeContexts& contexts,
+                                                                        const Chunk* chunk, uint8_t* selection,
+                                                                        uint16_t from, uint16_t to) const {
+    if (empty()) {
+        return Status::OK();
+    }
+
+    auto& node_ctx = contexts[id()];
+    auto& selection_buffer = node_ctx.selection_buffer;
+
+    if (UNLIKELY(selection_buffer.size() < to)) {
+        selection_buffer.resize(to);
+    }
+    auto* or_selection = selection_buffer.data();
+
+    RETURN_IF_ERROR(evaluate(contexts, chunk, or_selection, from, to));
+    for (int i = from; i < to; i++) {
+        selection[i] |= or_selection[i];
+    }
+
+    return Status::OK();
+}
+
+// ------------------------------------------------------------------------------------
+// PredicateOrNode
+// ------------------------------------------------------------------------------------
+
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate(CompoundNodeContexts& contexts, const Chunk* chunk,
+                                                                    uint8_t* selection, uint16_t from,
+                                                                    uint16_t to) const {
+    const auto num_rows = to - from;
+    if (empty()) {
+        memset(selection + from, 1, num_rows);
+        return Status::OK();
+    }
+
+    bool first = true;
+    for (const auto& child : children()) {
+        if (first) {
+            first = false;
+            RETURN_IF_ERROR(
+                    child.visit([&](const auto& pred) { return pred.evaluate(contexts, chunk, selection, from, to); }));
+        } else {
+            RETURN_IF_ERROR(child.visit(
+                    [&](const auto& pred) { return pred.evaluate_or(contexts, chunk, selection, from, to); }));
+        }
+
+        const auto num_falses = SIMD::count_zero(selection + from, num_rows);
+        if (!num_falses) {
+            break;
+        }
+    }
+
+    return Status::OK();
+}
+
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate_and(CompoundNodeContexts& contexts,
+                                                                        const Chunk* chunk, uint8_t* selection,
+                                                                        uint16_t from, uint16_t to) const {
+    if (empty()) {
+        return Status::OK();
+    }
+
+    auto& node_ctx = contexts[id()];
+    auto& selection_buffer = node_ctx.selection_buffer;
+
+    if (UNLIKELY(selection_buffer.size() < to)) {
+        selection_buffer.resize(to);
+    }
+    auto* and_selection = selection_buffer.data();
+
+    RETURN_IF_ERROR(evaluate(contexts, chunk, and_selection, from, to));
+    for (int i = from; i < to; i++) {
+        selection[i] &= and_selection[i];
+    }
+
+    return Status::OK();
+}
+
+template <>
+inline Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate_or(CompoundNodeContexts& contexts,
+                                                                       const Chunk* chunk, uint8_t* selection,
+                                                                       uint16_t from, uint16_t to) const {
+    for (const auto& child : children()) {
+        RETURN_IF_ERROR(
+                child.visit([&](const auto& pred) { return pred.evaluate_or(contexts, chunk, selection, from, to); }));
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

@@ -70,7 +70,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_conjunct_ctxs.empty() || !_predicates.empty()) {
+    if (!_conjunct_ctxs.empty() || !_pred_tree.empty()) {
         _expr_filter_timer = ADD_TIMER(_parent->_runtime_profile, "ExprFilterTime");
     }
 
@@ -167,14 +167,6 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
 
     GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
     RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool, _pred_tree));
-
-    for (const auto& [_, col_nodes] : _pred_tree.root().col_children_map()) {
-        for (const auto& col_node : col_nodes) {
-            _predicates.add(col_node.col_pred());
-        }
-    }
-    // TODO(liuzihe): support OR predicate.
-    DCHECK(_pred_tree.root().compound_children().empty());
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -287,11 +279,11 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_predicates.empty()) {
+        if (!_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }

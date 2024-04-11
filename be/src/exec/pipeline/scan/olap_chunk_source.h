@@ -80,7 +80,6 @@ private:
     TInternalScanRange* _scan_range;
 
     PredicateTree _non_pushdown_pred_tree;
-    ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
