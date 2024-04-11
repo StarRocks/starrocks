@@ -93,13 +93,17 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             if [[ "${{ github.event.schedule }}" == "0 11 * * 1,2,4,5" ]]; then
               branch=branch-3.3
-              [[ "$GITHUB_REPOSITORY" == 'StarRocks/starrocks' ]] && all_linux=true
+              if [[ "$GITHUB_REPOSITORY" == 'StarRocks/starrocks' && `date +%u` -eq 1 ]]; then
+                all_linux=true
+              fi
             elif [[ "${{ github.event.schedule }}" == "0 11 * * 3" ]]; then
               branch=branch-3.2
               all_linux=false
             elif [[ "${{ github.event.schedule }}" == "00 0 * * 1-5" ]]; then
               branch=main
-              all_linux=true
+              if [[ `date +%u` -eq 1 ]]; then
+                all_linux=true
+              fi
             else
               branch=main
             fi
