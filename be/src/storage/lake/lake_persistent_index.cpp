@@ -65,6 +65,11 @@ void KeyValueMerger::flush() {
     if (_index_value_vers.empty()) {
         return;
     }
+    // If a key has been erased, it should not be flushed.
+    if (_index_value_vers.front().second.get_value() == NullIndexValue) {
+        _index_value_vers.clear();
+        return;
+    }
 
     IndexValueWithVerPB index_value_pb;
     for (const auto& index_value_with_ver : _index_value_vers) {
@@ -90,7 +95,7 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
     for (auto& sstable_pb : sstable_meta.sstables()) {
         ASSIGN_OR_RETURN(auto rf,
                          fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+        auto* block_cache = _tablet_mgr->update_mgr()->pk_index_block_cache();
         if (block_cache == nullptr) {
             return Status::InternalError("Block cache is null.");
         }
@@ -129,7 +134,7 @@ Status LakePersistentIndex::minor_compact() {
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
     sstable_pb.set_version(_version.major_number());
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->update_mgr()->pk_index_block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -203,10 +208,16 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
+    KeyIndexSet key_indexes;
+    for (int i = 0; i < n; ++i) {
+        key_indexes.insert(n);
+    }
+    for (auto iter = _sstables.rbegin(); iter != _sstables.rend(); ++iter) {
+        RETURN_IF_ERROR((*iter)->check_not_exist(keys, key_indexes, version));
+    }
     if (is_memtable_full()) {
         RETURN_IF_ERROR(flush_memtable());
     }
-    // TODO: check whether keys exist in immutable_memtable and ssts
     return Status::OK();
 }
 
@@ -340,7 +351,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     sstable_pb.set_version(op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).version());
     auto sstable = std::make_unique<PersistentIndexSstable>();
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->update_mgr()->pk_index_block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }

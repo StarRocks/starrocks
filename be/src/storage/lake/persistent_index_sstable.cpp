@@ -96,4 +96,46 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     return Status::OK();
 }
 
+Status PersistentIndexSstable::check_not_exist(const Slice* keys, const KeyIndexSet& key_indexes,
+                                               int64_t version) const {
+    std::vector<std::string> index_value_with_vers(key_indexes.size());
+    sstable::ReadOptions options;
+    auto start_ts = butil::gettimeofday_us();
+    RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
+    auto end_ts = butil::gettimeofday_us();
+    TRACE_COUNTER_INCREMENT("multi_get", end_ts - start_ts);
+    size_t i = 0;
+    for (auto& key_index : key_indexes) {
+        // Index_value_with_vers is empty means key is not found in sst.
+        // Value in sst can not be empty.
+        if (index_value_with_vers[i].empty()) {
+            ++i;
+            continue;
+        }
+        IndexValueWithVerPB index_value_with_ver_pb;
+        if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
+            return Status::InternalError("parse index value info failed");
+        }
+        if (index_value_with_ver_pb.versions_size() != index_value_with_ver_pb.values_size()) {
+            return Status::InternalError("The size of version and the size of value are not equal");
+        }
+        // Only consider single version now.
+        if (index_value_with_ver_pb.versions_size() == 1) {
+            if (index_value_with_ver_pb.versions(0) == version) {
+                ++i;
+                continue;
+            }
+            if (index_value_with_ver_pb.values(0) != NullIndexValue) {
+                auto key = keys[key_index].to_string();
+                auto size = keys[key_index].get_size();
+                std::string msg = strings::Substitute("key %s already exists in PersistentIndexSstable",
+                                                      hexdump((const char*)key.data(), size));
+                return Status::AlreadyExist(msg);
+            }
+        }
+        ++i;
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::lake

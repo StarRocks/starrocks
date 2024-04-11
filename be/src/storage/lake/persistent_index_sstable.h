@@ -54,6 +54,8 @@ public:
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
                      KeyIndexSet* found_key_indexes) const;
 
+    Status check_not_exist(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version) const;
+
     sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }

@@ -417,6 +417,33 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         }
         delete iter;
     }
+    // 10. check not exist(some keys exist)
+    {
+        std::vector<std::string> keys_str(N / 2);
+        std::vector<Slice> keys(N / 2);
+        KeyIndexSet key_indexes_info;
+        for (int i = 0; i < N / 2; i++) {
+            int r = rand() % (N * 2);
+            keys_str[i] = fmt::format("test_key_{:016X}", r);
+            keys[i] = Slice(keys_str[i]);
+            key_indexes_info.insert(i);
+        }
+        ASSERT_OK(sst->check_not_exist(keys.data(), key_indexes_info, 100));
+        ASSERT_ERROR(sst->check_not_exist(keys.data(), key_indexes_info, 101));
+    }
+    // 11. check not exist(all keys not exist)
+    {
+        std::vector<std::string> keys_str(N);
+        std::vector<Slice> keys(N);
+        KeyIndexSet key_indexes_info;
+        for (int i = 0, j = N; i < N; i++, j++) {
+            keys_str[i] = fmt::format("test_key_{:016X}", j);
+            keys[i] = Slice(keys_str[i]);
+            key_indexes_info.insert(i);
+        }
+        ASSERT_OK(sst->check_not_exist(keys.data(), key_indexes_info, 100));
+        ASSERT_OK(sst->check_not_exist(keys.data(), key_indexes_info, 101));
+    }
 }
 
 } // namespace starrocks::lake

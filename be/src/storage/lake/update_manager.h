@@ -176,7 +176,7 @@ public:
 
     Status execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata, TxnLogPB* txn_log);
 
-    PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
+    PersistentIndexBlockCache* pk_index_block_cache() { return _pk_index_block_cache.get(); }
 
 private:
     // print memory tracker state
@@ -227,7 +227,7 @@ private:
 
     std::vector<PkIndexShard> _pk_index_shards;
 
-    std::unique_ptr<PersistentIndexBlockCache> _block_cache;
+    std::unique_ptr<PersistentIndexBlockCache> _pk_index_block_cache;
 };
 
 } // namespace lake
