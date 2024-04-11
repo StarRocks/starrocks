@@ -14,11 +14,7 @@
 
 package com.starrocks.sql.optimizer.task;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.common.profile.Timer;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.rule.Rule;
 
 import java.util.List;
@@ -40,31 +36,6 @@ public class RewriteDownTopTask extends RewriteTreeTask {
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {
             rewrite(root, i, root.getInputs().get(i));
         }
-
-        for (Rule rule : rules) {
-            if (rule.exhausted(context.getOptimizerContext())) {
-                continue;
-            }
-            if (!match(rule.getPattern(), root) || !rule.check(root, context.getOptimizerContext())) {
-                continue;
-            }
-
-            List<OptExpression> result;
-            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
-                result = rule.transform(root, context.getOptimizerContext());
-            }
-            Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
-
-            OptimizerTraceUtil.logApplyRule(context.getOptimizerContext(), rule, root, result);
-
-            if (result.isEmpty()) {
-                continue;
-            }
-
-            parent.getInputs().set(childIndex, result.get(0));
-            root = result.get(0);
-            change++;
-            deriveLogicalProperty(root);
-        }
+        applyRules(parent, childIndex, root);
     }
 }
