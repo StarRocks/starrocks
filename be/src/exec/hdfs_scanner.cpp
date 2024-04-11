@@ -84,9 +84,9 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     _scanner_params = scanner_params;
 
     RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
-    Status status = do_init(runtime_state, scanner_params);
+    RETURN_IF_ERROR(do_init(runtime_state, scanner_params));
 
-    return status;
+    return Status::OK();
 }
 
 Status HdfsScanner::_build_scanner_context() {
@@ -313,6 +313,19 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
 }
 
 void HdfsScanner::do_update_counter(HdfsScanProfile* profile) {}
+
+Status HdfsScanner::reinterpret_status(const Status& st) {
+    auto msg = fmt::format("file = {}", _scanner_params.path);
+
+    Status ret = st;
+    // After catching the AWS 404 file not found error and returning it to the FE,
+    // the FE will refresh the file information of table and re-execute the SQL operation.
+    if (st.is_io_error() && st.message().find("404") != std::string_view::npos) {
+        ret = Status::RemoteFileNotFound(st.message());
+    }
+
+    return ret.clone_and_append(msg);
+}
 
 void HdfsScanner::update_counter() {
     HdfsScanProfile* profile = _scanner_params.profile;

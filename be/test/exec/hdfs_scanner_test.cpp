@@ -31,10 +31,12 @@
 
 namespace starrocks {
 
+namespace {
 struct SlotDesc {
     string name;
     TypeDescriptor type;
 };
+} // namespace
 
 // TODO: partition scan
 class HdfsScannerTest : public ::testing::Test {
