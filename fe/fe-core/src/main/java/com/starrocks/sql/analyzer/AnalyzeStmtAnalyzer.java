@@ -17,15 +17,19 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
@@ -35,17 +39,26 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+
+import static com.starrocks.connector.PartitionUtil.createPartitionKey;
+import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 
 public class AnalyzeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -74,6 +87,10 @@ public class AnalyzeStmtAnalyzer {
                     StatsConstants.HISTOGRAM_BUCKET_NUM,
                     StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
+
+    public static boolean isSupportedHistogramAnalyzeTableType(Table table) {
+        return table.isNativeTableOrMaterializedView() || table.isHiveTable();
+    }
 
     static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -112,7 +129,7 @@ public class AnalyzeStmtAnalyzer {
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
-                if (statement.isSample()) {
+                if (!statement.getAnalyzeTypeDesc().isHistogram() && statement.isSample()) {
                     throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
@@ -240,13 +257,12 @@ public class AnalyzeStmtAnalyzer {
         private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
-                if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
-                    throw new SemanticException("External table %s don't support histogram analyze",
-                            statement.getTableName().toString());
-                }
                 List<String> columns = statement.getColumnNames();
-                OlapTable analyzeTable = (OlapTable) MetaUtils.getTable(session, statement.getTableName());
-
+                Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                if (!isSupportedHistogramAnalyzeTableType(analyzeTable)) {
+                    throw new SemanticException("Can't create histogram statistics on table type is %s",
+                            analyzeTable.getType().name());
+                }
                 for (String columnName : columns) {
                     Column column = analyzeTable.getColumn(columnName);
                     if (column.getType().isComplexType()
@@ -270,22 +286,50 @@ public class AnalyzeStmtAnalyzer {
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
 
-                long totalRows = analyzeTable.getRowCount();
-                long sampleRows = (long) (totalRows *
-                        Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO)));
+                double totalRows = 0;
+                if (analyzeTable.isNativeTableOrMaterializedView()) {
+                    OlapTable analyzedOlapTable = (OlapTable) analyzeTable;
+                    totalRows = analyzedOlapTable.getRowCount();
+                } else {
+                    TableName tableName = statement.getTableName();
+                    List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNames(tableName.getCatalog(), tableName.getDb(),
+                                    tableName.getTbl());
+                    List<PartitionKey> keys = new ArrayList<>();
+                    try {
+                        for (String partName : partitionNames) {
+                            List<String> values = toPartitionValues(partName);
+                            PartitionKey partitionKey = createPartitionKey(values, analyzeTable.getPartitionColumns(),
+                                    analyzeTable.getType());
+                            keys.add(partitionKey);
+                        }
+                    } catch (AnalysisException e) {
+                        throw new SemanticException("can not get partition keys for table : %s.%s.%s, %s",
+                                tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), e.getMessage());
+                    }
 
+                    Statistics tableStats = session.getGlobalStateMgr().getMetadataMgr().
+                            getTableStatistics(new OptimizerContext(new Memo(), new ColumnRefFactory(), session,
+                                    OptimizerConfig.defaultConfig()),
+                                    tableName.getCatalog(), analyzeTable, Maps.newHashMap(), keys, null);
+                    totalRows = tableStats.getOutputRowCount();
+
+                }
+                double sampleRows =  totalRows *
+                        Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
                 if (sampleRows < Config.statistic_sample_collect_rows && totalRows != 0) {
                     if (Config.statistic_sample_collect_rows > totalRows) {
                         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
                     } else {
                         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
-                                BigDecimal.valueOf((double) Config.statistic_sample_collect_rows / (double) totalRows)
+                                BigDecimal.valueOf(
+                                                (double) Config.statistic_sample_collect_rows / totalRows)
                                         .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                     }
                 } else if (sampleRows > Config.histogram_max_sample_row_count) {
                     properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
                             BigDecimal.valueOf((double) Config.histogram_max_sample_row_count /
-                                            (double) (totalRows == 0L ? 1L : totalRows))
+                                            (totalRows == 0L ? 1L : totalRows))
                                     .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                 }
             }
@@ -303,6 +347,10 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
             MetaUtils.normalizationTableName(session, statement.getTableName());
+            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                statement.setExternal(true);
+            }
+
             Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
             List<String> columnNames = statement.getColumnNames();
             for (String colName : columnNames) {

@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;
@@ -73,7 +74,6 @@ public class AnalyzeMgrTest {
             }
         };
 
-
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), true);
@@ -102,7 +102,7 @@ public class AnalyzeMgrTest {
     }
 
     @Test
-    public void testAnalyzeMgrPersist() throws Exception {
+    public void testAnalyzeMgrBasicStatsPersist() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
 
@@ -240,7 +240,8 @@ public class AnalyzeMgrTest {
         new MockUp<AnalyzeMgr>() {
             @Mock
             public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
-                                                                  List<String> columns, boolean async) {}
+                                                                  List<String> columns, boolean async) {
+            }
         };
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META);
         journalEntity.setData(externalBasicStatsMeta);
@@ -259,6 +260,60 @@ public class AnalyzeMgrTest {
         journalEntity.setData(externalBasicStatsMeta);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+    }
+
+    @Test
+    public void testAnalyzeMgrHistogramStatsPersist() throws Exception {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+
+        AnalyzeMgr analyzeMgr = new AnalyzeMgr();
+        ExternalHistogramStatsMeta externalHistogramStatsMeta = new ExternalHistogramStatsMeta("hive0", "hive_db",
+                "t1", "c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Maps.newHashMap());
+        analyzeMgr.addExternalHistogramStatsMeta(externalHistogramStatsMeta);
+        // test persist by image
+        UtFrameUtils.PseudoImage testImage = new UtFrameUtils.PseudoImage();
+        analyzeMgr.save(testImage.getDataOutputStream());
+        analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+        Assert.assertEquals(1, analyzeMgr.getExternalHistogramStatsMetaMap().size());
+        // test replay json to histogram stats
+        ExternalHistogramStatsMeta replayHistogramStatsMeta =
+                (ExternalHistogramStatsMeta) UtFrameUtils.PseudoJournalReplayer.
+                        replayNextJournal(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META);
+        Assert.assertEquals("hive0", replayHistogramStatsMeta.getCatalogName());
+        Assert.assertEquals("hive_db", replayHistogramStatsMeta.getDbName());
+        Assert.assertEquals("t1", replayHistogramStatsMeta.getTableName());
+        // test replay journal
+        JournalEntity journalEntity = new JournalEntity();
+        journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META);
+        journalEntity.setData(externalHistogramStatsMeta);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(1,
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
+
+        // test remove histogram stats
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID,
+                                              List<String> columnNames) {
+                return;
+            }
+        };
+        analyzeMgr.dropExternalHistogramStatsMetaAndData(connectContext, new TableName(
+                externalHistogramStatsMeta.getCatalogName(), externalHistogramStatsMeta.getDbName(),
+                externalHistogramStatsMeta.getTableName()), table, ImmutableList.of("c1"));
+        replayHistogramStatsMeta = (ExternalHistogramStatsMeta) UtFrameUtils.PseudoJournalReplayer.
+                replayNextJournal(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META);
+        Assert.assertEquals("hive0", replayHistogramStatsMeta.getCatalogName());
+        Assert.assertEquals("hive_db", replayHistogramStatsMeta.getDbName());
+        Assert.assertEquals("t1", replayHistogramStatsMeta.getTableName());
+        Assert.assertEquals("c1", replayHistogramStatsMeta.getColumn());
+
+        journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META);
+        journalEntity.setData(externalHistogramStatsMeta);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(0,
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
     }
 
     @Test
