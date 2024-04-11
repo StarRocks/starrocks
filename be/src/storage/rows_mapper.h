@@ -75,4 +75,7 @@ private:
 // rows mapper file's name for lake table
 StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_id);
 
+// rows mapper file's name for local table
+std::string local_rows_mapper_filename(const std::string& rowset_path, const std::string& rowset_id);
+
 } // namespace starrocks

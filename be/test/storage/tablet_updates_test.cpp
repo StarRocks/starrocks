@@ -1235,12 +1235,83 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
     EXPECT_TRUE(best_tablet->verify().ok());
 }
 
+// NOLINTNEXTLINE
+void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 5;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    auto rs = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    // stop apply
+    best_tablet->updates()->stop_apply(true);
+    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    // check rows mapper file
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // read from file
+    auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(local_rows_mapper_filename(output_rs->rowset_path(), output_rs->rowset_id_str())));
+    for (uint32_t i = 0; i < 100; i += 20) {
+        std::vector<uint64_t> rows_mapper;
+        ASSERT_OK(iterator.next_values(20, &rows_mapper));
+        ASSERT_TRUE(rows_mapper.size() == 20);
+        for (uint32_t j = 0; j < rows_mapper.size(); j++) {
+            ASSERT_TRUE((rows_mapper[j] >> 32) == 2);
+            ASSERT_TRUE((rows_mapper[j] & 0xFFFFFFFF) == i + j);
+        }
+    }
+    ASSERT_OK(iterator.status());
+    // should eof
+    std::vector<uint64_t> rows_mapper;
+    ASSERT_TRUE(iterator.next_values(1, &rows_mapper).is_end_of_file());
+    // restart apply
+    best_tablet->updates()->stop_apply(false);
+    best_tablet->updates()->check_for_apply();
+
+    // check final result
+    th.join();
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    EXPECT_TRUE(best_tablet->verify().ok());
+}
+
 TEST_F(TabletUpdatesTest, horizontal_compaction) {
     test_horizontal_compaction(false);
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
     test_horizontal_compaction(true);
+}
+
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_rows_mapper) {
+    test_horizontal_compaction_with_rows_mapper(false);
+}
+
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_with_rows_mapper) {
+    test_horizontal_compaction_with_rows_mapper(true);
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
@@ -1451,12 +1522,82 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 }
 
+void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_persistent_index) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    auto rs = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    // stop apply
+    best_tablet->updates()->stop_apply(true);
+    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    // check rows mapper file
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // read from file
+    auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
+    RowsMapperIterator iterator;
+    ASSERT_OK(iterator.open(local_rows_mapper_filename(output_rs->rowset_path(), output_rs->rowset_id_str())));
+    for (uint32_t i = 0; i < 100; i += 20) {
+        std::vector<uint64_t> rows_mapper;
+        ASSERT_OK(iterator.next_values(20, &rows_mapper));
+        ASSERT_TRUE(rows_mapper.size() == 20);
+        for (uint32_t j = 0; j < rows_mapper.size(); j++) {
+            ASSERT_TRUE((rows_mapper[j] >> 32) == 2);
+            ASSERT_TRUE((rows_mapper[j] & 0xFFFFFFFF) == i + j);
+        }
+    }
+    ASSERT_OK(iterator.status());
+    // should eof
+    std::vector<uint64_t> rows_mapper;
+    ASSERT_TRUE(iterator.next_values(1, &rows_mapper).is_end_of_file());
+    // restart apply
+    best_tablet->updates()->stop_apply(false);
+    best_tablet->updates()->check_for_apply();
+
+    // check final result
+    th.join();
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    EXPECT_TRUE(best_tablet->verify().ok());
+}
+
 TEST_F(TabletUpdatesTest, vertical_compaction) {
     test_vertical_compaction(false);
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index) {
     test_vertical_compaction(true);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction_with_rows_mapper) {
+    test_vertical_compaction_with_rows_mapper(false);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index_with_rows_mapper) {
+    test_vertical_compaction_with_rows_mapper(true);
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {

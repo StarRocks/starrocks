@@ -359,6 +359,8 @@ public:
 
     Status generate_pk_dump_if_in_error_state();
 
+    RowsetSharedPtr get_rowset(uint32_t rowset_id);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -402,9 +404,7 @@ private:
     // used for column-mode partial update
     void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
-    void _apply_compaction_commit(const EditVersionInfo& version_info);
-
-    RowsetSharedPtr _get_rowset(uint32_t rowset_id);
+    void _apply_compaction_commit(const EditVersionInfo& version_info, const EditVersion& applied_version);
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
@@ -487,6 +487,11 @@ private:
     std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
+
+    bool _use_light_apply_compaction(Rowset* rowset);
+
+    void _light_apply_compaction_commit(const EditVersionInfo& version_info, const EditVersion& applied_version,
+                                        Rowset* output_rowset);
 
 private:
     Tablet& _tablet;

@@ -133,4 +133,8 @@ StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_i
     return data_dir->get_tmp_path() + "/" + fmt::format("{:016X}_{:016X}.crm", tablet_id, txn_id);
 }
 
+std::string local_rows_mapper_filename(const std::string& rowset_path, const std::string& rowset_id) {
+    return rowset_path + "/" + rowset_id + ".crm";
+}
+
 } // namespace starrocks
