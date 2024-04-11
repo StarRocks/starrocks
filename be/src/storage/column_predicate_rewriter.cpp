@@ -493,7 +493,7 @@ Status _rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred, Col
 }
 
 Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
-                                                                 ColumnPredicates& dst_preds) {
+                                                                 std::vector<const ColumnExprPredicate*>& dst_preds) {
     DCHECK(src_pred != nullptr);
     const auto* column_expr_pred = down_cast<const ColumnExprPredicate*>(src_pred);
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, &dst_preds);

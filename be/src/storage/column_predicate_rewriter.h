@@ -129,7 +129,7 @@ public:
 private:
     static Status _rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred, ColumnPredicates& dst_preds);
     static Status _rewrite_column_expr_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
-                                                 ColumnPredicates& dst_preds);
+                                                 std::vector<const ColumnExprPredicate*>& dst_preds);
 };
 
 } // namespace starrocks
