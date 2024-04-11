@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -29,7 +30,6 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -292,11 +292,9 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
         refreshMaterializedViewWithPartition("test", "hive_partitioned_mv",
                 "1998-01-02", "1998-01-04");
-        Set<String> toRefreshPartitions = Sets.newHashSet();
 
         MaterializedView mv1 = getMv("test", "hive_partitioned_mv");
-        boolean result = mv1.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
-        Assert.assertTrue(result);
+        Set<String> toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
         Assert.assertEquals(4, toRefreshPartitions.size());
         Assert.assertTrue(toRefreshPartitions.contains("p19980101"));
         Assert.assertTrue(toRefreshPartitions.contains("p19980104"));
@@ -327,15 +325,15 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
         MaterializedView mv1 = getMv("test", "hive_unpartitioned_mv");
-        Set<String> toRefreshPartitions = Sets.newHashSet();
-        boolean result = mv1.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
-        Assert.assertTrue(result);
-        Assert.assertEquals(1, toRefreshPartitions.size());
+        MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
+        Set<String> toRefreshPartitions = mvUpdateInfo.getMvToRefreshPartitionNames();
+        Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+        Assert.assertTrue(!mvUpdateInfo.isValidRewrite());
+        Assert.assertEquals(0, toRefreshPartitions.size());
 
         toRefreshPartitions.clear();
         refreshMaterializedView("test", "hive_unpartitioned_mv");
-        result = mv1.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
-        Assert.assertTrue(result);
+        toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
         Assert.assertEquals(0, toRefreshPartitions.size());
 
         String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +

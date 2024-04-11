@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
@@ -41,7 +43,6 @@ import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -75,14 +76,14 @@ public class MaterializedViewTestBase extends PlanTestBase {
             m.createStatisticsTablesForTest();
         }
 
-        new MockUp<MaterializedView>() {
+        new MockUp<MvRefreshArbiter>() {
             /**
-             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
              */
             @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
+            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
+                                                                boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
             }
         };
 

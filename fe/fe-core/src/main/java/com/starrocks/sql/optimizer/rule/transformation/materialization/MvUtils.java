@@ -75,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -1276,6 +1277,27 @@ public class MvUtils {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         return scanMvOutputColumns;
+    }
+
+    public static OptExpression addExtraPredicate(OptExpression result,
+                                                  ScalarOperator extraPredicate) {
+        Operator op = result.getOp();
+        if (op instanceof LogicalSetOperator) {
+            LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
+            // use PUSH_DOWN_PREDICATE rule to push down filter after union all set after mv rewrite rule.
+            return OptExpression.create(filter, result);
+        } else {
+            // If op is aggregate operator, use setPredicate directly.
+            ScalarOperator origPredicate = op.getPredicate();
+            if (op.getProjection() != null) {
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
+                ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
+                op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
+            } else {
+                op.setPredicate(Utils.compoundAnd(origPredicate, extraPredicate));
+            }
+            return result;
+        }
     }
 
     public static ParseNode getQueryAst(String query) {
