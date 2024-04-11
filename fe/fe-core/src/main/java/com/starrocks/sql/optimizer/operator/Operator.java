@@ -185,13 +185,13 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
-    public DomainProperty getValueProperty(List<OptExpression> inputs) {
+    public DomainProperty getDomainProperty(List<OptExpression> inputs) {
         if (domainProperty == null) {
-            domainProperty = deriveValueProperty(inputs);
+            domainProperty = deriveDomainProperty(inputs);
         }
 
         if (projection != null) {
-            domainProperty = domainProperty.projectValueProperty(projection.getColumnRefMap());
+            domainProperty = domainProperty.projectDomainProperty(projection.getColumnRefMap());
         }
 
         return domainProperty;
@@ -201,7 +201,7 @@ public abstract class Operator {
         throw new UnsupportedOperationException();
     }
 
-    protected DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+    protected DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
         return new DomainProperty(Map.of());
     }
 

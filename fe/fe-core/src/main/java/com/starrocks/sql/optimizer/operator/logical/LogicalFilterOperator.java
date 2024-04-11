@@ -61,11 +61,11 @@ public class LogicalFilterOperator extends LogicalOperator {
     }
 
     @Override
-    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
-        DomainProperty childDomainProperty = inputs.get(0).getValueProperty();
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
         DomainPropertyDeriver deriver = new DomainPropertyDeriver();
         DomainProperty filterDomainProperty = deriver.derive(predicate);
-        return childDomainProperty.filterValueProperty(filterDomainProperty);
+        return childDomainProperty.filterDomainProperty(filterDomainProperty);
     }
 
     @Override

@@ -77,8 +77,8 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
-        DomainProperty leftDomainProperty = leftChild.getValueProperty();
-        DomainProperty rightDomainProperty = rightChild.getValueProperty();
+        DomainProperty leftDomainProperty = leftChild.getDomainProperty();
+        DomainProperty rightDomainProperty = rightChild.getDomainProperty();
 
         OptExpression result = null;
         if (joinOperator.getJoinType().isInnerJoin() || joinOperator.getJoinType().isSemiJoin()) {

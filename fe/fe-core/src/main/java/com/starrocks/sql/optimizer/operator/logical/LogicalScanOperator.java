@@ -131,7 +131,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     }
 
     @Override
-    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
         if (predicate == null) {
             return new DomainProperty(Map.of());
         }

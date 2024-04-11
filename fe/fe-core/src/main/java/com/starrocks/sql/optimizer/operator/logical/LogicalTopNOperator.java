@@ -153,11 +153,11 @@ public class LogicalTopNOperator extends LogicalOperator {
     }
 
     @Override
-    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
             return new DomainProperty(Map.of());
         }
-        return inputs.get(0).getValueProperty();
+        return inputs.get(0).getDomainProperty();
     }
 
     @Override

@@ -146,8 +146,8 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
-    public DomainProperty getValueProperty() {
-        return op.getValueProperty(inputs);
+    public DomainProperty getDomainProperty() {
+        return op.getDomainProperty(inputs);
     }
 
     public void initRowOutputInfo() {

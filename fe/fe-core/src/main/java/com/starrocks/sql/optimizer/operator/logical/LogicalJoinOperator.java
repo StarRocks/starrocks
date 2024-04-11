@@ -208,13 +208,13 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
-    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
             return new DomainProperty(Map.of());
         }
-        DomainProperty leftDomainProperty = inputs.get(0).getValueProperty();
-        DomainProperty rightDomainProperty = inputs.get(1).getValueProperty();
-        return DomainProperty.mergeValueProperty(List.of(leftDomainProperty, rightDomainProperty));
+        DomainProperty leftDomainProperty = inputs.get(0).getDomainProperty();
+        DomainProperty rightDomainProperty = inputs.get(1).getDomainProperty();
+        return DomainProperty.mergeDomainProperty(List.of(leftDomainProperty, rightDomainProperty));
     }
 
     @Override

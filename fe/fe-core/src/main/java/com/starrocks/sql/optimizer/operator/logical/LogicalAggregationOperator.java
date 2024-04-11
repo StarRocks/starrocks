@@ -181,11 +181,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
     }
 
     @Override
-    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
             return new DomainProperty(Map.of());
         }
-        DomainProperty childDomainProperty = inputs.get(0).getValueProperty();
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
 
         Map<ScalarOperator, DomainProperty.DomainWrapper> newValueMap = Maps.newHashMap();
         for (ColumnRefOperator groupByKey : groupingKeys) {
@@ -204,7 +204,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         if (predicate != null) {
             DomainPropertyDeriver deriver = new DomainPropertyDeriver();
             DomainProperty property = deriver.derive(predicate);
-            domainProperty = domainProperty.filterValueProperty(property);
+            domainProperty = domainProperty.filterDomainProperty(property);
         }
         return domainProperty;
     }

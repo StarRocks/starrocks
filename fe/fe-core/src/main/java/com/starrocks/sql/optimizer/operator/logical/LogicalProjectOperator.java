@@ -71,13 +71,13 @@ public final class LogicalProjectOperator extends LogicalOperator {
     }
 
     @Override
-    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
         if (CollectionUtils.isEmpty(inputs)) {
             return new DomainProperty(Map.of());
         }
-        DomainProperty childDomainProperty = inputs.get(0).getValueProperty();
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
 
-        return childDomainProperty.projectValueProperty(columnRefMap);
+        return childDomainProperty.projectDomainProperty(columnRefMap);
     }
 
     @Override

@@ -61,7 +61,7 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
     }
 
     @Override
-    public DomainProperty deriveValueProperty(List<OptExpression> inputs) {
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
         return new DomainProperty(Map.of());
     }
 

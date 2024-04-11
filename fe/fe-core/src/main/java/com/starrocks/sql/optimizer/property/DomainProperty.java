@@ -56,7 +56,7 @@ public class DomainProperty {
         return domainMap.get(scalarOperator).getPredicateDesc();
     }
 
-    public DomainProperty projectValueProperty(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+    public DomainProperty projectDomainProperty(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
             if (domainMap.containsKey(entry.getValue()) && !entry.getValue().equals(entry.getKey())) {
@@ -74,7 +74,7 @@ public class DomainProperty {
         return new DomainProperty(newValueMap);
     }
 
-    public DomainProperty filterValueProperty(DomainProperty filterDomainProperty) {
+    public DomainProperty filterDomainProperty(DomainProperty filterDomainProperty) {
         Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap(domainMap);
 
         for (Map.Entry<ScalarOperator, DomainWrapper> entry : filterDomainProperty.domainMap.entrySet()) {
@@ -87,7 +87,7 @@ public class DomainProperty {
         return new DomainProperty(newValueMap);
     }
 
-    public static DomainProperty mergeValueProperty(List<DomainProperty> domainPropertyList) {
+    public static DomainProperty mergeDomainProperty(List<DomainProperty> domainPropertyList) {
         Map<ScalarOperator, DomainWrapper> newValueMap = Maps.newHashMap();
         for (DomainProperty domainProperty : domainPropertyList) {
             for (Map.Entry<ScalarOperator, DomainWrapper> entry : domainProperty.domainMap.entrySet()) {
