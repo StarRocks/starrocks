@@ -335,6 +335,51 @@ public enum ErrorCode {
      */
 
     /**
+<<<<<<< HEAD
+=======
+     * 5200 - 5299: Authentication and Authorization
+     */
+    ERR_PASSWD_LENGTH(5201, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Password hash should be a %d-digit hexadecimal number"),
+    ERR_SQL_IN_BLACKLIST_ERROR(5202, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; This sql is in blacklist, please contact your admin"),
+    ERR_ACCESS_DENIED(5203, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
+                    ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
+    ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
+
+    /**
+     * 5300 - 5399: Lock and Transaction
+     */
+    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to acquire lock: %s"),
+    ERR_BEGIN_TXN_FAILED(5301, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to begin transaction: %s"),
+
+    /**
+     * 5400 - 5499: Internal error
+     */
+    ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5400, new byte[] {'X', 'X', '0', '0', '0'},
+            "Failed to change to SSL connection"),
+    ERR_FORWARD_TOO_MANY_TIMES(5401, new byte[] {'X', 'X', '0', '0', '0'}, "forward too many times %d"),
+
+    /**
+     * 5500 - 5599: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5500, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated"),
+    ERR_BAD_DB_ERROR(5501, new byte[] {'3', 'F', '0', '0', '0'}, "Unknown database '%s'"),
+    ERR_BAD_TABLE_ERROR(5502, new byte[] {'4', '2', '6', '0', '2'}, "Unknown table '%s'"),
+    ERR_NOT_OLAP_TABLE(5503, new byte[] {'4', '2', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
+    ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
+            "Partition '%s' has sub partitions, should specify the partition id"),
+    ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
+    ERR_NO_DEFAULT_STORAGE_VOLUME(5506, new byte[] {'5', '5', '0', '0', '0'},
+            "The default storage volume does not exist. " +
+                    "A default storage volume can be created by following these steps: " +
+                    "1. Create a storage volume. 2. Set the storage volume as default"),
+
+    /**
+>>>>>>> e79cbddb72 ([Enhancement] Unify error msg of default storage volume not exists (#43872))
      * 5600 - 5699: DML operation failure
      */
     ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
