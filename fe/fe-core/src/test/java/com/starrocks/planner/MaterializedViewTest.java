@@ -2164,6 +2164,76 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testViewDeltaJoinUKFK15() {
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(0);
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteFail(mv, query);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK16() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where dependents.name = 'name1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK17() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " join dependents using (empid)\n"
+                + "where dependents.name = 'name1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK18() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "full outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " full join dependents using (empid)\n"
+                + "where emps.empid = '1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK19() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "full outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " inner join dependents using (empid)\n"
+                + "where emps.empid = '1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+>>>>>>> 921847bd4b ([Enhancement] enhance view delta rewrite to support join derive rewrite (#43861))
     public void testViewDeltaJoinUKFKInMV1() {
         String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
                 + "join dependents using (empid)";
