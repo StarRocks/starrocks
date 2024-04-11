@@ -90,6 +90,18 @@ public class MvUpdateInfo {
         return "MvUpdateInfo{" +
                 "refreshType=" + mvToRefreshType +
                 ", mvToRefreshPartitionNames=" + mvToRefreshPartitionNames +
+                ", basePartToMvPartNames=" + basePartToMvPartNames +
+                ", mvPartToBasePartNames=" + mvPartToBasePartNames +
+                '}';
+    }
+
+    /**
+     * @return the detail string of the mv update info
+     */
+    public String toDetailString() {
+        return "MvUpdateInfo{" +
+                "refreshType=" + mvToRefreshType +
+                ", mvToRefreshPartitionNames=" + mvToRefreshPartitionNames +
                 ", baseTableUpdateInfos=" + baseTableUpdateInfos +
                 ", basePartToMvPartNames=" + basePartToMvPartNames +
                 ", mvPartToBasePartNames=" + mvPartToBasePartNames +

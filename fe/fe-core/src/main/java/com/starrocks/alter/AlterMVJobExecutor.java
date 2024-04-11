@@ -152,6 +152,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             queryRewriteSwitch = TableProperty.analyzeQueryRewriteSwitch(value);
             properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
         }
+        TableProperty.MVTransparentRewriteMode mvTransparentRewriteMode =
+                materializedView.getTableProperty().getMvTransparentRewriteMode();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE);
+            mvTransparentRewriteMode = TableProperty.analyzeMVTransparentRewrite(value);
+            properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE);
+        }
 
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
@@ -253,6 +260,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
             isChanged = true;
         }
+        // enable_query_rewrite
         if (propClone.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
             materializedView.getTableProperty().getProperties()
                     .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
@@ -263,6 +271,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             } else {
                 CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
             }
+            isChanged = true;
+        }
+        // enable_transparent_rewrite
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE)) {
+            materializedView.getTableProperty().getProperties()
+                    .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE, String.valueOf(mvTransparentRewriteMode));
+            materializedView.getTableProperty().setMvTransparentRewriteMode(mvTransparentRewriteMode);
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
