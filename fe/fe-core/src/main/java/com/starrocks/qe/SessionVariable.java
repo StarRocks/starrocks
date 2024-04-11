@@ -1894,13 +1894,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
     private boolean cboDecimalCastStringStrict = true;
 
-<<<<<<< HEAD
-    @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
-    private String cboEqBaseType = SessionVariableConstants.VARCHAR;
-=======
     @VarAttr(name = CBO_EQ_BASE_TYPE)
     private String cboEqBaseType = SessionVariableConstants.DECIMAL;
->>>>>>> 8d360d04cc ([BugFix] es operator support decimalV3 predicate (#43577))
 
     @VariableMgr.VarAttr(name = ENABLE_RESULT_SINK_ACCUMULATE)
     private boolean enableResultSinkAccumulate = true;
