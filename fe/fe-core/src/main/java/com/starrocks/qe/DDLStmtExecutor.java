@@ -18,7 +18,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -27,6 +29,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.datacache.DataCacheSelectExecutor;
+import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
@@ -86,6 +90,7 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
@@ -143,6 +148,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class DDLStmtExecutor {
 
@@ -1012,6 +1018,36 @@ public class DDLStmtExecutor {
                 DataCacheMgr.getInstance().clearRules();
             });
             return null;
+        }
+
+        @Override
+        public ShowResultSet visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+            Optional<DataCacheSelectMetrics> metrics = Optional.empty();
+            String errorMsg = "N/A";
+            try {
+                metrics = DataCacheSelectExecutor.cacheSelect(statement, context);
+            } catch (Exception e) {
+                LOG.warn(e);
+                errorMsg = e.getMessage();
+            }
+
+            Map<String, String> properties = statement.getProperties();
+            boolean verbose = Boolean.parseBoolean(properties.getOrDefault("verbose", "false"));
+
+            if (metrics.isPresent()) {
+                return metrics.get().getShowResultSet(verbose);
+            } else {
+                List<List<String>> rows = Lists.newArrayList();
+                List<String> row = Lists.newArrayList();
+                ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
+                        .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
+                        .addColumn(new Column("ERROR_MSG", ScalarType.createVarcharType()))
+                        .build();
+                row.add("FAILED");
+                row.add(errorMsg);
+                rows.add(row);
+                return new ShowResultSet(metaData, rows);
+            }
         }
 
         //=========================================== Dictionary Statement ==================================================

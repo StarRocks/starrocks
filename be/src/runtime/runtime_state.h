@@ -37,14 +37,14 @@
 #include <atomic>
 #include <fstream>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
+#include "block_cache/block_cache.h"
+#include "block_cache/datacache_utils.h"
 #include "cctz/time_zone.h"
-#include "common/constexpr.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -305,6 +305,47 @@ public:
         load_params->__set_filtered_rows(num_rows_load_filtered());
         load_params->__set_unselected_rows(num_rows_load_unselected());
         load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
+
+        // Update datacache load metrics
+        if (config::datacache_enable) {
+            update_load_datacache_metrics(load_params);
+        }
+    }
+
+    void update_num_datacache_read_bytes(const int64_t read_bytes) {
+        _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_read_time_ns(const int64_t read_time) {
+        _num_datacache_read_time_ns.fetch_add(read_time, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_write_bytes(const int64_t write_bytes) {
+        _num_datacache_write_bytes.fetch_add(write_bytes, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_write_time_ns(const int64_t write_time) {
+        _num_datacache_write_time_ns.fetch_add(write_time, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_count(const int64_t count) {
+        _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
+    }
+
+    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+        TLoadDataCacheMetrics metrics{};
+        metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
+        metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
+        metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
+        metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
+        metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
+
+        const BlockCache* cache = BlockCache::instance();
+        TDataCacheMetrics t_metrics{};
+        DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+        metrics.__set_metrics(t_metrics);
+
+        load_params->__set_load_datacache_metrics(metrics);
     }
 
     std::atomic_int64_t* mutable_total_spill_bytes();
@@ -560,6 +601,13 @@ private:
     std::atomic<int64_t> _num_rows_load_filtered{0};     // unqualified rows
     std::atomic<int64_t> _num_rows_load_unselected{0};   // rows filtered by predicates
     std::atomic<int64_t> _num_bytes_scan_from_source{0}; // total bytes scan from source node
+
+    // datacache select metrics
+    std::atomic<int64_t> _num_datacache_read_bytes{0};
+    std::atomic<int64_t> _num_datacache_read_time_ns{0};
+    std::atomic<int64_t> _num_datacache_write_bytes{0};
+    std::atomic<int64_t> _num_datacache_write_time_ns{0};
+    std::atomic<int64_t> _num_datacache_count{0};
 
     std::atomic<int64_t> _num_print_error_rows{0};
     std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows

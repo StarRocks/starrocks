@@ -50,6 +50,8 @@ public class TaskRunBuilder {
         taskRun.setType(getTaskType());
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
+        } else if (task.getSource().equals(Constants.TaskSource.DATACACHE_SELECT)) {
+            taskRun.setProcessor(new DataCacheSelectProcessor());
         } else {
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }
