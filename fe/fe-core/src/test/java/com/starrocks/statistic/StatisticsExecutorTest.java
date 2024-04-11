@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
@@ -130,7 +131,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
     }
 
     @Test
-    public void testQueryStatisticSync() {
+    public void testQueryStatisticSync() throws AnalysisException {
         String res;
         new MockUp<StatisticExecutor>() {
             @Mock
