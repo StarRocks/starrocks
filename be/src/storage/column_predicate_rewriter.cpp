@@ -55,8 +55,8 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
         const FieldPtr& field = _schema.field(i);
         const auto cid = field->id();
 
-        auto iter = pred_map.find(cid);
-        if (iter == pred_map.end()) {
+        auto iter = _pred_map.find(cid);
+        if (iter == _pred_map.end()) {
             continue;
         }
         auto& preds = iter->second;
@@ -469,7 +469,7 @@ Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool, const 
                                                         ColumnPredicateMap* dst_pred_map) {
     DCHECK(dst_pred_map != nullptr);
     for (auto& [cid, src_preds] : src_pred_map) {
-        auto& dst_preds = dst_pred_map->emplace(cid, {}).first->second;
+        auto& dst_preds = dst_pred_map->emplace({cid, {}}).first->second;
 
         for (const auto* src_pred : src_preds) {
             RETURN_IF_ERROR(_rewrite_predicate(pool, src_pred, dst_preds));
@@ -486,11 +486,12 @@ Status ZonemapPredicatesRewriter::_rewrite_predicate(ObjectPool* pool, const Col
         std::vector<const ColumnExprPredicate*> new_preds;
         RETURN_IF_ERROR(_rewrite_column_expr_predicate(pool, src_pred, new_preds));
         if (!new_preds.empty()) {
-            dst_preds.insert(dst_preds->end(), new_preds.begin(), new_preds.end());
+            dst_preds.insert(dst_preds.end(), new_preds.begin(), new_preds.end());
         } else {
             dst_preds.emplace_back(src_pred);
         }
     }
+    return Status::OK();
 }
 
 Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
