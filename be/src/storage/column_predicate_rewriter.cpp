@@ -442,7 +442,7 @@ StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::_rewrite_predicate(co
     return std::unique_ptr<ColumnPredicate>(new_pred);
 }
 
-Status GlobalDictPredicatesRewriter::rewrite_predicate(ConjunctivePredicates& predicates, ObjectPool* pool) {
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool, ConjunctivePredicates& predicates) {
     std::vector<uint8_t> selection;
     auto preds_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
         for (auto& pred : preds) {

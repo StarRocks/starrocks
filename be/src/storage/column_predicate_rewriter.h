@@ -95,7 +95,7 @@ public:
     GlobalDictPredicatesRewriter(const ColumnIdToGlobalDictMap& dict_maps, std::vector<uint8_t>* disable_rewrite)
             : _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
-    Status rewrite_predicate(ConjunctivePredicates& predicates, ObjectPool* pool);
+    Status rewrite_predicate(ObjectPool* pool, ConjunctivePredicates& predicates);
 
 private:
     /// Rewrites a single predicate.
