@@ -196,6 +196,7 @@ import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.common.RefreshMode;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
@@ -2198,9 +2199,17 @@ public class GlobalStateMgr {
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
         TableName tableName = stmt.getTableName();
         List<String> partitionNames = stmt.getPartitions();
+        if (stmt.getMode() != null) {
+            syncPartitions(tableName, partitionNames, stmt.getMode());
+        }
         refreshExternalTable(tableName, partitionNames);
         refreshOthersFeTable(tableName, partitionNames, true);
     }
+
+    private void syncPartitions(TableName tableName, List<String> partitionNames, RefreshMode mode) {
+        metadataMgr.syncPartitions(tableName, partitionNames, mode);
+    }
+
 
     public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);

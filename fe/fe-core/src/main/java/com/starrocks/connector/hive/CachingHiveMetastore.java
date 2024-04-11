@@ -32,6 +32,7 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.sql.common.RefreshMode;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
@@ -751,5 +752,10 @@ public class CachingHiveMetastore implements IHiveMetastore {
             String catalogName,
             final boolean getAllEvents) throws MetastoreNotificationFetchException {
         return ((HiveMetastore) metastore).getNextEventResponse(lastSyncedEventId, catalogName, getAllEvents);
+    }
+
+    @Override
+    public void syncPartitions(String db, String tableName, List<String> partitionNames, RefreshMode mode) {
+        metastore.syncPartitions(db, tableName, partitionNames, mode);
     }
 }

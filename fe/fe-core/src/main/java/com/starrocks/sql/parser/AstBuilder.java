@@ -440,6 +440,7 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.EngineType;
+import com.starrocks.sql.common.RefreshMode;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -1192,7 +1193,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             partitionNames = context.string().stream()
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
-        return new RefreshTableStmt(targetTableName, partitionNames, createPos(context));
+        RefreshMode mode = null;
+        if (context.SYNC() != null) {
+            mode = RefreshMode.SYNC;
+        } else if (context.ADD() != null) {
+            mode = RefreshMode.ADD;
+        } else if (context.DROP() != null) {
+            mode = RefreshMode.DROP;
+        }
+        return new RefreshTableStmt(targetTableName, partitionNames, createPos(context), mode);
     }
 
     @Override

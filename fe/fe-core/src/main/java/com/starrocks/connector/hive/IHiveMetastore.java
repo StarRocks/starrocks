@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.common.RefreshMode;
 
 import java.util.List;
 import java.util.Map;
@@ -104,4 +105,6 @@ public interface IHiveMetastore {
     default long getCurrentEventId() {
         return -1;
     }
+
+    void syncPartitions(String db, String tableName, List<String> partitionNames, RefreshMode mode);
 }
