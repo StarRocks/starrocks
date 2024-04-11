@@ -35,7 +35,7 @@ WRITE_CACHE_SIZE：写入 Data Cache 的大小。
 AVG_WRITE_CACHE_TIME：每一个文件写入 Data Cache 的平均耗时。
 TOTAL_CACHE_USAGE：本次预热执行完成后 Data Cache 的空间利用率，你可以根据这个评估 Data Cache 的空间是否充足。
 
-当然你可以进行更加细粒度的预热，减少 Data Cache 的占用，比如下面这个 case：
+当然你可以通过指定谓词和分区进行更加细粒度的预热，以减少 Data Cache 的占用，比如下面这个 case：
 
 ```sql
 mysql> cache select l_orderkey from lineitem where l_shipdate='1994-10-28';
