@@ -21,8 +21,15 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
+<<<<<<< HEAD
 import com.starrocks.common.util.LogUtil;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> e79cbddb72 ([Enhancement] Unify error msg of default storage volume not exists (#43872))
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
@@ -113,7 +120,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                throw new DdlException("Default storage volume not exists, it should be created first");
+                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -180,24 +187,15 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (dbStorageVolumeId != null) {
                 return getStorageVolume(dbStorageVolumeId);
             } else {
-                sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+                sv = getDefaultStorageVolume();
                 if (sv == null) {
-                    if (Config.enable_load_volume_from_conf) {
-                        LOG.error("Failed to get builtin storage volume, svName: {}, dbId: {}, current stack trace: {}",
-                                svName, dbId, LogUtil.getCurrentStackTrace());
-                        throw new DdlException(String.format("Failed to get builtin storage volume, svName: %s, dbId: %d",
-                                svName, dbId));
-                    } else {
-                        throw new DdlException("Cannot find a suitable storage volume. " +
-                                "Try setting 'enable_load_volume_from_conf' to true " +
-                                "and ensure the related storage volume settings are correct");
-                    }
+                    ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                throw new DdlException("Default storage volume not exists, it should be created first");
+                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
