@@ -22,7 +22,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -118,7 +118,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -187,13 +187,13 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             } else {
                 sv = getDefaultStorageVolume();
                 if (sv == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                    ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
