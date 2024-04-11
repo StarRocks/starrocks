@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 本文介绍如何通过 Data Cache 预热来提前将远端数据载入 Data Cache。
 
-在数据湖分析过程中，有一些场景对查询有一定的性能要求，比如 BI 报表，性能测试 POC 等。我们可以通过提前将远端数据载入 Data Cache，避免查询时还需要从远端拉取数据，从而提供稳定的查询性能。
+在数据湖分析过程中，有一些场景对查询有一定的性能要求，比如 BI 报表，性能测试 POC 等。我们可以提前将远端数据载入 Data Cache，避免查询时还需要从远端拉取数据，从而提供稳定的查询性能。
 
 ## CACHE SELECT 语法
 
@@ -50,24 +50,26 @@ mysql> cache select l_orderkey from lineitem where l_shipdate='1994-10-28';
 默认情况下，`CACHE SELECT` 给用户返回的指标是一个合并后的指标，你可以在 `CACHE SELECT` 末尾添加 `PROPERTIES("verbose"="true")` 获得更加详细的指标。
 
 ```sql
-mysql> cache select l_orderkey from lineitem where l_shipdate='1994-10-28'xxxx;
-+---------+---------------------+------------------+----------------------+-------------------+
-| STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
-+---------+---------------------+------------------+----------------------+-------------------+
-| SUCCESS | 1.3GB               | 15.1GB           | 12.2ms               | 75.81%            |
-+---------+---------------------+------------------+----------------------+-------------------+
-1 row in set (2 min 17.06 sec)
+mysql> cache select * from lineitem properties("verbose"="true");
++--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
+| BE_IP        | STATUS  | ALREADY_CACHED_SIZE | AVG_READ_CACHE_TIME | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
++--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
+| 172.26.80.42 | SUCCESS | 115.4MB             | 461.4micros         | 5.2GB            | 1.2s                 | 16.35%            |
+| 172.26.80.44 | SUCCESS | 106.5MB             | 2ms                 | 4.8GB            | 837ms                | 15.13%            |
+| 172.26.80.43 | SUCCESS | 114.7MB             | 4.9ms               | 5.1GB            | 988.9ms              | 16.10%            |
++--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
+3 rows in set (42.87 sec)
 ```
 
-verbose 模式下，会多返回两个指标，分别是如下含义：
+verbose 模式下，会返回每个 BE 的预热情况。同时会多返回一个指标：
 
+AVG_READ_CACHE_TIME： 表示每一个文件在 Data Cache 里面的平均查找耗时。
 
-
-## CACHE SELECT 结合 SUBMIT TASK
+## CACHE SELECT 定时调度
 
 CACHE SELECT 可以和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 结合，以实现周期性的预热。
 
-比如下面这个例子，每隔 5 分钟对 `lineitem` 进行一次预热：
+比如下面这个例子，每隔 5 分钟对 `lineitem` 表进行一次预热：
 
 ```sql
 mysql> submit task always_cache schedule every(interval 5 minute) as cache select l_orderkey from lineitem where l_shipdate='1994-10-28';
@@ -114,13 +116,13 @@ DROP TASK <task_name>;
 
 ## CACHE SELECT 最佳实践
 
-1. 做 POC 性能测试的时候，我想抛开外部存储系统的干扰，测试 StarRocks 的性能。
+1. 做 POC 性能测试的时候，想抛开外部存储系统的干扰，测试 StarRocks 的性能。
 
 你可以通过 `CACHE_SELECT` 语句提前把待 POC 的表数据载入 Data Cache，
 
-2. 业务方每天早上 8 点要查看 BI 报表，我希望那时候能够给业务方提供一个稳定的查询性能。
+2. 业务方每天早上 8 点要查看 BI 报表，我希望那时候能够给业务方提供一个相对稳定的查询性能。
 
-你可以提交一个周期性执行的 `CACHE SELECT`，指定在 8 点前执行。
+你可以提交一个周期性执行的 `CACHE SELECT`，指定每天早上 7 点开始执行。
 
 ```sql
 mysql> submit task BI schedule START('2024-02-03 07:00:00') EVERY(interval 1 day) AS cache select * from lineitem where l_shipdate='1994-10-28';
@@ -134,7 +136,9 @@ mysql> submit task BI schedule START('2024-02-03 07:00:00') EVERY(interval 1 day
 
 3. 我希望预热的时候，不要过多的消耗系统资源
 
-`SUBMIT TASK` 框架支持指定 Session Variable，你可以让 task 在指定的资源组执行，也可以降低查询的 DOP，等等。
+`SUBMIT TASK` 框架支持指定 Session Variable，你可以让 `CACHE SELECT` task 在指定的资源组执行，也可以降低预热的 DOP，等等。
+
+如下这个例子，该 task 同时指定了预热的 DOP 和资源组，以此减少预热对系统正常查询的影响。
 
 ```sql
 mysql> submit task cache_select properties("pipeline_dop"="1", "resource_group"="warmup") schedule EVERY(interval 1 day) AS cache select * from lineitem;
@@ -146,13 +150,12 @@ mysql> submit task cache_select properties("pipeline_dop"="1", "resource_group"=
 1 row in set (0.03 sec)
 ```
 
-如上面这个例子，同时指定了 task 的 DOP 和资源组，以此减少预热对系统正常查询的影响。
-
 ## CACHE SELECT 限制
 
 * 目前 CACHE SELECT 的实现是采用 `INSERT INTO BLACKHOLE()` 的方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销是差不多的。这一块后续会做出改进，提升 `CACHE SELECT` 的性能。
 * `CACHE SELECT` 只支持对单表进行预热，不会支持 `ORDER BY`，`LIMIT`，`GROUP BY` 等算子。
+* `CACHE SELECT` 预热的数据不会保证一定不被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以自行通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
 
 ## Data Cache 预热后续展望
 
-后续 StarRocks 将会引入自适应的 Data Cache 预热，尽可能的保证在用户日常查询的过程中，拥有尽可能高的缓存命中率。
+后续 StarRocks 将会引入自适应的 Data Cache 预热，尽可能的保证在用户日常查询的过程中，拥有更高的缓存命中率。
