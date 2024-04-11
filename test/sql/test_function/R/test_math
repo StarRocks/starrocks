@@ -1,4 +1,4 @@
--- name: test_math_cosine_similarity
+-- name: test_math: cosine_similarity, l2_distance
 create table t1 (id int, data array<float>) engine = olap distributed by hash(id) properties ("replication_num" = "1");
 -- result:
 []
@@ -21,23 +21,33 @@ select cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2
 -- result:
 0.14000002
 -- !result
-create table test_cosine (id int, data array<float>) ENGINE=olap DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) properties ("replication_num" = "1");
+select l2_distance(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 order by dist desc;
+-- result:
+0.08000001	3
+0.020000001	2
+0	1
+-- !result
+select l2_distance(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
+-- result:
+0
+-- !result
+create table test_vector (id int, data array<float>) ENGINE=olap DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) properties ("replication_num" = "1");
 -- result:
 []
 -- !result
-insert into test_cosine values (1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]);
+insert into test_vector values (1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]);
 -- result:
 []
 -- !result
-insert into test_cosine values (3, array<float>[0.15, 0.25, 0.32]), (4, array<float>[0.12, 0.11, 0.32]);
+insert into test_vector values (3, array<float>[0.15, 0.25, 0.32]), (4, array<float>[0.12, 0.11, 0.32]);
 -- result:
 []
 -- !result
-insert into test_cosine values (5, array<float>[0.25, 0.12, 0.13]), (6, array<float>[0.22, 0.01, 0.39]);
+insert into test_vector values (5, array<float>[0.25, 0.12, 0.13]), (6, array<float>[0.22, 0.01, 0.39]);
 -- result:
 []
 -- !result
-select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim from test_cosine order by sim desc;
+select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim from test_vector order by sim desc;
 -- result:
 1	[0.1,0.2,0.3]	0.9999999
 3	[0.15,0.25,0.32]	0.99397856
@@ -46,7 +56,7 @@ select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim fro
 6	[0.22,0.01,0.39]	0.841375
 5	[0.25,0.12,0.13]	0.76792216
 -- !result
-select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_cosine as a cross join test_cosine as b;
+select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_vector as a cross join test_vector as b;
 -- result:
 6	4	[0.22,0.01,0.39]	[0.12,0.11,0.32]	0.94712645
 6	1	[0.22,0.01,0.39]	[0.1,0.2,0.3]	0.841375
@@ -85,7 +95,7 @@ select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from
 4	5	[0.12,0.11,0.32]	[0.25,0.12,0.13]	0.77120167
 4	6	[0.12,0.11,0.32]	[0.22,0.01,0.39]	0.94712645
 -- !result
-select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_cosine as a cross join test_cosine as b order by sim desc;
+select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_vector as a cross join test_vector as b order by sim desc;
 -- result:
 3	3	[0.15,0.25,0.32]	[0.15,0.25,0.32]	1.0
 5	5	[0.25,0.12,0.13]	[0.25,0.12,0.13]	0.99999994
@@ -123,4 +133,91 @@ select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from
 4	5	[0.12,0.11,0.32]	[0.25,0.12,0.13]	0.77120167
 1	5	[0.1,0.2,0.3]	[0.25,0.12,0.13]	0.76792216
 5	1	[0.25,0.12,0.13]	[0.1,0.2,0.3]	0.76792216
+-- !result
+select id, data, l2_distance(array<float>[0.1, 0.2, 0.3], data) as sim from test_vector order by sim desc;
+-- result:
+6 [0.22,0.01,0.39]	0.058599994
+5 [0.25,0.12,0.13]	0.057800006
+2 [0.2,0.1,0.3]	0.020000001
+4 [0.12,0.11,0.32]	0.0089
+3 [0.15,0.25,0.32]	0.005399999
+1	[0.1,0.2,0.3]	0
+-- !result
+select a.id, b.id, a.data, b.data, l2_distance(a.data, b.data) as sim from test_vector as a cross join test_vector as b;
+-- result:
+2	3	[0.2,0.1,0.3]   [0.15,0.25,0.32]	0.0254
+2	1	[0.2,0.1,0.3]   [0.1,0.2,0.3]   0.020000001
+2	2	[0.2,0.1,0.3]   [0.2,0.1,0.3]   0
+2	4	[0.2,0.1,0.3]   [0.12,0.11,0.32]	0.0069
+2	5	[0.2,0.1,0.3]   [0.25,0.12,0.13]	0.031800006
+2	6	[0.2,0.1,0.3]   [0.22,0.01,0.39]	0.016599996
+6	3	[0.22,0.01,0.39]	[0.15,0.25,0.32]	0.0674
+6	1	[0.22,0.01,0.39]	[0.1,0.2,0.3]   0.058599994
+6	2	[0.22,0.01,0.39]	[0.2,0.1,0.3]   0.016599996
+6	4	[0.22,0.01,0.39]	[0.12,0.11,0.32]	0.0249
+6	5	[0.22,0.01,0.39]	[0.25,0.12,0.13]	0.08059999
+6	6	[0.22,0.01,0.39]	[0.22,0.01,0.39]	0
+3	3	[0.15,0.25,0.32]	[0.15,0.25,0.32]	0
+3	1	[0.15,0.25,0.32]	[0.1,0.2,0.3]   0.005399999
+3	2	[0.15,0.25,0.32]	[0.2,0.1,0.3]   0.0254
+3	4	[0.15,0.25,0.32]	[0.12,0.11,0.32]	0.0205
+3	5	[0.15,0.25,0.32]	[0.25,0.12,0.13]	0.06299999
+3	6	[0.15,0.25,0.32]	[0.22,0.01,0.39]	0.0674
+1	3	[0.1,0.2,0.3]   [0.15,0.25,0.32]	0.005399999
+1	1	[0.1,0.2,0.3]   [0.1,0.2,0.3]   0
+1	2	[0.1,0.2,0.3]   [0.2,0.1,0.3]   0.020000001
+1	4	[0.1,0.2,0.3]   [0.12,0.11,0.32]	0.0089
+1	5	[0.1,0.2,0.3]   [0.25,0.12,0.13]	0.057800006
+1	6	[0.1,0.2,0.3]   [0.22,0.01,0.39]	0.058599994
+5	3	[0.25,0.12,0.13]	[0.15,0.25,0.32]	0.06299999
+5	1	[0.25,0.12,0.13]	[0.1,0.2,0.3]   0.057800006
+5	2	[0.25,0.12,0.13]	[0.2,0.1,0.3]   0.031800006
+5	4	[0.25,0.12,0.13]	[0.12,0.11,0.32]	0.053099997
+5	5	[0.25,0.12,0.13]	[0.25,0.12,0.13]	0
+5	6	[0.25,0.12,0.13]	[0.22,0.01,0.39]	0.08059999
+4	3	[0.12,0.11,0.32]	[0.15,0.25,0.32]	0.0205
+4	1	[0.12,0.11,0.32]	[0.1,0.2,0.3]   0.0089
+4	2	[0.12,0.11,0.32]	[0.2,0.1,0.3]   0.0069
+4	4	[0.12,0.11,0.32]	[0.12,0.11,0.32]	0
+4	5	[0.12,0.11,0.32]	[0.25,0.12,0.13]	0.053099997
+4	6	[0.12,0.11,0.32]	[0.22,0.01,0.39]	0.0249
+-- !result
+select a.id, b.id, a.data, b.data, l2_distance(a.data, b.data) as sim from test_vector as a cross join test_vector as b order by sim desc;
+-- result:
+5	6	[0.25,0.12,0.13]	[0.22,0.01,0.39]	0.08059999
+6	5	[0.22,0.01,0.39]	[0.25,0.12,0.13]	0.08059999
+3	6	[0.15,0.25,0.32]	[0.22,0.01,0.39]	0.0674
+6	3	[0.22,0.01,0.39]	[0.15,0.25,0.32]	0.0674
+5	3	[0.25,0.12,0.13]	[0.15,0.25,0.32]	0.06299999
+3	5	[0.15,0.25,0.32]	[0.25,0.12,0.13]	0.06299999
+1	6	[0.1,0.2,0.3]   [0.22,0.01,0.39]	0.058599994
+6	1	[0.22,0.01,0.39]	[0.1,0.2,0.3]   0.058599994
+1	5	[0.1,0.2,0.3]   [0.25,0.12,0.13]	0.057800006
+5	1	[0.25,0.12,0.13]	[0.1,0.2,0.3]   0.057800006
+4	5	[0.12,0.11,0.32]	[0.25,0.12,0.13]	0.053099997
+5	4	[0.25,0.12,0.13]	[0.12,0.11,0.32]	0.053099997
+5	2	[0.25,0.12,0.13]	[0.2,0.1,0.3]   0.031800006
+2	5	[0.2,0.1,0.3]   [0.25,0.12,0.13]	0.031800006
+3	2	[0.15,0.25,0.32]	[0.2,0.1,0.3]   0.0254
+2	3	[0.2,0.1,0.3]   [0.15,0.25,0.32]	0.0254
+4	6	[0.12,0.11,0.32]	[0.22,0.01,0.39]	0.0249
+6	4	[0.22,0.01,0.39]	[0.12,0.11,0.32]	0.0249
+3	4	[0.15,0.25,0.32]	[0.12,0.11,0.32]	0.0205
+4	3	[0.12,0.11,0.32]	[0.15,0.25,0.32]	0.0205
+1	2	[0.1,0.2,0.3]   [0.2,0.1,0.3]   0.020000001
+2	1	[0.2,0.1,0.3]   [0.1,0.2,0.3]   0.020000001
+2	6	[0.2,0.1,0.3]   [0.22,0.01,0.39]	0.016599996
+6	2	[0.22,0.01,0.39]	[0.2,0.1,0.3]   0.016599996
+4	1	[0.12,0.11,0.32]	[0.1,0.2,0.3]   0.0089
+1	4	[0.1,0.2,0.3]   [0.12,0.11,0.32]	0.0089
+4	2	[0.12,0.11,0.32]	[0.2,0.1,0.3]   0.0069
+2	4	[0.2,0.1,0.3]   [0.12,0.11,0.32]	0.0069
+3	1	[0.15,0.25,0.32]	[0.1,0.2,0.3]   0.005399999
+1	3	[0.1,0.2,0.3]   [0.15,0.25,0.32]	0.005399999
+4	4	[0.12,0.11,0.32]	[0.12,0.11,0.32]	0
+3	3	[0.15,0.25,0.32]	[0.15,0.25,0.32]	0
+5	5	[0.25,0.12,0.13]	[0.25,0.12,0.13]	0
+1	1	[0.1,0.2,0.3]   [0.1,0.2,0.3]   0
+2	2	[0.2,0.1,0.3]   [0.2,0.1,0.3]   0
+6	6	[0.22,0.01,0.39]	[0.22,0.01,0.39]	0
 -- !result

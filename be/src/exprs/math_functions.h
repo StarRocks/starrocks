@@ -167,6 +167,9 @@ public:
     template <LogicalType TYPE, bool isNorm>
     DEFINE_VECTORIZED_FN(cosine_similarity);
 
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(l2_distance);
+
     /**
     * @param columns: [DoubleColumn]
     * @return BigIntColumn
