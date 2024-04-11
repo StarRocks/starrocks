@@ -113,10 +113,7 @@ public class FeNameFormat {
         }
 
 
-        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        }
-        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
 

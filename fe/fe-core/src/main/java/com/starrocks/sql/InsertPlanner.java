@@ -231,7 +231,7 @@ public class InsertPlanner {
                                 column.getName());
                 }
             }
-            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
                 String originName = Column.removeNamePrefix(column.getName());
                 if (outputColumnNames.contains(originName.toLowerCase())) {
                     if (baseSchemaNames.contains(column.getName())) {
@@ -696,8 +696,7 @@ public class InsertPlanner {
         for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
             Column targetColumn = outputFullSchema.get(columnIdx);
 
-            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
-                    targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+            if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
                 if (targetColumn.isGeneratedColumn()) {
                     continue;
                 }
