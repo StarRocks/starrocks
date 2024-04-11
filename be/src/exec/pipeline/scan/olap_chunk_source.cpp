@@ -634,7 +634,7 @@ void OlapChunkSource::_update_counter() {
         std::string access_path_hits = "AccessPathHits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
-            auto* path_counter = _runtime_profile->get_counter(k);
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[Hit]{}", k));
             if (path_counter == nullptr) {
                 path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
             }
@@ -647,7 +647,7 @@ void OlapChunkSource::_update_counter() {
         std::string access_path_unhits = "AccessPathUnhits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
-            auto* path_counter = _runtime_profile->get_counter(k);
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[Unhit]{}", k));
             if (path_counter == nullptr) {
                 path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_unhits);
             }
