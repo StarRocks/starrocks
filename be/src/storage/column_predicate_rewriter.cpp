@@ -235,7 +235,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         ASSIGN_OR_RETURN(const auto* dict_and_codes_ptr, _get_or_load_segment_dict_vec(cid, field));
         const auto& [dict_column, code_column] = *dict_and_codes_ptr;
 
-        return _rewrite_expr_predicate(pool, pred, dict_column, code_column, field->is_nullable(), dest_pred);
+        return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
 
     return RewriteStatus::UNCHANGED;
@@ -323,12 +323,12 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
 }
 
 StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewrite_expr_predicate(
-        ObjectPool* pool, const ColumnPredicate* raw_pred, const ColumnPtr& raw_dict_column,
-        const ColumnPtr& raw_code_column, bool field_nullable, ColumnPredicate** ptr) {
-    *ptr = nullptr;
+        ObjectPool* pool, const ColumnPtr& raw_dict_column, const ColumnPtr& raw_code_column, bool field_nullable,
+        const ColumnPredicate* src_pred, ColumnPredicate** dest_pred) {
+    *dest_pred = nullptr;
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
-    const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
+    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
     size_t chunk_size = std::min<size_t>(pred->runtime_state()->chunk_size(), std::numeric_limits<uint16_t>::max());
 
     if (value_size <= chunk_size) {
@@ -403,8 +403,9 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
     DCHECK_IF_ERROR(filter->prepare(state));
     DCHECK_IF_ERROR(filter->open(state));
-    ASSIGN_OR_RETURN(*ptr, ColumnExprPredicate::make_column_expr_predicate(
-                                   get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc()))
+    ASSIGN_OR_RETURN(*dest_pred,
+                     ColumnExprPredicate::make_column_expr_predicate(get_type_info(kDictCodeType), pred->column_id(),
+                                                                     state, filter, pred->slot_desc()))
     filter->close(state);
 
     return RewriteStatus::CHANGED;
