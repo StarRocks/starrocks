@@ -40,8 +40,8 @@ None	None	None
 -- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j1, "$.key2.key3") from js1 order by v1 limit 2;
 -- result:
-0	0
-0	0
+0	None
+0	None
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.key4") from js1 order by v1 limit 2;
 -- result:
