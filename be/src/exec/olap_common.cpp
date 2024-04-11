@@ -193,11 +193,26 @@ Status OlapScanKeys::get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* 
 }
 
 template <class T>
+TCondition ColumnValueRange<T>::to_olap_not_null_filter() const {
+    TCondition condition;
+    condition.__set_is_index_filter_only(_is_index_filter_only);
+    condition.__set_column_name(_column_name);
+    condition.__set_condition_op("IS");
+    condition.condition_values.emplace_back("NOT NULL");
+
+    return condition;
+}
+
+template <class T>
+template <bool Inverted>
 void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
     // If we have fixed range value, we generate in/not-in predicates.
     if (is_fixed_value_range()) {
         DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
         bool filter_in = (_fixed_op == FILTER_IN) ? true : false;
+        if constexpr (Inverted) {
+            filter_in = !filter_in;
+        }
         const std::string op = (filter_in) ? "*=" : "!=";
 
         TCondition condition;
@@ -226,7 +241,11 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         low.__set_is_index_filter_only(_is_index_filter_only);
         if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
             low.__set_column_name(_column_name);
-            low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? ">=" : ">>"));
+            if constexpr (Inverted) {
+                low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? "<<" : "<="));
+            } else {
+                low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? ">=" : ">>"));
+            }
             low.condition_values.push_back(cast_to_string(_low_value, type(), precision(), scale()));
         }
 
@@ -238,7 +257,11 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         high.__set_is_index_filter_only(_is_index_filter_only);
         if (_type_max != _high_value || FILTER_LESS_OR_EQUAL != _high_op) {
             high.__set_column_name(_column_name);
-            high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? "<=" : "<<"));
+            if constexpr (Inverted) {
+                high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? ">>" : ">="));
+            } else {
+                high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? "<=" : "<<"));
+            }
             high.condition_values.push_back(cast_to_string(_high_value, type(), precision(), scale()));
         }
 
@@ -710,37 +733,29 @@ int ColumnValueRange<T>::scale() const {
     return this->_scale;
 }
 
-template class ColumnValueRange<int8_t>;
-template class ColumnValueRange<uint8_t>;
-template class ColumnValueRange<int16_t>;
-template class ColumnValueRange<int32_t>;
-template class ColumnValueRange<int64_t>;
-template class ColumnValueRange<__int128>;
-template class ColumnValueRange<StringValue>;
-template class ColumnValueRange<Slice>;
-template class ColumnValueRange<DateTimeValue>;
-template class ColumnValueRange<DecimalV2Value>;
-template class ColumnValueRange<bool>;
-template class ColumnValueRange<DateValue>;
-template class ColumnValueRange<TimestampValue>;
+#define InsitializeColumnValueRange(T)                                                  \
+    template class ColumnValueRange<T>;                                                 \
+                                                                                        \
+    template void ColumnValueRange<T>::to_olap_filter<false>(std::vector<TCondition>&); \
+    template void ColumnValueRange<T>::to_olap_filter<true>(std::vector<TCondition>&);  \
+                                                                                        \
+    template Status OlapScanKeys::extend_scan_key<T>(ColumnValueRange<T> & range, int32_t max_scan_key_num);
 
-template Status OlapScanKeys::extend_scan_key<int8_t>(ColumnValueRange<int8_t>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<uint8_t>(ColumnValueRange<uint8_t>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<int16_t>(ColumnValueRange<int16_t>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<int32_t>(ColumnValueRange<int32_t>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<int64_t>(ColumnValueRange<int64_t>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<__int128>(ColumnValueRange<__int128>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<StringValue>(ColumnValueRange<StringValue>& range,
-                                                           int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<Slice>(ColumnValueRange<Slice>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<DateTimeValue>(ColumnValueRange<DateTimeValue>& range,
-                                                             int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<DecimalV2Value>(ColumnValueRange<DecimalV2Value>& range,
-                                                              int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<bool>(ColumnValueRange<bool>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<DateValue>(ColumnValueRange<DateValue>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<TimestampValue>(ColumnValueRange<TimestampValue>& range,
-                                                              int32_t max_scan_key_num);
+InsitializeColumnValueRange(int8_t);
+InsitializeColumnValueRange(uint8_t);
+InsitializeColumnValueRange(int16_t);
+InsitializeColumnValueRange(int32_t);
+InsitializeColumnValueRange(int64_t);
+InsitializeColumnValueRange(__int128);
+InsitializeColumnValueRange(StringValue);
+InsitializeColumnValueRange(Slice);
+InsitializeColumnValueRange(DateTimeValue);
+InsitializeColumnValueRange(DecimalV2Value);
+InsitializeColumnValueRange(bool);
+InsitializeColumnValueRange(DateValue);
+InsitializeColumnValueRange(TimestampValue);
+
+#undef InsitializeColumnValueRange
 
 } // namespace starrocks
 

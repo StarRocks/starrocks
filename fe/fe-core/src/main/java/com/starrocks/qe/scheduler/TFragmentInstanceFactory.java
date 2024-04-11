@@ -33,6 +33,7 @@ import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryQueueOptions;
 
@@ -159,6 +160,10 @@ public class TFragmentInstanceFactory {
                     TQueryOptions queryOptions = result.getQuery_options();
                     queryOptions.setQuery_queue_options(queryQueueOptions);
                 }
+
+                result.setPred_tree_params(new TPredicateTreeParams());
+                result.pred_tree_params.setEnable_or(sessionVariable.isEnablePushdownOrPredicate());
+                result.pred_tree_params.setEnable_show_in_profile(sessionVariable.isEnableShowPredicateTreeInProfile());
             }
         }
     }

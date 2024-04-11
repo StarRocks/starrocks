@@ -149,7 +149,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.use_page_cache = _runtime_state->use_page_cache();
     auto parser = _pool.add(new PredicateParser(_tablet_schema));
 
-    ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager.get_predicate_tree(parser, _predicate_free_pool));
+    ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
 
     // Improve for select * from table limit x, x is small
     if (pred_tree.empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {

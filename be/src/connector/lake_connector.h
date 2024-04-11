@@ -85,7 +85,7 @@ private:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
-    OlapScanConjunctsManager _conjuncts_manager;
+    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager = nullptr;
 
     lake::VersionedTablet _tablet;
     TabletSchemaCSPtr _tablet_schema;
@@ -145,6 +145,7 @@ private:
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+    RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;

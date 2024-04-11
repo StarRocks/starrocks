@@ -150,12 +150,18 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
     _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
+
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);
         const auto& tadaptive_dop_param = request.common().adaptive_dop_param;
         auto& adaptive_dop_param = _fragment_ctx->adaptive_dop_param();
         adaptive_dop_param.max_block_rows_per_driver_seq = tadaptive_dop_param.max_block_rows_per_driver_seq;
         adaptive_dop_param.max_output_amplification_factor = tadaptive_dop_param.max_output_amplification_factor;
+    }
+
+    if (request.common().__isset.pred_tree_params) {
+        const auto& tpred_tree_params = request.common().pred_tree_params;
+        _fragment_ctx->set_pred_tree_params({tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile});
     }
 
     return Status::OK();

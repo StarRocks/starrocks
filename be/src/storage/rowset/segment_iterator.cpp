@@ -357,8 +357,6 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _opts(std::move(options)),
           _predicate_columns(_opts.pred_tree.num_columns()) {
     _cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
-    // TODO(liuzihe: support or predicate).
-    DCHECK(_opts.pred_tree.root().compound_children().empty());
 
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
