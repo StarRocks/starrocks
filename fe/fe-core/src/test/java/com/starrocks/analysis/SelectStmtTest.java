@@ -307,11 +307,19 @@ public class SelectStmtTest {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
+<<<<<<< HEAD
                 "  5:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(4: count)\n" +
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
                 "  4:AGGREGATE (update serialize)\n" +
+=======
+                "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(4: count)\n" +
+                "  |  group by: 3: expr\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (update serialize)\n" +
+>>>>>>> 654fe83fba ([BugFix] fix One tablet property cause multi stage agg result wrong (#43842))
                 "  |  STREAMING\n" +
                 "  |  output: count(2: split)\n" +
                 "  |  group by: 3: expr\n" +
