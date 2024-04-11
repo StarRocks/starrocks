@@ -1598,5 +1598,45 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: skew_table");
+
+        sql = "select n_name,count(distinct n_regionkey,n_name) from nation group by n_name";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "6:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(6: count)\n" +
+                "  |  group by: 2: N_NAME\n" +
+                "  |  \n" +
+                "  5:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    HASH_PARTITIONED: 2: N_NAME\n" +
+                "\n" +
+                "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(if(3: N_REGIONKEY IS NULL, NULL, 2: N_NAME))\n" +
+                "  |  group by: 2: N_NAME\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "  |  \n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    HASH_PARTITIONED: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "\n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: N_NAME, 3: N_REGIONKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
     }
 }

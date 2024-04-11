@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -219,6 +220,10 @@ public class LogicalProperty implements Property {
             OneTabletProperty isExecuteInOneTablet = context.oneTabletProperty(0);
             if (isExecuteInOneTablet.distributionIntact) {
                 ColumnRefSet groupByColumns = new ColumnRefSet(node.getGroupingKeys());
+                // if multi stage agg,we don't support one Tablet optimization
+                if (Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0))) {
+                    return OneTabletProperty.notSupport();
+                }
                 if (groupByColumns.isSame(isExecuteInOneTablet.bucketColumns)) {
                     return isExecuteInOneTablet;
                 }
