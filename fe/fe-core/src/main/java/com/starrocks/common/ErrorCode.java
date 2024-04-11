@@ -282,6 +282,10 @@ public enum ErrorCode {
     ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
             "Partition '%s' has sub partitions, should specify the partition id"),
     ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
+    ERR_NO_DEFAULT_STORAGE_VOLUME(5506, new byte[] {'5', '5', '0', '0', '0'},
+            "The default storage volume does not exist. " +
+                    "You can create a default storage volume by following these steps: " +
+                    "1. Create a storage volume. 2. Set the created storage volume as default"),
 
     /**
      * 5600 - 5699: DML operation failure

@@ -473,6 +473,8 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        Assert.assertThrows(DdlException.class, () -> Deencapsulation.invoke(sdsvm,
+                "getStorageVolumeOfDb", StorageVolumeMgr.DEFAULT));
         sdsvm.createBuiltinStorageVolume();
         String defaultSVId = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
 
@@ -500,6 +502,10 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        Assert.assertThrows(DdlException.class, () -> Deencapsulation.invoke(sdsvm,
+                "getStorageVolumeOfTable", StorageVolumeMgr.DEFAULT, 2L));
+        Assert.assertThrows(DdlException.class, () -> Deencapsulation.invoke(sdsvm,
+                "getStorageVolumeOfTable", "", 2L));
 
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
