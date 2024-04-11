@@ -478,14 +478,15 @@ Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool, const 
     return Status::OK();
 }
 
-Status _rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred, ColumnPredicates& dst_preds) {
+Status ZonemapPredicatesRewriter::_rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
+                                                     ColumnPredicates& dst_preds) {
     if (!src_pred->is_expr_predicate()) {
         dst_preds.emplace_back(src_pred);
     } else {
         std::vector<const ColumnExprPredicate*> new_preds;
         RETURN_IF_ERROR(_rewrite_column_expr_predicate(pool, src_pred, new_preds));
         if (!new_preds.empty()) {
-            dst_preds.insert(dst->end(), new_preds.begin(), new_preds.end());
+            dst_preds.insert(dst_preds->end(), new_preds.begin(), new_preds.end());
         } else {
             dst_preds.emplace_back(src_pred);
         }
