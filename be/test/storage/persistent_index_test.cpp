@@ -1497,6 +1497,7 @@ TEST_P(PersistentIndexTest, test_fixlen_replace) {
     vector<IndexValue> values;
     vector<uint32_t> src_rssid;
     vector<IndexValue> replace_values;
+    vector<IndexValue> replace_values2;
     const int N = 1000000;
     keys.reserve(N);
     key_slices.reserve(N);
@@ -1505,6 +1506,7 @@ TEST_P(PersistentIndexTest, test_fixlen_replace) {
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
         values.emplace_back(i * 2);
         replace_values.emplace_back(i * 3);
+        replace_values2.emplace_back(i * 4);
     }
 
     for (int i = 0; i < N / 2; i++) {
@@ -1540,10 +1542,9 @@ TEST_P(PersistentIndexTest, test_fixlen_replace) {
         ASSERT_EQ(values[i], get_values[i]);
     }
 
-    //replace
+    // try replace
     std::vector<uint32_t> failed(keys.size());
-    Status st = index.try_replace(N, key_slices.data(), replace_values.data(), src_rssid, &failed);
-    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(index.try_replace(N, key_slices.data(), replace_values.data(), src_rssid, &failed).ok());
     std::vector<IndexValue> new_get_values(keys.size());
     ASSERT_TRUE(index.get(keys.size(), key_slices.data(), new_get_values.data()).ok());
     ASSERT_EQ(keys.size(), new_get_values.size());
@@ -1553,6 +1554,21 @@ TEST_P(PersistentIndexTest, test_fixlen_replace) {
     for (int i = N / 2; i < N; i++) {
         ASSERT_EQ(values[i], new_get_values[i]);
     }
+
+    // replace
+    std::vector<uint32_t> replace_idxes(N / 2);
+    std::iota(replace_idxes.begin(), replace_idxes.end(), 0);
+    ASSERT_TRUE(index.replace(N, key_slices.data(), replace_values2.data(), replace_idxes).ok());
+    std::vector<IndexValue> new_get_values2(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), new_get_values2.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values2.size());
+    for (int i = 0; i < N / 2; i++) {
+        ASSERT_EQ(replace_values2[i], new_get_values2[i]);
+    }
+    for (int i = N / 2; i < N; i++) {
+        ASSERT_EQ(values[i], new_get_values2[i]);
+    }
+
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
@@ -1572,6 +1588,7 @@ TEST_P(PersistentIndexTest, test_varlen_replace) {
     vector<IndexValue> values;
     vector<uint32_t> src_rssid;
     vector<IndexValue> replace_values;
+    vector<IndexValue> replace_values2;
 
     key_slices.reserve(N);
     for (int i = 0; i < N; i++) {
@@ -1579,6 +1596,7 @@ TEST_P(PersistentIndexTest, test_varlen_replace) {
         key_slices.emplace_back(keys[i]);
         values.emplace_back(i * 2);
         replace_values.emplace_back(i * 3);
+        replace_values2.emplace_back(i * 4);
     }
 
     for (int i = 0; i < N / 2; i++) {
@@ -1614,7 +1632,7 @@ TEST_P(PersistentIndexTest, test_varlen_replace) {
         ASSERT_EQ(values[i], get_values[i]);
     }
 
-    //replace
+    // try replace
     std::vector<uint32_t> failed(keys.size());
     Status st = index.try_replace(N, key_slices.data(), replace_values.data(), src_rssid, &failed);
     ASSERT_TRUE(st.ok());
@@ -1627,6 +1645,21 @@ TEST_P(PersistentIndexTest, test_varlen_replace) {
     for (int i = N / 2; i < N; i++) {
         ASSERT_EQ(values[i], new_get_values[i]);
     }
+
+    // replace
+    std::vector<uint32_t> replace_idxes(N / 2);
+    std::iota(replace_idxes.begin(), replace_idxes.end(), 0);
+    ASSERT_TRUE(index.replace(N, key_slices.data(), replace_values2.data(), replace_idxes).ok());
+    std::vector<IndexValue> new_get_values2(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), new_get_values2.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values2.size());
+    for (int i = 0; i < N / 2; i++) {
+        ASSERT_EQ(replace_values2[i], new_get_values2[i]);
+    }
+    for (int i = N / 2; i < N; i++) {
+        ASSERT_EQ(values[i], new_get_values2[i]);
+    }
+
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
