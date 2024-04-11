@@ -454,6 +454,6 @@ You can find a built-in function based on the following categories:
 - [uuid_numeric](./utility-functions/uuid_numeric.md)
 - [version](./utility-functions/version.md)
 
-## Utility functions
+## Dictionary functions
 
 [dict_mapping](./dict-functions/dict_mapping.md)
