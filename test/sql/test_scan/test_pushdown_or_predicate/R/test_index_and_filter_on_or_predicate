@@ -2,10 +2,6 @@
 set scan_or_to_union_limit = 1;
 -- result:
 -- !result
-set enable_show_predicate_tree_in_profile = true;
--- result:
-E: (1193, "Unknown system variable 'enable_show_predicate_tree_in_profile', the most similar variables are {'enable_rewrite_groupingsets_to_union_all', 'enable_write_hive_external_table', 'enable_shared_scan'}")
--- !result
 set enable_profile = true;
 -- result:
 -- !result
