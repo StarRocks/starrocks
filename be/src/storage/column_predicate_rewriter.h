@@ -125,6 +125,7 @@ public:
                                         ColumnPredicateMap* dst_pred_map);
 
 private:
+    static Status _rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred, ColumnPredicates& dst_preds);
     static Status _rewrite_column_expr_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
                                                  ColumnPredicates& dst_preds);
 };

@@ -471,20 +471,24 @@ Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool, const 
         auto& dst_preds = dst_pred_map->emplace(cid, {}).first->second;
 
         for (const auto* src_pred : src_preds) {
-            if (!src_pred->is_expr_predicate()) {
-                dst_preds->emplace_back(src_pred);
-            } else {
-                std::vector<const ColumnExprPredicate*> new_preds;
-                RETURN_IF_ERROR(_rewrite_column_expr_predicates(pool, src_pred, &new_preds));
-                if (!new_preds.empty()) {
-                    dst_preds->insert(dst->end(), new_preds.begin(), new_preds.end());
-                } else {
-                    dst_preds->emplace_back(src_pred);
-                }
-            }
+            RETURN_IF_ERROR(_rewrite_predicate(pool, src_pred, dst_preds));
         }
     }
     return Status::OK();
+}
+
+Status _rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred, ColumnPredicates& dst_preds) {
+    if (!src_pred->is_expr_predicate()) {
+        dst_preds->emplace_back(src_pred);
+    } else {
+        std::vector<const ColumnExprPredicate*> new_preds;
+        RETURN_IF_ERROR(_rewrite_column_expr_predicates(pool, src_pred, &new_preds));
+        if (!new_preds.empty()) {
+            dst_preds->insert(dst->end(), new_preds.begin(), new_preds.end());
+        } else {
+            dst_preds->emplace_back(src_pred);
+        }
+    }
 }
 
 Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
