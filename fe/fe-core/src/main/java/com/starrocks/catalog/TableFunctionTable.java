@@ -158,109 +158,7 @@ public class TableFunctionTable extends Table {
         checkNotNull(properties, "properties is null");
         checkNotNull(sessionVariable, "sessionVariable is null");
         this.properties = properties;
-
-        List<String> columnNames = columns.stream()
-                .map(Column::getName)
-                .collect(Collectors.toList());
-
-        Set<String> duplicateColumnNames = columns.stream()
-                .map(Column::getName)
-                .filter(name -> Collections.frequency(columnNames, name) > 1)
-                .collect(Collectors.toSet());
-        if (!duplicateColumnNames.isEmpty()) {
-            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
-        }
-
-        // parse table function properties
-        String single = properties.getOrDefault("single", "false");
-        if (!single.equalsIgnoreCase("true") && !single.equalsIgnoreCase("false")) {
-            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).",
-                    single);
-        }
-
-        this.writeSingleFile = single.equalsIgnoreCase("true");
-
-        // validate properties
-        if (!properties.containsKey(PROPERTY_PATH)) {
-            throw new SemanticException(
-                    "path is a mandatory property. \"path\" = \"s3://path/to/your/location/\"");
-        }
-        this.path = properties.get(PROPERTY_PATH);
-        if (!this.path.endsWith("/")) {
-            this.path += "/";
-        }
-
-        if (!properties.containsKey(PROPERTY_FORMAT)) {
-            throw new SemanticException("format is a mandatory property. " +
-                    "Use any of (parquet, orc, csv)");
-        }
-        this.format = properties.get(PROPERTY_FORMAT);
-
-        if (!SUPPORTED_FORMATS.contains(format)) {
-            throw new SemanticException(String.format("Unsupported format %s. " +
-                    "Use any of (parquet, orc, csv)", format));
-        }
-
-        // if max_file_size is not specified, use target max file size from session
-        if (properties.containsKey(PROPERTY_TARGET_MAX_FILE_SIZE)) {
-            this.targetMaxFileSize = Long.parseLong(properties.get(PROPERTY_TARGET_MAX_FILE_SIZE));
-        } else {
-            this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
-        }
-
-        // if compression codec is not specified, use compression codec from session
-        if (properties.containsKey(PROPERTY_COMPRESSION)) {
-            this.compressionType = properties.get(PROPERTY_COMPRESSION);
-        } else {
-            this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
-        }
-        if (CompressionUtils.getConnectorSinkCompressionType(compressionType).isEmpty()) {
-            throw new SemanticException(String.format("Unsupported compression codec %s. " +
-                    "Use any of (uncompressed, snappy, lz4, zstd, gzip)", compressionType));
-        }
-
-        if (writeSingleFile && properties.containsKey(PROPERTY_PARTITION_BY)) {
-            throw new SemanticException("cannot use partition_by and single simultaneously.");
-        }
-
-        if (properties.containsKey(PROPERTY_PARTITION_BY)) {
-            // parse and validate partition columns
-            List<String> partitionColumnNames = Arrays.asList(properties.get(PROPERTY_PARTITION_BY).split(","));
-            partitionColumnNames.replaceAll(String::trim);
-            partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList());
-
-            List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream()
-                    .filter(col -> !columnNames.contains(col))
-                    .collect(Collectors.toList());
-            if (!unmatchedPartitionColumnNames.isEmpty()) {
-                throw new SemanticException("partition columns expected to be a subset of " + columnNames +
-                        ", but got extra columns: " + unmatchedPartitionColumnNames);
-            }
-
-            List<Integer> partitionColumnIDs = partitionColumnNames.stream()
-                    .map(columnNames::indexOf)
-                    .collect(Collectors.toList());
-
-            for (Integer partitionColumnID : partitionColumnIDs) {
-                Column partitionColumn = columns.get(partitionColumnID);
-                Type type = partitionColumn.getType();
-                if (type.isBoolean() || type.isIntegerType() || type.isDateType() || type.isStringType()) {
-                    continue;
-                }
-                throw new SemanticException("partition column does not support type of " + type);
-            }
-
-            this.partitionColumnIDs = Optional.of(partitionColumnIDs);
-        }
-
-        // csv options
-        if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
-            this.csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
-        }
-        if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
-            this.csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
-        }
-
+        parsePropertiesForUnload(columns, sessionVariable);
         super.setNewFullSchema(columns);
     }
 
@@ -610,5 +508,109 @@ public class TableFunctionTable extends Table {
 
     public Boolean getCsvTrimSpace() {
         return csvTrimSpace;
+    }
+
+    public void parsePropertiesForUnload(List<Column> columns, SessionVariable sessionVariable) {
+        List<String> columnNames = columns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toList());
+
+        Set<String> duplicateColumnNames = columns.stream()
+                .map(Column::getName)
+                .filter(name -> Collections.frequency(columnNames, name) > 1)
+                .collect(Collectors.toSet());
+        if (!duplicateColumnNames.isEmpty()) {
+            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
+        }
+
+        // parse table function properties
+        String single = properties.getOrDefault("single", "false");
+        if (!single.equalsIgnoreCase("true") && !single.equalsIgnoreCase("false")) {
+            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).",
+                    single);
+        }
+
+        this.writeSingleFile = single.equalsIgnoreCase("true");
+
+        // validate properties
+        if (!properties.containsKey(PROPERTY_PATH)) {
+            throw new SemanticException(
+                    "path is a mandatory property. \"path\" = \"s3://path/to/your/location/\"");
+        }
+        this.path = properties.get(PROPERTY_PATH);
+        if (!this.path.endsWith("/")) {
+            this.path += "/";
+        }
+
+        if (!properties.containsKey(PROPERTY_FORMAT)) {
+            throw new SemanticException("format is a mandatory property. " +
+                    "Use any of (parquet, orc, csv)");
+        }
+        this.format = properties.get(PROPERTY_FORMAT);
+
+        if (!SUPPORTED_FORMATS.contains(format)) {
+            throw new SemanticException(String.format("Unsupported format %s. " +
+                    "Use any of (parquet, orc, csv)", format));
+        }
+
+        // if max_file_size is not specified, use target max file size from session
+        if (properties.containsKey(PROPERTY_TARGET_MAX_FILE_SIZE)) {
+            this.targetMaxFileSize = Long.parseLong(properties.get(PROPERTY_TARGET_MAX_FILE_SIZE));
+        } else {
+            this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+        }
+
+        // if compression codec is not specified, use compression codec from session
+        if (properties.containsKey(PROPERTY_COMPRESSION)) {
+            this.compressionType = properties.get(PROPERTY_COMPRESSION);
+        } else {
+            this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
+        }
+        if (CompressionUtils.getConnectorSinkCompressionType(compressionType).isEmpty()) {
+            throw new SemanticException(String.format("Unsupported compression codec %s. " +
+                    "Use any of (uncompressed, snappy, lz4, zstd, gzip)", compressionType));
+        }
+
+        if (writeSingleFile && properties.containsKey(PROPERTY_PARTITION_BY)) {
+            throw new SemanticException("cannot use partition_by and single simultaneously.");
+        }
+
+        if (properties.containsKey(PROPERTY_PARTITION_BY)) {
+            // parse and validate partition columns
+            List<String> partitionColumnNames = Arrays.asList(properties.get(PROPERTY_PARTITION_BY).split(","));
+            partitionColumnNames.replaceAll(String::trim);
+            partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList());
+
+            List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream()
+                    .filter(col -> !columnNames.contains(col))
+                    .collect(Collectors.toList());
+            if (!unmatchedPartitionColumnNames.isEmpty()) {
+                throw new SemanticException("partition columns expected to be a subset of " + columnNames +
+                        ", but got extra columns: " + unmatchedPartitionColumnNames);
+            }
+
+            List<Integer> partitionColumnIDs = partitionColumnNames.stream()
+                    .map(columnNames::indexOf)
+                    .collect(Collectors.toList());
+
+            for (Integer partitionColumnID : partitionColumnIDs) {
+                Column partitionColumn = columns.get(partitionColumnID);
+                Type type = partitionColumn.getType();
+                if (type.isBoolean() || type.isIntegerType() || type.isDateType() || type.isStringType()) {
+                    continue;
+                }
+                throw new SemanticException("partition column does not support type of " + type);
+            }
+
+            this.partitionColumnIDs = Optional.of(partitionColumnIDs);
+        }
+
+        // csv options
+        if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
+            this.csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+        }
+        if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
+            this.csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+        }
     }
 }
