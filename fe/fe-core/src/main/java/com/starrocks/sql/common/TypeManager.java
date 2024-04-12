@@ -243,28 +243,25 @@ public class TypeManager {
             return type1;
         }
 
-        PrimitiveType t1 = type1.getPrimitiveType();
-        PrimitiveType t2 = type2.getPrimitiveType();
-
-        if (t1 == PrimitiveType.NULL_TYPE || t2 == PrimitiveType.NULL_TYPE) {
-            return t1 == PrimitiveType.NULL_TYPE ? type2 : type1;
+        if (type1.isNull() || type2.isNull()) {
+            return type1.isNull() ? type2 : type1;
         }
 
-        BiFunction<PrimitiveType, PrimitiveType, Boolean> isDataAndString =
-                (a, b) -> a.isDateType() && (b.isStringType() || b.isDateType());
-        if (isDataAndString.apply(t1, t2) || isDataAndString.apply(t2, t1)) {
-            return Type.DATETIME;
+        if (type1.isJsonType() || type2.isJsonType()) {
+            return Type.JSON;
         }
 
-        if (t1.isDecimalV3Type() || t2.isDecimalV3Type()) {
-            Type decimalType = t1.isDecimalV3Type() ? type1 : type2;
-            Type otherType = t1.isDecimalV3Type() ? type2 : type1;
+        if (type1.isDecimalV3() || type2.isDecimalV3()) {
+            Type decimalType = type1.isDecimalV3() ? type1 : type2;
+            Type otherType = type1.isDecimalV3() ? type2 : type1;
             Preconditions.checkState(otherType.isScalarType());
             return ScalarType.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) decimalType, (ScalarType) otherType);
         }
 
-        if (type1.isStringType() && type2.isStringType()) {
-            return Type.VARCHAR;
+        BiFunction<Type, Type, Boolean> isDataAndString =
+                (a, b) -> a.isDateType() && (b.isStringType() || b.isDateType());
+        if (isDataAndString.apply(type1, type2) || isDataAndString.apply(type2, type1)) {
+            return Type.DATETIME;
         }
 
         // number type

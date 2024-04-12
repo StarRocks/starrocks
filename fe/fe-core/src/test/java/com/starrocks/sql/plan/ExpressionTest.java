@@ -510,7 +510,7 @@ public class ExpressionTest extends PlanTestBase {
         // v1 is bigint, bigint in varchar will cast bigint as varchar
         String sql = "select *  from t0 where v1 in ('a','b')";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR) IN ('a', 'b')\n"));
+        assertContains(plan, "CAST(1: v1 AS VARCHAR(1048576)) IN ('a', 'b')");
     }
 
     @Test
@@ -775,7 +775,7 @@ public class ExpressionTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
                 "c4 IN ('1970-01-01', '1970-01-01', '1970-02-01')");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('292278994-08-17', '1970-01-01', '1970-02-01') ",
-                "CAST(5: c4 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-01-01 00:00:00', '1970-02-01 00:00:00')");
+                "5: c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
 
         // common expression
         testPlanContains("SELECT " +
