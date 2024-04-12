@@ -4,15 +4,17 @@ displayed_sidebar: "Chinese"
 
 # 从 MySQL 实时同步
 
-本文介绍如何将 MySQL 的数据实时（秒级）同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。
+StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。。例如：
 
+- 方式一：![图一](../assets/4.9.2.png)
+- 方式二：![图二](../assets/4.9.4.png)
+
+本文使用方式一演示如何将 MySQL 的数据实时（秒级）同步至 StarRocks。
 > **注意**
 >
 > 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ## 基本原理
-
-![MySQL 同步](../assets/4.9.2.png)
 
 实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
 
@@ -403,7 +405,7 @@ displayed_sidebar: "Chinese"
 
 ## 常见问题
 
-### **如何为不同的表设置不同的 flink-connector-starrocks 配置**
+### 如何为不同的表设置不同的 flink-connector-starrocks 配置
 
 例如数据源某些表更新频繁，需要提高 flink connector sr 的导入速度等，则需要在 SMT 配置文件 **config_prod.conf** 中为这些表设置单独的 flink-connector-starrocks 配置。
 
@@ -447,7 +449,7 @@ flink.starrocks.sink.properties.row_delimiter=\x02
 flink.starrocks.sink.buffer-flush.interval-ms=10000
 ```
 
-### **同步 MySQL 分库分表后的多张表至 StarRocks 的一张表**
+### 同步 MySQL 分库分表后的多张表至 StarRocks 的一张表
 
 如果数据源 MySQL 进行分库分表，数据拆分成多张表甚至分布在多个库中，并且所有表的结构都是相同的，则您可以设置`[table-rule]`，将这些表同步至 StarRocks 的一张表中。比如 MySQL 有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有两张表 course_1，course_2，并且所有表的结构都是相同的，则通过设置如下`[table-rule]`可以将其同步至 StarRocks的一张表中。
 
@@ -476,7 +478,7 @@ flink.starrocks.sink.properties.row_delimiter =\x02
 flink.starrocks.sink.buffer-flush.interval-ms = 5000
 ```
 
-### **数据以** **JSON** **格式导入**
+### 数据以 JSON 格式导入
 
 以上示例数据以 CSV 格式导入，如果数据无法选出合适的分隔符，则您需要替换 `[table-rule]` 中`flink.starrocks.*`的如下参数。
 
