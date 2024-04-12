@@ -136,6 +136,11 @@ private:
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
                 const ColumnPtr& col = chunk->get_column_by_index(i);
+                if (_prune_column_after_index_filter && _prune_cols.count(i)) {
+                    // make sure each pruned column has the same size as the unpruneable one.
+                    col->resize(range.span_size());
+                    continue;
+                }
                 RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
                 may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
             }
@@ -184,6 +189,12 @@ private:
 
         // not all dict encode
         bool _has_force_dict_encode{false};
+
+        // If the column is pruneable, it means that we can skip the page read for it.
+        // Currently, it only can be happend if the column is a pure pushdown predicate
+        // for inverted index.
+        std::unordered_set<size_t> _prune_cols;
+        bool _prune_column_after_index_filter = false;
     };
 
     Status _init();
@@ -334,6 +345,8 @@ private:
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
+
+    std::unordered_set<ColumnId> _prune_cols_candidate_by_inverted_index;
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
@@ -1359,6 +1372,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     ctx->_column_iterators.reserve(ctx_fields);
     ctx->_skip_dict_decode_indexes.reserve(ctx_fields);
 
+    ctx->_prune_column_after_index_filter = _opts.prune_column_after_index_filter;
+
     // init skip dict_decode_code column indexes
     std::set<ColumnId> delete_pred_columns;
     _opts.delete_predicates.get_column_ids(&delete_pred_columns);
@@ -1377,6 +1392,14 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_skip_dict_decode_indexes.push_back(false);
         } else {
             ctx->_skip_dict_decode_indexes.push_back(true);
+            if (_prune_cols_candidate_by_inverted_index.count(f->id())) {
+                // The column is pruneable if and only if:
+                // 1. column in _prune_cols_candidate_by_inverted_index
+                // 2. column not in output schema
+                // 3. column is not one of the delete predicate columns
+                // 4. column must not be dict decoded when the read is finished
+                ctx->_prune_cols.insert(i);
+            }
         }
 
         if (use_dict_code || use_global_dict_code) {
@@ -1909,6 +1932,12 @@ Status SegmentIterator::_apply_inverted_index() {
     for (const ColumnPredicate* pred : erased_preds) {
         PredicateList& pred_list = _opts.predicates[pred->column_id()];
         pred_list.erase(std::find(pred_list.begin(), pred_list.end(), pred));
+
+        if (pred_list.empty()) {
+            // predicate for pred->column_id() has been total erased by
+            // inverted index filtering.These columns may can be pruned.
+            _prune_cols_candidate_by_inverted_index.insert(pred->column_id());
+        }
     }
 
     _opts.stats->rows_gin_filtered += input_rows - _scan_range.span_size();
