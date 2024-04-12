@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "common/status.h"
+
 namespace starrocks {
 
 struct DirSpace {
@@ -70,8 +72,15 @@ struct ReadCacheOptions {
     } stats;
 };
 
-int64_t parse_mem_size(const std::string& mem_size_str, int64_t mem_limit = -1);
+int64_t parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit);
 
-int64_t parse_disk_size(const std::string& disk_path, const std::string& disk_size_str, int64_t disk_limit = -1);
+int64_t parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
+                                       int64_t disk_limit);
+
+Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
+                                       bool ignore_broken_disk);
+
+Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, const std::string& config_disk_size,
+                                        bool ignore_broken_disk, std::vector<DirSpace>* disk_spaces);
 
 } // namespace starrocks
