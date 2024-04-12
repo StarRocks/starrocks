@@ -1665,7 +1665,7 @@ public class Config extends ConfigBase {
      * <p>
      * For example, if user specifies the value with {"ldap", "native"}, SR will first try to authenticate
      * a user whose authentication info may exist in a ldap server, if failed, SR will continue trying to
-     * authenticate the user to check whether it's a native user in SR, i.e. it's created by SR and
+     * authenticate the user to check whether it's a native user in SR,  i.e. it's created by SR and
      * its authentication info is stored in SR metadata.
      * <p>
      * For more information about security integration, you can refer to
