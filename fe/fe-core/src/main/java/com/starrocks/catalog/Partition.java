@@ -86,6 +86,9 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     @SerializedName(value = "shardGroupId")
     private long shardGroupId;
 
+    @SerializedName(value = "shardGroupIdList")
+    private List<Long> shardGroupIdList;
+
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
     private AtomicBoolean isImmutable = new AtomicBoolean(false);
@@ -169,8 +172,17 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         partition.nextVersion = this.nextVersion;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
+        partition.shardGroupIdList = this.shardGroupIdList;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
         return partition;
+    }
+
+    public List<Long> getShardGroupIdList() {
+        return shardGroupIdList;
+    }
+
+    public void setShardGroupIdList(List<Long> shardGroupIdList) {
+        this.shardGroupIdList = shardGroupIdList;
     }
 
     @Override

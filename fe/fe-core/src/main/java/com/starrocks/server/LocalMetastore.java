@@ -1719,16 +1719,10 @@ public class LocalMetastore implements ConnectorMetadata {
             indexMap.put(indexId, rollup);
         }
 
-        // create shard group
-        long shardGroupId = 0;
-        if (table.isCloudNativeTableOrMaterializedView()) {
-            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                    createShardGroup(db.getId(), table.getId(), partitionId);
-        }
 
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()),
-                        distributionInfo, shardGroupId);
+                        distributionInfo);
         // version
         if (version != null) {
             partition.updateVisibleVersion(version);
@@ -1736,10 +1730,19 @@ public class LocalMetastore implements ConnectorMetadata {
 
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
+        List<Long> shardGroupIdList = new ArrayList<>();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
             long indexId = entry.getKey();
             MaterializedIndex index = entry.getValue();
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
+
+            // create shard group
+            long shardGroupId = 0;
+            if (table.isCloudNativeTableOrMaterializedView()) {
+                shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
+                        createShardGroup(db.getId(), table.getId(), indexId);
+            }
+            shardGroupIdList.add(shardGroupId);
 
             // create tablets
             TabletMeta tabletMeta =
@@ -1758,6 +1761,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 partition.createRollupIndex(index);
             }
         }
+        partition.setShardGroupIdList(shardGroupIdList);
         return partition;
     }
 

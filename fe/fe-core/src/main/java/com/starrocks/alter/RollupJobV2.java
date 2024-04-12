@@ -131,48 +131,48 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     // physical partition id -> (rollup tablet id -> base tablet id)
     @SerializedName(value = "partitionIdToBaseRollupTabletIdMap")
-    private Map<Long, Map<Long, Long>> physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+    protected Map<Long, Map<Long, Long>> physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
     @SerializedName(value = "partitionIdToRollupIndex")
-    private Map<Long, MaterializedIndex> physicalPartitionIdToRollupIndex = Maps.newHashMap();
+    protected Map<Long, MaterializedIndex> physicalPartitionIdToRollupIndex = Maps.newHashMap();
 
     // rollup and base schema info
     @SerializedName(value = "baseIndexId")
-    private long baseIndexId;
+    protected long baseIndexId;
     @SerializedName(value = "rollupIndexId")
-    private long rollupIndexId;
+    protected long rollupIndexId;
     @SerializedName(value = "baseIndexName")
-    private String baseIndexName;
+    protected String baseIndexName;
     @SerializedName(value = "rollupIndexName")
-    private String rollupIndexName;
+    protected String rollupIndexName;
 
     @SerializedName(value = "rollupSchema")
-    private List<Column> rollupSchema = Lists.newArrayList();
+    protected List<Column> rollupSchema = Lists.newArrayList();
     @SerializedName(value = "rollupSchemaVersion")
-    private int rollupSchemaVersion;
+    protected int rollupSchemaVersion;
     @SerializedName(value = "baseSchemaHash")
-    private int baseSchemaHash;
+    protected int baseSchemaHash;
     @SerializedName(value = "rollupSchemaHash")
-    private int rollupSchemaHash;
+    protected int rollupSchemaHash;
 
     @SerializedName(value = "rollupKeysType")
-    private KeysType rollupKeysType;
+    protected KeysType rollupKeysType;
     @SerializedName(value = "rollupShortKeyColumnCount")
-    private short rollupShortKeyColumnCount;
+    protected short rollupShortKeyColumnCount;
     @SerializedName(value = "origStmt")
-    private OriginStatement origStmt;
+    protected OriginStatement origStmt;
 
     // The rollup job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
     @SerializedName(value = "viewDefineSql")
-    private String viewDefineSql;
+    protected String viewDefineSql;
     @SerializedName(value = "isColocateMVIndex")
     protected boolean isColocateMVIndex = false;
 
-    private Expr whereClause;
+    protected Expr whereClause;
 
     // save all create rollup tasks
-    private AgentBatchTask rollupBatchTask = new AgentBatchTask();
+    protected AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
@@ -204,12 +204,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.whereClause = whereClause;
     }
 
+    @Override
     public void addTabletIdMap(long partitionId, long rollupTabletId, long baseTabletId) {
         Map<Long, Long> tabletIdMap =
                 physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
         tabletIdMap.put(rollupTabletId, baseTabletId);
     }
 
+    @Override
     public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
         this.physicalPartitionIdToRollupIndex.put(partitionId, mvIndex);
     }
@@ -426,7 +428,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         tbl.rebuildFullSchema();
     }
 
-    private Expr analyzeExpr(Type type, String name, Expr defineExpr, Map<String, SlotDescriptor> slotDescByName,
+    public static Expr analyzeExpr(Type type, String name, Expr defineExpr, Map<String, SlotDescriptor> slotDescByName,
                              List<Expr> outputExprs, OlapTable tbl, TableName tableName) throws AlterCancelException {
         List<SlotRef> slots = new ArrayList<>();
         defineExpr.collect(SlotRef.class, slots);
@@ -730,7 +732,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     @Override
-    protected void runFinishedRewritingJob() {
+    protected void runFinishedRewritingJob() throws AlterCancelException {
         // nothing to do
     }
 
@@ -1001,6 +1003,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return taskInfos;
     }
 
+
+    @Override
     public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
         return physicalPartitionIdToRollupIndex;
     }

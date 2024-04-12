@@ -351,7 +351,6 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     txn_log->set_txn_id(request.txn_id);
     auto op_schema_change = txn_log->mutable_op_schema_change();
     op_schema_change->set_alter_version(alter_version);
-
     // convert historical rowsets
     RETURN_IF_ERROR(convert_historical_rowsets(sc_params, op_schema_change));
 

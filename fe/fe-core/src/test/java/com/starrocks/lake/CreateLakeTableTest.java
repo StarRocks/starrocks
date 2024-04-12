@@ -359,6 +359,23 @@ public class CreateLakeTableTest {
     }
 
     @Test
+    public void testCreateTableWithRollUp() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_with_rollup\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "DUPLICATE KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "ROLLUP (mv1 (c0, c1));"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_with_rollup");
+            Assert.assertEquals(2, lakeTable.getShardGroupIdList().size());
+
+            Assert.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
+                    get().getVisibleMaterializedIndicesCount());
+
+        }
+    }
+    @Test
     public void testRestoreColumnUniqueId() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.test_unique_id\n" +
