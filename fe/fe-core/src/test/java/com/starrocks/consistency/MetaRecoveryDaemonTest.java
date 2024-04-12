@@ -66,6 +66,9 @@ public class MetaRecoveryDaemonTest {
         cluster.runSql("test", sql);
         cluster.runSql("test", "insert into test.tbl_recover values (1, 'a'), (2, 'b')");
 
+        // wait insert to finish
+        Thread.sleep(2000L);
+
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) database.getTable("tbl_recover");
         Partition partition = table.getPartition("tbl_recover");
