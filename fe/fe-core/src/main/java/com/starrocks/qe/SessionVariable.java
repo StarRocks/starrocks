@@ -280,6 +280,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
 
+    public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
+            "enable_prune_column_after_index_filter";
+
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
     // If the time exceeded but the transaction state is not VISIBLE, the transaction will
@@ -1136,6 +1139,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER, flag = VariableMgr.INVISIBLE)
+    private boolean enablePruneColumnAfterIndexFilter = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -2528,6 +2534,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableFilterUnusedColumnsInScanStage() {
         return enableFilterUnusedColumnsInScanStage;
+    }
+
+    public boolean isEnablePruneColumnAfterIndexFilter() {
+        return enablePruneColumnAfterIndexFilter;
     }
 
     public void disableTrimOnlyFilteredColumnsInScanStage() {

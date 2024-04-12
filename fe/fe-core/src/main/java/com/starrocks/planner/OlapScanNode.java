@@ -977,6 +977,8 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
+            msg.olap_scan_node.setEnable_prune_column_after_index_filter(
+                ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
         }
     }
 
