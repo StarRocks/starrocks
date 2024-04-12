@@ -34,6 +34,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTable;
@@ -449,7 +451,25 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
-
+        List<Comparable> info = Lists.newArrayList();
+        info.add(jobId);
+        info.add(tableName);
+        info.add(TimeUtils.longToTimeString(createTimeMs));
+        info.add(TimeUtils.longToTimeString(finishedTimeMs));
+        info.add(baseIndexName);
+        info.add(rollupIndexName);
+        info.add(rollupIndexId);
+        info.add(watershedTxnId);
+        info.add(jobState.name());
+        info.add(errMsg);
+        // progress
+        if (jobState == JobState.RUNNING && rollupBatchTask.getTaskNum() > 0) {
+            info.add(rollupBatchTask.getFinishedTaskNum() + "/" + rollupBatchTask.getTaskNum());
+        } else {
+            info.add(FeConstants.NULL_STRING);
+        }
+        info.add(timeoutMs / 1000);
+        infos.add(info);
     }
 
     @Override

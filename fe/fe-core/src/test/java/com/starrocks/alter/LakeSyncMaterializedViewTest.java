@@ -81,8 +81,6 @@ public class LakeSyncMaterializedViewTest {
         lakeRollupJob = (LakeRollupJob) alterJobV2List.get(0);
     }
 
-
-
     @AfterClass
     public static void tearDown() {
 
