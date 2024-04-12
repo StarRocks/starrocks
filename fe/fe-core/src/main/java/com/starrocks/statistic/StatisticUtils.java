@@ -164,7 +164,6 @@ public class StatisticUtils {
         if (collectPartitionIds.isEmpty()) {
             return;
         }
-
         StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
         Map<String, String> properties = Maps.newHashMap();
         if (SAMPLE == analyzeType) {
@@ -182,6 +181,10 @@ public class StatisticUtils {
                     .submit(() -> {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                        // set session id for temporary table
+                        if (table.isTemporaryTable()) {
+                            statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
+                        }
                         statsConnectCtx.setThreadLocalInfo();
 
                         statisticExecutor.collectStatistics(statsConnectCtx,

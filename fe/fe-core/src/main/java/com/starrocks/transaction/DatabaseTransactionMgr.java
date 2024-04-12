@@ -1693,6 +1693,8 @@ public class DatabaseTransactionMgr {
                 LOG.info("remove expired transaction: {}", transactionState);
                 deleteTransaction(transactionState);
             }
+        } catch (Throwable e) {
+            LOG.warn("replay exception {}", e);
         } finally {
             writeUnlock();
         }

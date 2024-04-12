@@ -136,6 +136,8 @@ public class MetaUtils {
         return table;
     }
 
+    // get the Table in the session based on table name,
+    // if there are temporary tables and normal tables with the same name, the temporary table will be used first.
     public static Table getTable(ConnectContext session, TableName tableName) {
         if (Strings.isNullOrEmpty(tableName.getCatalog())) {
             tableName.setCatalog(session.getCurrentCatalog());
