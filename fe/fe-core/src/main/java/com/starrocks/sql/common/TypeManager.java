@@ -268,13 +268,13 @@ public class TypeManager {
         }
 
         // number type
-        if (type1.isIntegerType() && type2.isIntegerType()) {
+        if (type1.isFixedPointType() && type2.isFixedPointType()) {
             return type1.getTypeSize() > type2.getTypeSize() ? type1 : type2;
         } else if ((type1.isBoolean() && type2.isNumericType()) ||
-                (type1.isIntegerType() && type2.isFloatingPointType())) {
+                (type1.isFixedPointType() && type2.isFloatingPointType())) {
             return type2;
         } else if ((type2.isBoolean() && type1.isNumericType()) ||
-                (type2.isIntegerType() && type1.isFloatingPointType())) {
+                (type2.isFixedPointType() && type1.isFloatingPointType())) {
             return type1;
         }
 
