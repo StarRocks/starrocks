@@ -256,14 +256,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<ColumnStatistic> columnStatisticList;
         Map<String, Histogram> histogramStatistics;
         if (table.isNativeTableOrMaterializedView()) {
-            columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table,
+            columnStatisticList = GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table,
                             columnNames);
-            histogramStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table,
+            histogramStatistics = GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table,
                             columnNames);
         } else {
-            columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table,
+            columnStatisticList = GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table,
                     columnNames).stream().map(ConnectorTableColumnStats::getColumnStatistic).collect(Collectors.toList());
-            histogramStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage().
+            histogramStatistics = GlobalStateMgr.getCurrentStatisticStorage().
                     getConnectorHistogramStatistics(table, columnNames);
         }
         for (int i = 0; i < columnNames.size(); ++i) {
