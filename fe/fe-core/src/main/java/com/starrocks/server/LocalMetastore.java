@@ -1575,15 +1575,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         Long id = GlobalStateMgr.getCurrentState().getNextId();
-        // physical partitions in the same logical partition use the same shard_group_id,
-        // so that the shards of this logical partition are more evenly distributed.
-        long shardGroupId = partition.getShardGroupId();
-
         if (name == null) {
             name = partition.generatePhysicalPartitionName(id);
         }
         PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(
-                id, name, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
+                id, name, partition.getId(), indexMap.get(olapTable.getBaseIndexId()));
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1600,7 +1596,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             storageMedium, olapTable.isCloudNativeTableOrMaterializedView());
 
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                createLakeTablets(olapTable, id, shardGroupId, index, distributionInfo,
+                createLakeTablets(olapTable, id, index.getShardGroupId(), index, distributionInfo,
                         tabletMeta, tabletIdSet, warehouseId);
             } else {
                 createOlapTablets(olapTable, index, Replica.ReplicaState.NORMAL, distributionInfo,
@@ -1738,16 +1734,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             indexMap.put(indexId, rollup);
         }
 
-        // create shard group
-        long shardGroupId = 0;
-        if (table.isCloudNativeTableOrMaterializedView()) {
-            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                    createShardGroup(db.getId(), table.getId(), partitionId);
-        }
-
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()),
-                        distributionInfo, shardGroupId);
+                        distributionInfo);
         // version
         if (version != null) {
             partition.updateVisibleVersion(version);
@@ -1759,6 +1748,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             long indexId = entry.getKey();
             MaterializedIndex index = entry.getValue();
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
+
+            // create shard group
+            long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
+            if (table.isCloudNativeTableOrMaterializedView()) {
+                shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
+                        createShardGroup(db.getId(), table.getId(), partitionId, indexId);
+                index.setShardGroupId(shardGroupId);
+            }
 
             // create tablets
             TabletMeta tabletMeta =
@@ -1777,6 +1774,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 partition.createRollupIndex(index);
             }
         }
+
         return partition;
     }
 
@@ -2771,13 +2769,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (table == null) {
                 throw new DdlException("create materialized failed. table:" + tableName + " not exist");
             }
-            if (table.isCloudNativeTable()) {
-                throw new DdlException("Creating synchronous materialized view(rollup) is not supported in " +
-                        "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
-                        "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
-                        "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details.");
-            }
-            if (!table.isOlapTable()) {
+
+            if (!table.isOlapOrCloudNativeTable()) {
                 throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
                         table.getType().name() + " table[" + tableName + "]");
             }

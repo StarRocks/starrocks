@@ -24,6 +24,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -80,9 +81,15 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
-            // The version of a replication transaction may not continuously
-            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                    || version == partition.getVisibleVersion() + 1);
+
+            // lake rollup will lead to version not continuously,
+            // just ingore check for now
+            // or we can persist a mocked transactionState.
+            if (RunMode.isSharedNothingMode()) {
+                // The version of a replication transaction may not continuously
+                Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                        || version == partition.getVisibleVersion() + 1);
+            }
 
             partition.updateVisibleVersion(version, versionTime);
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {

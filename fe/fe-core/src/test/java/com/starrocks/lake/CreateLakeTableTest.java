@@ -17,6 +17,7 @@ package com.starrocks.lake;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -358,6 +359,23 @@ public class CreateLakeTableTest {
         }
     }
 
+    @Test
+    public void testCreateTableWithRollUp() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_with_rollup\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "DUPLICATE KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "ROLLUP (mv1 (c0, c1));"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_with_rollup");
+            Assert.assertEquals(2, lakeTable.getShardGroupIds().size());
+
+            Assert.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
+                    get().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+
+        }
+    }
     @Test
     public void testRestoreColumnUniqueId() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(

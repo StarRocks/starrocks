@@ -62,6 +62,7 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeRollupJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
@@ -264,6 +265,7 @@ public class GsonUtils {
                     .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
+                    .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
                     .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
 
     // runtime adapter for class "LoadJobStateUpdateInfo"

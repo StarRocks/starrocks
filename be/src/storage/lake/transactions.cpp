@@ -35,6 +35,11 @@ using ParallelSet = phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_h
                                                   phmap::priv::Allocator<T>, 4, std::mutex, true>;
 ParallelSet<int64_t> tablet_txns;
 
+// publish version with EMPTY_TXNLOG_TXNID means there is no txnlog
+// and need to increase version number of the tablet,
+// the situation happens in create rollup.
+const int EMPTY_TXNLOG_TXNID = -1;
+
 bool add_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
     return ok;
@@ -136,6 +141,21 @@ StatusOr<TxnLogPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet_id, c
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const TxnInfoPB> txns) {
+    if (txns.size() == 1 && txns[0].txn_id() == EMPTY_TXNLOG_TXNID) {
+        LOG(INFO) << "publish version tablet_id: " << tablet_id << ", txn: " << EMPTY_TXNLOG_TXNID
+                  << ", base_version: " << base_version << ", new_version: " << new_version;
+        // means there is no txnlog and need to increase version number,
+        // just return tablet metadata of base_version.
+        CHECK_EQ(new_version, base_version + 1);
+        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, base_version));
+
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
+        new_metadata->set_version(new_version);
+
+        RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
+        return new_metadata;
+    }
+
     if (!add_tablet(tablet_id)) {
         return Status::ResourceBusy(
                 fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "

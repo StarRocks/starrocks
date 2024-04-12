@@ -74,7 +74,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getParentId();
                 long physicalPartitionId = partition.getId();
-                long shardGroupId = partition.getShardGroupId();
+                long shardGroupId = partition.getIndex(originIndexId).getShardGroupId();
+
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.

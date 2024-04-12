@@ -37,6 +37,7 @@ package com.starrocks.alter;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -60,7 +61,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /*
@@ -344,5 +347,15 @@ public abstract class AlterJobV2 implements Writable {
                         orgIndexMeta.getIndexId(), indexMeta.getIndexId(), e);
             }
         }
+    }
+
+    public void addTabletIdMap(long partitionId, long rollupTabletId, long baseTabletId) {
+    }
+
+    public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
+    }
+
+    public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
+        return Collections.emptyMap();
     }
 }
