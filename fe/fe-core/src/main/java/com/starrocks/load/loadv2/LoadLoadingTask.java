@@ -160,6 +160,56 @@ public class LoadLoadingTask extends LoadTask {
         return new DefaultCoordinator.Factory();
     }
 
+    public RuntimeProfile buildTopLevelProfile() {
+        RuntimeProfile profile = new RuntimeProfile("Load");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(getLoadId()));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeString(createTimestamp));
+
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimestamp;
+        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE,
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(
+                        db.getId(), txnId).getTransactionStatus().isFinalStatus() ? "Finished" : "Running");
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
+        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+
+        SessionVariable variables = context.getSessionVariable();
+        if (variables != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("load_parallel_instance_num=").append(Config.load_parallel_instance_num).append(",");
+            sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
+                    .append(variables.getParallelExecInstanceNum()).append(",");
+            sb.append(SessionVariable.MAX_PARALLEL_SCAN_INSTANCE_NUM).append("=")
+                    .append(variables.getMaxParallelScanInstanceNum()).append(",");
+            sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+            sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
+                    .append(variables.getEnableAdaptiveSinkDop())
+                    .append(",");
+            if (context.getResourceGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=")
+                        .append(context.getResourceGroup().getName())
+                        .append(",");
+            }
+            sb.deleteCharAt(sb.length() - 1);
+            summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+
+            summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+        }
+
+        profile.addChild(summaryProfile);
+
+        return profile;
+    }
+
     private void executeOnce() throws Exception {
         checkMeta();
 
@@ -167,6 +217,8 @@ public class LoadLoadingTask extends LoadTask {
         Coordinator curCoordinator;
         curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
         curCoordinator.setLoadJobType(loadJobType);
+        curCoordinator.setExecPlan(loadPlanner.getExecPlan());
+        curCoordinator.setTopProfileSupplier(this::buildTopLevelProfile);
 
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
@@ -174,49 +226,7 @@ public class LoadLoadingTask extends LoadTask {
             actualExecute(curCoordinator);
 
             if (context.getSessionVariable().isEnableProfile()) {
-                RuntimeProfile profile = new RuntimeProfile("Load");
-                RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
-                summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
-                summaryProfile.addInfoString(ProfileManager.START_TIME,
-                        TimeUtils.longToTimeString(createTimestamp));
-
-                long currentTimestamp = System.currentTimeMillis();
-                long totalTimeMs = currentTimestamp - createTimestamp;
-                summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
-                summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
-
-                summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
-                summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
-                summaryProfile.addInfoString("StarRocks Version",
-                        String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
-                summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
-                summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-                summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
-
-                SessionVariable variables = context.getSessionVariable();
-                if (variables != null) {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("load_parallel_instance_num=").append(Config.load_parallel_instance_num).append(",");
-                    sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
-                            .append(variables.getParallelExecInstanceNum()).append(",");
-                    sb.append(SessionVariable.MAX_PARALLEL_SCAN_INSTANCE_NUM).append("=")
-                            .append(variables.getMaxParallelScanInstanceNum()).append(",");
-                    sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-                    sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
-                            .append(variables.getEnableAdaptiveSinkDop())
-                            .append(",");
-                    if (context.getResourceGroup() != null) {
-                        sb.append(SessionVariable.RESOURCE_GROUP).append("=")
-                                .append(context.getResourceGroup().getName())
-                                .append(",");
-                    }
-                    sb.deleteCharAt(sb.length() - 1);
-                    summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
-
-                    summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
-                }
-
-                profile.addChild(summaryProfile);
+                RuntimeProfile profile = buildTopLevelProfile();
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
@@ -225,7 +235,8 @@ public class LoadLoadingTask extends LoadTask {
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
-                String profileContent = ProfileManager.getInstance().pushProfile(null, profile);
+                String profileContent = ProfileManager.getInstance().pushProfile(
+                        loadPlanner.getExecPlan().getProfilingPlan(), profile);
                 if (context.getQueryDetail() != null) {
                     context.getQueryDetail().setProfile(profileContent);
                 }

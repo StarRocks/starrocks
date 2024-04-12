@@ -161,7 +161,7 @@ public class ExplainAnalyzer {
     }
 
     public String analyze() {
-        if (plan == null || summaryProfile == null || plannerProfile == null || executionProfile == null) {
+        if (plan == null || summaryProfile == null || executionProfile == null) {
             return null;
         }
 
