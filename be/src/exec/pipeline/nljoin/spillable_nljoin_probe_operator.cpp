@@ -149,6 +149,7 @@ bool SpillableNLJoinProbeOperator::is_finished() const {
 }
 
 bool SpillableNLJoinProbeOperator::has_output() const {
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_spiller);
     return !_is_current_build_probe_finished() && _chunk_stream && _chunk_stream->has_output();
 }
 
@@ -169,6 +170,7 @@ Status SpillableNLJoinProbeOperator::set_finished(RuntimeState* state) {
 
 StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state) {
     TRACE_SPILL_LOG << "pull_chunk:" << _driver_sequence;
+    RETURN_IF_ERROR(_spiller->task_status());
     if (_prober.probe_finished() || _build_chunk == nullptr || _build_chunk->is_empty()) {
         auto chunk_st = _chunk_stream->get_next(state, _executor());
         if (chunk_st.status().is_end_of_file()) {
