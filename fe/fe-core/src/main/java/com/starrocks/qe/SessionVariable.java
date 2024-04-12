@@ -672,6 +672,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * And this parameter is to define how huge this file is.
      */
     public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1298,6 +1299,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT, flag = VariableMgr.INVISIBLE)
     private boolean enableAggregationPipelineShareLimit = true;
 
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
+
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
 
@@ -1308,6 +1312,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableRewriteBitmapUnionToBitmapAgg(boolean enableRewriteBitmapUnionToBitmapAgg) {
         this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
     }
+
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
     }
@@ -3502,6 +3507,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
         tResult.setConnector_max_split_size(connectorMaxSplitSize);
         tResult.setOrc_use_column_names(orcUseColumnNames);
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
         return tResult;
     }
 
