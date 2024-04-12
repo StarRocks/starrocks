@@ -234,7 +234,7 @@ public class TypeManager {
         if (type1.isArrayType() || type2.isArrayType()) {
             return TypeManager.getCommonSuperType(type1, type2);
         }
-        if (type1.isComplexType() || type2.isComplexType()) {
+        if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType()) {
             // We don't support complex type (map/struct) for GT/LT predicate.
             return Type.INVALID;
         }
