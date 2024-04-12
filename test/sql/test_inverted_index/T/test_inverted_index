@@ -552,6 +552,8 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "
 SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "%abc%";
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "c");
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match "";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
 
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 INSERT INTO t_complex_predicate_for_gin_english VALUES (2, "cbd edf");
@@ -569,6 +571,30 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) matc
 SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match "%abc%";
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "c");
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match "";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match NULL;
 
 DROP TABLE t_complex_predicate_for_gin_none;
 DROP TABLE t_complex_predicate_for_gin_english;
+
+-- name: test_delete_and_column_prune
+CREATE TABLE `t_delete_and_column_prune` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "english") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_delete_and_column_prune VALUES (1, "b"),(2, "b"),(3, "b");
+SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
+DELETE FROM t_delete_and_column_prune WHERE id1 = 2;
+SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
+
+DROP TABLE t_delete_and_column_prune;
