@@ -321,7 +321,7 @@ public class InsertAnalyzer {
         }
 
         Database database = MetaUtils.getDatabase(catalogName, dbName);
-        Table table = MetaUtils.getTable(session, database, insertStmt.getTableName());
+        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

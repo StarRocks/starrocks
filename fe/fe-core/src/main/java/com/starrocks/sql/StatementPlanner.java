@@ -390,7 +390,7 @@ public class StatementPlanner {
         String tableName = stmt.getTableName().getTbl();
 
         Database db = MetaUtils.getDatabase(catalogName, dbName);
-        Table targetTable = MetaUtils.getTable(session, db, stmt.getTableName());
+        Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
         if (targetTable == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

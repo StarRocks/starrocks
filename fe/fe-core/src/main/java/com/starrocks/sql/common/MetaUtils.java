@@ -152,11 +152,13 @@ public class MetaUtils {
     // get table by tableName, unlike getTable, this interface is session aware,
     // which means if there is a temporary table with the same name,
     // use temporary table first, otherwise, treat it as a permanent table
-    public static Table getSessionAwareTable(ConnectContext session, TableName tableName) {
+    public static Table getSessionAwareTable(ConnectContext session, Database database, TableName tableName) {
         if (Strings.isNullOrEmpty(tableName.getCatalog())) {
             tableName.setCatalog(session.getCurrentCatalog());
         }
-        Database database = getDatabase(session, tableName);
+        if (database == null) {
+            database = getDatabase(session, tableName);
+        }
 
         Table table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
                 session.getSessionId(), tableName.getCatalog(), database.getId(), tableName.getTbl());
@@ -167,25 +169,6 @@ public class MetaUtils {
                 tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
-        }
-        return table;
-    }
-
-    public static Table getTable(ConnectContext session, Database database, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(session.getCurrentCatalog());
-        }
-        Table table = null;
-        // for internal catalog, try to use temporary table first
-        if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
-                    session.getSessionId(), tableName.getCatalog(), database.getId(), tableName.getTbl());
-            if (table == null) {
-                table = database.getTable(tableName.getTbl());
-            }
-        } else {
-            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         }
         return table;
     }

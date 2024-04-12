@@ -1105,7 +1105,7 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getTable(context, db, analyzeStmt.getTableName());
+        Table table = MetaUtils.getTable(context, analyzeStmt.getTableName());
         if (StatisticUtils.isEmptyTable(table)) {
             return;
         }
@@ -1885,7 +1885,7 @@ public class StmtExecutor {
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
-            targetTable = MetaUtils.getTable(context, database, stmt.getTableName());
+            targetTable = MetaUtils.getSessionAwareTable(context, database, stmt.getTableName());
         }
 
         if (isExplainAnalyze) {

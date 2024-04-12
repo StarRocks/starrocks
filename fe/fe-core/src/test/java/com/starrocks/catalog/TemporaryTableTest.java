@@ -234,11 +234,11 @@ public class TemporaryTableTest {
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
                 "properties('replication_num'='1')");
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Unknown table 't1'", () -> {
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table test.t1 is not found", () -> {
             getShowCreateTableResult("t1", connectContext1);
         });
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Unknown table 't2'", () -> {
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table test.t2 is not found", () -> {
             getShowCreateTableResult("t2", connectContext);
         });
 

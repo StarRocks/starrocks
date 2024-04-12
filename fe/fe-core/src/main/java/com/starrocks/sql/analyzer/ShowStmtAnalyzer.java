@@ -339,7 +339,7 @@ public class ShowStmtAnalyzer {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = MetaUtils.getTable(context, db, node.getDbTableName());
+                Table table = MetaUtils.getSessionAwareTable(context, db, node.getDbTableName());
                 //if getTable not find table, may be is statement "desc materialized-view-name"
                 if (table == null) {
                     for (Table tb : db.getTables()) {
@@ -539,7 +539,7 @@ public class ShowStmtAnalyzer {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = MetaUtils.getTable(context, db, new TableName(dbName, tableName));
+                Table table = db.getTable(tableName);
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP table");
                 }

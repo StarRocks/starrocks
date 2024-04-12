@@ -701,7 +701,7 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = MetaUtils.getTable(connectContext, db, showStmt.getTbl());
+                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
                 if (table == null) {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
@@ -1691,7 +1691,8 @@ public class ShowExecutor {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    Table table = MetaUtils.getTable(context, db, new TableName(statement.getDbName(), statement.getTableName()));
+                    Table table = MetaUtils.getSessionAwareTable(
+                            context, db, new TableName(statement.getDbName(), statement.getTableName()));
                     if (table == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
                     }
@@ -2193,7 +2194,7 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = MetaUtils.getTable(context, db, statement.getTableName());
+                Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
                 if (table == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
                             db.getOriginName() + "." + statement.getTableName().toString());
