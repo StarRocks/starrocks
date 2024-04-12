@@ -875,6 +875,13 @@ public class StmtExecutor {
         subStmtExecutors.add(subStmtExecutor);
     }
 
+    public List<StmtExecutor> getSubStmtExecutors() {
+        if (subStmtExecutors == null) {
+            return Lists.newArrayList();
+        }
+        return subStmtExecutors;
+    }
+
     // Because this is called by other thread
     public void cancel(String cancelledMessage) {
         if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {

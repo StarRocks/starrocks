@@ -29,8 +29,13 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;
 import java.util.Map;
@@ -113,6 +118,24 @@ public class DataCacheStmtAnalyzer {
 
         @Override
         public Void visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+            InsertStmt insertStmt = statement.getInsertStmt();
+            QueryStatement queryStatement = insertStmt.getQueryStatement();
+            // Analyze query sql is valid
+            Analyzer.analyze(queryStatement, context);
+
+            // Only Support external table now
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
+            TableName tableName = tableRelation.getResolveTableName();
+            if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                throw new SemanticException("Currently cache select is only supported in external catalog");
+            }
+
             return null;
         }
     }
