@@ -244,4 +244,25 @@ public class TemporaryTableTest {
 
     }
 
+    @Test
+    public void testAbnormalCases() throws Exception {
+        ConnectContext connectContext1 = UtFrameUtils.createDefaultCtx();
+        String createHiveCatalogStmt = "create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\")";
+        StarRocksAssert starRocksAssert1 = new StarRocksAssert(connectContext1)
+                .withCatalog(createHiveCatalogStmt).withDatabase("t");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "show temporary table is not supported under non-default catalog", () -> {
+                starRocksAssert1.useCatalog("hive_catalog").useDatabase("t").show("show temporary tables");
+            });
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "", () -> {
+            starRocksAssert1.useCatalog("hive_catalog").useDatabase("t")
+                    .withTemporaryTable("create temporary table t1(c1 int,c2 int, c3 int) " +
+                    "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
+                    "properties('replication_num'='1')");
+
+        });
+    }
+
 }

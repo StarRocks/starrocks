@@ -121,6 +121,7 @@ public class DropStmtAnalyzer {
 
         @Override
         public Void visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, ConnectContext context) {
+            statement.setSessionId(context.getSessionId());
             MetaUtils.normalizationTableName(context, statement.getTableNameObject());
 
             // check catalog

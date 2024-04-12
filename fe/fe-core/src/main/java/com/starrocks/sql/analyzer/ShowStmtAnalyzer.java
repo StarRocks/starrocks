@@ -124,6 +124,15 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowTemporaryTablesStatement(ShowTemporaryTableStmt node, ConnectContext context) {
+            String catalogName;
+            if (node.getCatalogName() != null) {
+                catalogName = node.getCatalogName();
+            } else {
+                catalogName = context.getCurrentCatalog();
+            }
+            if (!CatalogMgr.isInternalCatalog(catalogName)) {
+                throw new SemanticException("show temporary table is not supported under non-default catalog");
+            }
             return visitShowTableStatement(node, context);
         }
 

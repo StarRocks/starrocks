@@ -153,6 +153,7 @@ public class CreateTableAnalyzer {
         }
 
         if (isCreateTemporaryTable) {
+            ((CreateTemporaryTableStmt) statement).setSessionId(context.getSessionId());
             if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
                 throw new SemanticException("temporary table must be created under internal catalog");
             }

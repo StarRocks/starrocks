@@ -113,7 +113,6 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ExplainAnalyzer;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -128,7 +127,6 @@ import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
-import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
@@ -1520,9 +1518,6 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        if (parsedStmt instanceof ShowTemporaryTableStmt) {
-            ((ShowTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
-        }
         ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
             // state changed in execute
@@ -1597,16 +1592,6 @@ public class StmtExecutor {
 
 
     private void handleDdlStmt() throws DdlException {
-        // set sessionId for temporary table related stmt
-        if (parsedStmt instanceof CreateTemporaryTableStmt) {
-            ((CreateTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
-        }
-        if (parsedStmt instanceof DropTemporaryTableStmt) {
-            ((DropTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
-        }
-        if (parsedStmt instanceof CreateTemporaryTableLikeStmt) {
-            ((CreateTemporaryTableLikeStmt) parsedStmt).setSessionId(context.getSessionId());
-        }
         try {
             ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
             if (resultSet == null) {

@@ -5553,7 +5553,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         temporaryTableMgr.addTemporaryTable(UUIDUtil.genUUID(), db.getId(), tbl.getName(), tbl.getId());
                     }
                 } catch (Throwable e) {
-                    LOG.error("reload table failed: {} {}", tbl, e);
+                    LOG.error("reload table failed: {}", tbl, e);
                 }
             });
         }
