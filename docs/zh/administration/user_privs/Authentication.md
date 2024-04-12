@@ -42,10 +42,10 @@ authentication_ldap_simple_bind_root_pwd =
 CREATE USER user_identity IDENTIFIED WITH authentication_ldap_simple [AS 'ldap_distinguished_name'];
 ```
 
-以下示例创建 LDAP 认证用户 zhangsan，LDAP Distinguished Name（DN）为 “uid=zhansan,ou=company,dc=example,dc=com”。
+以下示例创建 LDAP 认证用户 `tom`，LDAP Distinguished Name（DN）为 `uid=tom,ou=company,dc=example,dc=com`。
 
 ```sql
-CREATE USER zhangsan IDENTIFIED WITH authentication_ldap_simple AS 'uid=zhansan,ou=company,dc=example,dc=com'
+CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ```
 
 如果您希望通过 StarRocks 直接在 LDAP 系统中检索用户的方式认证登录的用户，则在完成以上**额外配置后**，您无需在创建用户时指定用户在 LDAP 中的 DN。该用户在登录时，StarRocks 将在 LDAP 系统中检索该用户，如果有且仅有一个匹配结果，则认证成功果。
@@ -65,7 +65,7 @@ mysql -u<user_identity> -P<query_port> -h<fe_host> -p --default-auth mysql_clear
 示例：
 
 ```shell
-mysql -uzhangsan -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
+mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
 * **JDBC**
