@@ -6,9 +6,9 @@ displayed_sidebar: "English"
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering ultra-low latency real-time analytics at scale and enabling users to query real-time data as they happen.
+StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
-This topic describes how to synchronize data from MySQL to StarRocks in real-time (to the second) through Apache Flink®.
+This topic describes how to synchronize data from MySQL to StarRocks in real-time (within seconds) through Apache Flink®.
 
 <InsertPrivNote />
 
@@ -16,7 +16,7 @@ This topic describes how to synchronize data from MySQL to StarRocks in real-tim
 
 :::tip
 
- Flink CDC is used to synchronize from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table structures. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table structures to StarRocks. Flink CDC 3.0 can even synchronize the structures of the entire MySQL database, the sharded databases and tables, and also support schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
+Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table schemas. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table schemas to StarRocks. Flink CDC 3.0 can even synchronize the schemas of the entire MySQL database, the sharded databases and tables, and also support schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
 
 :::
 
