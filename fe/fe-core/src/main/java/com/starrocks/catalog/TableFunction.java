@@ -48,6 +48,10 @@ public class TableFunction extends Function {
     private String symbolName = "";
 
     // only used for serialization
+
+    // not serialized
+    private boolean isLeftJoin = false;
+
     protected TableFunction() {
     }
 
@@ -126,6 +130,10 @@ public class TableFunction extends Function {
         this.symbolName = symbolName;
     }
 
+    public void setIsLeftJoin(boolean isLeftJoin) {
+        this.isLeftJoin = isLeftJoin;
+    }
+
     @Override
     public void write(DataOutput output) throws IOException {
         // 1. type
@@ -150,6 +158,7 @@ public class TableFunction extends Function {
         TTableFunction tableFn = new TTableFunction();
         tableFn.setSymbol(symbolName);
         tableFn.setRet_types(tableFnReturnTypes.stream().map(Type::toThrift).collect(Collectors.toList()));
+        tableFn.setIs_left_join(isLeftJoin);
         fn.setTable_fn(tableFn);
         return fn;
     }
