@@ -18,7 +18,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
+import com.starrocks.statistic.MockHistogramStatisticStorage;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -34,7 +34,7 @@ public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
