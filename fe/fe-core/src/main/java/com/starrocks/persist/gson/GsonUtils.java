@@ -68,8 +68,6 @@ import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
-import com.starrocks.authentication.LDAPSecurityIntegration;
-import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -332,10 +330,6 @@ public class GsonUtils {
                     .registerSubtype(PipePEntryObject.class, "PipePEntryObject")
                     .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject");
 
-    private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
-            RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
-                    .registerSubtype(LDAPSecurityIntegration.class, "LDAPSecurityIntegration");
-
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
             .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse");
@@ -443,7 +437,6 @@ public class GsonUtils {
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
