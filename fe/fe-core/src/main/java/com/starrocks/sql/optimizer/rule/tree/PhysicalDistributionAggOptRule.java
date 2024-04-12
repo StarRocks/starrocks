@@ -38,8 +38,20 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             root.getOp().accept(new UseSortAGGRule(), root, null);
             return root;
         }
+<<<<<<< HEAD
         if (ConnectContext.get().getSessionVariable().isEnablePerBucketComputeOptimize()) {
             root.getOp().accept(new UsePerBucketOptimizeRule(), root, null);
+=======
+
+        if (sv.isEnableSpill() && sv.getSpillMode().equals("force")) {
+            return root;
+        }
+
+        // per bucket optimize will be replaced with group execution.
+        // remove me in 4.0
+        if (sv.isEnablePerBucketComputeOptimize()) {
+            root.getOp().accept(new UsePerBucketOptimizeRule(sv.isEnablePartitionBucketOptimize()), root, null);
+>>>>>>> 25abbd1775 ([BugFix] disable per bucket optimize in force spill mode (#43935))
             return root;
         }
         return root;
