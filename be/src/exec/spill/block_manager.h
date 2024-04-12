@@ -45,12 +45,9 @@ public:
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
-    int32_t next_sequence_id() { return _next_sequence_id++; }
-
     virtual bool preallocate(size_t write_size) = 0;
 
 protected:
-    int32_t _next_sequence_id{};
     size_t _size{};
     bool _is_remote = false;
 };
@@ -69,10 +66,7 @@ public:
 
     virtual const Block* block() const = 0;
 
-    int32_t next_sequence_id() { return _next_sequence_id++; }
-
 protected:
-    int32_t _next_sequence_id{};
     const Block* _block = nullptr;
 };
 
