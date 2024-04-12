@@ -2354,7 +2354,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
-    public boolean getEnableSpill() {
+    public boolean isEnableSpill() {
         return enableSpill;
     }
 
@@ -2364,6 +2364,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSpillMode(String spillMode) {
         this.spillMode = spillMode;
+    }
+
+    public String getSpillMode() {
+        return spillMode;
     }
 
     public void setEnableRboTablePrune(boolean enableRboTablePrune) {

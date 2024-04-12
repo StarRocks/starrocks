@@ -2202,7 +2202,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     taskRun.getProcessor();
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+            Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
         }
 
         {
@@ -2216,7 +2216,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     taskRun.getProcessor();
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
 
             Config.enable_materialized_view_spill = true;
         }
@@ -2246,7 +2246,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                 taskRun.getProcessor();
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+        Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
     }
 
     @Test
