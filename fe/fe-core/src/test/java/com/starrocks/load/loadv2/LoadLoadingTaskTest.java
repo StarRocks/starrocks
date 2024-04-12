@@ -20,13 +20,26 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static org.junit.Assert.assertNotNull;
+
 public class LoadLoadingTaskTest {
+    @Injectable
+    private ConnectContext connectContext;
+
     @Test
     public void testBuilder(
             @Mocked GlobalStateMgr globalStateMgr) {
@@ -51,6 +64,43 @@ public class LoadLoadingTaskTest {
 
         LoadJob.JSONOptions realJSONOptions =  Deencapsulation.getField(task, "jsonOptions");
         Assert.assertEquals(jsonOptions, realJSONOptions);
+    }
+
+    @Test
+    public void testBuildTopLevelProfile(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked GlobalTransactionMgr globalTransactionMgr,
+                                          @Mocked TransactionState transactionState) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNextId();
+                result = 1;
+                connectContext.getSessionVariable();
+                result = new SessionVariable();
+                connectContext.getQualifiedUser();
+                result = "test_user";
+                connectContext.getDatabase();
+                result = "test_db";
+
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = transactionState;
+                transactionState.getTransactionStatus();
+                result = TransactionStatus.COMMITTED;
+            }
+        };
+
+        // Call the method under test
+        Database database = new Database(10000L, "test");
+        OlapTable olapTable = new OlapTable(10001L, "tbl", null, KeysType.AGG_KEYS, null, null);
+        LoadLoadingTask loadLoadingTask = new LoadLoadingTask.Builder().setDb(database)
+                .setTable(olapTable).setContext(connectContext).setOriginStmt(new OriginStatement("")).build();
+        RuntimeProfile profile = loadLoadingTask.buildTopLevelProfile();
+
+        // Perform assertions to verify the behavior
+        assertNotNull("Profile should not be null", profile);
     }
 
     @Test
