@@ -183,6 +183,7 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (_aggregator->spiller()->has_output_data()) {
         return true;
     }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_aggregator->spiller());
     if (_aggregator->spiller()->is_cancel()) {
         return true;
     }
@@ -216,6 +217,7 @@ Status SpillableAggregateDistinctBlockingSourceOperator::set_finished(RuntimeSta
 }
 
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->spiller()->task_status());
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::pull_chunk(state);
     }

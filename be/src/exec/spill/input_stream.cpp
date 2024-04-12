@@ -18,6 +18,7 @@
 #include <memory>
 #include <utility>
 
+#include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
@@ -197,8 +198,9 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(SerdeContext& ctx) {
     if (has_chunk()) {
         return read_from_buffer();
     }
-    CHECK(!_is_prefetching);
-    return _input_stream->get_next(ctx);
+    // if prefetch failed, return empty chunk
+    DCHECK(false);
+    return std::make_unique<Chunk>();
 }
 
 Status BufferedInputStream::prefetch(SerdeContext& ctx) {
