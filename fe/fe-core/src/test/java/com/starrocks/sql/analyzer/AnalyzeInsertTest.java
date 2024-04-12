@@ -111,7 +111,7 @@ public class AnalyzeInsertTest {
                 return new Database();
             }
             @Mock
-            public Table getTable(ConnectContext context, Database database, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return null;
             }
         };
@@ -120,7 +120,7 @@ public class AnalyzeInsertTest {
 
         new MockUp<MetaUtils>() {
             @Mock
-            public Table getTable(ConnectContext context, Database database, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return icebergTable;
             }
         };
@@ -155,7 +155,7 @@ public class AnalyzeInsertTest {
             }
 
             @Mock
-            public Table getTable(ConnectContext context, Database database, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return icebergTable;
             }
         };
@@ -238,7 +238,7 @@ public class AnalyzeInsertTest {
                 return null;
             }
             @Mock
-            public Table getTable(ConnectContext conntext, Database database, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext conntext, Database database, TableName tableName) {
                 return hiveTable;
             }
         };

@@ -455,7 +455,7 @@ public class ShowExecutorTest {
 
         new MockUp<MetaUtils>() {
             @Mock
-            public Table getTable(ConnectContext ctx, Database db, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext ctx, Database db, TableName tableName) {
                 return olapTable;
             }
         };

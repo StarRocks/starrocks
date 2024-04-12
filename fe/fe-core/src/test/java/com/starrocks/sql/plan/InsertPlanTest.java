@@ -868,7 +868,8 @@ public class InsertPlanTest extends PlanTestBase {
                 return new Database(12345566, "iceberg_db");
             }
             @Mock
-            public com.starrocks.catalog.Table getTable(ConnectContext context, Database database, TableName tableName) {
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName tableName) {
                 return icebergTable;
             }
         };
@@ -917,7 +918,7 @@ public class InsertPlanTest extends PlanTestBase {
         try {
             getInsertExecPlan("insert into not_exist_table values (1)");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Table not_exist_table is not found"));
+            Assert.assertTrue(e.getMessage().contains("Table test.not_exist_table is not found"));
         }
     }
 
