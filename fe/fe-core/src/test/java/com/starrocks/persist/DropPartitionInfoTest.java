@@ -75,7 +75,9 @@ public class DropPartitionInfoTest {
         Assert.assertFalse(rInfo1.equals(this));
         Assert.assertNotEquals(info1, new DropPartitionInfo(-1L, 2L, false, true, partitionNames));
         Assert.assertNotEquals(info1, new DropPartitionInfo(1L, -2L, false, true, partitionNames));
-        Assert.assertNotEquals(info1, new DropPartitionInfo(1L, 2L, false, true, partitionNames));
+        List<String> partitionNames1 = new ArrayList<>();
+        partitionNames1.add("test_partition1");
+        Assert.assertNotEquals(info1, new DropPartitionInfo(1L, 2L, false, true, partitionNames1));
         Assert.assertNotEquals(info1, new DropPartitionInfo(1L, 2L, true, true, partitionNames));
         Assert.assertNotEquals(info1, new DropPartitionInfo(1L, 2L, false, false, partitionNames));
         Assert.assertEquals(info1, new DropPartitionInfo(1L, 2L, false, true, partitionNames));

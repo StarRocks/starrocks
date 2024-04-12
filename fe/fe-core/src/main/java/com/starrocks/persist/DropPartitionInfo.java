@@ -135,7 +135,7 @@ public class DropPartitionInfo implements Writable, GsonPreProcessable, GsonPost
 
     @Override
     public void gsonPostProcess() throws IOException {
-        if (partitionName != null) {
+        if (partitionName != null && partitionNames.size() == 0) {
             partitionNames.add(partitionName);
         }
     }
