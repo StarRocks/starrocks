@@ -4,22 +4,32 @@ displayed_sidebar: "Chinese"
 
 # 从 MySQL 实时同步
 
-StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。。例如：
+StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。
 
-- 方式一：![图一](../assets/4.9.2.png)
-- 方式二：![图二](../assets/4.9.4.png)
+本文介绍如何将 MySQL 的数据通过 Apache Flink® 实时（秒级）同步至 StarRocks。
 
-本文使用方式一演示如何将 MySQL 的数据实时（秒级）同步至 StarRocks。
 > **注意**
 >
 > 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ## 基本原理
 
-实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
+:::info
 
-> 说明：
-> MySQL 实时同步至 StarRocks 能够保证端到端的 exactly-once 的语义一致性。
+从 MySQL 至 Flink 的这段链路需要借助 Flink CDC，本文使用 Flink CDC 的版本小于 3.0，因此需要借助 SMT 同步表结构。
+然而如果使用 Flink CDC 3.0，则无需借助 SMT，即可将表结构同步至 StarRocks，甚至可以同步整个 MySQL 数据库、分库分表的结构，同时也支持同步 schema change。具体的使用方式，参见[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
+
+:::
+
+![flink](../assets/4.9.2.png)
+
+将 MySQL 的数据通过 Flink 同步至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
+
+:::info
+
+该同步流程能够保证端到端的 exactly-once 的语义一致性。
+
+:::
 
 1. **同步库表结构**
 
@@ -29,9 +39,11 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
    Flink SQL 客户端执行导入数据的 SQL 语句（`INSERT INTO SELECT`语句），向 Flink 集群提交一个或者多个长时间运行的 Flink job。Flink集群运行 Flink job ，[Flink cdc connector](https://ververica.github.io/flink-cdc-connectors/master/content/快速上手/build-real-time-data-lake-tutorial-zh.html) 先读取数据库的历史全量数据，然后无缝切换到增量读取，并且发给 flink-connector-starrocks，最后  flink-connector-starrocks  攒微批数据同步至 StarRocks。
 
-   > **注意**
-   >
-   > 仅支持同步 DML，不支持同步 DDL。
+   :::info
+
+   仅支持同步 DML，不支持同步 DDL。
+
+   :::
 
 ## 业务场景
 

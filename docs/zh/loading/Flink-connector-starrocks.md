@@ -417,7 +417,7 @@ DISTRIBUTED BY HASH(id);
 
 ### 使用 Flink CDC 3.0 同步数据（支持 schema change）
 
-[Flink CDC 3.0 框架](https://nightlies.apache.org/flink/flink-cdc-docs-stable)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建流式 ELT 管道。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
+[Flink CDC 3.0 框架](https://nightlies.apache.org/flink/flink-cdc-docs-stable)可以轻松地从 CDC 数据源（如 MySQL，kafka）到 StarRocks 构建流式 ELT 管道。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
 
 自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/starrocks)。StarRocks Pipeline Connector 支持：
 
