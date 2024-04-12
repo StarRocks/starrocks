@@ -437,7 +437,6 @@ public class GsonUtils {
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
