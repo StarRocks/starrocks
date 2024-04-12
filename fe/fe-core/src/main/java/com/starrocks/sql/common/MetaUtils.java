@@ -168,7 +168,7 @@ public class MetaUtils {
         table = session.getGlobalStateMgr().getMetadataMgr().getTable(
                 tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName.toString());
+            throw new SemanticException("Table %s is not found", tableName.getTbl());
         }
         return table;
     }

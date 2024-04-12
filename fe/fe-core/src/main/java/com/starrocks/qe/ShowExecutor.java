@@ -527,9 +527,6 @@ public class ShowExecutor {
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
-            if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                return new ShowResultSet(showTemporaryTableStmt.getMetaData(), rows);
-            }
 
             String dbName = showTemporaryTableStmt.getDb();
             UUID sessionId = showTemporaryTableStmt.getSessionId();

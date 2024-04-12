@@ -918,7 +918,7 @@ public class InsertPlanTest extends PlanTestBase {
         try {
             getInsertExecPlan("insert into not_exist_table values (1)");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Table test.not_exist_table is not found"));
+            Assert.assertTrue(e.getMessage().contains("Table not_exist_table is not found"));
         }
     }
 
