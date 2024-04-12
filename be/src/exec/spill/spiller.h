@@ -46,6 +46,7 @@
     }
 
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
+
 namespace starrocks::spill {
 
 // some metrics for spill
