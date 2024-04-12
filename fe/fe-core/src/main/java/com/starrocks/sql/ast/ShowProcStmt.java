@@ -36,6 +36,7 @@ public class ShowProcStmt extends ShowStmt {
                 .add("cluster_balance")
                 .add("routine_loads")
                 .add("transactions")
+                .add("compactions")
                 .build();
     }
 
