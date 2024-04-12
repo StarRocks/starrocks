@@ -33,11 +33,10 @@ public:
 
     struct Stats {
         // The total number of items stored in the map.
-        size_t num_items = 0;
+        std::atomic<size_t> num_items = 0;
+
         // How many bytes occupied by the items stored in this map.
-        size_t memory_usage = 0;
-        // How many bytes saved by using the TabletSchemaMap.
-        size_t saved_memory_usage = 0;
+        int64_t memory_usage = 0;
     };
 
     TabletSchemaMap() = default;
@@ -58,10 +57,8 @@ public:
     std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPtr& tablet_schema);
 
     // Removes the TabletSchema (if one exists) with the id equivalent to id.
-    //
-    // Returns number of elements removed (0 or 1).
     // [thread-safe]
-    size_t erase(SchemaId id);
+    void erase(SchemaId id);
 
     // Checks if there is an element with unique id equivalent to id in the container.
     //
@@ -70,22 +67,33 @@ public:
 
     // NOTE: time complexity of method is high, don't call this method too often.
     // [thread-safe]
-    Stats stats() const;
+    const Stats& stats() const;
 
 private:
     constexpr static int kShardSize = 16;
 
     bool check_schema_unique_id(const TabletSchemaPB& schema_pb, const TabletSchemaCSPtr& schema_ptr);
     bool check_schema_unique_id(const TabletSchemaCSPtr& in_schema, const TabletSchemaCSPtr& ori_schema);
+
+    struct Item {
+        std::weak_ptr<const TabletSchema> tablet_schema;
+        int64_t mem_usage = 0;
+    };
+
     struct MapShard {
         mutable std::mutex mtx;
-        phmap::flat_hash_map<SchemaId, std::weak_ptr<const TabletSchema>> map;
+        phmap::flat_hash_map<SchemaId, Item> map;
     };
+    using ShardMapIter = phmap::flat_hash_map<SchemaId, Item>::iterator;
+
+    void _insert(MapShard& shard, SchemaId id, const TabletSchemaPtr& tablet_schema);
+    void _replace(const ShardMapIter& iter, const TabletSchemaPtr& tablet_schema);
 
     MapShard* get_shard(SchemaId id) { return &_map_shards[id % kShardSize]; }
     const MapShard* get_shard(SchemaId id) const { return &_map_shards[id % kShardSize]; }
 
     MapShard _map_shards[kShardSize];
+    Stats _stats;
 };
 
 class GlobalTabletSchemaMap final : public TabletSchemaMap {
