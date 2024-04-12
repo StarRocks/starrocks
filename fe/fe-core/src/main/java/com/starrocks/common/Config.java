@@ -1656,24 +1656,6 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_column_level_privilege = false;
 
     /**
-     * The authentication_chain configuration specifies the sequence of security integrations
-     * that will be used to authenticate a user. Each security integration in the chain will be
-     * tried in the order they are defined until one of them successfully authenticates the user.
-     * The configuration should specify a list of names of the security integrations
-     * that will be used in the chain.
-     * <p>
-     * For example, if user specifies the value with {"ldap", "native"}, SR will first try to authenticate
-     * a user whose authentication info may exist in a ldap server, if failed, SR will continue trying to
-     * authenticate the user to check whether it's a native user in SR, i.e. it's created by SR and
-     * its authentication info is stored in SR metadata.
-     * <p>
-     * For more information about security integration, you can refer to
-     * {@link com.starrocks.authentication.SecurityIntegration}
-     */
-    @ConfField(mutable = true)
-    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
-
-    /**
      * ldap server host for authentication_ldap_simple
      */
     @ConfField(mutable = true)
