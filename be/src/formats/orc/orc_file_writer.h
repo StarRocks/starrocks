@@ -90,12 +90,6 @@ private:
 
     void _write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
-    void _write_array_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type);
-
-    void _write_struct_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type);
-
-    void _write_map_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type);
-
     inline static const std::string STARROCKS_ORC_WRITER_VERSION_KEY = "starrocks.writer.version";
 
     const std::string _location;
