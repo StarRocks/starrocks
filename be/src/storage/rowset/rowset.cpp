@@ -216,11 +216,12 @@ Status Rowset::reload_segment(int32_t segment_id) {
     return Status::OK();
 }
 
-int64_t Rowset::total_segment_data_size() {
+StatusOr<int64_t> Rowset::total_segment_data_size() {
     int64_t res = 0;
     for (auto& seg : _segments) {
         if (seg != nullptr) {
-            res += seg->get_data_size();
+            ASSIGN_OR_RETURN(auto sz, seg->get_data_size());
+            res += sz;
         }
     }
     return res;

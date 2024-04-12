@@ -176,12 +176,7 @@ public:
 
     size_t mem_usage() const;
 
-    int64_t get_data_size() const {
-        if (_segment_file_info.size.has_value()) {
-            return _segment_file_info.size.value();
-        }
-        return _fs->get_file_size(_segment_file_info.path).value_or(0);
-    }
+    StatusOr<int64_t> get_data_size() const;
 
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
