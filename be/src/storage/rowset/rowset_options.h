@@ -82,6 +82,8 @@ public:
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     bool asc_hint = true;
+
+    bool prune_column_after_index_filter = false;
 };
 
 } // namespace starrocks

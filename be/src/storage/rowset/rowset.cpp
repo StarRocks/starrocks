@@ -690,6 +690,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.

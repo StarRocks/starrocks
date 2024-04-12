@@ -287,7 +287,7 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
                                                 roaring::Roaring* row_bitmap) const {
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
-    // format as: col (NOT) LIKE/MATCH xxx, xxx can be any expr with string type
+    // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
     // For the untokenized mode, LIKE and MATCH are both available.
     // Otherwise, only MATCH is available.
     bool vaild_pred = false;
@@ -307,11 +307,13 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     // check if satisfy vaild LIKE format
     vaild_like = vectorized_function_call != nullptr &&
                  LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
-                 expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF;
+                 expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
+                 expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
     // check if satisfy vaild MATCH format
     vaild_match = vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
-                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF;
+                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
+                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
     vaild_pred = iterator->is_untokenized() ? (vaild_like || vaild_match) : vaild_match;
 

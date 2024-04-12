@@ -90,6 +90,8 @@ struct TabletReaderParams {
     TScanRange* scan_range = nullptr;
     int32_t plan_node_id;
 
+    bool prune_column_after_index_filter = false;
+
 public:
     std::string to_string() const;
 };

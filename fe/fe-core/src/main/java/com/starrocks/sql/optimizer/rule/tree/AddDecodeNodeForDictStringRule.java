@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
@@ -1226,6 +1227,13 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
 
             return predicate.getChild(0).isColumnRef();
+        }
+
+        @Override
+        public Boolean visitMatchExprOperator(MatchExprOperator predicate, Void context) {
+            // match expression is always satisfy the following format:
+            // SlotRef MATCH StringLiteral which is always SimpleStrictPredicate
+            return true;
         }
 
         // These type predicates couldn't be pushed down to storage engine,
