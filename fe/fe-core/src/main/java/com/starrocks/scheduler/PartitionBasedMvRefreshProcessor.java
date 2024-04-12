@@ -466,7 +466,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // enable spill by default for mv if spill is not set by default and
         // `session.enable_spill` session variable is not set.
         if (Config.enable_materialized_view_spill &&
-                !mvSessionVariable.getEnableSpill() &&
+                !mvSessionVariable.isEnableSpill() &&
                 !mvProperty.getProperties().containsKey(MV_SESSION_ENABLE_SPILL)) {
             mvSessionVariable.setEnableSpill(true);
         }
