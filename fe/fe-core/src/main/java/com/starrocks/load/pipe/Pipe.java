@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.CloseableLock;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -76,7 +77,6 @@ public class Pipe implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(Pipe.class);
 
-    public static final int DEFAULT_POLL_INTERVAL = 60 * 5; // 5 minutes
     public static final int MAX_POLL_INTERVAL = 3600; // 1 hour
     public static final long DEFAULT_BATCH_SIZE = 1 << 30; // 1 GB
     public static final long DEFAULT_BATCH_FILES = 256;
@@ -114,7 +114,7 @@ public class Pipe implements GsonPostProcessable {
     private Map<Long, PipeTaskDesc> runningTasks = new HashMap<>();
     private ErrorInfo lastErrorInfo = new ErrorInfo();
     private int failedTaskExecutionCount = 0;
-    private int pollIntervalSecond = DEFAULT_POLL_INTERVAL;
+    private int pollIntervalSecond = Config.pipe_default_poll_interval_s;
     private long lastPolledTime = 0;
     private boolean recovered = false;
 
