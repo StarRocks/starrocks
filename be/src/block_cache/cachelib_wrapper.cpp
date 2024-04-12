@@ -109,6 +109,14 @@ Status CacheLibWrapper::read_object(const std::string& key, CacheHandle* handle,
     return Status::NotSupported("not supported read object in cachelib");
 }
 
+Status CacheLibWrapper::update_mem_quota(size_t quota_bytes) {
+    return Status::NotSupported("not support updating memory cache quota for cachelib");
+}
+
+Status update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    return Status::NotSupported("not support updating disk cache spaces for cachelib");
+}
+
 void CacheLibWrapper::record_read_remote(size_t size, int64_t lateny_us) {}
 
 void CacheLibWrapper::record_read_cache(size_t size, int64_t lateny_us) {}

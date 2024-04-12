@@ -160,38 +160,4 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
     return Status::OK();
 }
 
-Status parse_conf_datacache_paths(const std::string& config_path, std::vector<std::string>* paths) {
-    if (config_path.empty()) {
-        return Status::OK();
-    }
-    std::vector<string> path_vec = strings::Split(config_path, ";", strings::SkipWhitespace());
-    for (auto& item : path_vec) {
-        StripWhiteSpace(&item);
-        item.erase(item.find_last_not_of('/') + 1);
-        if (item.empty() || item[0] != '/') {
-            LOG(WARNING) << "invalid datacache path. path=" << item;
-            continue;
-        }
-
-        Status status = FileSystem::Default()->create_dir_if_missing(item);
-        if (!status.ok()) {
-            LOG(WARNING) << "datacache path can not be created. path=" << item;
-            continue;
-        }
-
-        string canonicalized_path;
-        status = FileSystem::Default()->canonicalize(item, &canonicalized_path);
-        if (!status.ok()) {
-            LOG(WARNING) << "datacache path can not be canonicalized. may be not exist. path=" << item;
-            continue;
-        }
-        paths->emplace_back(canonicalized_path);
-    }
-    if ((path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
-        LOG(WARNING) << "fail to parse datacache_disk_path config. value=[" << config_path << "]";
-        return Status::InvalidArgument("fail to parse datacache_disk_path");
-    }
-    return Status::OK();
-}
-
 } // end namespace starrocks

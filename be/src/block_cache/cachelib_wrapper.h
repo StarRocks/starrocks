@@ -56,6 +56,10 @@ public:
 
     Status remove(const std::string& key) override;
 
+    Status update_mem_quota(size_t quota_bytes) override;
+
+    Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
+
     const DataCacheMetrics cache_metrics(int level) override;
 
     void record_read_remote(size_t size, int64_t lateny_us) override;

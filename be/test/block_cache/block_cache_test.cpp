@@ -67,30 +67,30 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
 
 TEST_F(BlockCacheTest, parse_cache_space_size_str) {
     uint64_t mem_size = 10;
-    ASSERT_EQ(parse_mem_size("10"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10K"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10K", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10M"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10M", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10G"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10G", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10T"), mem_size);
-    ASSERT_EQ(parse_mem_size("10%", 10 * 1024), 1024);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10T", 0), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10%", 10 * 1024), 1024);
 
     std::string disk_path = "./block_disk_cache";
     uint64_t disk_size = 10;
-    ASSERT_EQ(parse_disk_size(disk_path, "10"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10K"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10K", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10M"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10M", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10G"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10G", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10T"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10T", 0), disk_size);
 
-    disk_size = parse_disk_size(disk_path, "10%");
+    disk_size = parse_conf_datacache_disk_size(disk_path, "10%", 0);
     std::error_code ec;
     auto space_info = std::filesystem::space(disk_path, ec);
     ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
@@ -100,22 +100,22 @@ TEST_F(BlockCacheTest, parse_cache_space_paths) {
     const std::string cwd = std::filesystem::current_path().string();
     const std::string s_normal_path = fmt::format("{}/block_disk_cache/cache1;{}/block_disk_cache/cache2", cwd, cwd);
     std::vector<std::string> paths;
-    ASSERT_TRUE(parse_conf_datacache_paths(s_normal_path, &paths).ok());
+    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_normal_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
     const std::string s_space_path = fmt::format(" {}/block_disk_cache/cache3 ; {}/block_disk_cache/cache4 ", cwd, cwd);
-    ASSERT_TRUE(parse_conf_datacache_paths(s_space_path, &paths).ok());
+    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_space_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
     const std::string s_empty_path = fmt::format("//;{}/block_disk_cache/cache4 ", cwd, cwd);
-    ASSERT_FALSE(parse_conf_datacache_paths(s_empty_path, &paths).ok());
+    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_empty_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 1);
 
     paths.clear();
     const std::string s_invalid_path = fmt::format(" /block_disk_cache/cache5;{}/+/cache6", cwd, cwd);
-    ASSERT_FALSE(parse_conf_datacache_paths(s_invalid_path, &paths).ok());
+    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_invalid_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 0);
 }
 

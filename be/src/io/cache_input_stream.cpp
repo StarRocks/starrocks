@@ -239,15 +239,17 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
         const int64_t write_size = std::min(_block_size, write_end_offset - write_offset_cursor);
 
         SharedBufferPtr sb = nullptr;
-        auto ret = _sb_stream->find_shared_buffer(write_offset_cursor, write_size);
-        if (ret.ok() && options.async) {
-            sb = ret.value();
-            auto cb = [sb](int code, const std::string& msg) {
-                // We only need to keep the shared buffer pointer
-                LOG_IF(WARNING, code != 0 && code != EEXIST) << "write block cache failed, errmsg: " << msg;
-            };
-            options.callback = cb;
-            options.allow_zero_copy = true;
+        if (options.async) {
+            auto ret = _sb_stream->find_shared_buffer(write_offset_cursor, write_size);
+            if (ret.ok()) {
+                sb = ret.value();
+                auto cb = [sb](int code, const std::string& msg) {
+                    // We only need to keep the shared buffer pointer
+                    LOG_IF(WARNING, code != 0 && code != EEXIST) << "write block cache failed, errmsg: " << msg;
+                };
+                options.callback = cb;
+                options.allow_zero_copy = true;
+            }
         }
         Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
         if (r.ok()) {

@@ -17,26 +17,20 @@
 #include <filesystem>
 
 #include "common/logging.h"
+#include "fs/fs.h"
+#include "gutil/strings/split.h"
 #include "util/parse_util.h"
 
 namespace starrocks {
 
-int64_t parse_mem_size(const std::string& mem_size_str, int64_t mem_limit) {
-    return ParseUtil::parse_mem_spec(mem_size_str, mem_limit);
+int64_t parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit) {
+    return ParseUtil::parse_mem_spec(conf_mem_size_str, mem_limit);
 }
 
-int64_t parse_disk_size(const std::string& disk_path, const std::string& disk_size_str, int64_t disk_limit) {
-    if (disk_limit == -1) {
+int64_t parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
+                                       int64_t disk_limit) {
+    if (disk_limit <= 0) {
         std::filesystem::path dpath(disk_path);
-        // The datacache directory may be created automatically later.
-        if (!std::filesystem::exists(dpath)) {
-            if (!dpath.has_parent_path()) {
-                LOG(ERROR) << "invalid disk path for datacache, disk_path: " << disk_path;
-                return -1;
-            }
-            dpath = dpath.parent_path();
-        }
-
         std::error_code ec;
         auto space_info = std::filesystem::space(dpath, ec);
         if (ec) {
@@ -46,6 +40,56 @@ int64_t parse_disk_size(const std::string& disk_path, const std::string& disk_si
         disk_limit = space_info.capacity;
     }
     return ParseUtil::parse_mem_spec(disk_size_str, disk_limit);
+}
+
+Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
+                                       bool ignore_broken_disk) {
+    if (config_path.empty()) {
+        return Status::OK();
+    }
+    std::vector<std::string> path_vec = strings::Split(config_path, ";", strings::SkipWhitespace());
+    for (auto& item : path_vec) {
+        StripWhiteSpace(&item);
+        item.erase(item.find_last_not_of('/') + 1);
+        if (item.empty() || item[0] != '/') {
+            LOG(WARNING) << "invalid datacache path. path=" << item;
+            continue;
+        }
+
+        Status status = FileSystem::Default()->create_dir_if_missing(item);
+        if (!status.ok()) {
+            LOG(WARNING) << "datacache path can not be created. path=" << item;
+            continue;
+        }
+
+        string canonicalized_path;
+        status = FileSystem::Default()->canonicalize(item, &canonicalized_path);
+        if (!status.ok()) {
+            LOG(WARNING) << "datacache path can not be canonicalized. may be not exist. path=" << item;
+            continue;
+        }
+        paths->emplace_back(canonicalized_path);
+    }
+    if ((path_vec.size() != paths->size() && ignore_broken_disk)) {
+        LOG(WARNING) << "fail to parse datacache_disk_path config. value=[" << config_path << "]";
+        return Status::InvalidArgument("fail to parse datacache_disk_path");
+    }
+    return Status::OK();
+}
+
+Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, const std::string& config_disk_size,
+                                        bool ignore_broken_disk, std::vector<DirSpace>* disk_spaces) {
+    std::vector<std::string> paths;
+    RETURN_IF_ERROR(parse_conf_datacache_disk_paths(config_disk_path, &paths, ignore_broken_disk));
+    for (auto& p : paths) {
+        int64_t disk_size = parse_conf_datacache_disk_size(p, config_disk_size, -1);
+        if (disk_size < 0) {
+            LOG(ERROR) << "invalid disk size for datacache: " << disk_size;
+            return Status::InvalidArgument("invalid disk size for datacache");
+        }
+        disk_spaces->push_back({.path = p, .size = static_cast<size_t>(disk_size)});
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

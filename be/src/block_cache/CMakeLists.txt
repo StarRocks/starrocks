@@ -27,6 +27,7 @@ set(CACHE_FILES
   io_buffer.cpp
   cache_options.cpp
   datacache_utils.cpp
+  disk_space_monitor.cpp
 )
 
 if (${WITH_CACHELIB} STREQUAL "ON")

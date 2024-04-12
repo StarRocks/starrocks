@@ -126,6 +126,19 @@ Status StarCacheWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
+Status StarCacheWrapper::update_mem_quota(size_t quota_bytes) {
+    return to_status(_cache->update_mem_quota(quota_bytes));
+}
+
+Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    std::vector<starcache::DirSpace> disk_spaces;
+    disk_spaces.reserve(spaces.size());
+    for (auto& dir : spaces) {
+        disk_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
+    }
+    return to_status(_cache->update_disk_spaces(disk_spaces));
+}
+
 const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {
     auto metrics = _cache->metrics(level);
     // Now the EEXIST is treated as an failed status in starcache, which will cause the write_fail_count too large
