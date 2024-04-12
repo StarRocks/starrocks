@@ -238,19 +238,8 @@ void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr&
         _write_datetime(orc_column, column);
         break;
     }
-    case TYPE_ARRAY: {
-        _write_array_column(orc_column, column, type_desc);
-        break;
-    }
-    case TYPE_STRUCT: {
-        _write_struct_column(orc_column, column, type_desc);
-        break;
-    }
-    case TYPE_MAP: {
-        _write_map_column(orc_column, column, type_desc);
-        break;
-    }
     default: {
+        CHECK(false) << "unreachable";
     }
     }
 }
@@ -521,32 +510,10 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     case TYPE_DATE: {
         return orc::createPrimitiveType(orc::TypeKind::DATE);
     }
-    case TYPE_DATETIME:
-        [[fallthrough]];
-    case TYPE_TIME: {
+    case TYPE_DATETIME: {
         return orc::createPrimitiveType(orc::TypeKind::TIMESTAMP);
     }
-    case TYPE_STRUCT: {
-        auto struct_type = orc::createStructType();
-        for (size_t i = 0; i < type_desc.children.size(); ++i) {
-            const TypeDescriptor& child_type = type_desc.children[i];
-            ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> child_orc_type, _make_schema_node(child_type));
-            struct_type->addStructField(type_desc.field_names[i], std::move(child_orc_type));
-        }
-        return struct_type;
-    }
-    case TYPE_MAP: {
-        const TypeDescriptor& key_type = type_desc.children[0];
-        const TypeDescriptor& value_type = type_desc.children[1];
-        ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> key_orc_type, _make_schema_node(key_type));
-        ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> value_orc_type, _make_schema_node(value_type));
-        return orc::createMapType(std::move(key_orc_type), std::move(value_orc_type));
-    }
-    case TYPE_ARRAY: {
-        const TypeDescriptor& child_type = type_desc.children[0];
-        ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> child_orc_type, _make_schema_node(child_type));
-        return orc::createListType(std::move(child_orc_type));
-    }
+    // TODO(letian-jiang): support nested type
     default:
         return Status::NotSupported(
                 fmt::format("ORC writer does not support to write {} type yet", type_desc.debug_string()));
