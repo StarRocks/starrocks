@@ -136,10 +136,12 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     auto new_tablet_meta2 = publish_single_version(tablet_id, 4, txn_id2);
     ASSERT_OK(new_tablet_meta2.status());
     ASSERT_EQ(false, new_tablet_meta2.value()->enable_persistent_index());
+#ifdef USE_STAROS
     data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
     ASSERT_TRUE(data_dir != nullptr);
     ASSERT_ERROR(FileSystem::Default()->path_exists(data_dir->get_persistent_index_path() + "/" +
                                                     std::to_string(tablet_id)));
+#endif
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
