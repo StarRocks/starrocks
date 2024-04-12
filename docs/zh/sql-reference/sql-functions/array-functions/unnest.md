@@ -12,6 +12,8 @@ UNNEST 是一种表函数 (table function)，用于将一个数组展开成多�
 
 从 2.5 版本开始，UNNEST 支持传入多个 array 参数，并且多个 array 的元素类型和长度（元素个数）可以不同。对于长度不同的情况，以最长数组的长度为基准，长度小于这个长度的数组使用 NULL 进行元素补充，参见 [示例二](#示例二unnest-接收多个参数)。
 
+从 3.2.6 版本开始，UNNEST支持Left Join on true，参见 [示例三](#示例三unnest-支持left-join-on-true)。
+
 ## 语法
 
 ```Haskell
@@ -32,7 +34,7 @@ unnest(array0[, array1 ...])
 
 - UNNEST 必须与 lateral join 一起使用，但是 lateral join 关键字可以在查询中省略。
 - 支持输入多个数组，数组的长度和类型可以不同。
-- 如果输入的数组为 NULL 或 空，则计算时跳过。
+- 如果输入的数组为 NULL 或 空，则计算时跳过（left join on true 除外）。
 - 如果数组中的某个元素为 NULL，该元素对应的位置返回 NULL。
 
 ## **示例**
@@ -135,8 +137,66 @@ FROM example_table, unnest(split(type, ";"), scores) AS unnest(type,scores);
 +------+-------+--------+
 ```
 
+
 `UNNEST` 函数中的 `type` 列和 `scores` 列数据类型不相同。
 
 `type` 列为 VARCHAR 类型，计算过程中使用 split() 函数转为了 ARRAY 类型。
 
 `id = 1` 的 `type` 转化后得到数组 ["typeA","typeB"]，包含 2 个元素；`id = 2` 的 `type` 转化后得到数组 ["typeA","typeB","typeC"]，包含 3 个元素。以数组最长长度 3 为基准，对 ["typeA","typeB"] 补充了 NULL。
+
+### 示例三：UNNEST 支持Left Join on true
+```SQL
+-- 创建表。
+CREATE TABLE student_score
+(
+`id` bigint(20) NULL COMMENT "",
+`scores` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- 向表插入数据。
+INSERT INTO student_score VALUES
+(1, [80,85,87]),
+(2, [77, null, 89]),
+(3, null),
+(4, []),
+(5, [90,92]);
+
+-- 查询表中数据。
+SELECT * FROM student_score ORDER BY id;
++------+--------------+
+| id   | scores       |
++------+--------------+
+|    1 | [80,85,87]   |
+|    2 | [77,null,89] |
+|    3 | NULL         |
+|    4 | []           |
+|    5 | [90,92]      |
++------+--------------+
+
+-- left join on true
+SELECT id, scores, unnest FROM student_score LEFT JOIN unnest(scores) AS unnest ON TRUE ORDER BY 1, 3;
++------+--------------+--------+
+| id   | scores       | unnest |
++------+--------------+--------+
+|  1   | [80,85,87]   |     80 |
+|  1   | [80,85,87]   |     85 |
+|  1   | [80,85,87]   |     87 |
+|  2   | [77,null,89] |   None |
+|  2   | [77,null,89] |     77 |
+|  2   | [77,null,89] |     89 |
+|  3   | None         |   None |
+|  4   | []           |   None |
+|  5   | [90,92]      |     90 |
+|  5   | [90,92]      |     92 |
++------+--------------+--------+
+```
+可以看到对于 `id = 1` 的 `scores` 数组，根据元素个数拆成了 3 行。
+
+`id = 2`的 `scores` 数组中包含 null 元素，对应位置返回 null。
+
+`id = 3` 和 `id = 4` 的 `scores` 数组分别是 NULL 和 空，left join计算时保留。

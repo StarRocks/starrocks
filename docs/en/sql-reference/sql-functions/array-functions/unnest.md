@@ -12,6 +12,8 @@ You can use Lateral Join with UNNEST to implement common conversions, for exampl
 
 From v2.5, UNNEST can take a variable number of array parameters. The arrays can vary in type and length (number of elements). If the arrays have different lengths, the largest length prevails, which means nulls will be added to arrays that are less than this length. See [Example 2](#example-2-unnest-takes-multiple-parameters) for more information.
 
+From v3.2.6, UNNEST can be used with Left Join on true. See [Example 3](#example-3-unnest-left-join-on-true) for more information.
+
 ## Syntax
 
 ```Haskell
@@ -31,7 +33,7 @@ For the element types supported in an array, see [ARRAY](../../data-types/semi_s
 ## Usage notes
 
 - UNNEST is a table function. It must be used with Lateral Join but the keyword Lateral Join does not need to be explicitly specified.
-- If the array expression evaluates to NULL or it is empty, no rows will be returned.
+- If the array expression evaluates to NULL or it is empty, no rows will be returned(except left join on true).
 - If an element in the array is NULL, NULL is returned for that element.
 
 ## Examples
@@ -143,3 +145,60 @@ For `id = 1`, `type` is converted into ["typeA","typeB"], which has two elements
 For `id = 2`, `type` is converted into  ["typeA","typeB","typeC"], which has three elements.
 
 To ensure consistent numbers of rows for each `id`, a null element is added to ["typeA","typeB"].
+
+### Example 3: unnest left join on true
+```SQL
+-- Create table example_table where scores is an ARRAY column.
+CREATE TABLE student_score
+(
+`id` bigint(20) NULL COMMENT "",
+`scores` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- Insert data into this table.
+INSERT INTO student_score VALUES
+(1, [80,85,87]),
+(2, [77, null, 89]),
+(3, null),
+(4, []),
+(5, [90,92]);
+
+-- Query data from this table.
+SELECT * FROM student_score ORDER BY id;
++------+--------------+
+| id   | scores       |
++------+--------------+
+|    1 | [80,85,87]   |
+|    2 | [77,null,89] |
+|    3 | NULL         |
+|    4 | []           |
+|    5 | [90,92]      |
++------+--------------+
+
+-- left join on true
+select id, scores, unnest from student_score left join unnest(scores) as unnest on true order by 1, 3;
++------+--------------+--------+
+| id   | scores       | unnest |
++------+--------------+--------+
+|  1   | [80,85,87]   |     80 |
+|  1   | [80,85,87]   |     85 |
+|  1   | [80,85,87]   |     87 |
+|  2   | [77,null,89] |   None |
+|  2   | [77,null,89] |     77 |
+|  2   | [77,null,89] |     89 |
+|  3   | None         |   None |
+|  4   | []           |   None |
+|  5   | [90,92]      |     90 |
+|  5   | [90,92]      |     92 |
++------+--------------+--------+
+```
+[80,85,87] corresponding to `id = 1` is converted into three rows.
+
+[77,null,89] corresponding to `id = 2` retains the null value.
+
+`scores` corresponding to  `id = 3` and `id = 4` are NULL and empty, left join reserved the value.
