@@ -30,6 +30,7 @@
 
 namespace starrocks {
 
+class Cache;
 class TxnLogPB_OpWrite;
 
 namespace lake {
@@ -50,6 +51,21 @@ public:
 private:
     UpdateManager* _update_mgr = nullptr;
     const MetaFileBuilder* _pk_builder = nullptr;
+};
+
+class PersistentIndexBlockCache {
+public:
+    explicit PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit);
+
+    void update_memory_usage();
+
+    Cache* cache() { return _cache.get(); }
+
+private:
+    std::mutex _mutex;
+    size_t _memory_usage{0};
+    std::unique_ptr<Cache> _cache;
+    std::unique_ptr<MemTracker> _mem_tracker;
 };
 
 class UpdateManager {
@@ -160,6 +176,8 @@ public:
 
     Status execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata, TxnLogPB* txn_log);
 
+    PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
+
 private:
     // print memory tracker state
     void _print_memory_stats();
@@ -208,6 +226,8 @@ private:
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
+
+    std::unique_ptr<PersistentIndexBlockCache> _block_cache;
 };
 
 } // namespace lake
