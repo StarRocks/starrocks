@@ -480,8 +480,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select t2.tb from tall t1 join tall t2 " +
                 "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PREDICATES: 20: tt = '123', " +
-                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1"));
+        assertContains(plan, "PREDICATES: 20: tt = '123', " +
+                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1");
     }
 
     @Test
@@ -510,7 +510,7 @@ public class ExpressionTest extends PlanTestBase {
         // v1 is bigint, bigint in varchar will cast bigint as varchar
         String sql = "select *  from t0 where v1 in ('a','b')";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) IN ('a', 'b')\n"));
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR) IN ('a', 'b')\n"));
     }
 
     @Test
@@ -775,7 +775,7 @@ public class ExpressionTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
                 "c4 IN ('1970-01-01', '1970-01-01', '1970-02-01')");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('292278994-08-17', '1970-01-01', '1970-02-01') ",
-                "c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
+                "CAST(5: c4 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-01-01 00:00:00', '1970-02-01 00:00:00')");
 
         // common expression
         testPlanContains("SELECT " +
@@ -785,6 +785,15 @@ public class ExpressionTest extends PlanTestBase {
                         " FROM test_in_pred_norm",
                 "<slot 7> : (5: c4 IN (CAST('292278994-08-17' AS DATE), '1970-02-01')) AND " +
                         "(6: c5 IN (CAST('292278994-08-17' AS DATE), '1970-02-01'))");
+
+        String plan = getFragmentPlan("SELECT " +
+                "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-18', '1970-02-01') AND " +
+                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-17', '1970-02-01')  " +
+                " FROM test_in_pred_norm");
+        Assert.assertTrue("plan is " + plan, plan.contains("common expressions:"));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 8> "));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 9> "));
     }
 
     @Test
@@ -1793,6 +1802,14 @@ public class ExpressionTest extends PlanTestBase {
             sql = "select t1g = true from test_bool";
             plan = getVerboseExplain(sql);
             assertContains(plan, "[7: t1g, BIGINT, true] = 1");
+
+            sql = "select id_decimal < '123' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([10: id_decimal, DECIMAL64(10,2), true] as DOUBLE) < 123.0");
+
+            sql = "select id_bool < '123' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([11: id_bool, BOOLEAN, true] as DOUBLE) < 123.0");
         } finally {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }
@@ -1845,6 +1862,11 @@ public class ExpressionTest extends PlanTestBase {
             sql = "select t1g = true from test_bool";
             plan = getVerboseExplain(sql);
             assertContains(plan, "[7: t1g, BIGINT, true] = 1");
+
+            sql = "select id_decimal > t1a from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan,
+                    "cast([10: id_decimal, DECIMAL64(10,2), true] as DOUBLE) > cast([1: t1a, VARCHAR, true] as DOUBLE)");
         } finally {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }
