@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 从 MySQL 实时同步
 
-StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。
+StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支撑实时分析和处理海量数据的需求。
 
 本文介绍如何将 MySQL 的数据通过 Apache Flink® 实时（秒级）同步至 StarRocks。
 
@@ -16,7 +16,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
 :::info
 
-从 MySQL 至 Flink 的这段链路需要借助 Flink CDC，本文使用 Flink CDC 的版本小于 3.0，因此需要借助 SMT 同步表结构。
+从 MySQL 同步至 Flink 需要使用 Flink CDC，本文使用 Flink CDC 的版本小于 3.0，因此需要借助 SMT 同步表结构。
 然而如果使用 Flink CDC 3.0，则无需借助 SMT，即可将表结构同步至 StarRocks，甚至可以同步整个 MySQL 数据库、分库分表的结构，同时也支持同步 schema change。具体的使用方式，参见[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
 
 :::
