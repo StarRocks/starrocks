@@ -471,4 +471,12 @@ size_t Segment::mem_usage() const {
     }
     return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
 }
+
+StatusOr<int64_t> Segment::get_data_size() const {
+    if (_segment_file_info.size.has_value()) {
+        return _segment_file_info.size.value();
+    }
+    return _fs->get_file_size(_segment_file_info.path);
+}
+
 } // namespace starrocks

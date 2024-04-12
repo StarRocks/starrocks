@@ -1404,7 +1404,13 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         }
     }
     full_row_size += rowset->rowset_meta()->total_row_size();
-    full_rowset_size = rowset->total_segment_data_size();
+    if (auto r = rowset->total_segment_data_size(); r.ok()) {
+        full_rowset_size = r.value();
+    } else {
+        LOG(WARNING) << r.status();
+        failure_handler("fail to get segment file size", true);
+        return;
+    }
 
     PersistentIndexMetaPB index_meta;
     if (enable_persistent_index) {
@@ -1525,19 +1531,24 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
         // TODO reset tablet schema in rowset
         if (rowset_meta_pb.has_txn_meta()) {
-            full_rowset_size = rowset->total_segment_data_size();
-            rowset->rowset_meta()->clear_txn_meta();
-            rowset->rowset_meta()->set_total_row_size(full_row_size);
-            rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
-            rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
-            rowset->set_schema(apply_tschema);
-            rowset->rowset_meta()->set_tablet_schema(apply_tschema);
-            (void)rowset->reload();
-            RowsetMetaPB full_rowset_meta_pb;
-            rowset->rowset_meta()->get_full_meta_pb(&full_rowset_meta_pb);
-            st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                        new_del_vecs, index_meta, enable_persistent_index,
-                                                        &full_rowset_meta_pb);
+            auto r = rowset->total_segment_data_size();
+            if (r.ok()) {
+                full_rowset_size = r.value();
+                rowset->rowset_meta()->clear_txn_meta();
+                rowset->rowset_meta()->set_total_row_size(full_row_size);
+                rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
+                rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
+                rowset->set_schema(apply_tschema);
+                rowset->rowset_meta()->set_tablet_schema(apply_tschema);
+                (void)rowset->reload();
+                RowsetMetaPB full_rowset_meta_pb;
+                rowset->rowset_meta()->get_full_meta_pb(&full_rowset_meta_pb);
+                st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
+                                                            new_del_vecs, index_meta, enable_persistent_index,
+                                                            &full_rowset_meta_pb);
+            } else {
+                st.update(r.status());
+            }
         } else {
             st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                         new_del_vecs, index_meta, enable_persistent_index, nullptr);

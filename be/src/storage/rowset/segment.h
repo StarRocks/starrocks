@@ -201,12 +201,7 @@ public:
 
     size_t mem_usage() const;
 
-    int64_t get_data_size() const {
-        if (_segment_file_info.size.has_value()) {
-            return _segment_file_info.size.value();
-        }
-        return _fs->get_file_size(_segment_file_info.path).value_or(0);
-    }
+    StatusOr<int64_t> get_data_size() const;
 
     lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
 

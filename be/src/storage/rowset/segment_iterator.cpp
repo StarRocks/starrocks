@@ -546,16 +546,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
-            int64_t file_size = 0;
-            if (_segment->file_info().size.has_value()) {
-                file_size = _segment->file_info().size.value();
-            } else {
-                file_size = rfile->get_size().value();
-            }
-
+            ASSIGN_OR_RETURN(auto file_size, _segment->get_data_size());
             auto shared_buffered_input_stream =
                     std::make_unique<io::SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
-            const io::SharedBufferedInputStream::CoalesceOptions options = {
+            auto options = io::SharedBufferedInputStream::CoalesceOptions{
                     .max_dist_size = config::io_coalesce_read_max_distance_size,
                     .max_buffer_size = config::io_coalesce_read_max_buffer_size};
             shared_buffered_input_stream->set_coalesce_options(options);
