@@ -18,6 +18,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -200,6 +201,8 @@ public abstract class Coordinator {
     public abstract List<String> getRejectedRecordPaths();
 
     public abstract List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos();
+
+    public abstract DataCacheSelectMetrics getDataCacheSelectMetrics();
 
     // ------------------------------------------------------------------------------------
     // Methods for audit.

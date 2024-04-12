@@ -279,6 +279,7 @@ statement
     | showDataCacheRulesStatement
     | dropDataCacheRuleStatement
     | clearDataCacheRulesStatement
+    | dataCacheSelectStatement
 
     // Export Statement
     | exportStatement
@@ -677,7 +678,7 @@ columnNameWithComment
 submitTaskStatement
     : SUBMIT TASK qualifiedName?
         taskClause*
-        AS (createTableAsSelectStatement | insertStatement )
+        AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
     ;
 
 taskClause
@@ -2015,6 +2016,10 @@ dropDataCacheRuleStatement
 
 clearDataCacheRulesStatement
     : CLEAR DATACACHE RULES
+    ;
+
+dataCacheSelectStatement
+    : CACHE SELECT selectItem (',' selectItem)* FROM qualifiedName (WHERE where=expression)? properties?
     ;
 
 // ------------------------------------------- Export Statement --------------------------------------------------------

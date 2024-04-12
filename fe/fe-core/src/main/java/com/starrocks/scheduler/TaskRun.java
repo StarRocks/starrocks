@@ -205,6 +205,7 @@ public class TaskRun implements Comparable<TaskRun> {
             runCtx.setParentConnectContext(parentRunCtx);
         }
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        runCtx.setCurrentCatalog(task.getCatalogName());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
         runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
@@ -320,6 +321,7 @@ public class TaskRun implements Comparable<TaskRun> {
             status.setCreateTime(createTime);
         }
         status.setUser(task.getCreateUser());
+        status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);

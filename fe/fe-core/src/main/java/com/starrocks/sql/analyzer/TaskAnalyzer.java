@@ -31,6 +31,11 @@ import java.util.Map;
 public class TaskAnalyzer {
 
     public static void analyzeSubmitTaskStmt(SubmitTaskStmt submitTaskStmt, ConnectContext session) {
+        String catalogName = submitTaskStmt.getCatalogName();
+        if (Strings.isNullOrEmpty(catalogName)) {
+            catalogName = session.getCurrentCatalog();
+        }
+
         String dbName = submitTaskStmt.getDbName();
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = session.getDatabase();
@@ -38,6 +43,7 @@ public class TaskAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
         }
+        submitTaskStmt.setCatalogName(catalogName);
         submitTaskStmt.setDbName(dbName);
         analyzeTaskProperties(submitTaskStmt.getProperties());
         analyzeTaskSchedule(submitTaskStmt.getSchedule());

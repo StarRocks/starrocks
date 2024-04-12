@@ -50,6 +50,7 @@ include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
 include "epack/FailoverGroup.thrift"
+include "DataCache.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -487,6 +488,7 @@ struct TTaskInfo {
     5: optional string definition
     6: optional i64 expire_time
     7: optional string properties
+    8: optional string catalog
 }
 
 struct TGetTaskInfoResult {
@@ -508,6 +510,8 @@ struct TTaskRunInfo {
 
     12: optional string extra_message
     13: optional string properties
+
+    14: optional string catalog
 }
 
 struct TGetTaskRunInfoResult {
@@ -720,6 +724,8 @@ struct TReportExecStatusParams {
   27: optional string rejected_record_path
 
   28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
+
+  29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
 }
 
 struct TAuditStatistics {
