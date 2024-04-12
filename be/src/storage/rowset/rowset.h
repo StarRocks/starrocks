@@ -155,7 +155,7 @@ public:
     Status reload();
     Status reload_segment(int32_t segment_id);
     Status reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema);
-    int64_t total_segment_data_size();
+    StatusOr<int64_t> total_segment_data_size();
 
     const TabletSchema& schema_ref() const { return *_schema; }
     const TabletSchemaCSPtr& schema() const { return _schema; }
