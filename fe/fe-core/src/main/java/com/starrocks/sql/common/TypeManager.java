@@ -156,9 +156,14 @@ public class TypeManager {
     private static Type getCompatibleTypeForBetweenAndIn(Type t1, Type t2, boolean isBetween) {
         // if predicate is 'IN' and one type is string ,another type is not float
         // we choose string or decimal as cmpType according to session variable cboEqBaseType
-        if (!isBetween &&
-                (t1.isStringType() && t2.isExactNumericType() || t1.isExactNumericType() && t2.isStringType())) {
-            return getEquivalenceBaseType(t1, t2);
+        if (!isBetween) {
+            if (t1.isComplexType() || t2.isComplexType()) {
+                return TypeManager.getCommonSuperType(t1, t2);
+            }
+
+            if (t1.isStringType() && t2.isExactNumericType() || t1.isExactNumericType() && t2.isStringType()) {
+                return getEquivalenceBaseType(t1, t2);
+            }
         }
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {
             return t2;
@@ -183,9 +188,6 @@ public class TypeManager {
             return Type.JSON;
         }
 
-        if (t1.isComplexType() || t2.isComplexType()) {
-            return TypeManager.getCommonSuperType(t1, t2);
-        }
 
         PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();
         PrimitiveType t2ResultType = t2.getResultType().getPrimitiveType();
@@ -296,16 +298,12 @@ public class TypeManager {
     }
 
     public static Type getCompatibleTypeForCaseWhen(List<Type> types) {
-        return getCompatibleType(types, "CaseWhen");
-    }
-
-    public static Type getCompatibleType(List<Type> types, String kind) {
         Type compatibleType = types.get(0);
         for (int i = 1; i < types.size(); i++) {
             compatibleType = getCommonSuperType(compatibleType, types.get(i));
             if (!compatibleType.isValid()) {
-                throw new SemanticException("Failed to get compatible type for %s with %s and %s",
-                        kind, types.get(i), types.get(i - 1));
+                throw new SemanticException("Failed to get compatible type for CaseWhen with %s and %s",
+                        types.get(i), types.get(i - 1));
             }
         }
 
