@@ -187,19 +187,6 @@ public class SkewJoinTest extends PlanTestBase {
         String sql = "select struct_tbl.c0, struct_tbl.c2.a, t3.c2 from default_catalog.test.struct_tbl " +
                 "join[skew|test.struct_tbl.c1.a(1,2)] hive0.partitioned_db.t3 on c1.a = t3.c1 ";
         String sqlPlan = getFragmentPlan(sql);
-<<<<<<< HEAD
-        assertCContains(sqlPlan, "1:Project\n" +
-                "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 10> : CASE WHEN 2: c1.a IS NULL THEN " +
-                "24: round WHEN 2: c1.a IN (1, 2) THEN 24: round ELSE 0 END\n" +
-                "  |  <slot 18> : 2: c1.a\n" +
-                "  |  <slot 19> : 3: c2.a\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 21> : 2: c1.a\n" +
-                "  |  <slot 22> : rand()\n" +
-                "  |  <slot 23> : 22: rand * 1000.0\n" +
-                "  |  <slot 24> : round(23: multiply)");
-=======
         assertCContains(sqlPlan, "HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -246,7 +233,6 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
                 "  |  equal join conjunct: 9: expr = 3: c1");
->>>>>>> 46b143c96e ([Enhancement]Support get stats for subfield of struct type from statistics storage (#43675))
     }
 
     @Test

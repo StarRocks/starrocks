@@ -57,11 +57,7 @@ public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
-<<<<<<< HEAD
-                                                    List<String> columnNames) {
-=======
                                                    List<String> columnNames) throws AnalysisException {
->>>>>>> 46b143c96e ([Enhancement]Support get stats for subfield of struct type from statistics storage (#43675))
         if (table == null) {
             // Statistical information query is an unlocked operation,
             // so it is possible for the table to be deleted while the code is running
