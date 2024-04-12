@@ -115,6 +115,8 @@ public:
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
 
+    size_t memory_usage() const override;
+
 private:
     Status flush_memtable();
 
