@@ -1513,7 +1513,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("olapTable is null");
         }
         boolean fastSchemaEvolution = olapTable.enableFastSchemaEvolution();
-        //for multi add colmuns clauses
         IntSupplier colUniqueIdSupplier = new IntSupplier() {
             private int pendingMaxColUniqueId = olapTable.getMaxColUniqueId();
 
@@ -1762,7 +1761,6 @@ public class SchemaChangeHandler extends AlterHandler {
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws UserException {
         AlterJobV2 schemaChangeJob = analyzeAndCreateJob(alterClauses, db, olapTable);
-        LOG.info("table: {} max column unique id: {}", olapTable.getName(), olapTable.getMaxColUniqueId());
         if (schemaChangeJob == null) {
             return null;
         }

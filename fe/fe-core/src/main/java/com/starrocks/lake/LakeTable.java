@@ -261,7 +261,7 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    public boolean getUseFastSchemaEvolution() {
+    public boolean enableFastSchemaEvolution() {
         return !hasRowStorageType() && Config.enable_fast_schema_evolution_in_share_data_mode;
     }
 }

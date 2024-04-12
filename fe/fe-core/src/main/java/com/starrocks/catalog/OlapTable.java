@@ -2817,6 +2817,8 @@ public class OlapTable extends Table {
         return false;
     }
 
+    // if table can use fast schema evolution and `fast_schema_evolution` in property is true,
+    // enableFastSchemaEvolution return true
     public boolean enableFastSchemaEvolution() {
         if (!canUseFastSchemaEvolution() || hasRowStorageType()) {
             // row storage type does not support fast schema evolution currently
