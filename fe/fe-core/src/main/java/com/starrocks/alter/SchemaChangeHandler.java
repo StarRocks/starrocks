@@ -239,10 +239,10 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        boolean ligthSchemaChange = olapTable.enableFastSchemaEvolution();
+        boolean fastSchemaEvolution = olapTable.enableFastSchemaEvolution();
         if (alterClause.getGeneratedColumnPos() == null) {
             for (Column column : columns) {
-                ligthSchemaChange &= addColumnInternal(olapTable, column, null, targetIndexId, baseIndexId, indexSchemaMap,
+                fastSchemaEvolution &= addColumnInternal(olapTable, column, null, targetIndexId, baseIndexId, indexSchemaMap,
                         newColNameSet);
             }
         } else {
@@ -251,10 +251,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 addColumnInternal(olapTable, column, alterClause.getGeneratedColumnPos(),
                         targetIndexId, baseIndexId, indexSchemaMap, newColNameSet);
                 // add a generated column need to rewrite data, can not use light schema change
-                ligthSchemaChange = false;
+                fastSchemaEvolution = false;
             }
         }
-        return ligthSchemaChange;
+        return fastSchemaEvolution;
     }
 
     /**
