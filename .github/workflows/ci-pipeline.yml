@@ -429,13 +429,13 @@ jobs:
 
       - name: Install Apache Thrift 0.13
         run: |
-          sudo apt-get update
-          sudo apt-get install -y automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config
+          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config
+          lsb_release -a
           git clone --branch 0.13.0 --depth 1 https://github.com/apache/thrift.git
           cd thrift
           ./bootstrap.sh
           ./configure
-          make
+          make -j8
           sudo make install
 
       - name: Analyze FE
@@ -470,6 +470,7 @@ jobs:
       - name: BRANCH INFO
         id: branch
         run: |
+          exit 1
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
