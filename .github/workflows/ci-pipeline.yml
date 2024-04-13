@@ -470,7 +470,6 @@ jobs:
       - name: BRANCH INFO
         id: branch
         run: |
-          exit 1
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
