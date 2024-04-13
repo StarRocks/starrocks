@@ -300,7 +300,7 @@ jobs:
       - name: BUILD RESULT
         run: |
           echo ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}
-          echo "::notice::Package: ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
+          echo "Package: ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
           echo ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }} > tar.txt
 
       - uses: actions/upload-artifact@v4

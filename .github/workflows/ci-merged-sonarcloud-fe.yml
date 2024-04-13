@@ -48,10 +48,16 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven
 
-      - name: Setup thrift
-        uses: dodopizza/setup-thrift@v1
-        with:
-          version: 0.13.0
+      - name: Install Apache Thrift 0.13
+        run: |
+          mkdir -p ./.setup-thrift/oras
+          mkdir -p ./.setup-thrift/thrift
+          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
+          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
+          ln -sf $(pwd)/oras /usr/local/bin/oras
+          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
+          tar zxf ./thrift.v0.13.0.tar.gz -C .
+          ln -sf $(pwd)/thrift /usr/local/bin/thrift
 
       - name: Analyze FE
         env:
