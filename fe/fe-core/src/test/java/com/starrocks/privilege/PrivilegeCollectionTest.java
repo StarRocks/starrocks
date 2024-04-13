@@ -277,6 +277,7 @@ public class PrivilegeCollectionTest {
         PEntryObject table2 = new TablePEntryObject(101, "db", "tbl");
         Assert.assertTrue(table1.match(table2));
         Assert.assertEquals(table1, table2);
+        Assert.assertEquals(table1.hashCode(), table2.hashCode());
 
         PEntryObject table3 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
         PEntryObject table4 = new TablePEntryObject(101, "db", "db");
@@ -305,6 +306,7 @@ public class PrivilegeCollectionTest {
         PEntryObject db2 = new DbPEntryObject(101, "db");
         Assert.assertTrue(db1.match(db2));
         Assert.assertEquals(db1, db2);
+        Assert.assertEquals(db1.hashCode(), db2.hashCode());
 
         PEntryObject db3 = new DbPEntryObject(101, "hive.db");
         PEntryObject db4 = new DbPEntryObject(101, "hive");
