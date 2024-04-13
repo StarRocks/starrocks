@@ -429,14 +429,14 @@ jobs:
 
       - name: Install Apache Thrift 0.13
         run: |
-          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config
-          lsb_release -a
-          git clone --branch 0.13.0 --depth 1 https://github.com/apache/thrift.git
-          cd thrift
-          ./bootstrap.sh
-          ./configure
-          make -j8
-          sudo make install
+          mkdir -p ./.setup-thrift/oras
+          mkdir -p ./.setup-thrift/thrift
+          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
+          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
+          ln -sf $(pwd)/oras /usr/local/bin/oras
+          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
+          tar zxf ./thrift.v0.13.0.tar.gz -C .
+          ln -sf $(pwd)/thrift /usr/local/bin/thrift
 
       - name: Analyze FE
         env:
