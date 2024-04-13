@@ -127,7 +127,7 @@ public class DbPEntryObject implements PEntryObject {
             return this.catalogId == other.catalogId;
         }
         return this.catalogId == other.catalogId &&
-                Objects.equals(getCompatibleDbUUID(this.uuid), getCompatibleDbUUID(other.uuid));
+                Objects.equals(Catalog.getCompatibleDbUUID(this.uuid), Catalog.getCompatibleDbUUID(other.uuid));
     }
 
     @Override
@@ -186,12 +186,13 @@ public class DbPEntryObject implements PEntryObject {
             return false;
         }
         DbPEntryObject that = (DbPEntryObject) o;
-        return this.catalogId == that.catalogId && Objects.equals(uuid, that.uuid);
+        return this.catalogId == that.catalogId &&
+                Objects.equals(Catalog.getCompatibleDbUUID(this.uuid), Catalog.getCompatibleDbUUID(that.uuid));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogId, uuid);
+        return Objects.hash(catalogId, Catalog.getCompatibleDbUUID(uuid));
     }
 
     @Override
