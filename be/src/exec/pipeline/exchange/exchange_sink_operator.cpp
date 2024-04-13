@@ -367,11 +367,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(
         }
     }
 
-    _num_shuffles = _channels.size() * _num_shuffles_per_channel;
-    _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
-
     // Each channel is bound to a specific driver sequence for the local bucket shuffle join.
-    if (_is_channel_bound_driver_sequence && _is_pipeline_level_shuffle) {
+    if (_is_channel_bound_driver_sequence) {
         _num_shuffles_per_channel = 1;
         _driver_sequence_per_shuffle = std::move(driver_sequence_per_channel);
     } else {
@@ -382,6 +379,9 @@ ExchangeSinkOperator::ExchangeSinkOperator(
             }
         }
     }
+    _num_shuffles = _channels.size() * _num_shuffles_per_channel;
+
+    _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
 
     _shuffler = std::make_unique<Shuffler>(runtime_state()->func_version() <= 3, !_is_channel_bound_driver_sequence,
                                            _part_type, _channels.size(), _num_shuffles_per_channel);

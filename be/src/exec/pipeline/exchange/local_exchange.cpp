@@ -70,7 +70,7 @@ Status Partitioner::send_chunk(const ChunkPtr& chunk,
 Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) {
     size_t num_rows = chunk->num_rows();
     if (_shuffler == nullptr) {
-        _shuffler = std::make_unique<Shuffler>(_source->runtime_state()->func_version() <= 3, _rehash, _part_type,
+        _shuffler = std::make_unique<Shuffler>(_source->runtime_state()->func_version() <= 3, false, _part_type,
                                                _source->get_sources().size(), 1);
     }
 
@@ -128,8 +128,7 @@ PartitionExchanger::PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryMa
 
 void PartitionExchanger::incr_sinker() {
     LocalExchanger::incr_sinker();
-    _partitioners.emplace_back(std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs,
-                                                                    _source->require_pipline_rehash()));
+    _partitioners.emplace_back(std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs));
 }
 
 Status PartitionExchanger::prepare(RuntimeState* state) {

@@ -496,7 +496,6 @@ void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFa
     downstream_source->set_degree_of_parallelism(upstream_source->degree_of_parallelism());
     downstream_source->set_could_local_shuffle(upstream_source->could_local_shuffle());
     downstream_source->set_partition_type(upstream_source->partition_type());
-    downstream_source->set_require_pipline_rehash(upstream_source->require_pipline_rehash());
     if (!upstream_source->partition_exprs().empty() || !downstream_source->partition_exprs().empty()) {
         downstream_source->set_partition_exprs(upstream_source->partition_exprs());
     }

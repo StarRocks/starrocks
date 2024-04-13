@@ -144,8 +144,6 @@ struct TDataStreamSink {
 
   // Specify the columns which need to send
   6: optional list<i32> output_columns;
-
-  7: optional bool disable_pipeline_shuffle;
 }
 
 struct TMultiCastDataStreamSink {

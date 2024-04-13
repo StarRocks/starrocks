@@ -45,11 +45,7 @@ public:
         if (_part_type == TPartitionType::HASH_PARTITIONED && !compatibility) {
             _local_exchange_shuffle = &Shuffler::local_exchange_shuffle<ReduceOp>;
         } else {
-            if (is_two_level_shuffle) {
-                _local_exchange_shuffle = &Shuffler::local_exchange_shuffle<ModuloOp>;
-            } else {
-                _local_exchange_shuffle = &Shuffler::local_exchange_shuffle_without_rehash<ModuloOp>;
-            }
+            _local_exchange_shuffle = &Shuffler::local_exchange_shuffle<ModuloOp>;
         }
     }
 
@@ -98,15 +94,6 @@ private:
                                 size_t num_rows) {
         for (int32_t i = 0; i < num_rows; ++i) {
             uint32_t driver_sequence = ReduceOp()(HashUtil::xorshift32(hash_values[i]), _num_channels);
-            shuffle_channel_ids[i] = driver_sequence;
-        }
-    }
-
-    template <typename ReduceOp>
-    void local_exchange_shuffle_without_rehash(std::vector<uint32_t>& shuffle_channel_ids,
-                                               std::vector<uint32_t>& hash_values, size_t num_rows) {
-        for (int32_t i = 0; i < num_rows; ++i) {
-            uint32_t driver_sequence = ReduceOp()(hash_values[i], _num_channels);
             shuffle_channel_ids[i] = driver_sequence;
         }
     }

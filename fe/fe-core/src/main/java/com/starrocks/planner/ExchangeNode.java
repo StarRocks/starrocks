@@ -84,7 +84,6 @@ public class ExchangeNode extends PlanNode {
     private long offset;
 
     private TPartitionType partitionType;
-    private boolean disablePipelineShuffle;
     private DataPartition dataPartition;
     private DistributionSpec.DistributionType distributionType;
     // Specify the columns which need to send, work on CTE, and keep empty in other sense
@@ -134,10 +133,6 @@ public class ExchangeNode extends PlanNode {
 
     public void setPartitionType(TPartitionType type) {
         partitionType = type;
-    }
-
-    public void setDisablePipelineShuffle(boolean disablePipelineShuffle) {
-        this.disablePipelineShuffle = disablePipelineShuffle;
     }
 
     public DistributionSpec.DistributionType getDistributionType() {
@@ -196,7 +191,6 @@ public class ExchangeNode extends PlanNode {
         if (partitionType != null) {
             msg.exchange_node.setPartition_type(partitionType);
         }
-        msg.exchange_node.setDisable_pipeline_shuffle(disablePipelineShuffle);
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         msg.exchange_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
     }

@@ -51,7 +51,6 @@ public class DataStreamSink extends DataSink {
     private DataPartition outputPartition;
 
     private boolean isMerge;
-    private boolean disablePipelineShuffle = false;
 
     // Specify the columns which need to send, used on MultiCastSink
     private List<Integer> outputColumnIds;
@@ -114,7 +113,6 @@ public class DataStreamSink extends DataSink {
         TDataStreamSink tStreamSink =
                 new TDataStreamSink(exchNodeId.asInt(), outputPartition.toThrift());
         tStreamSink.setIs_merge(isMerge);
-        tStreamSink.setDisable_pipeline_shuffle(disablePipelineShuffle);
         tStreamSink.setDest_dop(exchDop);
         if (outputColumnIds != null && !outputColumnIds.isEmpty()) {
             tStreamSink.setOutput_columns(outputColumnIds);
@@ -131,9 +129,5 @@ public class DataStreamSink extends DataSink {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
-    }
-
-    public void setDisablePipelineShuffle(boolean disablePipelineShuffle) {
-        this.disablePipelineShuffle = disablePipelineShuffle;
     }
 }

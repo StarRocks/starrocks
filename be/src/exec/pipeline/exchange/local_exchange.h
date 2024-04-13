@@ -77,8 +77,8 @@ protected:
 class ShufflePartitioner final : public Partitioner {
 public:
     ShufflePartitioner(LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                       const std::vector<ExprContext*>& partition_expr_ctxs, bool rehash)
-            : Partitioner(source), _part_type(part_type), _partition_expr_ctxs(partition_expr_ctxs), _rehash(rehash) {
+                       const std::vector<ExprContext*>& partition_expr_ctxs)
+            : Partitioner(source), _part_type(part_type), _partition_expr_ctxs(partition_expr_ctxs) {
         _partitions_columns.resize(partition_expr_ctxs.size());
         _hash_values.reserve(source->runtime_state()->chunk_size());
     }
@@ -90,7 +90,6 @@ private:
     const TPartitionType::type _part_type;
     // Compute per-row partition values.
     const std::vector<ExprContext*>& _partition_expr_ctxs;
-    bool _rehash = false;
     Columns _partitions_columns;
     std::vector<uint32_t> _hash_values;
     std::unique_ptr<Shuffler> _shuffler;
@@ -111,7 +110,7 @@ public:
 class LocalExchanger {
 public:
     explicit LocalExchanger(std::string name, std::shared_ptr<ChunkBufferMemoryManager> memory_manager,
-                            LocalExchangeSourceOperatorFactory* source, bool rehash = true)
+                            LocalExchangeSourceOperatorFactory* source)
             : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {}
 
     virtual ~LocalExchanger() = default;

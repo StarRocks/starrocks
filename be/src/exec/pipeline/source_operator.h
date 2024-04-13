@@ -58,11 +58,6 @@ public:
     // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
     virtual bool could_local_shuffle() const { return _could_local_shuffle; }
     void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
-    // require_two_level_shuffle is false means we need to avoid pipeline rehash shuffle in the next local shuffle.
-    bool require_pipline_rehash() const { return _require_pipline_rehash; }
-    void set_require_pipline_rehash(bool require_two_level_shuffle) {
-        _require_pipline_rehash = require_two_level_shuffle;
-    }
     // This information comes from the hint of the sql, like `sum(v1) over ([skewed] partition by v2 order by v3)`
     // and if this pipeline is connected by a full sort node and it can have better performance with a uniformed distribution.
     // So we will use this method to determine whether a random local exchange should be introduced.
@@ -123,7 +118,6 @@ public:
 protected:
     size_t _degree_of_parallelism = 1;
     bool _could_local_shuffle = true;
-    bool _require_pipline_rehash = true;
     bool _is_skewed = false;
     TPartitionType::type _partition_type = TPartitionType::type::HASH_PARTITIONED;
     MorselQueueFactory* _morsel_queue_factory = nullptr;

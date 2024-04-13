@@ -979,8 +979,6 @@ struct TExchangeNode {
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
   5: optional bool enable_parallel_merge
-  // disable pipeline shuffle for exchange node
-  6: optional bool disable_pipeline_shuffle
 }
 
 // This contains all of the information computed by the plan as part of the resource

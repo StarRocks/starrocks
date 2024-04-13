@@ -41,7 +41,6 @@
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "gen_cpp/Partitions_types.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
@@ -250,21 +249,13 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
-    bool disable_pipeline_shuffle =
-            _texchange_node.__isset.disable_pipeline_shuffle && _texchange_node.disable_pipeline_shuffle;
-    bool enable_pipeline_shuffle =
-            runtime_state()->query_ctx()->enable_pipeline_level_shuffle() && !disable_pipeline_shuffle;
     OpFactories operators;
     if (!_is_merging) {
-        auto exchange_source_op =
-                std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(), _texchange_node,
-                                                                _num_senders, _input_row_desc, enable_pipeline_shuffle);
-        // When pipeline shuffle is disabled for bucket shuffle join, we need to align the hash distribution of the build side to the probe side
-        bool require_two_level_shuffle =
-                !(disable_pipeline_shuffle &&
-                  _texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED);
+        auto* query_ctx = context->runtime_state()->query_ctx();
+        auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(
+                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_row_desc,
+                query_ctx->enable_pipeline_level_shuffle());
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
-        exchange_source_op->set_require_pipline_rehash(require_two_level_shuffle);
         operators.emplace_back(exchange_source_op);
     } else {
         if (_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) {
