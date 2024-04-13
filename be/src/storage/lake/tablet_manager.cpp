@@ -554,28 +554,37 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
 int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
     int64_t size = 0;
     std::shared_lock rdlock(_meta_lock);
-    const auto& it = _tablet_in_writing_txn_size.find(tablet_id);
-    if (it != _tablet_in_writing_txn_size.end()) {
-        for (auto& [k, v] : it->second) {
-            size += v;
-        }
+    const auto& it = _tablet_in_writing_size.find(tablet_id);
+    if (it != _tablet_in_writing_size.end()) {
+        size = it->second;
     }
     VLOG(1) << "tablet " << tablet_id << " in writing data size: " << size;
     return size;
 }
 
-void TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size) {
+void TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {
     std::unique_lock wrlock(_meta_lock);
-    _tablet_in_writing_txn_size[tablet_id][txn_id] += size;
-    VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id]
-            << " size: " << size << " txn_id: " << txn_id;
+    _tablet_in_writing_size[tablet_id] += size;
+    VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_size[tablet_id]
+            << " size: " << size;
 }
 
-void TabletManager::remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id) {
+void TabletManager::remove_in_writing_data_size(int64_t tablet_id) {
     std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "remove tablet " << tablet_id
-            << "in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id] << " txn_id: " << txn_id;
-    _tablet_in_writing_txn_size[tablet_id].erase(txn_id);
+    VLOG(1) << "remove tablet " << tablet_id << " in writing data size: " << _tablet_in_writing_size[tablet_id];
+    _tablet_in_writing_size.erase(tablet_id);
+}
+
+void TabletManager::clean_in_writing_data_size() {
+    std::unique_lock wrlock(_meta_lock);
+    for (auto it = _tablet_in_writing_size.begin(); it != _tablet_in_writing_size.end();) {
+        VLOG(1) << "clean in writing data size of tablet " << it->first << " size: " << it->second;
+        if (!is_tablet_in_worker(it->first)) {
+            it = _tablet_in_writing_size.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchemaPtr schema) {
