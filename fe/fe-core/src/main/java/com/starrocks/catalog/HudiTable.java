@@ -31,6 +31,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
@@ -43,6 +44,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.common.model.HoodieTableType;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -250,7 +252,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return null;
         }
 
-        String hudiInstantTimestamp = null;
+        HoodieInstant lastInstant = null;
         for (int i = 0; i < hudiPartitions.size(); i++) {
             DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
             PartitionKey key = info.getKey();
@@ -268,10 +270,17 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             tPartition.setLocation(tPartitionLocation);
             tHudiTable.putToPartitions(partitionId, tPartition);
 
-            if (hudiInstantTimestamp == null) {
+            // update lastInstant according to remote file info.
+            {
                 RemoteFileInfo fileInfo = hudiPartitions.get(i);
-                if (fileInfo.getFiles().size() > 0) {
-                    hudiInstantTimestamp = fileInfo.getFiles().get(0).hudiInstantTimestamp;
+                for (RemoteFileDesc desc : fileInfo.getFiles()) {
+                    HoodieInstant instant = desc.getHudiInstant();
+                    if (instant == null) {
+                        continue;
+                    }
+                    if (lastInstant == null || instant.compareTo(lastInstant) > 0) {
+                        lastInstant = instant;
+                    }
                 }
             }
         }
@@ -287,7 +296,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         if (tableType == HudiTableType.MOR) {
-            tHudiTable.setInstant_time(hudiInstantTimestamp);
+            tHudiTable.setInstant_time(lastInstant == null ? "" : lastInstant.getTimestamp());
         }
 
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));

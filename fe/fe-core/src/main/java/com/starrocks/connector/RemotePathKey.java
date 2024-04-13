@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 
@@ -30,14 +31,16 @@ public class RemotePathKey {
     private final Optional<String> hudiTableLocation;
 
     public static class HudiContext {
-        public AtomicBoolean initialized = new AtomicBoolean(false);
+        // ---- concurrent initialization -----
+        public AtomicBoolean init = new AtomicBoolean(false);
         public ReentrantLock lock = new ReentrantLock();
-        public HoodieTableFileSystemView fsView;
-        public HoodieTimeline timeline;
-        public String timestamp;
+        // ---- actual fields -----
+        public HoodieTableFileSystemView fsView = null;
+        public HoodieTimeline timeline = null;
+        public HoodieInstant lastInstant = null;
     }
 
-    public HudiContext hudiContext;
+    private HudiContext hudiContext;
 
     public static RemotePathKey of(String path, boolean isRecursive) {
         return new RemotePathKey(path, isRecursive, Optional.empty());
@@ -106,5 +109,13 @@ public class RemotePathKey {
         if (hudiContext != null) {
             hudiContext = null;
         }
+    }
+
+    public void setHudiContext(HudiContext ctx) {
+        hudiContext = ctx;
+    }
+
+    public HudiContext getHudiContext() {
+        return hudiContext;
     }
 }
