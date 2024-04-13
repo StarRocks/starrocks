@@ -42,6 +42,8 @@ public class RemoteFileDesc {
     private PaimonSplitsInfo paimonSplitsInfo;
     private OdpsSplitsInfo odpsSplitsInfo;
 
+    public String hudiInstantTimestamp;
+
     private RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                            ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
                            List<FileScanTask> icebergScanTasks, PaimonSplitsInfo paimonSplitsInfo,

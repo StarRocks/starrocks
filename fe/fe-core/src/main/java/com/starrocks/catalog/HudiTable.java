@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -44,10 +43,6 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.common.model.HoodieTableType;
-import org.apache.hudi.common.table.HoodieTableMetaClient;
-import org.apache.hudi.common.table.timeline.HoodieInstant;
-import org.apache.hudi.common.table.timeline.HoodieTimeline;
-import org.apache.hudi.common.util.Option;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,7 +57,6 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
-
 
 /**
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
@@ -111,6 +105,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private List<String> dataColumnNames = Lists.newArrayList();
     @SerializedName(value = "prop")
     private Map<String, String> hudiProperties = Maps.newHashMap();
+
+    private HudiTableType tableType;
 
     public HudiTable() {
         super(TableType.HUDI);
@@ -254,6 +250,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return null;
         }
 
+        String hudiInstantTimestamp = null;
         for (int i = 0; i < hudiPartitions.size(); i++) {
             DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
             PartitionKey key = info.getKey();
@@ -270,6 +267,13 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             tPartitionLocation.setSuffix(hudiPartitions.get(i).getFullPath());
             tPartition.setLocation(tPartitionLocation);
             tHudiTable.putToPartitions(partitionId, tPartition);
+
+            if (hudiInstantTimestamp == null) {
+                RemoteFileInfo fileInfo = hudiPartitions.get(i);
+                if (fileInfo.getFiles().size() > 0) {
+                    hudiInstantTimestamp = fileInfo.getFiles().get(0).hudiInstantTimestamp;
+                }
+            }
         }
 
         Configuration conf = new Configuration();
@@ -282,15 +286,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                     .applyToConfiguration(conf);
         }
 
-        HoodieTableMetaClient metaClient =
-                HoodieTableMetaClient.builder().setConf(conf).setBasePath(getTableLocation()).build();
-        HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
-        Option<HoodieInstant> latestInstant = timeline.lastInstant();
-        String queryInstant = "";
-        if (latestInstant.isPresent()) {
-            queryInstant = latestInstant.get().getTimestamp();
+        if (tableType == HudiTableType.MOR) {
+            tHudiTable.setInstant_time(hudiInstantTimestamp);
         }
-        tHudiTable.setInstant_time(queryInstant);
+
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
         tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
@@ -446,6 +445,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         private List<String> dataColNames = Lists.newArrayList();
         private Map<String, String> hudiProperties = Maps.newHashMap();
 
+        private HudiTableType tableType;
+
         public Builder() {
         }
 
@@ -506,6 +507,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
         public Builder setHudiProperties(Map<String, String> hudiProperties) {
             this.hudiProperties = hudiProperties;
+            return this;
+        }
+
+        public Builder setTableType(HudiTableType tableType) {
+            this.tableType = tableType;
             return this;
         }
 

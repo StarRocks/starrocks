@@ -317,7 +317,8 @@ public class HiveMetastoreApiConverter {
                 .setPartitionColNames(partitionColumnNames)
                 .setDataColNames(toDataColumnNamesForHudiTable(hudiSchema, partitionColumnNames))
                 .setHudiProperties(toHudiProperties(table, metaClient, hudiSchema))
-                .setCreateTime(table.getCreateTime());
+                .setCreateTime(table.getCreateTime())
+                .setTableType(HudiTable.fromInputFormat(table.getSd().getInputFormat()));
 
         return tableBuilder.build();
     }
