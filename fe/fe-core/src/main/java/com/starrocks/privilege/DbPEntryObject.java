@@ -15,6 +15,7 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -26,9 +27,6 @@ import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
-
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.starrocks.catalog.ExternalCatalog.getCompatibleDbUUID;
 
 public class DbPEntryObject implements PEntryObject {
     @SerializedName(value = "ci")
@@ -94,7 +92,7 @@ public class DbPEntryObject implements PEntryObject {
      * for external database, use database name as privilege id.
      */
     public static String getDatabaseUUID(GlobalStateMgr mgr, String catalogName, String dbToken) throws PrivObjNotFoundException {
-        checkArgument(!dbToken.equals("*"));
+        Preconditions.checkArgument(!dbToken.equals("*"));
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             Database database = mgr.getMetadataMgr().getDb(catalogName, dbToken);
             if (database == null) {

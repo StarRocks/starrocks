@@ -548,7 +548,8 @@ public class PrivilegeCheckerTest {
         dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
         Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
-        tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+        tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
         Assert.assertEquals(tablePEntryObject.getDatabaseUUID(), "iceberg_db");
         Assert.assertEquals(tablePEntryObject.getTableUUID(), "iceberg_tbl");
         Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));

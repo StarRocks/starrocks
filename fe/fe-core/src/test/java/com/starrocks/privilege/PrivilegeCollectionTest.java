@@ -272,26 +272,44 @@ public class PrivilegeCollectionTest {
     }
 
     @Test
-    public void testTablePEntryCompatibilityForExternalTable() {
-        TablePEntryObject table1 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
-        TablePEntryObject table2 = new TablePEntryObject(101, "db", "tbl");
+    public void testPEntryCompatibilityForExternalTable() {
+        PEntryObject table1 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
+        PEntryObject table2 = new TablePEntryObject(101, "db", "tbl");
         Assert.assertTrue(table1.match(table2));
+        Assert.assertEquals(table1, table2);
 
-        TablePEntryObject table3 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
-        TablePEntryObject table4 = new TablePEntryObject(101, "db", "db");
+        PEntryObject table3 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
+        PEntryObject table4 = new TablePEntryObject(101, "db", "db");
         Assert.assertFalse(table3.match(table4));
+        Assert.assertNotEquals(table3, table4);
 
-        TablePEntryObject table5 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
-        TablePEntryObject table6 = new TablePEntryObject(101, "hive", "tbl");
+        PEntryObject table5 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
+        PEntryObject table6 = new TablePEntryObject(101, "hive", "tbl");
         Assert.assertFalse(table5.match(table6));
+        Assert.assertEquals(table5, table6);
 
-        TablePEntryObject table7 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
-        TablePEntryObject table8 = new TablePEntryObject(101, "db", "123");
+        PEntryObject table7 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
+        PEntryObject table8 = new TablePEntryObject(101, "db", "123");
         Assert.assertFalse(table7.match(table8));
+        Assert.assertEquals(table7, table8);
 
-        TablePEntryObject table9 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
-        TablePEntryObject table10 = new TablePEntryObject(101, "db", "hive");
+        PEntryObject table9 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
+        PEntryObject table10 = new TablePEntryObject(101, "db", "hive");
         Assert.assertFalse(table9.match(table10));
+        Assert.assertEquals(table9, table10);
+    }
+
+    @Test
+    public void testPEntryCompatibilityForExternalDb() {
+        PEntryObject db1 = new DbPEntryObject(101, "hive.db");
+        PEntryObject db2 = new DbPEntryObject(101, "db");
+        Assert.assertTrue(db1.match(db2));
+        Assert.assertEquals(db1, db2);
+
+        PEntryObject db3 = new DbPEntryObject(101, "hive.db");
+        PEntryObject db4 = new DbPEntryObject(101, "hive");
+        Assert.assertFalse(db3.match(db4));
+        Assert.assertNotEquals(db3, db4);
     }
 
     @Test
