@@ -286,17 +286,17 @@ public class PrivilegeCollectionTest {
         PEntryObject table5 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
         PEntryObject table6 = new TablePEntryObject(101, "hive", "tbl");
         Assert.assertFalse(table5.match(table6));
-        Assert.assertEquals(table5, table6);
+        Assert.assertNotEquals(table5, table6);
 
         PEntryObject table7 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
         PEntryObject table8 = new TablePEntryObject(101, "db", "123");
         Assert.assertFalse(table7.match(table8));
-        Assert.assertEquals(table7, table8);
+        Assert.assertNotEquals(table7, table8);
 
         PEntryObject table9 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
         PEntryObject table10 = new TablePEntryObject(101, "db", "hive");
         Assert.assertFalse(table9.match(table10));
-        Assert.assertEquals(table9, table10);
+        Assert.assertNotEquals(table9, table10);
     }
 
     @Test
@@ -316,9 +316,9 @@ public class PrivilegeCollectionTest {
     public void testBasicForExternalTable() throws PrivilegeException {
         PrivilegeCollectionV2 collection = new PrivilegeCollectionV2();
         // pentry of external table in old format
-        TablePEntryObject table1 = new TablePEntryObject(101, "db", "tbl");
+        TablePEntryObject table1 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
         // pentry of external table in new format
-        TablePEntryObject table2 = new TablePEntryObject(101, "hive.db", "hive.db.tbl.123");
+        TablePEntryObject table2 = new TablePEntryObject(101, "db", "tbl");
 
         // test interoperability of old & new format
         List<PEntryObject> toGrantWithPEntryList = ImmutableList.of(table1, table2, table1, table2);
