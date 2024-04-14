@@ -580,6 +580,29 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     EXPECT_EQ(st.value()->column(0).name(), "c0");
     EXPECT_EQ(st.value()->column(1).name(), "c1");
 }
+
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+    _tablet_manager->add_in_writing_data_size(1, 100);
+
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+    _tablet_manager->remove_in_writing_data_size(1);
+
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+
+    _tablet_manager->add_in_writing_data_size(1, 100);
+    _tablet_manager->clean_in_writing_data_size();
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+
+    // preserve original g_worker value, and reset it to our MockedWorker
+    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
+    g_worker.reset(new MockStarOSWorker());
+    DeferOp op([origin_worker] { g_worker = origin_worker; });
+
+    _tablet_manager->clean_in_writing_data_size();
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+}
+
 #endif // USE_STAROS
 
 } // namespace starrocks
