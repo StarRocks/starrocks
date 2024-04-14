@@ -479,7 +479,9 @@ public:
     size_t memory_usage() {
         size_t mem_usage = 0;
         for (auto& bf : _bf_vec) {
-            mem_usage += bf->size();
+            if (bf != nullptr) {
+                mem_usage += bf->size();
+            }
         }
         return mem_usage;
     }

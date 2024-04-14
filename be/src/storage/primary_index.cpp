@@ -1502,6 +1502,7 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
 }
 
 std::size_t PrimaryIndex::memory_usage() const {
+    std::lock_guard<std::mutex> lg(_lock);
     if (_persistent_index) {
         return _persistent_index->memory_usage();
     }
