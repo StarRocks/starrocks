@@ -234,6 +234,11 @@ public class KuduMetadata implements ConnectorMetadata {
         }
     }
 
+    @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.KUDU;
+    }
+
     private String getKuduFullTableName(String dbName, String tblName) {
         return schemaEmulationEnabled ?
                 (schemaEmulationPrefix + dbName + DATABASE_TABLE_JOINER + tblName) : tblName;
