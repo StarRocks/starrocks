@@ -1964,7 +1964,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(true);
         std::vector<IndexValue> small_get_values(1);
         ASSERT_OK(index.get(1, key_slices.data(), small_get_values.data()));
-        ASSERT_EQ(values[i].get_value() * 4, small_get_values[0].get_value());
+        ASSERT_EQ(values[0].get_value() * 4, small_get_values[0].get_value());
         index.test_calc_memory_usage();
         small_get_values.clear();
         for (int i = 0; i < N; i++) {
