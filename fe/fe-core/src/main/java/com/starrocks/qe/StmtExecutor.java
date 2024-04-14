@@ -425,6 +425,19 @@ public class StmtExecutor {
         return parsedStmt;
     }
 
+    private void sqlBlackListCheck() throws AnalysisException {
+        // sql's blacklist is enabled through enable_sql_blacklist.
+        if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
+            OriginStatement origStmt = parsedStmt.getOrigStmt();
+            if (origStmt != null) {
+                String originSql = origStmt.originStmt.trim()
+                        .toLowerCase().replaceAll(" +", " ");
+                // If this sql is in blacklist, show message.
+                SqlBlackList.verifying(originSql);
+            }
+        }
+    }
+
     // Execute one statement.
     // Exception:
     //  IOException: talk with client failed.
@@ -541,16 +554,7 @@ public class StmtExecutor {
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 context.setStatisticsJob(isStatisticsJob);
 
-                // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
-                    OriginStatement origStmt = parsedStmt.getOrigStmt();
-                    if (origStmt != null) {
-                        String originSql = origStmt.originStmt.trim()
-                                .toLowerCase().replaceAll(" +", " ");
-                        // If this sql is in blacklist, show message.
-                        SqlBlackList.verifying(originSql);
-                    }
-                }
+                sqlBlackListCheck();
 
                 // Record planner costs in audit log
                 Preconditions.checkNotNull(execPlan, "query must has a plan");
@@ -623,6 +627,7 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof SetCatalogStmt) {
                 handleSetCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
+                sqlBlackListCheck();
                 if (execPlanBuildByNewPlanner) {
                     handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
                 } else {
@@ -703,16 +708,7 @@ public class StmtExecutor {
             }
 
             if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {
-                // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist) {
-                    OriginStatement origStmt = parsedStmt.getOrigStmt();
-                    if (origStmt != null) {
-                        String originSql = origStmt.originStmt.trim()
-                                .toLowerCase().replaceAll(" +", " ");
-                        // If this sql is in blacklist, show message.
-                        SqlBlackList.verifying(originSql);
-                    }
-                }
+                sqlBlackListCheck();
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
