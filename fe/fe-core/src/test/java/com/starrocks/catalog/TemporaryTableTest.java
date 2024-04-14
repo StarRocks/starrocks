@@ -234,11 +234,11 @@ public class TemporaryTableTest {
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
                 "properties('replication_num'='1')");
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table test.t1 is not found", () -> {
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table t1 is not found", () -> {
             getShowCreateTableResult("t1", connectContext1);
         });
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table test.t2 is not found", () -> {
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Table t2 is not found", () -> {
             getShowCreateTableResult("t2", connectContext);
         });
 
