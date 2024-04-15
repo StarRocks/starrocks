@@ -757,7 +757,7 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
