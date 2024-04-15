@@ -300,12 +300,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
-            List<TabletFailInfo> failedTablets) {
+                          List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);
             try {
                 TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
                 // update write failed backend/replica
@@ -329,7 +329,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             } catch (Exception e) {
                 LOG.warn("Fail to execute postAbort", e);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);
             }
         }
 

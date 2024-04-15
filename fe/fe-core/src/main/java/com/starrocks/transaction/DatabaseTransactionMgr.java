@@ -1833,8 +1833,14 @@ public class DatabaseTransactionMgr {
                 stateBatch.writeUnlock();
             }
         }
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        Set<Long> tableIds = Sets.newHashSet();
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            tableIds.addAll(transactionState.getTableIdList());
+        }
+        locker.lockTablesWithIntensiveDbLock(db, new ArrayList<>(tableIds), LockType.WRITE);
+
         try {
             boolean txnOperated = false;
             stateBatch.writeLock();
@@ -1860,7 +1866,7 @@ public class DatabaseTransactionMgr {
                 stateBatch.writeUnlock();
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, new ArrayList<>(tableIds), LockType.WRITE);
         }
 
         collectStatisticsForStreamLoadOnFirstLoadBatch(stateBatch, db);

@@ -386,29 +386,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    boolean isLakeTableTransaction(TransactionState transactionState) {
-        if (transactionState.getTableIdList().isEmpty()) {
-            return false;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
-        if (db == null) {
-            return false;
-        }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            for (long tableId : transactionState.getTableIdList()) {
-                Table table = db.getTable(tableId);
-                if (table != null) {
-                    return table.isCloudNativeTableOrMaterializedView();
-                }
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-        return false;
-    }
-
     void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
         Set<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
@@ -787,7 +764,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<Tablet> shadowTablets = null;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
@@ -821,7 +798,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         }
 
         try {
