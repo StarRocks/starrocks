@@ -59,7 +59,8 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _flat_iters[0]->get_current_ordinal(); }
 
-    /// for vectorized engine
+    ordinal_t num_rows() const override { return _flat_iters[0]->num_rows(); }
+
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
@@ -221,6 +222,8 @@ public:
     [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
 
     ordinal_t get_current_ordinal() const override { return _json_iter->get_current_ordinal(); }
+
+    ordinal_t num_rows() const override { return _json_iter->num_rows(); }
 
     /// for vectorized engine
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
