@@ -31,6 +31,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 
 public class LoadLoadingTaskTest {
+
     @Test
     public void testExecuteTaskWhenMetaDropped(@Mocked CatalogIdGenerator idGenerator) {
         new Expectations() {
