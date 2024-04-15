@@ -193,6 +193,8 @@ private:
     Status _replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
                                                 const std::vector<uint32_t>& replace_indexes, const Column& pks);
 
+    void _calc_memory_usage();
+
 protected:
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
@@ -206,6 +208,7 @@ private:
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
+    std::atomic<size_t> _memory_usage{0};
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {
