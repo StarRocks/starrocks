@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -36,17 +38,32 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+
 public class BestMvSelector {
     private final List<OptExpression> expressions;
     private final OptimizerContext context;
     private final OptExpression queryPlan;
     private final boolean isAggQuery;
+    private final Rule rule;
 
-    public BestMvSelector(List<OptExpression> expressions, OptimizerContext context, OptExpression queryPlan) {
+    public BestMvSelector(List<OptExpression> expressions, OptimizerContext context, OptExpression queryPlan, Rule rule) {
         this.expressions = expressions;
         this.context = context;
         this.queryPlan = queryPlan;
         this.isAggQuery = queryPlan.getOp() instanceof LogicalAggregationOperator;
+        this.rule = rule;
+    }
+
+    private List<OptExpression> calculateStatistics(List<OptExpression> expressions, OptimizerContext context) {
+        for (OptExpression expression : expressions) {
+            try {
+                calculateStatistics(expression, context);
+            } catch (Exception e) {
+                logMVRewrite(context, rule, "calculate statistics failed: {}", DebugUtil.getStackTrace(e));
+            }
+        }
+        return expressions;
     }
 
     public OptExpression selectBest() {
@@ -54,9 +71,7 @@ public class BestMvSelector {
             return expressions.get(0);
         }
         // compute the statistics of OptExpression
-        for (OptExpression expression : expressions) {
-            calculateStatistics(expression, context);
-        }
+        List<OptExpression> validExpressions = calculateStatistics(expressions, context);
 
         // collect original table scans
         List<Table> originalTables = MvUtils.getAllTables(queryPlan);
@@ -65,18 +80,18 @@ public class BestMvSelector {
         Set<String> nonEquivalenceColumns = Sets.newHashSet();
         MvUtils.splitPredicate(predicates, equivalenceColumns, nonEquivalenceColumns);
         List<CandidateContext> contexts = Lists.newArrayList();
-        for (int i = 0; i < expressions.size(); i++) {
-            List<Table> expressionTables = MvUtils.getAllTables(expressions.get(i));
+        for (int i = 0; i < validExpressions.size(); i++) {
+            List<Table> expressionTables = MvUtils.getAllTables(validExpressions.get(i));
             originalTables.stream().forEach(originalTable -> expressionTables.remove(originalTable));
             CandidateContext mvContext = getMVContext(
-                    expressions.get(i), isAggQuery, context, expressionTables, equivalenceColumns, nonEquivalenceColumns);
+                    validExpressions.get(i), isAggQuery, context, expressionTables, equivalenceColumns, nonEquivalenceColumns);
             Preconditions.checkState(mvContext != null);
             mvContext.setIndex(i);
             contexts.add(mvContext);
         }
         // sort expressions based on statistics output row count and compute size
         contexts.sort(new CandidateContextComparator());
-        return expressions.get(contexts.get(0).getIndex());
+        return validExpressions.get(contexts.get(0).getIndex());
     }
 
     @VisibleForTesting

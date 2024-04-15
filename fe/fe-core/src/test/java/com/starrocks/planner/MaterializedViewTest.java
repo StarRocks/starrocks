@@ -912,13 +912,44 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testAggregateWithGroupByKeyExpr() {
+    public void testAggregateWithGroupByKeyExpr1() {
+        setTracLogModule("MV");
         testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
                 "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
                 .contains("  0:OlapScanNode\n" +
                         "     TABLE: mv0")
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 14> : abs(9: empid)\n" +
+                        "  |  ")
+                .contains("  2:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(11: total)\n" +
+                        "  |  group by: 14: abs, 10: deptno");
+    }
+
+    @Test
+    public void testAggregateWithGroupByKeyExpr2() {
+        testRewriteOK("select empid, deptno," +
+                        " sum(salary) as total, " +
+                        " min(salary) as min_total, " +
+                        " max(salary) as max_total, " +
+                        " count(salary) + 1 as cnt" +
+                        " from emps group by empid, deptno ",
+                "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
+                .contains("  0:OlapScanNode\n" +
+                        "     TABLE: mv0")
+                // only contains required columns from mv scan operator.
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 16> : abs(9: empid)\n" +
+                        "  |  ")
                 .contains("  2:AGGREGATE (update serialize)\n" +
                         "  |  STREAMING\n" +
                         "  |  output: sum(11: total)\n" +
