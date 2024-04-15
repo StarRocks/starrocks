@@ -93,8 +93,8 @@ insert into t5 SELECT generate_series, 650000 - generate_series FROM TABLE(gener
 -- 
 select max(s1) from (select sum(c1) s1 from t5 group by c0) tb;
 select max(s1), avg(s2) from (select sum(c1) s1, sum(c0) s2 from t5 group by c0) tb;
-select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2 from t5 group by c0 order by c0 limit 10) tb;
-select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2, c0 from t5 group by c0 order by c0 limit 10) tb;
-select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2, c0, c1 from t5 group by c0, c1 order by c0, c1 limit 10) tb;
+select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2 from t5 group by c0 limit 10) tb;
+select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2, c0 from t5 group by c0 limit 10) tb;
+select count(s1), count(s2) from (select sum(c1) s1, sum(c0) s2, c0, c1 from t5 group by c0, c1 limit 10) tb;
 select distinct c0, c1 from t5 order by 1, 2 limit 1;
-select count(*) from (select distinct c0, c1 from t5 order by 1, 2 limit 10) tb;
+select count(*) from (select distinct c0, c1 from t5 limit 10) tb;
