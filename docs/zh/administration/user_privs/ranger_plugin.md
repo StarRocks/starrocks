@@ -63,7 +63,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
+2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j.jar](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
 
 3. 重启 Ranger Admin。
 
@@ -174,6 +174,10 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    bin/stop_fe.sh
    bin/start_fe.sh
    ```
+
+10. 重建 StarRocks Service
+
+    Ranger 不支持 Service 文件的
 
 ## 复用其他 Service 来为外表鉴权
 
