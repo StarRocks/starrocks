@@ -34,16 +34,21 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.UUID;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
@@ -110,6 +115,52 @@ public class DropStmtAnalyzer {
                 if (table instanceof View) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "TABLE");
                 }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, ConnectContext context) {
+            statement.setSessionId(context.getSessionId());
+            MetaUtils.normalizationTableName(context, statement.getTableNameObject());
+
+            // check catalog
+            String catalogName = statement.getCatalogName();
+            if (!CatalogMgr.isInternalCatalog(catalogName)) {
+                throw new SemanticException("drop temporary table can only be execute under default catalog");
+            }
+            try {
+                MetaUtils.checkCatalogExistAndReport(catalogName);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
+            String dbName = statement.getDbName();
+            // check database
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            if (db == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+            statement.setSessionId(context.getSessionId());
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            String tableName = statement.getTableName();
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getServingState().getTemporaryTableMgr();
+                UUID sessionId = statement.getSessionId();
+                if (!temporaryTableMgr.tableExists(sessionId, db.getId(), tableName)) {
+                    if (statement.isSetIfExists()) {
+                        LOG.info("drop temporary table[{}.{}] in session[{}] which does not exist",
+                                dbName, tableName, sessionId);
+                        return null;
+                    } else {
+                        LOG.info("drop temporary table[{}.{}] in session[{}] which does not exist",
+                                dbName, tableName, sessionId);
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                    }
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
             }
             return null;
         }

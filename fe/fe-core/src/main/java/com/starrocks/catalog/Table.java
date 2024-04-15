@@ -395,6 +395,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return false;
     }
 
+    public boolean isTemporaryTable() {
+        return false;
+    }
+
     public List<Column> getFullSchema() {
         return fullSchema;
     }
