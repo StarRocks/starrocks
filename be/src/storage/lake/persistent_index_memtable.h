@@ -58,6 +58,8 @@ public:
 
     void clear();
 
+    Status check_not_exist(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version) const;
+
 private:
     static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
                                    const IndexValue& value);

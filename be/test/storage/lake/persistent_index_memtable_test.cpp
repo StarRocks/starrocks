@@ -145,4 +145,28 @@ TEST(PersistentIndexMemtableTest, test_replace) {
     }
 }
 
+TEST(PersistentIndexMemtableTest, test_check_not_exist) {
+    using Key = uint64_t;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    vector<IndexValue> replace_values;
+    const int N = 1000;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    KeyIndexSet key_indexes_info;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        values.emplace_back(i * 2);
+        key_indexes_info.insert(i);
+    }
+
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
+
+    ASSERT_ERROR(memtable->check_not_exist(key_slices.data(), key_indexes_info, 1));
+    ASSERT_OK(memtable->check_not_exist(key_slices.data(), key_indexes_info, -1));
+}
+
 } // namespace starrocks::lake

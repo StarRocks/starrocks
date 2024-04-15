@@ -151,4 +151,31 @@ void PersistentIndexMemtable::clear() {
     _map.clear();
 }
 
+Status PersistentIndexMemtable::check_not_exist(const Slice* keys, const KeyIndexSet& key_indexes,
+                                                int64_t version) const {
+    for (const auto& key_index : key_indexes) {
+        auto key = std::string_view(keys[key_index]);
+        auto it = _map.find(key);
+        if (it != _map.end()) {
+            // Only consider single version now.
+            auto& index_value_vers = it->second;
+            if (index_value_vers.empty()) {
+                continue;
+            }
+            auto& index_version = index_value_vers.front().first;
+            if (index_version == version) {
+                continue;
+            }
+            auto& index_value = index_value_vers.front().second;
+            if (index_value.get_value() != NullIndexValue) {
+                auto size = keys[key_index].get_size();
+                std::string msg = strings::Substitute("key %s already exists in memtable",
+                                                      hexdump((const char*)key.data(), size));
+                return Status::AlreadyExist(msg);
+            }
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::lake
