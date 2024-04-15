@@ -136,6 +136,7 @@ Status LakePersistentIndex::minor_compact() {
         return Status::InternalError("Block cache is null.");
     }
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    std::unique_lock write_lock(_mutex);
     _sstables.emplace_back(std::move(sstable));
     return Status::OK();
 }
@@ -154,6 +155,7 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     if (key_indexes->empty() || _sstables.empty()) {
         return Status::OK();
     }
+    std::shared_lock read_lock(_mutex);
     for (auto iter = _sstables.rbegin(); iter != _sstables.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
         RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
@@ -248,14 +250,18 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
     return Status::OK();
 }
 
-std::unique_ptr<sstable::Iterator> LakePersistentIndex::prepare_merging_iterator() {
+std::unique_ptr<sstable::Iterator> LakePersistentIndex::prepare_merging_iterator(TxnLogPB* txn_log) {
     sstable::ReadOptions read_options;
     std::vector<sstable::Iterator*> iters;
     auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
     iters.reserve(max_compaction_versions);
+    std::shared_lock read_lock(_mutex);
     for (const auto& sstable : _sstables) {
         sstable::Iterator* iter = sstable->new_iterator(read_options);
         iters.emplace_back(iter);
+        auto input_sstable = txn_log->mutable_op_compaction()->add_input_sstables();
+        auto sstable_pb = sstable->sstable_pb();
+        input_sstable->CopyFrom(sstable_pb);
         if (iters.size() >= max_compaction_versions) {
             break;
         }
@@ -284,7 +290,7 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version, TxnLogPB* 
         return Status::OK();
     }
 
-    auto iter_ptr = prepare_merging_iterator();
+    auto iter_ptr = prepare_merging_iterator(txn_log);
     if (!iter_ptr->Valid()) {
         return iter_ptr->status();
     }
@@ -300,15 +306,6 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version, TxnLogPB* 
     RETURN_IF_ERROR(merge_sstables(std::move(iter_ptr), &builder));
     RETURN_IF_ERROR(wf->close());
 
-    auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
-    for (const auto& sstable : _sstables) {
-        auto input_sstable = txn_log->mutable_op_compaction()->add_input_sstables();
-        auto sstable_pb = sstable->sstable_pb();
-        input_sstable->CopyFrom(sstable_pb);
-        if (txn_log->op_compaction().input_sstables_size() >= max_compaction_versions) {
-            break;
-        }
-    }
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(filename);
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(builder.FileSize());
     return Status::OK();
@@ -336,6 +333,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     for (const auto& input_sstable : op_compaction.input_sstables()) {
         filenames.insert(input_sstable.filename());
     }
+    std::unique_lock<std::shared_mutex> write_lock(_mutex);
     _sstables.erase(std::remove_if(_sstables.begin(), _sstables.end(),
                                    [&](const std::unique_ptr<PersistentIndexSstable>& sstable) {
                                        return filenames.contains(sstable->sstable_pb().filename());
@@ -349,6 +347,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 }
 
 void LakePersistentIndex::commit(MetaFileBuilder* builder) {
+    std::shared_lock read_lock(_mutex);
     PersistentIndexSstableMetaPB sstable_meta;
     for (auto& sstable : _sstables) {
         auto* sstable_pb = sstable_meta.add_sstables();

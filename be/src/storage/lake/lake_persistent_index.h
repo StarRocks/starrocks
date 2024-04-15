@@ -142,7 +142,7 @@ private:
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
-    std::unique_ptr<sstable::Iterator> prepare_merging_iterator();
+    std::unique_ptr<sstable::Iterator> prepare_merging_iterator(TxnLogPB* txn_log);
 
     Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
 
@@ -155,6 +155,7 @@ private:
     // In major compaction, some sstables will be picked to be merged into one.
     // sstables are ordered with the smaller version on the left.
     std::vector<std::unique_ptr<PersistentIndexSstable>> _sstables;
+    mutable std::shared_mutex _mutex;
 };
 
 } // namespace lake
