@@ -139,9 +139,11 @@ public class ConnectScheduler {
         if (currentConn >= currentMaxConn) {
             return false;
         }
-        numberConnection.incrementAndGet();
-        connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
-        connectionMap.put((long) ctx.getConnectionId(), ctx);
+        ConnectContext existingConnectionContext = connectionMap.putIfAbsent((long) ctx.getConnectionId(), ctx);
+        if (existingConnectionContext == null) {
+            numberConnection.incrementAndGet();
+            connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
+        }
         return true;
     }
 
