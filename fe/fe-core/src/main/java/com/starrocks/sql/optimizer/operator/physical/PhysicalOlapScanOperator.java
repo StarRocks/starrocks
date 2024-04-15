@@ -55,6 +55,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     // TODO: remove this
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
+    // Rewriting the scan column ref also needs to rewrite the pruned predicate at the same time.
     private List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
 
     public PhysicalOlapScanOperator(Table table,
