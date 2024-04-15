@@ -717,6 +717,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_CONNECTOR_SINK_WRITER_SCALING = "enable_connector_sink_writer_scaling";
 
+    public static final String ENABLE_CONSTANT_EXECUTE_IN_FE = "enable_constant_execute_in_fe";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2017,6 +2019,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enablePipelineLevelShuffle = true;
+
+    @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
+    private boolean enableConstantReturnInFE = false;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -3650,6 +3655,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePredicateMoveAround(boolean enablePredicateMoveAround) {
         this.enablePredicateMoveAround = enablePredicateMoveAround;
+    }
+
+    public boolean isEnableConstantReturnInFE() {
+        return enableConstantReturnInFE;
+    }
+
+    public void setEnableConstantReturnInFE(boolean enableConstantReturnInFE) {
+        this.enableConstantReturnInFE = enableConstantReturnInFE;
     }
 
     // Serialize to thrift object
