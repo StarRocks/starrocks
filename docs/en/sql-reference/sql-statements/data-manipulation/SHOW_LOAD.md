@@ -84,13 +84,8 @@ The output of this statement varies based on loading methods.
 
 Example 1: Vertically display all load jobs in your current database.
 
-<<<<<<< HEAD
-```undefined
-SHOW LOAD\G;
-=======
 ```plaintext
 SHOW LOAD\G
->>>>>>> 0cb1e63f52 ([Doc] remove semicolon when formatting the output (#43553))
 *************************** 1. row ***************************
          JobId: 976331
          Label: duplicate_table_with_null
