@@ -129,11 +129,6 @@ public class MVRewriteValidator {
             return;
         }
 
-        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
-        if (tracer == null) {
-            return;
-        }
-
         List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
         Set<Long> beforeTableIds = taskContext.getAllScanOperators().stream()
                 .map(op -> op.getTable().getId())
@@ -149,6 +144,10 @@ public class MVRewriteValidator {
             taskContext.getOptimizerContext().getQueryTables().addAll(diffMVs);
         }
 
+        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
+        if (tracer == null) {
+            return;
+        }
         if (diffMVs.isEmpty()) {
             Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
             boolean hasRewriteSuccess = tracers.values().stream()

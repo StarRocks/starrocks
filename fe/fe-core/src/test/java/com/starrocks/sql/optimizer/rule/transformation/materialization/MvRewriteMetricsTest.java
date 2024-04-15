@@ -72,8 +72,6 @@ public class MvRewriteMetricsTest extends MvRewriteTestBase {
                 String query = "select * from depts where deptno > 20";
                 String plan = getFragmentPlan(query);
                 PlanTestBase.assertContains(plan, mvName);
-
-
                 Assert.assertTrue(mvMetric.counterQueryHitTotal.getValue() == 1);
                 Assert.assertTrue(mvMetric.counterQueryConsideredTotal.getValue() == 1);
                 Assert.assertTrue(mvMetric.counterQueryMatchedTotal.getValue() == 1);
