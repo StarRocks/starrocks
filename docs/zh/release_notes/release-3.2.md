@@ -37,6 +37,7 @@ displayed_sidebar: "Chinese"
 - 物化视图在基表为逻辑视图情况下改写失败。[#42173](https://github.com/StarRocks/starrocks/pull/42173)
 - 跨集群同步工具在迁移主键表到存算分离集群时 CN Crash。[#42260](https://github.com/StarRocks/starrocks/pull/42260)
 - 外表物化视图范围分区不连续。[#41957](https://github.com/StarRocks/starrocks/pull/41957)
+- 外表权限丢失。[#44030](https://github.com/StarRocks/starrocks/pull/44030)
 
 ## 3.2.4
 
