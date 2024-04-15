@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.iceberg.FileScanTask;
 
 import java.util.ArrayList;
@@ -41,6 +42,8 @@ public class RemoteFileDesc {
     private List<FileScanTask> icebergScanTasks = new ArrayList<>();
     private PaimonSplitsInfo paimonSplitsInfo;
     private OdpsSplitsInfo odpsSplitsInfo;
+
+    private HoodieInstant hudiInstant;
 
     private RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                            ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
@@ -140,6 +143,14 @@ public class RemoteFileDesc {
 
     public OdpsSplitsInfo getOdpsSplitsInfo() {
         return odpsSplitsInfo;
+    }
+
+    public HoodieInstant getHudiInstant() {
+        return hudiInstant;
+    }
+
+    public void setHudiInstant(HoodieInstant instant) {
+        hudiInstant = instant;
     }
 
     @Override

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.cache.CacheBuilder;
@@ -43,17 +42,24 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     private final LoadingCache<RemotePathKey, List<RemoteFileDesc>> cache;
 
     protected CachingRemoteFileIO(RemoteFileIO fileIO,
-                               Executor executor,
-                               long expireAfterWriteSec,
-                               long refreshIntervalSec,
-                               long maxSize) {
+                                  Executor executor,
+                                  long expireAfterWriteSec,
+                                  long refreshIntervalSec,
+                                  long maxSize) {
         this.fileIO = fileIO;
         this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                .build(asyncReloading(CacheLoader.from(this::loadRemoteFiles), executor));
+                .build(asyncReloading(new CacheLoader<RemotePathKey, List<RemoteFileDesc>>() {
+                    @Override
+                    public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
+                        List<RemoteFileDesc> res = loadRemoteFiles(key);
+                        key.drop();
+                        return res;
+                    }
+                }, executor));
     }
 
     public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
-                                                        long expireAfterWrite, long refreshInterval, long maxSize) {
+                                                                 long expireAfterWrite, long refreshInterval, long maxSize) {
         return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, maxSize);
     }
 
