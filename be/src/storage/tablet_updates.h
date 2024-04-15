@@ -476,7 +476,7 @@ private:
 
     void check_for_apply() { _check_for_apply(); }
 
-    std::timed_mutex* get_index_lock() { return &_index_lock; }
+    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
@@ -501,7 +501,7 @@ private:
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
-    mutable std::timed_mutex _index_lock;
+    mutable std::shared_timed_mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 
