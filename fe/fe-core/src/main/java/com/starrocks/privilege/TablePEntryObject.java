@@ -168,7 +168,7 @@ public class TablePEntryObject implements PEntryObject {
         }
         return this.catalogId == other.catalogId &&
                 Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID), Catalog.getCompatibleDbUUID(other.databaseUUID)) &&
-                Objects.equals(Catalog.getCompatibleDbUUID(other.tableUUID), Catalog.getCompatibleDbUUID(this.tableUUID));
+                Objects.equals(Catalog.getCompatibleTableUUID(this.tableUUID), Catalog.getCompatibleTableUUID(other.tableUUID));
     }
 
     @Override
@@ -237,13 +237,13 @@ public class TablePEntryObject implements PEntryObject {
         }
         TablePEntryObject that = (TablePEntryObject) o;
         return this.catalogId == that.catalogId &&
-                Objects.equals(databaseUUID, that.databaseUUID) &&
-                Objects.equals(tableUUID, that.tableUUID);
+                Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID), Catalog.getCompatibleDbUUID(that.databaseUUID)) &&
+                Objects.equals(Catalog.getCompatibleTableUUID(this.tableUUID), Catalog.getCompatibleTableUUID(that.tableUUID));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogId, databaseUUID, tableUUID);
+        return Objects.hash(catalogId, Catalog.getCompatibleDbUUID(databaseUUID), Catalog.getCompatibleTableUUID(tableUUID));
     }
 
     @Override
