@@ -2906,4 +2906,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
+
+    @ConfField(mutable = true)
+    public static boolean show_execution_groups = true;
 }
