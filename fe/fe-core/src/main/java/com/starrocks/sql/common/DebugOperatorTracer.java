@@ -119,6 +119,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
                 "}";
     }
@@ -337,6 +338,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + node.getOutputColumns() +
                 ", projection=" + node.getProjection() +
                 ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
                 "}";
     }
