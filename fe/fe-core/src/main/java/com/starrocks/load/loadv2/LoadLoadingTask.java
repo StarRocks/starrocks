@@ -162,12 +162,6 @@ public class LoadLoadingTask extends LoadTask {
         executeOnce();
     }
 
-<<<<<<< HEAD
-=======
-    private Coordinator.Factory getCoordinatorFactory() {
-        return new DefaultCoordinator.Factory();
-    }
-
     public RuntimeProfile buildTopLevelProfile() {
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
@@ -218,7 +212,6 @@ public class LoadLoadingTask extends LoadTask {
         return profile;
     }
 
->>>>>>> 1a2df0fa45 ([Enhancement] Support runtime profile for broker load (#43145))
     private void executeOnce() throws Exception {
         checkMeta();
 
