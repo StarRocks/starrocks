@@ -1390,6 +1390,18 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds);
 
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+
+            jobBuilder.withWarehouse(warehouseId);
+        }
+
         long tableId = olapTable.getId();
         Long alterIndexId = olapTable.getBaseIndexId();
         List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
@@ -2601,6 +2613,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .build();
             job.setIndexTabletSchema(indexId, indexName, schemaInfo);
         }
+        job.setWarehouseId(schemaChangeData.getWarehouseId());
         return job;
     }
 
