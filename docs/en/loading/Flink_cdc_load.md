@@ -4,19 +4,13 @@ displayed_sidebar: "English"
 
 # Realtime synchronization from MySQL
 
-<<<<<<< HEAD
-StarRocks supports real-time data synchronization from MySQL within seconds, delivering ultra-low latency real-time analytics at scale and enabling users to query real-time data as they happen.
-=======
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
->>>>>>> f7919f9720 ( [Doc] explain that flink cdc is one of many methods to synchronize data from mysql to sr (#43970))
 
 This topic describes how to synchronize data from MySQL to StarRocks in real-time (within seconds) through Apache Flink®.
 
-> **NOTICE**
->
-> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+<InsertPrivNote />
 
 ## How it works
 
