@@ -86,7 +86,6 @@ public interface IRewriteEquivalent {
 
     /**
      * Rewrite newInput if it is equivalent with input by using input's column ref mapping replace.
-     * @param input         : original scalar operator.
      * @param replace       : original scalar operator's mapping column ref.
      * @param newInput      : the new scalar operator to rewrite.
      * @return              : return a new scalar operator that is rewritten by newInput and replace.

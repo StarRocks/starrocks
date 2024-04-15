@@ -47,7 +47,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -97,6 +96,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.operator.Operator.OP_UNION_ALL_BIT;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMvTransparentPlan;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 
 /*
  * SPJG materialized view rewriter, based on
@@ -104,7 +104,7 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
  *
  *  This rewriter is for single table or multi table join query rewrite
  */
-public class MaterializedViewRewriter {
+public class MaterializedViewRewriter implements IMaterializedViewRewriter {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewRewriter.class);
     protected final MvRewriteContext mvRewriteContext;
     protected final MaterializationContext materializationContext;
@@ -495,7 +495,8 @@ public class MaterializedViewRewriter {
         return true;
     }
 
-    public OptExpression rewrite() {
+    @Override
+    public OptExpression doRewrite(MvRewriteContext mvContext) {
         final OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
         final List<Table> queryTables = mvRewriteContext.getQueryTables();
@@ -525,11 +526,29 @@ public class MaterializedViewRewriter {
         if (matchMode == MatchMode.VIEW_DELTA) {
             return rewriteViewDelta(queryTables, mvTables, mvPredicateSplit, mvColumnRefRewriter,
                     queryExpression, mvExpression);
-        } else {
-            Preconditions.checkState(matchMode == MatchMode.COMPLETE);
+        } else if (matchMode == MatchMode.COMPLETE) {
             return rewriteComplete(queryTables, mvTables, matchMode, mvPredicateSplit, mvColumnRefRewriter,
                     null, null, null);
+        } else {
+            return null;
         }
+    }
+
+    /**
+     * After plan is rewritten by MV, still do some actions for new MV's plan.
+     * 1. column prune
+     * 2. partition prune
+     * 3. bucket prune
+     */
+    public OptExpression doPostAfterRewrite(OptimizerContext optimizerContext,
+                                            MvRewriteContext mvRewriteContext,
+                                            OptExpression candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        candidate = new MVColumnPruner().pruneColumns(candidate);
+        candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
+        return candidate;
     }
 
     /**
@@ -2371,23 +2390,6 @@ public class MaterializedViewRewriter {
             matchMode = MatchMode.VIEW_DELTA;
         }
         return matchMode;
-    }
-
-    protected OptExpression deriveOptExpression(OptExpression root) {
-        deriveLogicalProperty(root);
-        return root;
-    }
-
-    protected void deriveLogicalProperty(OptExpression root) {
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
-
-        if (root.getLogicalProperty() == null) {
-            ExpressionContext context = new ExpressionContext(root);
-            context.deriveLogicalProperty();
-            root.setLogicalProperty(context.getRootProperty());
-        }
     }
 
     // TODO: consider no-loss type cast

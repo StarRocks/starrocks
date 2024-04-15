@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 /*
@@ -51,7 +51,8 @@ public class AggregateJoinRule extends BaseMaterializedViewRewriteRule {
     }
 
     @Override
-    public MaterializedViewRewriter getMaterializedViewRewrite(MvRewriteContext mvContext) {
+    public IMaterializedViewRewriter createRewriter(OptimizerContext optimizerContext,
+                                                    MvRewriteContext mvContext) {
         return new AggregatedMaterializedViewRewriter(mvContext);
     }
 }
