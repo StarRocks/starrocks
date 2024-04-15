@@ -468,6 +468,27 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testExternalDBAndTablePEntryObject() throws Exception {
+        starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
+        DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                ImmutableList.of("test_iceberg", "*"));
+        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                ImmutableList.of("test_iceberg", "*", "*"));
+        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+
+        dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                ImmutableList.of("test_iceberg", "iceberg_db"));
+        Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
+        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                ImmutableList.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+        Assert.assertEquals(tablePEntryObject.getDatabaseUUID(), "iceberg_db");
+        Assert.assertEquals(tablePEntryObject.getTableUUID(), "iceberg_tbl");
+        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+    }
+
+    @Test
     public void testGetResourceMappingExternalTableException() throws Exception {
         ctxToTestUser();
         // no throw
