@@ -95,10 +95,14 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         if (it == _field_name_2_iceberg_field.end()) {
             continue;
         }
+        auto& schema = _file_metadata->schema();
+        const ParquetField* field = schema.get_stored_column_by_field_id(it->second->field_id);
+        // After the column is added, there is no new column when querying the previously
+        // imported parquet file. It is skipped here, and this column will be set to NULL
+        // in the FileReader::_read_min_max_chunk.
+        if (field == nullptr) continue;
         // Put SlotDescriptor's origin column name here!
-        column_name_2_pos_in_meta.emplace(
-                slot->col_name(),
-                _file_metadata->schema().get_stored_column_by_field_id(it->second->field_id)->physical_column_index);
+        column_name_2_pos_in_meta.emplace(slot->col_name(), field->physical_column_index);
     }
 }
 
