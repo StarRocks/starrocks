@@ -1089,15 +1089,27 @@ INSERT INTO t_upper_case_column_name VALUES (1, "b"),(2, "b"),(3, "b");
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH "b";
 -- result:
+1
+2
+3
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
 -- result:
+1
+2
+3
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
 -- result:
+1
+2
+3
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
 -- result:
+1
+2
+3
 -- !result
 DROP TABLE t_upper_case_column_name;
 -- result:
