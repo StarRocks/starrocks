@@ -51,6 +51,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.PipePEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeException;
@@ -495,17 +496,19 @@ public class PrivilegeCheckerTest {
     @Test
     public void testExternalDBAndTablePEntryObject() throws Exception {
         starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
-        DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
+        DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                ImmutableList.of("test_iceberg", "*"));
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                List.of("test_iceberg", "*", "*"));
+                ImmutableList.of("test_iceberg", "*", "*"));
         Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
 
-        dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
+        dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                ImmutableList.of("test_iceberg", "iceberg_db"));
         Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+                ImmutableList.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
         Assert.assertEquals(tablePEntryObject.getDatabaseUUID(), "iceberg_db");
         Assert.assertEquals(tablePEntryObject.getTableUUID(), "iceberg_tbl");
         Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
