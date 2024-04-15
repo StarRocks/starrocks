@@ -569,6 +569,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testSelectSetOperation() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownTopNLimit(0);
         String sql = "select * from t0 union select * from t1 union select * from t0";
         assertPlanContains(sql, "7:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
