@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
@@ -103,10 +102,13 @@ public class RemoteFileOperations {
         List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
         List<Map<RemotePathKey, List<RemoteFileDesc>>> result = Lists.newArrayList();
 
+        RemotePathKey.HudiContext hudiContext = new RemotePathKey.HudiContext();
+
         Tracers.count(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES, cacheMissSize);
         try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES)) {
             for (Partition partition : partitions) {
                 RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+                pathKey.setHudiContext(hudiContext);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = pullRemoteFileExecutor.submit(() ->
                         remoteFileIO.getRemoteFiles(pathKey, useCache));
                 futures.add(future);
