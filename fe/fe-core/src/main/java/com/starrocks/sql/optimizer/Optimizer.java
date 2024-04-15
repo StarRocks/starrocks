@@ -609,11 +609,7 @@ public class Optimizer {
         }
 
         if (isEnableMultiTableRewrite(connectContext, tree)) {
-            if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
-                    rootTaskContext.getOptimizerContext().getCandidateMvs()
-                            .stream().anyMatch(MaterializationContext::hasMultiTables)) {
-                context.getRuleSet().addSingleTableMvRewriteRule();
-            }
+            context.getRuleSet().addSingleTableMvRewriteRule();
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 

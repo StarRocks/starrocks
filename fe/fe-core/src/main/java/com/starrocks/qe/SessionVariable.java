@@ -490,6 +490,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
 
+    public static final String MATERIALIZED_VIEW_MAX_RELATION_MAPPING_SIZE =
+            "materialized_view_max_relation_mapping_size";
+
     public static final String MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT =
             "materialized_view_join_same_table_permutation_limit";
 
@@ -1353,6 +1356,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
+
+    @VarAttr(name = MATERIALIZED_VIEW_MAX_RELATION_MAPPING_SIZE)
+    private int materializedViewMaxRelationMappingSize = 10;
 
     @VarAttr(name = MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT, flag = VariableMgr.INVISIBLE)
     private int materializedViewJoinSameTablePermutationLimit = 5;
@@ -2677,6 +2683,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewViewDeltaRewrite(boolean enableMaterializedViewViewDeltaRewrite) {
         this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public int getMaterializedViewMaxRelationMappingSize() {
+        return materializedViewMaxRelationMappingSize;
+    }
+
+    public void setMaterializedViewMaxRelationMappingSize(int materializedViewMaxRelationMappingSize) {
+        this.materializedViewMaxRelationMappingSize = materializedViewMaxRelationMappingSize;
     }
 
     public int getMaterializedViewJoinSameTablePermutationLimit() {
