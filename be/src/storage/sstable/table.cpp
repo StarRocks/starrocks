@@ -250,12 +250,14 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
         return false;
     };
 
+    size_t i = 0;
     for (auto it = begin; it != end; ++it) {
         auto& k = keys[*it];
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
-            if (search_in_block(k, *it)) {
+            if (search_in_block(k, i)) {
                 TRACE_COUNTER_INCREMENT("continue_block_read", 1);
+                ++i;
                 continue;
             } else {
                 current_block_itr_ptr.reset(nullptr);
@@ -275,9 +277,10 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
                 auto end_ts = butil::gettimeofday_us();
                 TRACE_COUNTER_INCREMENT("read_block", end_ts - start_ts);
-                (void)search_in_block(k, *it);
+                (void)search_in_block(k, i);
             }
         }
+        ++i;
     }
     if (s.ok()) {
         s = iiter->status();
