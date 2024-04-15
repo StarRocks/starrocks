@@ -37,6 +37,7 @@ Fixed the following issues:
 - Queries cannot be rewritten with asynchronous materialized views created on logical views. [#42173](https://github.com/StarRocks/starrocks/pull/42173)
 - CNs crash when the Cross-cluster Data Migration Tool is used to migrate Primary Key tables to a shared-data cluster. [#42260](https://github.com/StarRocks/starrocks/pull/42260)
 - The partition ranges of the external catalog-based asynchronous materialized views are not consecutive. [#41957](https://github.com/StarRocks/starrocks/pull/41957)
+- The privileges of external tables cannot be found due to incompatibility issues. [#44030](https://github.com/StarRocks/starrocks/pull/44030)
 
 ## 3.2.4
 
