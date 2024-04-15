@@ -39,11 +39,11 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
-// wrapper for star manager to use bdbje
-public class BDBJEJournalSystem implements JournalSystem {
+// Implements com.staros.journal.JournalSystem on top of bdbje environment
+public class StarOSBDBJEJournalSystem implements JournalSystem {
     private static final String JOURNAL_PREFIX = "starmgr_"; // do not change this string!
     private static final int REPLAY_INTERVAL_MS = 1;
-    private static final Logger LOG = LogManager.getLogger(BDBJEJournalSystem.class);
+    private static final Logger LOG = LogManager.getLogger(StarOSBDBJEJournalSystem.class);
 
     private BDBJEJournal bdbjeJournal;
     private JournalWriter journalWriter;
@@ -51,7 +51,7 @@ public class BDBJEJournalSystem implements JournalSystem {
     private AtomicLong replayedJournalId;
     private Daemon replayer; // TODO: maybe it's better to move this to StarMgr
 
-    public BDBJEJournalSystem(BDBEnvironment environment) {
+    public StarOSBDBJEJournalSystem(BDBEnvironment environment) {
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         bdbjeJournal = new BDBJEJournal(environment, JOURNAL_PREFIX);
 
@@ -65,7 +65,7 @@ public class BDBJEJournalSystem implements JournalSystem {
     }
 
     // for checkpoint thread only
-    public BDBJEJournalSystem(BDBJEJournal journal) {
+    public StarOSBDBJEJournalSystem(BDBJEJournal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
     }
@@ -86,7 +86,7 @@ public class BDBJEJournalSystem implements JournalSystem {
             try {
                 replayer.join();
             } catch (InterruptedException e) {
-                LOG.warn("got exception when stopping the star mgr replayer thread, {}.", e);
+                LOG.warn("got exception when stopping the star mgr replayer thread, {}.", e.getMessage());
             }
             replayer = null;
         }
@@ -104,7 +104,7 @@ public class BDBJEJournalSystem implements JournalSystem {
 
             journalWriter.startDaemon();
         } catch (Exception e) {
-            LOG.warn("star mgr prepare journal failed before becoming leader, {}.", e);
+            LOG.warn("star mgr prepare journal failed before becoming leader, {}.", e.getMessage());
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
         }
@@ -127,15 +127,16 @@ public class BDBJEJournalSystem implements JournalSystem {
                         }
                         replayJournal(cursor);
                     } catch (JournalInconsistentException | InterruptedException e) {
-                        LOG.warn("got interrupt exception or inconsistent exception when replay star mgr journal, {}.", e);
+                        LOG.warn("got interrupt exception or inconsistent exception when replay star mgr journal, {}.",
+                                e.getMessage());
                         Util.stdoutWithTime(e.getMessage());
                         System.exit(-1);
                     } catch (Throwable e) {
-                        LOG.error("star mgr replayer thread catch an exception when replay journal, {}.", e);
+                        LOG.error("star mgr replayer thread catch an exception when replay journal, {}.", e.getMessage());
                         try {
                             Thread.sleep(5000);
                         } catch (InterruptedException e1) {
-                            LOG.error("star mgr replayer sleep got exception, {}.", e1);
+                            LOG.error("star mgr replayer sleep got exception, {}.", e1.getMessage());
                         }
                     }
                 }
@@ -179,7 +180,8 @@ public class BDBJEJournalSystem implements JournalSystem {
             cursor = bdbjeJournal.read(replayedJournalId.get() + 1, journalId);
             replayJournal(cursor);
         } catch (InterruptedException | JournalInconsistentException e) {
-            LOG.warn("got interrupt exception or inconsistent exception when replay star mgr journal, {}.", e);
+            LOG.warn("got interrupt exception or inconsistent exception when replay star mgr journal, {}.",
+                    e.getMessage());
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
         } catch (Exception e) {
