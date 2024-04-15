@@ -726,6 +726,60 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(TIME_SLICE_START.plus(epoch, timeUnit));
     }
 
+    @ConstantFunction(name = "first_day", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
+    public static ConstantOperator firstDay(ConstantOperator dateOp, ConstantOperator dateFieldOp,
+                                            ConstantOperator firstDayOfWeekOp) throws AnalysisException {
+        String date = dateOp.getVarchar();
+        LocalDate resultDate = null;
+        if (!org.apache.commons.lang3.StringUtils.isEmpty(date)) {
+            int dateField = dateFieldOp.getInt();
+            date = date.substring(0, 10);
+
+            int firstDayOfWeek = firstDayOfWeekOp.getInt();
+            LocalDate currDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
+            switch (dateField) {
+                case 0:
+                case 1:
+                case 6:   // 分钟
+                case 7:   // 小时
+                case 8:   // 合计
+                    resultDate = currDate;
+                    break;
+                case 2:
+                    int dayOfWeek = currDate.getDayOfWeek().getValue();
+
+                    if (firstDayOfWeek <= dayOfWeek) {
+                        resultDate = currDate.plusDays(firstDayOfWeek - dayOfWeek);
+                    } else {
+                        resultDate = currDate.plusDays(firstDayOfWeek - dayOfWeek - 7);
+                    }
+
+                    break;
+                case 3:
+                    resultDate = currDate.withDayOfMonth(1);
+                    break;
+                case 5:   //  季维度
+                    int month = currDate.getMonthValue();
+                    int year = currDate.getYear();
+
+                    month = (month - 1) / 3 * 3 + 1;
+                    resultDate = LocalDate.of(year, month, 1);
+                    break;
+                case 4:  //  年维度
+                    resultDate = LocalDate.of(currDate.getYear(), 1, 1);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (resultDate == null) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+
+        return ConstantOperator.createVarchar(DateTimeFormatter.ISO_LOCAL_DATE.format(resultDate));
+    }
+
     /**
      * Math function
      */

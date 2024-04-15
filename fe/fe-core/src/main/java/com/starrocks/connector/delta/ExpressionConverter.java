@@ -194,6 +194,13 @@ public class ExpressionConverter implements AstVisitor<Expression, Void> {
         } else if (dataType instanceof DoubleType) {
             return Literal.of(((FloatLiteral) literalExpr).getValue());
         } else if (dataType instanceof StringType) {
+            //When using an attempt, delta is of type string,
+            // and the inner table is of type date.
+            // An error is reported by converting the date type to string
+            if (literalExpr instanceof DateLiteral) {
+                String tmpDate = ((DateLiteral) literalExpr).getStringValue();
+                return Literal.of(tmpDate);
+            }
             return Literal.of(((StringLiteral) literalExpr).getUnescapedValue());
         } else if (dataType instanceof DateType) {
             return Literal.of(Date.valueOf(literalExpr.getStringValue()));

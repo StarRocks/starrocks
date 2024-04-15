@@ -56,6 +56,7 @@ import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.DictionaryMgr;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.Function;
@@ -2288,9 +2289,10 @@ public class GlobalStateMgr {
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)
-                    && !(table instanceof IcebergTable) && !(table instanceof JDBCTable)) {
+                    && !(table instanceof IcebergTable) && !(table instanceof JDBCTable)
+                    && !(table instanceof DeltaLakeTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps/jdbc external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps/jdbc/delta external table/view");
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);

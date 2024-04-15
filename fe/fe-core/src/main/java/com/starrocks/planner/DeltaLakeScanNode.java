@@ -54,6 +54,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -167,7 +168,8 @@ public class DeltaLakeScanNode extends ScanNode {
         if (!partitionKeys.containsKey(partitionKey)) {
             partitionId = nextPartitionId();
             String tableLocation = deltaLakeTable.getTableLocation();
-            Path filePath = new Path(tableLocation, file.getPath());
+            Path p = new Path(URI.create(file.getPath()));
+            Path filePath = new Path(tableLocation, p);
 
             DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
                     new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
@@ -186,7 +188,7 @@ public class DeltaLakeScanNode extends ScanNode {
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
 
-        hdfsScanRange.setRelative_path(new Path(file.getPath()).getName());
+        hdfsScanRange.setRelative_path(new Path(URI.create(file.getPath())).getName());
         hdfsScanRange.setOffset(0);
         hdfsScanRange.setLength(file.getSize());
         hdfsScanRange.setPartition_id(partitionId);
@@ -273,6 +275,35 @@ public class DeltaLakeScanNode extends ScanNode {
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        List<Expr> noEvalPartitionConjuncts = scanNodePredicates.getNoEvalPartitionConjuncts();
+        String partitionSqlPredicate = getExplainString(noEvalPartitionConjuncts);
+        for (Expr expr : noEvalPartitionConjuncts) {
+            msg.hdfs_scan_node.addToPartition_conjuncts(expr.treeToThrift());
+        }
+        msg.hdfs_scan_node.setPartition_sql_predicates(partitionSqlPredicate);
+
+        // put non-partition conjuncts into conjuncts
+        if (msg.isSetConjuncts()) {
+            msg.conjuncts.clear();
+        }
+
+        List<Expr> nonPartitionConjuncts = scanNodePredicates.getNonPartitionConjuncts();
+        for (Expr expr : nonPartitionConjuncts) {
+            msg.addToConjuncts(expr.treeToThrift());
+        }
+        String sqlPredicate = getExplainString(nonPartitionConjuncts);
+        msg.hdfs_scan_node.setSql_predicates(sqlPredicate);
+
+        List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
+        if (!minMaxConjuncts.isEmpty()) {
+            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
+            for (Expr expr : minMaxConjuncts) {
+                msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
+            }
+            msg.hdfs_scan_node.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
+            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
+        }
 
         if (deltaLakeTable != null) {
             msg.hdfs_scan_node.setTable_name(deltaLakeTable.getName());

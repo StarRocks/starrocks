@@ -23,6 +23,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
@@ -275,6 +276,16 @@ public class OptExternalPartitionPruner {
                 long partitionId = entry.second;
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
+        } else if (table instanceof DeltaLakeTable) {
+            DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+            final List<Column> partitionColumns = deltaLakeTable.getPartitionColumns();
+            List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
+            for (Column column : partitionColumns) {
+                ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
+                columnToPartitionValuesMap.put(partitionColumnRefOperator,  new ConcurrentSkipListMap<>());
+                columnToNullPartitions.put(partitionColumnRefOperator, Sets.newHashSet());
+                partitionColumnRefOperators.add(partitionColumnRefOperator);
+            }
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
                 columnToPartitionValuesMap, columnToNullPartitions);
@@ -298,7 +309,7 @@ public class OptExternalPartitionPruner {
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
-        if (table instanceof HiveMetaStoreTable) {
+        if (table instanceof HiveMetaStoreTable || table instanceof DeltaLakeTable) {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
