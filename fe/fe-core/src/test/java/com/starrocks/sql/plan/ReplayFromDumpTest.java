@@ -880,4 +880,22 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "     Predicates: [7: undef_signed_not_null, VARCHAR, false] != 'j'\n" +
                 "     partitionsRatio=3/3, tabletsRatio=30/30"));
     }
+
+    @Test
+    public void testTopNPushDownBelowUnionAll() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/topn_push_down_union"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+
+        // Topn should be pushed down below union all and contains no duplicated ording columns
+        PlanTestBase.assertContains(replayPair.second, "  26:TOP-N\n" +
+                "  |  order by: <slot 240> 240: expr ASC, <slot 241> 241: cast DESC, <slot 206> 206: mock_025 DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 200");
+        PlanTestBase.assertContains(replayPair.second, "17:TOP-N\n" +
+                "  |  order by: <slot 165> 165: cast ASC, <slot 153> 153: cast DESC, <slot 166> 166: expr ASC, " +
+                "<slot 167> 167: cast DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 200");
+    }
 }
