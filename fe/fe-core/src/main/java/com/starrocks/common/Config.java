@@ -1140,6 +1140,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view_spill = true;
 
+    @ConfField(mutable = true, comment = "whether to collect metrics for materialized view by default")
+    public static boolean enable_materialized_view_metrics_collect = true;
+
     /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,
