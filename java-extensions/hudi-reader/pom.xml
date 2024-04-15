@@ -16,6 +16,7 @@
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <slf4j.version>1.7.36</slf4j.version>
+<<<<<<< HEAD
         <presto.hadoop.version>2.7.4-11</presto.hadoop.version>
         <presto.hive.version>3.0.0-8</presto.hive.version>
         <hadoop.version>2.7.4</hadoop.version>
@@ -23,6 +24,14 @@
         <fasterxml.version>2.13.4</fasterxml.version>
         <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
         <esotericsoftware.kryo.shaded.version>4.0.2</esotericsoftware.kryo.shaded.version>
+=======
+        <hive-apache.version>3.1.2-22</hive-apache.version>
+        <parquet-hadoop.version>1.12.3</parquet-hadoop.version>
+        <hadoop.version>3.3.6</hadoop.version>
+        <hudi.version>0.14.0</hudi.version>
+        <airlift.version>0.25</airlift.version>
+        <avro.version>1.11.3</avro.version>
+>>>>>>> 82df2a888c ([Bugfix] Support Hudi query in data delete condition for 0.12 version above  (#44067))
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
     </properties>
 
