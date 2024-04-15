@@ -189,11 +189,11 @@ SELECT id, scores, unnest FROM student_score LEFT JOIN unnest(scores) AS unnest 
 |  1   | [80,85,87]   |     80 |
 |  1   | [80,85,87]   |     85 |
 |  1   | [80,85,87]   |     87 |
-|  2   | [77,null,89] |   None |
+|  2   | [77,null,89] |   NULL |
 |  2   | [77,null,89] |     77 |
 |  2   | [77,null,89] |     89 |
-|  3   | None         |   None |
-|  4   | []           |   None |
+|  3   | NULL         |   NULL |
+|  4   | []           |   NULL |
 |  5   | [90,92]      |     90 |
 |  5   | [90,92]      |     92 |
 +------+--------------+--------+
@@ -203,4 +203,4 @@ SELECT id, scores, unnest FROM student_score LEFT JOIN unnest(scores) AS unnest 
 
 [77,null,89] corresponding to `id = 2` retains the null value.
 
-`scores` corresponding to `id = 3` and `id = 4` are NULL and empty, Left Join reserved the value.
+`scores` corresponding to `id = 3` and `id = 4` are NULL and empty, Left Join reservs the value.
