@@ -81,7 +81,7 @@ public class StarMgrServer {
     }
 
     private StarManagerServer starMgrServer;
-    private BDBJEJournalSystem journalSystem;
+    private StarOSBDBJEJournalSystem journalSystem;
 
     public StarMgrServer() {
         execution = new StateChangeExecution() {
@@ -99,7 +99,7 @@ public class StarMgrServer {
 
     // for checkpoint thread only
     public StarMgrServer(BDBJEJournal journal) {
-        journalSystem = new BDBJEJournalSystem(journal);
+        journalSystem = new StarOSBDBJEJournalSystem(journal);
         starMgrServer = new StarManagerServer(journalSystem);
     }
 
@@ -107,7 +107,7 @@ public class StarMgrServer {
         return starMgrServer.getStarManager();
     }
 
-    public BDBJEJournalSystem getJournalSystem() {
+    public StarOSBDBJEJournalSystem getJournalSystem() {
         return journalSystem;
     }
 
@@ -116,7 +116,7 @@ public class StarMgrServer {
     }
 
     public void initialize(BDBEnvironment environment, String baseImageDir) throws IOException {
-        journalSystem = new BDBJEJournalSystem(environment);
+        journalSystem = new StarOSBDBJEJournalSystem(environment);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now

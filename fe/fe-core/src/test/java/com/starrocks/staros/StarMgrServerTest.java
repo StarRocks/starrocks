@@ -67,7 +67,7 @@ public class StarMgrServerTest {
         server.getJournalSystem().setReplayId(1L);
         Assert.assertEquals(1L, server.getReplayId());
 
-        new MockUp<BDBJEJournalSystem>() {
+        new MockUp<StarOSBDBJEJournalSystem>() {
             @Mock
             public void replayTo(long journalId) throws StarException {
             }
@@ -78,7 +78,7 @@ public class StarMgrServerTest {
         };
         Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L));
 
-        new MockUp<BDBJEJournalSystem>() {
+        new MockUp<StarOSBDBJEJournalSystem>() {
             @Mock
             public void replayTo(long journalId) throws StarException {
             }

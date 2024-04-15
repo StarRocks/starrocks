@@ -30,7 +30,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class BDBJEJournalSystemTest {
+public class StarOSBDBJEJournalSystemTest {
     @Mocked
     private BDBEnvironment environment;
     @Mocked
@@ -41,9 +41,9 @@ public class BDBJEJournalSystemTest {
     @Test
     public void testBDBJEJournalSystem() throws Exception {
         // test construction
-        BDBJEJournalSystem journalSystem = new BDBJEJournalSystem(environment);
+        StarOSBDBJEJournalSystem journalSystem = new StarOSBDBJEJournalSystem(environment);
 
-        BDBJEJournalSystem journalSystem2 = new BDBJEJournalSystem(journal);
+        StarOSBDBJEJournalSystem journalSystem2 = new StarOSBDBJEJournalSystem(journal);
 
         // test get and set
         long id = journalSystem.getReplayId();
