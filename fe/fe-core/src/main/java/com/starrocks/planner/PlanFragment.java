@@ -400,6 +400,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public boolean isColocateGroupFragment() {
+        return colocateExecGroups.size() > 0;
+    }
+
     public boolean isDopEstimated() {
         return dopEstimated;
     }

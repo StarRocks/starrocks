@@ -86,6 +86,10 @@ public:
     void update_profile(const Profile& profile);
     void set_morsel(pipeline::ScanMorsel* morsel) { _morsel = morsel; }
 
+    void set_driver_sequence(size_t driver_sequence) {
+        runtime_bloom_filter_eval_context.driver_sequence = driver_sequence;
+    }
+
 protected:
     int64_t _read_limit = -1; // no limit
     bool _has_any_predicate = false;

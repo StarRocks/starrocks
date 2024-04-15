@@ -654,7 +654,8 @@ public class PlanFragmentBuilder {
                 if (entry.getValue().isLiteral() && !entry.getValue().isNullable()) {
                     slotDescriptor.setIsNullable(false);
                 } else {
-                    slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
+                    slotDescriptor.setIsNullable(
+                            slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
                 }
             }
             tupleDescriptor.computeMemLayout();
@@ -1389,11 +1390,14 @@ public class PlanFragmentBuilder {
                         predicate.setChild(0, columnRefOperator);
                         try {
                             LiteralExpr literalExpr =
-                                    LiteralExpr.create(((ConstantOperator) operator1).getVarchar(), columnRefOperator.getType());
+                                    LiteralExpr.create(((ConstantOperator) operator1).getVarchar(),
+                                            columnRefOperator.getType());
                             predicate.setChild(1,
-                                    ConstantOperator.createObject(literalExpr.getRealObjectValue(), columnRefOperator.getType()));
+                                    ConstantOperator.createObject(literalExpr.getRealObjectValue(),
+                                            columnRefOperator.getType()));
                         } catch (AnalysisException e) {
-                            throw new SemanticException(((ConstantOperator) operator1).getVarchar() + " is not a number");
+                            throw new SemanticException(
+                                    ((ConstantOperator) operator1).getVarchar() + " is not a number");
                         }
                     } else {
                         continue;
@@ -2585,7 +2589,8 @@ public class PlanFragmentBuilder {
                     currentExecGroup.setColocateGroup();
                     currentExecGroup.merge(rightExecGroup);
                     execGroups.remove(rightExecGroup);
-                } else if (distributionMode.equals(JoinNode.DistributionMode.BROADCAST) &&
+                } else if ((distributionMode.equals(JoinNode.DistributionMode.BROADCAST) || distributionMode.equals(
+                        JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) &&
                         !leftExecGroup.isDisableColocateGroup()) {
                     // do nothing
                 } else {

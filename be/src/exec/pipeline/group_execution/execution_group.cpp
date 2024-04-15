@@ -41,7 +41,7 @@ Status NormalExecutionGroup::prepare_pipelines(RuntimeState* state) {
 }
 
 template <DriverPtrCallable Callable>
-auto for_each_active_driver(Pipelines& pipelines, Callable call) {
+auto for_each_active_driver(PipelineRawPtrs& pipelines, Callable call) {
     using ReturnType = std::invoke_result_t<Callable, const DriverPtr&>;
     for (auto& pipeline : pipelines) {
         for (auto& driver : pipeline->drivers()) {
@@ -70,7 +70,7 @@ void NormalExecutionGroup::submit_active_drivers() {
     return for_each_active_driver(_pipelines, [this](const DriverPtr& driver) { _executor->submit(driver.get()); });
 }
 
-void NormalExecutionGroup::add_pipeline(PipelinePtr pipeline) {
+void NormalExecutionGroup::add_pipeline(PipelineRawPtr pipeline) {
     _pipelines.emplace_back(std::move(pipeline));
     _num_pipelines = _pipelines.size();
 }
@@ -118,7 +118,7 @@ void ColocateExecutionGroup::submit_active_drivers() {
     }
 }
 
-void ColocateExecutionGroup::add_pipeline(PipelinePtr pipeline) {
+void ColocateExecutionGroup::add_pipeline(PipelineRawPtr pipeline) {
     _pipelines.emplace_back(std::move(pipeline));
     _num_pipelines = _pipelines.size();
 }

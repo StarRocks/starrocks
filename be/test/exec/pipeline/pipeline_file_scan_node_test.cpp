@@ -415,8 +415,9 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     _pipelines.push_back(
             std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories, exec_group.get()));
-    exec_group->add_pipeline(_pipelines.back());
-    _fragment_ctx->set_exec_groups({exec_group});
+    exec_group->add_pipeline(_pipelines.back().get());
+    auto pipelines = _pipelines;
+    _fragment_ctx->set_pipelines({exec_group}, std::move(pipelines));
 
     prepare_pipeline();
 

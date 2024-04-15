@@ -568,7 +568,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                                                                   tsink, fragment.output_exprs));
     }
     _fragment_ctx->set_data_sink(std::move(datasink));
-    _fragment_ctx->set_exec_groups(builder.build());
+    auto group_with_pipelines = builder.build();
+    _fragment_ctx->set_pipelines(std::move(group_with_pipelines.first), std::move(group_with_pipelines.second));
 
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 

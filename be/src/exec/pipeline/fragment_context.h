@@ -93,7 +93,7 @@ public:
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
-    void set_exec_groups(ExecutionGroups&& exec_groups);
+    void set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines);
 
     Status prepare_all_pipelines();
 
@@ -186,6 +186,7 @@ private:
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
+    Pipelines _pipelines;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
 

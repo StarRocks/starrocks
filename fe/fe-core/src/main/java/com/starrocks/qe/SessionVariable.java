@@ -1480,8 +1480,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableGroupExecution = enableGroupExecution;
     }
 
+    // runtime dop requires join probe to wait for all builds to complete before executing.
+    // It conflicts with group execution.
     public boolean isEnableGroupExecution() {
-        return enableGroupExecution;
+        return enableGroupExecution && !isEnableRuntimeAdaptiveDop();
     }
 
     public int getGroupExecutionGroupScale() {
