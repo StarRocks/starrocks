@@ -2094,6 +2094,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         .setVersion(partition.getVisibleVersion())
                         .setStorageMedium(storageMedium)
                         .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setPersistentIndexType(table.getPersistentIndexType())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                         .setBinlogConfig(table.getCurBinlogConfig())
                         .setTabletType(tabletType)
