@@ -12,7 +12,7 @@ You can use Lateral Join with UNNEST to implement common conversions, for exampl
 
 From v2.5, UNNEST can take a variable number of array parameters. The arrays can vary in type and length (number of elements). If the arrays have different lengths, the largest length prevails, which means nulls will be added to arrays that are less than this length. See [Example 2](#example-2-unnest-takes-multiple-parameters) for more information.
 
-From v3.2.6, UNNEST can be used with Left Join on true. See [Example 3](#example-3-unnest-left-join-on-true) for more information.
+From v3.2.6, UNNEST can be used with Left Join ON TRUE. See [Example 3](#example-3-unnest-left-join-on-true) for more information.
 
 ## Syntax
 
@@ -33,7 +33,7 @@ For the element types supported in an array, see [ARRAY](../../data-types/semi_s
 ## Usage notes
 
 - UNNEST is a table function. It must be used with Lateral Join but the keyword Lateral Join does not need to be explicitly specified.
-- If the array expression evaluates to NULL or it is empty, no rows will be returned(except left join on true).
+- If the array expression evaluates to NULL or it is empty, no rows will be returned (except for LEFT JOIN ON TRUE).
 - If an element in the array is NULL, NULL is returned for that element.
 
 ## Examples
@@ -146,9 +146,10 @@ For `id = 2`, `type` is converted into  ["typeA","typeB","typeC"], which has thr
 
 To ensure consistent numbers of rows for each `id`, a null element is added to ["typeA","typeB"].
 
-### Example 3: unnest left join on true
+### Example 3: UNNEST with LFET JOIN ON TRUE
+
 ```SQL
--- Create table example_table where scores is an ARRAY column.
+-- Create table student_score where scores is an ARRAY column.
 CREATE TABLE student_score
 (
 `id` bigint(20) NULL COMMENT "",
@@ -180,8 +181,8 @@ SELECT * FROM student_score ORDER BY id;
 |    5 | [90,92]      |
 +------+--------------+
 
--- left join on true
-select id, scores, unnest from student_score left join unnest(scores) as unnest on true order by 1, 3;
+-- Use LEFT JOIN ON TRUE.
+SELECT id, scores, unnest FROM student_score LEFT JOIN unnest(scores) AS unnest ON TRUE ORDER BY 1, 3;
 +------+--------------+--------+
 | id   | scores       | unnest |
 +------+--------------+--------+
@@ -197,8 +198,9 @@ select id, scores, unnest from student_score left join unnest(scores) as unnest 
 |  5   | [90,92]      |     92 |
 +------+--------------+--------+
 ```
+
 [80,85,87] corresponding to `id = 1` is converted into three rows.
 
 [77,null,89] corresponding to `id = 2` retains the null value.
 
-`scores` corresponding to  `id = 3` and `id = 4` are NULL and empty, left join reserved the value.
+`scores` corresponding to `id = 3` and `id = 4` are NULL and empty, Left Join reserved the value.
