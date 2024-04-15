@@ -240,13 +240,12 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
-    auto search_in_block = [&](const Slice& k, const size_t& index) {
-        current_block_itr_ptr->Seek(k);
-        if (current_block_itr_ptr->Valid() && k == current_block_itr_ptr->key()) {
-            (*values)[index].assign(current_block_itr_ptr->value().data, current_block_itr_ptr->value().size);
+    auto search_in_block = [](const Slice& k, std::string* value, Iterator* current_block_itr) {
+        current_block_itr->Seek(k);
+        if (current_block_itr->Valid() && k == current_block_itr->key()) {
+            value->assign(current_block_itr->value().data, current_block_itr->value().size);
             return true;
         }
-        s = current_block_itr_ptr->status();
         return false;
     };
 
@@ -255,10 +254,12 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
         auto& k = keys[*it];
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
-            if (search_in_block(k, i)) {
+            if (search_in_block(k, &(*values)[i], current_block_itr_ptr.get())) {
+                s = current_block_itr_ptr->status();
                 TRACE_COUNTER_INCREMENT("continue_block_read", 1);
                 continue;
             } else {
+                s = current_block_itr_ptr->status();
                 current_block_itr_ptr.reset(nullptr);
             }
         }
@@ -276,7 +277,8 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
                 auto end_ts = butil::gettimeofday_us();
                 TRACE_COUNTER_INCREMENT("read_block", end_ts - start_ts);
-                (void)search_in_block(k, i);
+                (void)search_in_block(k, &(*values)[i], current_block_itr_ptr.get());
+                s = current_block_itr_ptr->status();
             }
         }
     }
