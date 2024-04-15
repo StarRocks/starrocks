@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -460,6 +461,20 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
                 }
 
+                // rewrite pruned partition predicates
+                List<ScalarOperator> newPrunedPredicates = Lists.newArrayList();
+                if (CollectionUtils.isNotEmpty(scanOperator.getPrunedPartitionPredicates())) {
+                    for (ScalarOperator predicate : scanOperator.getPrunedPartitionPredicates()) {
+                        if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
+                            final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                            final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
+                            newPrunedPredicates.add(newCallOperator);
+                        } else {
+                            newPrunedPredicates.add(predicate);
+                        }
+                    }
+                }
+
                 newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
                     // TODO: maybe have to implement a clone method to create a physical node.
@@ -468,7 +483,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
-                                    scanOperator.getPrunedPartitionPredicates(),
+                                    newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex());
                     newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
