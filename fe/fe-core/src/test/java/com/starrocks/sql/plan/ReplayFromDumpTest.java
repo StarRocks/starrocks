@@ -825,4 +825,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
+
+    @Test
+    public void testViewDeltaRewriter() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+    }
 }

@@ -258,15 +258,15 @@ public class MaterializationContext {
                 return false;
             }
 
-            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
-            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
+            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression, queryRefFactory);
+            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression, mvColumnRefFactory);
             // there should be at least one same join type in mv scan descs for every query scan desc.
             // to forbid rewrite for:
             // query: a left outer join b
             // mv: a inner join b inner join c
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getJoinOptExpression() != null
-                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
+                        && mvTableScanDescs.stream().noneMatch(scanDesc -> scanDesc.isCompatible(queryScanDesc))) {
                     logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
                             "at least one same join type should be existed");
                     return false;
