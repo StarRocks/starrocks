@@ -479,7 +479,9 @@ public:
     size_t memory_usage() {
         size_t mem_usage = 0;
         for (auto& bf : _bf_vec) {
-            mem_usage += bf->size();
+            if (bf != nullptr) {
+                mem_usage += bf->size();
+            }
         }
         return mem_usage;
     }
@@ -781,6 +783,8 @@ public:
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
+    void test_calc_memory_usage() { return _calc_memory_usage(); }
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
