@@ -70,10 +70,6 @@ public class TaskRunHistory {
             return;
         }
         int startIndex = Math.min(allHistory.size(), Config.task_runs_max_history_number);
-<<<<<<< HEAD
-        allHistory.subList(startIndex, allHistory.size())
-                .forEach(taskRunStatus -> historyTaskRunMap.remove(taskRunStatus.getQueryId()));
-=======
         // Creating a new list for elements to be removed to avoid ConcurrentModificationException
         List<String> idsToRemove = allHistory.subList(startIndex, beforeSize)
                 .stream()
@@ -84,7 +80,6 @@ public class TaskRunHistory {
         idsToRemove.forEach(this::removeTask);
         LOG.warn("Too much task metadata triggers forced task_run GC, " +
                 "size before GC:{}, size after GC:{}.", beforeSize, historyTaskRunMap.size());
->>>>>>> 27a4d19245 ([BugFix] Add TaskRunScheduler to support task runs' FIFO scheduler (#43843))
     }
 
     public long getTaskRunCount() {
