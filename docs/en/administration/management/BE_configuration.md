@@ -4356,7 +4356,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### get_txn_status_internal_sec
 
-- Default: 30
+- Default: 10
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes

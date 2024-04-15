@@ -4300,7 +4300,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### get_txn_status_internal_sec
 
-- 默认值：30
+- 默认值：10
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
