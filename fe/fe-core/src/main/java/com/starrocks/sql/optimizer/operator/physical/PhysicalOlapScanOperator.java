@@ -55,6 +55,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
 
+    // Rewriting the scan column ref also needs to rewrite the pruned predicate at the same time.
     private List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
 
     private PhysicalOlapScanOperator() {
@@ -269,6 +270,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
         public Builder setGlobalDictsExpr(Map<Integer, ScalarOperator> globalDictsExpr) {
             builder.globalDictsExpr = globalDictsExpr;
+            return this;
+        }
+
+        public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
+            builder.prunedPartitionPredicates = prunedPartitionPredicates;
             return this;
         }
     }
