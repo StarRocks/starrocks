@@ -186,11 +186,11 @@ SELECT id, scores, unnest FROM student_score LEFT JOIN unnest(scores) AS unnest 
 |  1   | [80,85,87]   |     80 |
 |  1   | [80,85,87]   |     85 |
 |  1   | [80,85,87]   |     87 |
-|  2   | [77,null,89] |   None |
+|  2   | [77,null,89] |   NULL |
 |  2   | [77,null,89] |     77 |
 |  2   | [77,null,89] |     89 |
-|  3   | None         |   None |
-|  4   | []           |   None |
+|  3   | NULL         |   NULL |
+|  4   | []           |   NULL |
 |  5   | [90,92]      |     90 |
 |  5   | [90,92]      |     92 |
 +------+--------------+--------+
@@ -198,6 +198,6 @@ SELECT id, scores, unnest FROM student_score LEFT JOIN unnest(scores) AS unnest 
 
 可以看到对于 `id = 1` 的 `scores` 数组 `[80,85,87]`，根据元素个数拆成了 3 行。
 
-`id = 2` 的 `scores` 数组 `[77,null,89]` 中包含 null 元素，对应位置返回 null。
+`id = 2` 的 `scores` 数组 `[77,null,89]` 中包含 null 元素，对应位置返回 NULL。
 
 `id = 3` 和 `id = 4` 的 `scores` 数组分别是 NULL 和 空，Left Join 计算时保留。
