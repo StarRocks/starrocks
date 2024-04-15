@@ -1242,7 +1242,7 @@ CONF_mInt32(finish_publish_version_internal, "100");
 
 CONF_mBool(enable_stream_load_verbose_log, "false");
 
-CONF_mInt32(get_txn_status_internal_sec, "30");
+CONF_mInt32(get_txn_status_internal_sec, "10");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 

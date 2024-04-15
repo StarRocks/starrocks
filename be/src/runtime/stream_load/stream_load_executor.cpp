@@ -296,7 +296,11 @@ StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::str
 bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
                             int64_t deadline) {
     while (deadline > UnixSeconds()) {
-        sleep(std::min((int64_t)config::get_txn_status_internal_sec, deadline - UnixSeconds()));
+        auto wait_seconds = std::min((int64_t)config::get_txn_status_internal_sec, deadline - UnixSeconds());
+        LOG(WARNING) << "commit transaction " << txn_id << " failed, will wait " << wait_seconds
+                     << " seconds before retrieving the visible status again";
+        // The following sleep might introduce delay of commit and publish total time
+        sleep(wait_seconds);
         auto status_or = get_txn_status(auth, db, table, txn_id);
         if (!status_or.ok()) {
             return false;
