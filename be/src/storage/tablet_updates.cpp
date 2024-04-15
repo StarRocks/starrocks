@@ -4936,12 +4936,12 @@ Status TabletUpdates::get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, E
     if (timeout_ms <= 0) {
         _index_lock.lock();
     } else {
-        if (!_index_lock.try_lock_for(std::chrono::milliseconds(timeout_ms))) {
+        if (!_index_lock.try_lock_shared_for(std::chrono::milliseconds(timeout_ms))) {
             return Status::TimedOut("get_rss_rowids_by_pk try lock timeout");
         }
     }
     auto st = get_rss_rowids_by_pk_unlock(tablet, keys, read_version, rss_rowids);
-    _index_lock.unlock();
+    _index_lock.unlock_shared();
     return st;
 }
 
