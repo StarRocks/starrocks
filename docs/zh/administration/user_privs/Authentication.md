@@ -155,21 +155,22 @@ public class Test implements AuthenticationProvider {
 3. 在 FE 节点的配置文件 **fe.conf** 中添加以下配置项。
 
 ```conf
+# 通过添加custom方式，指定登录验证方式顺序。下方示例意思是先进行自定义鉴权，若鉴权失败会再次尝试用户建立时指定内部鉴权方式。
+authentication_chain = custom,native
 # 添加 自定义 认证方式相关类。
 authorization_custom_class = xxx.xxx.xxx
 ```
+4. 自定义配置，需要与 **fe.conf** 同一目录下，新建 **custom_authentication.conf** 进行配置。文件格式与 **fe.conf** 一致。
 
-### 创建用户
-
-完成以上配置后，您还需要在 StarRocks 中创建相应用户，并指定其认证方式及认证信息。
-
-```sql
-CREATE USER user_identity IDENTIFIED WITH authentication_custom;
+```java
+# 在自定义类中获取自定义参数
+  Properties prop =
+        (Properties) authenticationInfo.extraInfo.get(AuthPlugin.AUTHENTICATION_CUSTOM.name());
 ```
 
+### 其他说明
 
-### 认证用户
-
-使用 自定义 认证时，您需要通过客户端传递明文密码给 StarRocks。
-
-传递方式参考上述LDAP认证用户相关内容。
+1. root用户为StarRocks内置超管用户，在自定义方式中也已经特殊处理，用户无需单独处理。
+2. 如果需要使用明文密码，请参考上述LDAP相关内容，不再赘述。
+3. 如果是直接登录，即默认密文密码，其密码解析与校验可以参考`MysqlPassword`类。
+4. 自定义方式主要用于与其他外部系统保持统一登录信息。因此，与StarRocks其他内部登录校验方式不同的是，自定义方式无需在StarRocks创建用户，用户和密码均保存在外部系统即可。

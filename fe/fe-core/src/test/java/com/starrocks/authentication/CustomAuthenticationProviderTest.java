@@ -14,23 +14,15 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.UserDesc;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Collections;
-import java.util.Map;
-
 public class CustomAuthenticationProviderTest {
-
-    static String AUTH_PLUGIN = "AUTHENTICATION_CUSTOM";
 
     byte[] password = "".getBytes();
     byte[] randomString = "".getBytes();
@@ -44,34 +36,23 @@ public class CustomAuthenticationProviderTest {
     @BeforeClass
     public static void setUp() throws Exception {
         Config.authorization_custom_class = "com.starrocks.authentication.FakeCustomAuthenticationProviderTest";
+        Config.authentication_chain = new String[] {"custom"};
         UtFrameUtils.setUpForPersistTest();
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
     }
 
     @Test
-    public void testCustomInNativeAuthentication() throws Exception {
-        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
-        UserDesc userDesc = new UserDesc(testUser, AUTH_PLUGIN, "", false, NodePosition.ZERO);
+    public void testCustomAuthentication() throws Exception {
         AuthenticationMgr mgr = ctx.getGlobalStateMgr().getAuthenticationMgr();
-        CreateUserStmt stmt = new CreateUserStmt(true, userDesc, Collections.emptyList());
-        UserAuthenticationInfo authenticationInfo = new UserAuthenticationInfo();
-        authenticationInfo.setOrigUserHost(testUser.getUser(), testUser.getHost());
-        authenticationInfo.setAuthPlugin(AUTH_PLUGIN);
-        stmt.setAuthenticationInfo(authenticationInfo);
-        mgr.createUser(stmt);
+        UserIdentity res = mgr.checkPassword(user, host, password, randomString);
+        Assert.assertNull(res);
 
-        UserIdentity check1 = mgr.checkPassword(user, host, password, randomString);
-        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                mgr.getBestMatchedUserIdentity(user, host);
-        Assert.assertNotNull(matchedUserIdentity);
-
-        AuthenticationProvider provider =
-                AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+        AuthenticationProvider provider = AuthenticationProviderFactory.create(CustomAuthenticationProviderFactory.PLUGIN_NAME);
         try {
-            provider.authenticate(user, host, password, randomString, matchedUserIdentity.getValue());
+            provider.authenticate(user, host, password, randomString, new UserAuthenticationInfo());
             Assert.fail();
-        } catch (AuthenticationException e) {
-            Assert.assertTrue(e.getMessage().contains("Login error"));
+        } catch (AuthenticationException ex) {
+            Assert.assertTrue(ex.getMessage().contains("Login error"));
         }
 
     }

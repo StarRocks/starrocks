@@ -18,6 +18,7 @@ package com.starrocks.mysql.privilege;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.CustomAuthenticationProviderFactory;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -170,9 +171,9 @@ public class Password implements Writable {
             return false;
         }
         try {
-            AuthenticationProvider customAuthenticationProvider =
-                    ClassUtil.initialize(className, AuthenticationProvider.class);
-            customAuthenticationProvider.authenticate(remoteUser, "", remotePassword, randomString, null);
+            AuthenticationProvider provider = CustomAuthenticationProviderFactory.getInstance().getCustomAuthenticationProvider();
+            provider.authenticate(remoteUser, "", remotePassword, randomString,
+                    CustomAuthenticationProviderFactory.getUserAuthenticationInfo());
         } catch (Exception e) {
             LOG.error("Failed to authenticate for [user: {}] by custom, msg: ", remoteUser, e);
             return false;

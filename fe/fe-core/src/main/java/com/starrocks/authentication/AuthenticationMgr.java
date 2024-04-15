@@ -136,8 +136,6 @@ public class AuthenticationMgr {
         AuthenticationProviderFactory.installPlugin(
                 LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
 
-        initCustomAuthenticationIfSet();
-
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
@@ -298,6 +296,41 @@ public class AuthenticationMgr {
         return null;
     }
 
+    private UserIdentity checkPasswordForCustom(
+            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
+
+        // root user do not need custom check
+        if (ROOT_USER.equals(remoteUser)) {
+            return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+        }
+
+        if (Config.authorization_custom_class.isEmpty()) {
+            LOG.warn("Cannot check user and password with Custom method. Since 'authorization_custom_class' is Empty!");
+            return null;
+        }
+
+        try {
+            AuthenticationProvider provider = CustomAuthenticationProviderFactory.getInstance().getCustomAuthenticationProvider();
+            AuthenticationProviderFactory.installPlugin(CustomAuthenticationProviderFactory.PLUGIN_NAME, provider);
+            LOG.info(CustomAuthenticationProviderFactory.PLUGIN_NAME + " is success added! ");
+            provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                    CustomAuthenticationProviderFactory.getUserAuthenticationInfo());
+
+            UserIdentity authenticatedUser =
+                    UserIdentity.createEphemeralUserIdent(remoteUser, ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_CUSTOM);
+            ConnectContext currentContext = ConnectContext.get();
+            if (currentContext != null) {
+                currentContext.setCurrentRoleIds(new HashSet<>(
+                        Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
+            }
+            return authenticatedUser;
+        } catch (AuthenticationException ex) {
+            LOG.debug("failed to authenticate for custom, user: {}@{}, error: {}",
+                    remoteUser, remoteHost, ex.getMessage());
+            return null;
+        }
+    }
+
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
         String[] authChain = Config.authentication_chain;
         UserIdentity authenticatedUser = null;
@@ -306,11 +339,17 @@ public class AuthenticationMgr {
                 break;
             }
 
-            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
-            } else {
-                authenticatedUser = checkPasswordForNonNative(
-                        remoteUser, remoteHost, remotePasswd, randomString, authMechanism);
+            switch (authMechanism.toLowerCase()) {
+                case ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE:
+                    authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+                    break;
+                case ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_CUSTOM:
+                    authenticatedUser = checkPasswordForCustom(remoteUser, remoteHost, remotePasswd, randomString);
+                    break;
+                default:
+                    authenticatedUser = checkPasswordForNonNative(remoteUser, remoteHost, remotePasswd, randomString,
+                            authMechanism);
+                    break;
             }
         }
 
@@ -813,20 +852,5 @@ public class AuthenticationMgr {
         this.userNameToProperty = ret.userNameToProperty;
         this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
-    }
-
-    private void initCustomAuthenticationIfSet() {
-        String className = Config.authorization_custom_class.trim();
-        if (!className.isEmpty()) {
-            try {
-                AuthenticationProvider customAuthenticationProvider =
-                        ClassUtil.initialize(className, AuthenticationProvider.class);
-                AuthenticationProviderFactory.installPlugin(AuthPlugin.AUTHENTICATION_CUSTOM.name(),
-                        customAuthenticationProvider);
-            } catch (Exception e) {
-                LOG.warn("Error when initialize custom Authentication class " + className +
-                        ", will try to use other Authentication provider");
-            }
-        }
     }
 }

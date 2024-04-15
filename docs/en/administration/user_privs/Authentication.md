@@ -77,7 +77,7 @@ Add `default\_auth=mysql_clear_password` and `ENABLE_CLEARTEXT\_PLUGIN=1` in the
 
 StarRocks supports custom authentication.
 
-There are 3 steps to use Custom Authentication.
+There are 4 steps to use Custom Authentication.
 
 1. Implement Custom abstract class
 
@@ -127,20 +127,32 @@ public class Test implements AuthenticationProvider {
 2. Put your jar in **fe/lib**
 
 
-3. Add a parameter in **fe.conf**
+3. Add 2 parameters in **fe.conf**
 
 ```conf
+# set the order for authentication method. The example below means StarRocks will try to check password through your 
+custom initialization first, and try native method which setted when creating user if custom check failed.
+authentication_chain = custom,native
 # add Custom Authentication Implementation Class。
 authorization_custom_class = xxx.xxx.xxx
 ```
 
-When creating a user, specify the authentication method as Custom authentication by `IDENTIFIED WITH
-authentication_custom`.
+4. Add custom property file if needed. 
 
-Example :
+You can create a new file named **custom_authentication.conf** in the same directory with **fe.conf**. The content 
+syntax is also the same as **fe.conf**.
 
-```sql
-CREATE USER user_identity IDENTIFIED WITH authentication_custom;
+The way to get Properties in your Custom class:
+
+```java
+  Properties prop =
+        (Properties) authenticationInfo.extraInfo.get(AuthPlugin.AUTHENTICATION_CUSTOM.name());
 ```
 
-How to connect StarRocks with username and password is similar to LDAP above.
+** Notice **
+1. *root* is super user in StarRocks now, and has been checked before Custom checking. So you do not need to check 
+   this user.
+2. If need plain password, you can refer to LDAP content above.
+3. If connect StarRocks with normal method, you can refer to `MysqlPassword` class.
+4. Custom Authentication is provided for users who want to keep usernames and passwords the same as other platforms. So you
+   do not need create users before using it, which is the different from other native authentication method.
