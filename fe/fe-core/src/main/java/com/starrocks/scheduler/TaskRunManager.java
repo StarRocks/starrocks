@@ -89,13 +89,9 @@ public class TaskRunManager implements MemoryTrackable {
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
-<<<<<<< HEAD
-        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
-=======
         // Only log create task run status when it's not rejected and created.
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
-        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
->>>>>>> b08ee3fc11 ([BugFix] Only log create task run status log when it's not rejected and created (#43064))
+        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
     }
 
     public boolean killTaskRun(Long taskId) {
