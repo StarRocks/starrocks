@@ -262,6 +262,18 @@ public class TaskRunManager implements MemoryTrackable {
         return taskRunScheduler.getRunningTaskRunMap().containsKey(taskId);
     }
 
+    public long getRunningTaskRunCount() {
+        return taskRunScheduler.getRunningTaskRunMap().size();
+    }
+
+    public long getHistoryTaskRunCount() {
+        return taskRunHistory.getTaskRunCount();
+    }
+
+    public long getPendingTaskRunCount() {
+        return taskRunScheduler.getPendingTaskRunMap().size();
+    }
+
     public long getPendingTaskRunCount(long taskId) {
         taskRunLock.lock();
         try {
