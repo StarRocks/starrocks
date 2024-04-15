@@ -12,7 +12,7 @@ You can use Lateral Join with UNNEST to implement common conversions, for exampl
 
 From v2.5, UNNEST can take a variable number of array parameters. The arrays can vary in type and length (number of elements). If the arrays have different lengths, the largest length prevails, which means nulls will be added to arrays that are less than this length. See [Example 2](#example-2-unnest-takes-multiple-parameters) for more information.
 
-From v3.2.6, UNNEST can be used with Left Join ON TRUE. See [Example 3](#example-3-unnest-left-join-on-true) for more information.
+From v3.2.6, UNNEST can be used with LEFT JOIN ON TRUE. See [Example 3](#example-3-unnest-left-join-on-true) for more information.
 
 ## Syntax
 
@@ -146,7 +146,7 @@ For `id = 2`, `type` is converted into  ["typeA","typeB","typeC"], which has thr
 
 To ensure consistent numbers of rows for each `id`, a null element is added to ["typeA","typeB"].
 
-### Example 3: UNNEST with LFET JOIN ON TRUE
+### Example 3: UNNEST with LEFT JOIN ON TRUE
 
 ```SQL
 -- Create table student_score where scores is an ARRAY column.
@@ -203,4 +203,4 @@ SELECT id, scores, unnest FROM student_score LEFT JOIN unnest(scores) AS unnest 
 
 [77,null,89] corresponding to `id = 2` retains the null value.
 
-`scores` corresponding to `id = 3` and `id = 4` are NULL and empty, Left Join reservs the value.
+`scores` corresponding to `id = 3` and `id = 4` are NULL and empty, Left Join reserves the value.
