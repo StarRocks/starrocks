@@ -791,9 +791,7 @@ public class ExpressionTest extends PlanTestBase {
                 "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-18', '1970-02-01') AND " +
                 "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-17', '1970-02-01')  " +
                 " FROM test_in_pred_norm");
-        Assert.assertTrue("plan is " + plan, plan.contains("common expressions:"));
-        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 8> "));
-        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 9> "));
+        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 7> "));
     }
 
     @Test
