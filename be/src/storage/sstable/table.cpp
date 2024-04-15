@@ -251,13 +251,12 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     };
 
     size_t i = 0;
-    for (auto it = begin; it != end; ++it) {
+    for (auto it = begin; it != end; ++it, ++i) {
         auto& k = keys[*it];
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
             if (search_in_block(k, i)) {
                 TRACE_COUNTER_INCREMENT("continue_block_read", 1);
-                ++i;
                 continue;
             } else {
                 current_block_itr_ptr.reset(nullptr);
@@ -280,7 +279,6 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 (void)search_in_block(k, i);
             }
         }
-        ++i;
     }
     if (s.ok()) {
         s = iiter->status();
