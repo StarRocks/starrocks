@@ -270,6 +270,18 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             ASSERT_EQ(expected_values[i], values[i]);
         }
         ASSERT_EQ(key_indexes_info, found_keys_info);
+
+        found_keys_info.clear();
+        key_indexes_info.clear();
+        for (int i = N / 4; i < N / 2; ++i) {
+            key_indexes_info.insert(i);
+        }
+        std::vector<IndexValue> values1(N / 2, IndexValue(NullIndexValue));
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes_info, -1, values1.data(), &found_keys_info));
+        for (int i = N / 4; i < N / 2; i++) {
+            ASSERT_EQ(expected_values[i], values1[i]);
+        }
+        ASSERT_EQ(key_indexes_info, found_keys_info);
     }
     {
         // 5. multi get with version (all keys included)
