@@ -1069,6 +1069,7 @@ Status PrimaryIndex::load(Tablet* tablet) {
             LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
         }
     }
+    _calc_memory_usage();
     return _status;
 }
 
@@ -1086,6 +1087,7 @@ void PrimaryIndex::unload() {
     }
     _status = Status::OK();
     _loaded = false;
+    _calc_memory_usage();
 }
 
 static string int_list_to_string(const vector<uint32_t>& l) {
@@ -1112,6 +1114,7 @@ Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta) {
     if (_persistent_index != nullptr) {
         return _persistent_index->commit(index_meta);
     }
+    _calc_memory_usage();
     return Status::OK();
 }
 
@@ -1502,10 +1505,7 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
 }
 
 std::size_t PrimaryIndex::memory_usage() const {
-    if (_persistent_index) {
-        return _persistent_index->memory_usage();
-    }
-    return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_usage() : 0;
+    return _memory_usage.load();
 }
 
 std::size_t PrimaryIndex::size() const {
@@ -1564,6 +1564,7 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
         _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
     }
     _loaded = true;
+    _calc_memory_usage();
 
     return Status::OK();
 }
@@ -1583,6 +1584,16 @@ Status PrimaryIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dum
         RETURN_IF_ERROR(_pkey_to_rssid_rowid->pk_dump(dump, level));
     }
     return Status::OK();
+}
+
+void PrimaryIndex::_calc_memory_usage() {
+    size_t memory_usage = 0;
+    if (_persistent_index) {
+        memory_usage = _persistent_index->memory_usage();
+    } else {
+        memory_usage = _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_usage() : 0;
+    }
+    _memory_usage.store(memory_usage);
 }
 
 } // namespace starrocks
