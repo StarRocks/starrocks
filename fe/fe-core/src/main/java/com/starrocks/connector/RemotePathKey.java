@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
+
+import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class RemotePathKey {
     private final String path;
@@ -24,6 +29,18 @@ public class RemotePathKey {
 
     // The table location must exist in HudiTable
     private final Optional<String> hudiTableLocation;
+
+    public static class HudiContext {
+        // ---- concurrent initialization -----
+        public AtomicBoolean init = new AtomicBoolean(false);
+        public ReentrantLock lock = new ReentrantLock();
+        // ---- actual fields -----
+        public HoodieTableFileSystemView fsView = null;
+        public HoodieTimeline timeline = null;
+        public HoodieInstant lastInstant = null;
+    }
+
+    private HudiContext hudiContext;
 
     public static RemotePathKey of(String path, boolean isRecursive) {
         return new RemotePathKey(path, isRecursive, Optional.empty());
@@ -41,7 +58,7 @@ public class RemotePathKey {
 
     public boolean approximateMatchPath(String basePath, boolean isRecursive) {
         String pathWithSlash = path.endsWith("/") ? path : path + "/";
-        String basePathWithSlash =  basePath.endsWith("/") ? basePath : basePath + "/";
+        String basePathWithSlash = basePath.endsWith("/") ? basePath : basePath + "/";
         return pathWithSlash.startsWith(basePathWithSlash) && (this.isRecursive == isRecursive);
     }
 
@@ -86,5 +103,19 @@ public class RemotePathKey {
         }
         sb.append('}');
         return sb.toString();
+    }
+
+    public void drop() {
+        if (hudiContext != null) {
+            hudiContext = null;
+        }
+    }
+
+    public void setHudiContext(HudiContext ctx) {
+        hudiContext = ctx;
+    }
+
+    public HudiContext getHudiContext() {
+        return hudiContext;
     }
 }
