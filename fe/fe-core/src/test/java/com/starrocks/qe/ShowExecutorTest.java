@@ -109,6 +109,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
@@ -443,15 +444,23 @@ public class ShowExecutorTest {
         listPartitionInfoTest.setUp();
         OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
         Database db = new Database();
+
         new Expectations(db) {
             {
                 db.getTable(anyString);
                 minTimes = 0;
                 result = olapTable;
 
-                db.getTable(0);
-                minTimes = 0;
+                db.getTable(1000);
+                minTimes = 1;
                 result = olapTable;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext ctx, Database db, TableName tableName) {
+                return olapTable;
             }
         };
 
@@ -462,6 +471,7 @@ public class ShowExecutorTest {
                 result = db;
             }
         };
+
 
         // Ok to test
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
