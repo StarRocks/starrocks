@@ -1153,7 +1153,11 @@ public class QueryAnalyzer {
                     }
                 }
             } else {
-                table = metadataMgr.getTable(catalogName, dbName, tbName);
+                // treat it as a temporary table first
+                table = metadataMgr.getTemporaryTable(session.getSessionId(), catalogName, db.getId(), tbName);
+                if (table == null) {
+                    table = metadataMgr.getTable(catalogName, dbName, tbName);
+                }
             }
 
             if (table == null) {

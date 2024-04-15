@@ -1431,12 +1431,14 @@ public class AstToStringBuilder {
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
-        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
+        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition,
+                hidePassword, table.isTemporaryTable());
     }
 
     public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
                                   List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword,
+                                  boolean isTemporary) {
         // 1. create table
         // 1.1 materialized view
         if (table.isMaterializedView()) {
@@ -1476,6 +1478,9 @@ public class AstToStringBuilder {
                 || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
+        }
+        if (isTemporary) {
+            sb.append("TEMPORARY ");
         }
         sb.append("TABLE ");
         if (!Strings.isNullOrEmpty(dbName)) {

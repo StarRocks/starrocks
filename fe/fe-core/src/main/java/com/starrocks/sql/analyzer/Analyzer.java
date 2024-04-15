@@ -71,6 +71,9 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -89,6 +92,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -202,6 +206,18 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCreateTemporaryTableStatement(CreateTemporaryTableStmt statement, ConnectContext context) {
+            CreateTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTemporaryTableLikeStatement(CreateTemporaryTableLikeStmt statement, ConnectContext context) {
+            CreateTableLikeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
             AlterTableStatementAnalyzer.analyze(statement, context);
             return null;
@@ -295,6 +311,13 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCreateTemporaryTableAsSelectStatement(
+                CreateTemporaryTableAsSelectStmt statement, ConnectContext session) {
+            CTASAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             if (statement.getCreateTableAsSelectStmt() != null) {
                 CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
@@ -383,6 +406,12 @@ public class Analyzer {
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
+            DropStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, ConnectContext session) {
             DropStmtAnalyzer.analyze(statement, session);
             return null;
         }

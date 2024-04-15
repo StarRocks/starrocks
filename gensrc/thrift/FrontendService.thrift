@@ -787,6 +787,7 @@ struct TMasterOpRequest {
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
+    35: optional string session_id
 }
 
 struct TColumnDefinition {

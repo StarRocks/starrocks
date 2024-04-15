@@ -97,6 +97,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -764,6 +765,22 @@ public class ConnectProcessor {
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
         } else {
             ctx.setCurrentRoleIds(new HashSet<>());
+        }
+
+        // after https://github.com/StarRocks/starrocks/pull/43162, we support temporary tables.
+        // DDL/DML operations related to temporary tables are bound to a specific session,
+        // so the request forwarded by the follower needs to specifically set the session id.
+
+        //  During the grayscale upgrade process,
+        //  if the leader is a new version and the follower is an old version,
+        //  the forwarded request won't have a session id.
+        //  Considering that the old version FE does not support operations related to temporary tables,
+        //  the session id is not necessary at this time.
+        //  in this case, we just set a random session id to ensure that subsequent processing can be processed normally.
+        if (request.isSetSession_id()) {
+            ctx.setSessionId(UUID.fromString(request.getSession_id()));
+        } else {
+            ctx.setSessionId(UUIDUtil.genUUID());
         }
 
         if (request.isSetIsLastStmt()) {

@@ -56,7 +56,6 @@ statement
     // Table Statement
     | createTableStatement
     | createTableAsSelectStatement
-    | createTemporaryTableStatement
     | createTableLikeStatement
     | showCreateTableStatement
     | dropTableStatement
@@ -70,6 +69,7 @@ statement
     | alterTableStatement
     | cancelAlterTableStatement
     | showAlterStatement
+    | showTemporaryTablesStatement
 
     // View Statement
     | createViewStatement
@@ -426,7 +426,7 @@ showDataStmt
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
 createTableStatement
-    : CREATE EXTERNAL? TABLE (IF NOT EXISTS)? qualifiedName
+    : CREATE (TEMPORARY | EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
           '(' columnDesc (',' columnDesc)* (',' indexDesc)* ')'
           engineDesc?
           charsetDesc?
@@ -440,6 +440,7 @@ createTableStatement
           properties?
           extProperties?
      ;
+
 
 columnDesc
     : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
@@ -528,13 +529,8 @@ ifNotExists:
     (IF NOT EXISTS)?
     ;
 
-createTemporaryTableStatement
-    : CREATE TEMPORARY TABLE qualifiedName
-        queryStatement
-    ;
-
 createTableAsSelectStatement
-    : CREATE TABLE (IF NOT EXISTS)? qualifiedName
+    : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
         keyDesc?
         comment?
@@ -544,6 +540,7 @@ createTableAsSelectStatement
         properties?
         AS queryStatement
     ;
+
 
 dropTableStatement
     : DROP TEMPORARY? TABLE (IF EXISTS)? qualifiedName FORCE?
@@ -571,6 +568,10 @@ indexType
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showTemporaryTablesStatement
+    : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showCreateTableStatement
@@ -602,7 +603,7 @@ descTableStatement
     ;
 
 createTableLikeStatement
-    : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
+    : CREATE (TEMPORARY | EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
         partitionDesc?
         distributionDesc?
         properties?
