@@ -483,12 +483,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
-<<<<<<< HEAD
-                                    scanOperator.getSelectedTabletId(), scanOperator.getPrunedPartitionPredicates(),
-=======
-                                    scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
-                                    newPrunedPredicates,
->>>>>>> 1c135f0ca7 ([BugFix] fix pruned predicate not be rewritten (#43975))
+                                    scanOperator.getSelectedTabletId(), newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex());
                     newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());

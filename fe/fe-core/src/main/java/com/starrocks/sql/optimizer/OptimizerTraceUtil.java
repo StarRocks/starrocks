@@ -262,6 +262,7 @@ public class OptimizerTraceUtil {
                     ", selectedPartitionId=" + node.getSelectedPartitionId() +
                     ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                     ", predicate=" + node.getPredicate() +
+                    ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                     ", limit=" + node.getLimit() +
                     "}";
         }
@@ -477,6 +478,7 @@ public class OptimizerTraceUtil {
                     ", outputColumns=" + node.getOutputColumns() +
                     ", projection=" + node.getProjection() +
                     ", predicate=" + node.getPredicate() +
+                    ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                     ", limit=" + node.getLimit() +
                     "}";
         }
