@@ -1084,12 +1084,6 @@ struct THdfsScanNode {
     19: optional string serialized_predicate;
 }
 
-struct TKuduScanNode {
-    1: optional Types.TTupleId tuple_id
-    // table name it scans
-    2: optional string table_name;
-}
-
 struct TProjectNode {
     1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
     // Used for common operator compute result reuse
@@ -1258,8 +1252,6 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
-  // Scan node for kudu
-  73: optional TKuduScanNode kudu_scan_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
