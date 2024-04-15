@@ -17,15 +17,15 @@
 
 package com.starrocks.authentication;
 
-import java.io.File;
-import java.io.FileReader;
-import java.util.Properties;
-
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ClassUtil;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.io.File;
+import java.io.FileReader;
+import java.util.Properties;
 
 public class CustomAuthenticationProviderFactory {
 

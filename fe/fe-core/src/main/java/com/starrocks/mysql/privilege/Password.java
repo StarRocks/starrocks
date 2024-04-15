@@ -22,7 +22,6 @@ import com.starrocks.authentication.CustomAuthenticationProviderFactory;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.ClassUtil;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.persist.gson.GsonUtils;
