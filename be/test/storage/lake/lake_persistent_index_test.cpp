@@ -88,7 +88,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
     // insert duplicate should return error
-    // ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), 0).ok());
+    ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), 1).ok());
 
     // test get
     vector<IndexValue> get_values(keys.size());

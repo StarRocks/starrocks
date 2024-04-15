@@ -210,7 +210,7 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
     RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
     KeyIndexSet key_indexes;
     for (int i = 0; i < n; ++i) {
-        key_indexes.insert(n);
+        key_indexes.insert(i);
     }
     if (_immutable_memtable != nullptr) {
         RETURN_IF_ERROR(_immutable_memtable->check_not_exist(keys, key_indexes, version));
