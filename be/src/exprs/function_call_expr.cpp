@@ -101,7 +101,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
-
         RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::THREAD_LOCAL));
     }
 
@@ -121,12 +120,13 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
 
 void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks::ExprContext* context,
                                        FunctionContext::FunctionStateScope scope) {
-    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr) {
+    // _fn_context_index > 0 means this function call has call opened
+    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index > 0) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-        _fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
+        (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
 
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            _fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
+            (void)_fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
         }
     }
 
