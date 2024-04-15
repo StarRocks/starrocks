@@ -264,6 +264,7 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     //
     _spill_options->read_shared =
             _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::BROADCAST ||
+            _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::LOCAL_HASH_BUCKET ||
             state->fragment_ctx()->enable_adaptive_dop();
 
     const auto& param = _hash_joiner_factory->hash_join_param();

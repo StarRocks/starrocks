@@ -46,18 +46,18 @@ public:
     auto for_each_pipeline(Callable&& call) {
         using ReturnType = std::invoke_result_t<Callable, Pipeline*>;
         if constexpr (std::same_as<ReturnType, void>) {
-            for (auto& pipeline : _pipelines) {
-                call(pipeline.get());
+            for (auto pipeline : _pipelines) {
+                call(pipeline);
             }
         } else {
-            for (auto& pipeline : _pipelines) {
-                RETURN_IF_ERROR(call(pipeline.get()));
+            for (auto pipeline : _pipelines) {
+                RETURN_IF_ERROR(call(pipeline));
             }
             return Status::OK();
         }
     }
 
-    virtual void add_pipeline(PipelinePtr pipeline) = 0;
+    virtual void add_pipeline(PipelineRawPtr pipeline) = 0;
     virtual void close(RuntimeState* state) = 0;
     virtual void submit_next_driver() = 0;
     virtual bool is_empty() const = 0;
@@ -94,8 +94,7 @@ protected:
     std::atomic<size_t> _num_epoch_finished_pipelines{};
     size_t _num_pipelines{};
     DriverExecutor* _executor;
-    Pipelines _pipelines;
-
+    PipelineRawPtrs _pipelines;
     void clear_all_drivers(Pipelines& pipelines);
 };
 
@@ -107,7 +106,7 @@ public:
     Status prepare_pipelines(RuntimeState* state) override;
     Status prepare_drivers(RuntimeState* state) override;
     void submit_active_drivers() override;
-    void add_pipeline(PipelinePtr pipeline) override;
+    void add_pipeline(PipelineRawPtr pipeline) override;
 
     void close(RuntimeState* state) override;
     // nothing to do
@@ -128,7 +127,7 @@ public:
     Status prepare_pipelines(RuntimeState* state) override;
     Status prepare_drivers(RuntimeState* state) override;
     void submit_active_drivers() override;
-    void add_pipeline(PipelinePtr pipeline) override;
+    void add_pipeline(PipelineRawPtr pipeline) override;
 
     void close(RuntimeState* state) override;
     void submit_next_driver() override;

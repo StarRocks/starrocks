@@ -365,9 +365,9 @@ public:
     void set_global() { this->_global = true; }
 
     // only used in local colocate filter
-    bool is_colocate_filter() const { return !_colocate_filters.empty(); }
-    std::vector<JoinRuntimeFilter*>& colocate_filter() { return _colocate_filters; }
-    const std::vector<JoinRuntimeFilter*>& colocate_filter() const { return _colocate_filters; }
+    bool is_group_colocate_filter() const { return !_group_colocate_filters.empty(); }
+    std::vector<JoinRuntimeFilter*>& group_colocate_filter() { return _group_colocate_filters; }
+    const std::vector<JoinRuntimeFilter*>& group_colocate_filter() const { return _group_colocate_filters; }
 
 protected:
     void _update_version() { _rf_version++; }
@@ -381,7 +381,7 @@ protected:
     bool _always_true = false;
     size_t _rf_version = 0;
     // local colocate filters is local filter we don't have to serialize them
-    std::vector<JoinRuntimeFilter*> _colocate_filters;
+    std::vector<JoinRuntimeFilter*> _group_colocate_filters;
 };
 
 template <typename ModuloFunc>
