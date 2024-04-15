@@ -1062,3 +1062,43 @@ SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
 DROP TABLE t_delete_and_column_prune;
 -- result:
 -- !result
+-- name: test_upper_case_column_name
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+CREATE TABLE `t_upper_case_column_name` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `TeXt` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`TeXt`) USING GIN ("parser" = "english") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_upper_case_column_name VALUES (1, "b"),(2, "b"),(3, "b");
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
+-- result:
+-- !result
+DROP TABLE t_upper_case_column_name;
+-- result:
+-- !result
