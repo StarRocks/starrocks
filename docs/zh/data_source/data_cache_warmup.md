@@ -155,6 +155,8 @@ DROP TASK <task_name>;
 
 ## 使用限制
 
+* 需要开启 Data Cache 特性，且拥有对目标 catalog，db，table 的 SELECT 权限。
+* `CACHE SELECT` 支持存算分离和存算一体架构的外表查询，支持 Text，Parquet 和 ORC 数据格式。
 * `CACHE SELECT` 只支持对单表进行预热，不支持 `ORDER BY`，`LIMIT`，`GROUP BY` 等算子。
 * 目前 CACHE SELECT 的实现是采用 `INSERT INTO BLACKHOLE()` 的方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销是差不多的。这一块后续会做出改进，提升 `CACHE SELECT` 的性能。
 * `CACHE SELECT` 预热的数据不会保证一定不被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以自行通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
