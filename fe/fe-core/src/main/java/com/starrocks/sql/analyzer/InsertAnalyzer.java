@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -170,6 +171,8 @@ public class InsertAnalyzer {
             }
         } else {
             targetColumns = new ArrayList<>();
+            Set<String> requiredKeyColumns = table.getBaseSchema().stream().filter(Column::isKey)
+                    .filter(c -> !c.isAutoIncrement()).map(c -> c.getName().toLowerCase()).collect(Collectors.toSet());
             for (String colName : insertStmt.getTargetColumnNames()) {
                 Column column = table.getColumn(colName);
                 if (column == null) {
@@ -181,21 +184,36 @@ public class InsertAnalyzer {
                 if (!mentionedColumns.add(colName)) {
                     throw new SemanticException("Column '%s' specified twice", colName);
                 }
+                requiredKeyColumns.remove(colName.toLowerCase());
                 targetColumns.add(column);
+            }
+            if (table.isOlapTable()) {
+                OlapTable olapTable = (OlapTable) table;
+                if (olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)) {
+                    if (!requiredKeyColumns.isEmpty()) {
+                        String missingKeyColumns = String.join(",", requiredKeyColumns);
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_MISSING_KEY_COLUMNS, missingKeyColumns);
+                    }
+                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size()) {
+                        insertStmt.setUsePartialUpdate();
+                    }
+                }
             }
         }
 
-        for (Column column : table.getBaseSchema()) {
-            Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-            if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
-                    !column.isAutoIncrement() && !column.isGeneratedColumn() &&
-                    !mentionedColumns.contains(column.getName())) {
-                StringBuilder msg = new StringBuilder();
-                for (String s : mentionedColumns) {
-                    msg.append(" ").append(s).append(" ");
+        if (!insertStmt.usePartialUpdate()) {
+            for (Column column : table.getBaseSchema()) {
+                Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
+                        !column.isAutoIncrement() && !column.isGeneratedColumn() &&
+                        !mentionedColumns.contains(column.getName())) {
+                    StringBuilder msg = new StringBuilder();
+                    for (String s : mentionedColumns) {
+                        msg.append(" ").append(s).append(" ");
+                    }
+                    throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
+                            column.getName(), msg.toString());
                 }
-                throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
-                        column.getName(), msg.toString());
             }
         }
 
@@ -228,7 +246,6 @@ public class InsertAnalyzer {
         }
 
         insertStmt.setTargetTable(table);
-        insertStmt.setTargetColumns(targetColumns);
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
         }

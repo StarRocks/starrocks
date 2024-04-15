@@ -233,6 +233,11 @@ public enum ErrorCode {
     ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
     ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
 
+    ERR_MISSING_KEY_COLUMNS(6014, new byte[] {'4', '2', '0', '0', '0'},
+            "missing key columns:%s for primary key table"),
+    ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN(6015, new byte[] {'4', '2', '0', '0', '0'},
+            "missing dependency column for generated column %s"),
+
     ERR_BAD_FAILOVER_GROUP_STATEMENT(7000, new byte[] {'4', '2', '0', '0', '0'}, "Bad failover group statement: '%s'"),
     ERR_UNKNOWN_FAILOVER_GROUP(7001, new byte[] {'4', '2', '0', '0', '0'}, "Unknown failover group '%s'"),
     ERR_FAILOVER_GROUP_EXISTS(7002, new byte[] {'4', '2', '0', '0', '0'}, "Failover group '%s' exists"),

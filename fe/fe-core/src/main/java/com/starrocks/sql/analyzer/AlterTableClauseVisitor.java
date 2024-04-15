@@ -515,7 +515,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             }
 
             if (!columnDef.getType().matchesType(expr.getType())) {
-                throw new SemanticException("Illege expression type for Generated Column " +
+                throw new SemanticException("Illegal expression type for Generated Column " +
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
@@ -629,7 +629,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
                 }
 
                 if (!colDef.getType().matchesType(expr.getType())) {
-                    throw new SemanticException("Illege expression type for Generated Column " +
+                    throw new SemanticException("Illegal expression type for Generated Column " +
                             "Column Type: " + colDef.getType().toString() +
                             ", Expression Type: " + expr.getType().toString());
                 }
@@ -754,7 +754,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             }
 
             if (!columnDef.getType().matchesType(expr.getType())) {
-                throw new SemanticException("Illege expression type for Generated Column " +
+                throw new SemanticException("Illegal expression type for Generated Column " +
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }

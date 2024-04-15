@@ -497,7 +497,7 @@ public class CreateTableAnalyzer {
                     }
 
                     if (!column.getType().matchesType(expr.getType())) {
-                        throw new SemanticException("Illege expression type for Generated Column " +
+                        throw new SemanticException("Illegal expression type for Generated Column " +
                                 "Column Type: " + column.getType().toString() +
                                 ", Expression Type: " + expr.getType().toString());
                     }
