@@ -4,13 +4,9 @@ displayed_sidebar: "English"
 
 # Realtime synchronization from MySQL
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
-
 StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
 This topic describes how to synchronize data from MySQL to StarRocks in real-time (within seconds) through Apache Flink®.
-
-<InsertPrivNote />
 
 ## How it works
 
