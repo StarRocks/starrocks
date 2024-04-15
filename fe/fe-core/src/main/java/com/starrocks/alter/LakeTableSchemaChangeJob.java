@@ -374,6 +374,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setStorageMedium(storageMedium)
                                 .setLatch(countDownLatch)
                                 .setEnablePersistentIndex(table.enablePersistentIndex())
+                                .setPersistentIndexType(table.getPersistentIndexType())
                                 .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                                 .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                                 .setCompressionType(table.getCompressionType())
