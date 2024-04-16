@@ -245,7 +245,7 @@ public:
     static TabletSchemaSPtr create(const TabletSchemaCSPtr& tablet_schema, const std::vector<int32_t>& column_indexes);
     static TabletSchemaSPtr create_with_uid(const TabletSchemaCSPtr& tablet_schema,
                                             const std::vector<uint32_t>& unique_column_ids);
-    static TabletSchemaSPtr copy(const TabletSchemaCSPtr& tablet_schema);
+    static std::unique_ptr<TabletSchema> copy(const TabletSchemaCSPtr& tablet_schema);
     static TabletSchemaCSPtr copy(const TabletSchemaCSPtr& src_schema, const std::vector<TColumn>& cols);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
