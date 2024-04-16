@@ -36,11 +36,11 @@ Create table `exam` and insert data into this table.
 ```sql
 CREATE TABLE exam (
     subject STRING,
-    exam_result INT
+    score INT
 ) 
 DISTRIBUTED BY HASH(`subject`);
 
-insert into exam values
+INSERT INTO exam VALUES
 ('chemistry',80),
 ('chemistry',100),
 ('chemistry',null),
@@ -54,9 +54,9 @@ insert into exam values
 ```
 
 ```Plain
-select * from exam order by Subject;
+select * from exam order by subject;
 +-----------+-------+
-| Subject   | Score |
+| subject   | score |
 +-----------+-------+
 | chemistry |    80 |
 | chemistry |   100 |
@@ -74,15 +74,15 @@ select * from exam order by Subject;
 Calculate the median of each subject.
 
 ```SQL
-SELECT Subject, PERCENTILE_DISC (Score, 0.5)
-FROM exam group by Subject;
+select subject, percentile_disc(score, 0.5)
+from exam group by subject;
 ```
 
 Output
 
 ```Plain
 +-----------+-----------------------------+
-| Subject   | percentile_disc(Score, 0.5) |
+| subject   | percentile_disc(score, 0.5) |
 +-----------+-----------------------------+
 | chemistry |                         100 |
 | math      |                          70 |
