@@ -27,6 +27,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,6 +79,9 @@ public class OptimizerContext {
     // uniquePartitionIdGenerator for external catalog
     private long uniquePartitionIdGenerator = 0L;
 
+    // collect all LogicalOlapScanOperators in the query before any optimization
+    private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -88,6 +93,7 @@ public class OptimizerContext {
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
         this.queryId = UUID.randomUUID();
+        this.allLogicalOlapScanOperators = Collections.emptyList();
     }
 
     @VisibleForTesting
@@ -297,5 +303,13 @@ public class OptimizerContext {
 
     public long getNextUniquePartitionId() {
         return uniquePartitionIdGenerator++;
+    }
+
+    public void setAllLogicalOlapScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
+        this.allLogicalOlapScanOperators = allScanOperators;
+    }
+
+    public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
+        return allLogicalOlapScanOperators;
     }
 }
