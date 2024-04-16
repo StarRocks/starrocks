@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -383,6 +384,13 @@ public class AstToStringBuilder {
             }
 
             sb.append(stmt.getMvName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCleanTemporaryTableStatement(CleanTemporaryTableStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("clean temporary table on session '").append(stmt.getSessionId()).append("'");
             return sb.toString();
         }
 
