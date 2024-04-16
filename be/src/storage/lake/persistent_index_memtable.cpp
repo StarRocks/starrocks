@@ -50,16 +50,10 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
 Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
-        auto size = keys[i].get_size();
         const auto value = values[i];
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, value);
-        if (auto [it, inserted] = _map.emplace(key, index_value_vers); !inserted) {
-            std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
-                                                  hexdump((const char*)key.data(), size));
-            LOG(WARNING) << msg;
-            return Status::AlreadyExist(msg);
-        }
+        _map.emplace(key, index_value_vers);
     }
     return Status::OK();
 }

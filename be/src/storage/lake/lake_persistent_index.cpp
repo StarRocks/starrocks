@@ -207,17 +207,20 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
 }
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
-    RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
+    // Check if keys exist first. Return error if keys have existed.
     KeyIndexSet key_indexes;
     for (int i = 0; i < n; ++i) {
         key_indexes.insert(i);
     }
+    RETURN_IF_ERROR(_memtable->check_not_exist(keys, key_indexes, version));
     if (_immutable_memtable != nullptr) {
         RETURN_IF_ERROR(_immutable_memtable->check_not_exist(keys, key_indexes, version));
     }
     for (auto iter = _sstables.rbegin(); iter != _sstables.rend(); ++iter) {
         RETURN_IF_ERROR((*iter)->check_not_exist(keys, key_indexes, version));
     }
+
+    RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
     if (is_memtable_full()) {
         RETURN_IF_ERROR(flush_memtable());
     }
