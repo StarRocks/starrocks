@@ -1,24 +1,57 @@
 -- name: test_execute_in_fe
--- execute in fe
 set enable_constant_execute_in_fe = true;
+-- result:
+-- !result
 select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
 1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
 cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
 x'123456', x'AABBCC11';
-
+-- result:
+1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	4V	b'\xaa\xbb\xcc\x11'
+-- !result
 select 1 as a union all select 2 union all select 1000000000;
+-- result:
+1
+2
+1000000000
+-- !result
 select @@character_set_results AS character_set_results;
+-- result:
+utf8
+-- !result
 select cast(10000000 as float), cast(1000000000000000 as double);
+-- result:
+10000000.0	1000000000000000.0
+-- !result
 select cast(0.00001 as float), cast(0.00001 as double);
-
--- execute in be
+-- result:
+1e-05	1e-05
+-- !result
 set enable_constant_execute_in_fe = false;
+-- result:
+-- !result
 select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
 1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
 cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
 x'123456', x'AABBCC11';
-
+-- result:
+1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	4V	b'\xaa\xbb\xcc\x11'
+-- !result
 select 1 as a union all select 2 union all select 1000000000;
+-- result:
+1
+2
+1000000000
+-- !result
 select @@character_set_results AS character_set_results;
+-- result:
+utf8
+-- !result
 select cast(10000000 as float), cast(1000000000000000 as double);
+-- result:
+10000000.0	1000000000000000.0
+-- !result
 select cast(0.00001 as float), cast(0.00001 as double);
+-- result:
+1e-05	1e-05
+-- !result
