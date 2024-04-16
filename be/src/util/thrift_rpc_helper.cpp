@@ -59,6 +59,37 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
 }
 
+// TRY_CATCH_ALL will not set catched=true, only used for catch unexpected crash,
+// cannot be used to control memory usage.
+#define CATCH_ALL_THRIFT_RPC_EXCEPTION(result, stmt)                                                                 \
+    do {                                                                                                             \
+        std::stringstream ss;                                                                                        \
+        try {                                                                                                        \
+            { stmt; }                                                                                                \
+        } catch (apache::thrift::protocol::TProtocolException & e) {                                                 \
+            if (e.getType() == apache::thrift::protocol::TProtocolException::TProtocolExceptionType::INVALID_DATA) { \
+                ss << "FE RPC response parsing failure, address=" << address                                         \
+                   << ". The FE may be busy, please retry later or increase BE config thrift_rpc_timeout_ms";        \
+            } else {                                                                                                 \
+                ss << "FE RPC failure, address=" << address << ", reason=" << e.what();                              \
+            }                                                                                                        \
+        } catch (apache::thrift::transport::TTransportException & e) {                                               \
+            if (e.getType() == apache::thrift::transport::TTransportException::TTransportExceptionType::TIMED_OUT) { \
+                ss << "FE RPC timeout, address=" << address << ", reason=" << e.what()                               \
+                   << ". The FE may be busy, please retry later or increase BE config thrift_rpc_timeout_ms";        \
+            } else {                                                                                                 \
+                ss << "FE RPC failure, address=" << address << ", reason=" << e.what();                              \
+            }                                                                                                        \
+        } catch (std::exception & e) {                                                                               \
+            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();                                  \
+        }                                                                                                            \
+        if (ss.str().empty()) {                                                                                      \
+            result = Status::OK();                                                                                   \
+        } else {                                                                                                     \
+            result = Status::ThriftRpcError(ss.str());                                                               \
+        }                                                                                                            \
+    } while (0)
+
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
@@ -69,27 +100,31 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         LOG(WARNING) << "Connect frontend failed, address=" << address << ", status=" << status.message();
         return status;
     }
-    try {
-        try {
-            callback(client);
-        } catch (apache::thrift::transport::TTransportException& e) {
-            status = client.reopen(timeout_ms);
-            if (!status.ok()) {
-                LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << status.message();
-                return status;
-            }
-            callback(client);
-        }
-    } catch (apache::thrift::TException& e) {
-        std::stringstream ss;
-        ss << "call frontend service failed, address=" << address << ", reason=" << e.what();
-        LOG(WARNING) << ss.str();
+
+    // 1st call
+    CATCH_ALL_THRIFT_RPC_EXCEPTION(status, callback(client));
+    if (status.ok()) {
+        return status;
+    }
+    LOG(WARNING) << status << ", first try";
+
+    SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
+
+    status = client.reopen(timeout_ms);
+    if (!status.ok()) {
+        LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << status;
+        return status;
+    }
+
+    // 2nd call
+    CATCH_ALL_THRIFT_RPC_EXCEPTION(status, callback(client));
+    if (!status.ok()) {
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
         // just reopen to disable this connection
         (void)client.reopen(timeout_ms);
-        return Status::ThriftRpcError(ss.str());
+        LOG(WARNING) << status << ", last try";
     }
-    return Status::OK();
+    return status;
 }
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
