@@ -168,6 +168,7 @@ enum TSchemaTableType {
     SCH_BE_DATACACHE_METRICS,
     SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
+    SCH_TEMP_TABLES,
 }
 
 enum THdfsCompression {

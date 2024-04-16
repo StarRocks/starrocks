@@ -14,6 +14,8 @@
 
 #include "exec/schema_scanner.h"
 
+#include <protocol/TDebugProtocol.h>
+
 #include "column/type_traits.h"
 #include "exec/schema_scanner/schema_be_bvars_scanner.h"
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
@@ -46,6 +48,7 @@
 #include "exec/schema_scanner/schema_tables_scanner.h"
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 #include "exec/schema_scanner/schema_tasks_scanner.h"
+#include "exec/schema_scanner/schema_temp_tables_scanner.h"
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
 #include "exec/schema_scanner/schema_views_scanner.h"
@@ -190,6 +193,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaPartitionsMetaScanner>();
     case TSchemaTableType::SYS_FE_MEMORY_USAGE:
         return std::make_unique<SysFeMemoryUsage>();
+    case TSchemaTableType::SCH_TEMP_TABLES:
+        return std::make_unique<SchemaTempTablesScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

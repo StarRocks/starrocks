@@ -1440,6 +1440,14 @@ struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
+struct TGetTemporaryTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetTemporaryTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
 struct TTabletSchedule {
     1: optional i64 table_id
     2: optional i64 partition_id
@@ -1561,6 +1569,8 @@ struct TTableInfo {
     19: optional i64 checksum
     20: optional string create_options
     21: optional string table_comment
+    22: optional string session_id
+    23: optional i64 table_id
 }
 
 struct TAllocateAutoIncrementIdParam {
@@ -1858,5 +1868,6 @@ service FrontendService {
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
+    TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 }
 
