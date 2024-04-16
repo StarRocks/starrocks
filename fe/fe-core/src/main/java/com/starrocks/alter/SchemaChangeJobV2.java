@@ -290,7 +290,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
-            Long baseIndexId = tbl.getBaseIndexId();
+            long baseIndexId = tbl.getBaseIndexId();
 
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
@@ -313,7 +313,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
-                    List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
                             .setKeysType(originKeysType)
