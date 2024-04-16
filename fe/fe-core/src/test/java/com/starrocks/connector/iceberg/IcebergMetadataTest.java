@@ -1061,7 +1061,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
     @Test
     public void testListPartitionNames() {
-        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).appendFile(FILE_B_3).commit();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
@@ -1077,7 +1077,9 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
         List<String> partitionNames = metadata.listPartitionNames("db", "table");
-        Assert.assertEquals(partitionNames, Lists.newArrayList("k2=2", "k2=3"));
+        Assert.assertEquals(2, partitionNames.size());
+        Assert.assertTrue(partitionNames.contains("k2=2"));
+        Assert.assertTrue(partitionNames.contains("k2=3"));
     }
 
     @Test
