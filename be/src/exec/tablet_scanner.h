@@ -104,7 +104,7 @@ private:
     std::shared_ptr<TabletReader> _reader;
 
     TabletSharedPtr _tablet;
-    TabletSchemaSPtr _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     int64_t _version = 0;
 
     // output columns of `this` TabletScanner, i.e, the final output columns of `get_chunk`.

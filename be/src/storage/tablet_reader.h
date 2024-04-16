@@ -41,7 +41,7 @@ public:
                  std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                  RowSourceMaskBuffer* mask_buffer, const TabletSchemaCSPtr& tablet_schema = nullptr);
-    TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema, Schema schema);
+    TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaCSPtr& tablet_schema, Schema schema);
     ~TabletReader() override { close(); }
 
     void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
