@@ -164,7 +164,7 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         // prepare for optimizer
-        prepare(connectContext, columnRefFactory);
+        prepare(connectContext, columnRefFactory, logicOperatorTree);
 
         // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
         logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
@@ -224,8 +224,6 @@ public class Optimizer {
         Memo memo = context.getMemo();
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-        // collect all olap scan operator
-        collectAllLogicalOlapScanOperators(logicOperatorTree, rootTaskContext);
 
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
@@ -304,7 +302,9 @@ public class Optimizer {
         memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
-    private void prepare(ConnectContext connectContext, ColumnRefFactory columnRefFactory) {
+    private void prepare(ConnectContext connectContext,
+                         ColumnRefFactory columnRefFactory,
+                         OptExpression logicOperatorTree) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();
@@ -313,6 +313,10 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         context.setQueryTables(queryTables);
         context.setUpdateTableId(updateTableId);
+
+        // collect all olap scan operator
+        collectAllLogicalOlapScanOperators(logicOperatorTree, context);
+
     }
 
     private void prepareMvRewrite(ConnectContext connectContext, OptExpression logicOperatorTree,
@@ -834,10 +838,10 @@ public class Optimizer {
         return expression;
     }
 
-    private void collectAllLogicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
+    private void collectAllLogicalOlapScanOperators(OptExpression tree, OptimizerContext optimizerContext) {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
-        rootTaskContext.setAllLogicalOlapScanOperators(Collections.unmodifiableList(list));
+        optimizerContext.setAllLogicalOlapScanOperators(Collections.unmodifiableList(list));
     }
 
     private void collectAllPhysicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
