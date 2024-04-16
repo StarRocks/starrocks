@@ -73,7 +73,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
     _tablet_schema = !tablet_schema ? _tablet->tablet_schema() : tablet_schema;
 }
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema,
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaCSPtr& tablet_schema,
                            Schema schema)
         : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {
     _tablet_schema = tablet_schema;
