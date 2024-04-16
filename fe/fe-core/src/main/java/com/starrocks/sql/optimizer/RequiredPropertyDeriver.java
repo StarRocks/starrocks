@@ -23,14 +23,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-<<<<<<< HEAD
-import com.starrocks.sql.optimizer.base.OrderSpec;
-=======
-import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
-import com.starrocks.sql.optimizer.base.EmptySortProperty;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
->>>>>>> 3afec4e5ff ([BugFix] fix required property derived for no cte operator (#44090))
+import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -50,20 +44,13 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
->>>>>>> 3afec4e5ff ([BugFix] fix required property derived for no cte operator (#44090))
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-<<<<<<< HEAD
-=======
 import java.util.Map;
-import java.util.Optional;
->>>>>>> 3afec4e5ff ([BugFix] fix required property derived for no cte operator (#44090))
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -372,16 +359,16 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             List<Ordering> orderingList = requirementsFromParent.getSortProperty().getSpec().getOrderDescs();
             for (Ordering ordering : orderingList) {
                 if (!colIds.contains(ordering.getColumnRef().getId())) {
-                    sortProperty = EmptySortProperty.INSTANCE;
+                    sortProperty = SortProperty.EMPTY;
                     break;
                 }
             }
 
             if (distributionProperty.getSpec() instanceof HashDistributionSpec) {
                 HashDistributionSpec spec = (HashDistributionSpec) distributionProperty.getSpec();
-                for (DistributionCol distributionCol : spec.getShuffleColumns()) {
-                    if (!colIds.contains(distributionCol.getColId())) {
-                        distributionProperty = EmptyDistributionProperty.INSTANCE;
+                for (Integer colId : spec.getShuffleColumns()) {
+                    if (!colIds.contains(colId)) {
+                        distributionProperty = DistributionProperty.EMPTY;
                         break;
                     }
                 }
