@@ -10,7 +10,7 @@ Release date: April 16, 2024
 
 ### Bug Fixes
 
-Fixed the following issues:
+Fixed the following issue:
 
 - The privileges of external tables cannot be found due to incompatibility issues. [#44030](https://github.com/StarRocks/starrocks/pull/44030)
 
