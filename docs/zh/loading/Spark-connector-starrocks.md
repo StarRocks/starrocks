@@ -184,7 +184,7 @@ DISTRIBUTED BY HASH(`id`)
 
 #### 网络配置
 
-确保 Spark 所在机器能够访问 StarRocks 集群中 FE 所在机器的 `http_port` 和 `query_port` 端口，以及 BE 所在机器的 `http_port` 端口。
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 所在机器的  [`http_port`](../administration/management/FE_configuration.md#http_port) 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口，以及 BE 所在机器的 [`http_port`](../administration/management/BE_configuration.md#be_http_port) 端口。
 
 ### 使用 Spark DataFrame 写入数据
 

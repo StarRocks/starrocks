@@ -270,6 +270,10 @@ The processing logic of the underlying storage engine used by StarRocks cannot c
 
 The following examples assume you have created a database named `test` in your StarRocks cluster and you have the permissions of user `root`. The parameter settings in the examples are based on Spark Connector 1.1.0.
 
+### Network configuration
+
+Ensure that the machine where Spark is located can access the machine where the FE or FEs in a StarRocks cluster are located through the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`query_port`](../administration/management/FE_configuration.md#query_port) ports, and access the machines where the BEs in a StarRocks cluster are located through the [`http_port`](../administration/management/BE_configuration.md#be_http_port) port.
+
 ### Data example
 
 Do as follows to prepare a sample table:
