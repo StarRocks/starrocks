@@ -100,7 +100,26 @@ public class MVPartitionPruner {
                 } catch (AnalysisException e) {
                     // ignore
                 }
-                return optExpression;
+
+                final LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
+                // reset original partition predicates to prune partitions/tablets again
+                builder.withOperator(scanOperator);
+                if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
+                    // refresh iceberg table's metadata
+                    Table refBaseTable = scanOperator.getTable();
+                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
+                    String catalogName = cachedIcebergTable.getCatalogName();
+                    String dbName = cachedIcebergTable.getRemoteDbName();
+                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
+                    Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+                    if (currentTable == null) {
+                        return null;
+                    }
+                    // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
+                    builder.setTable(currentTable);
+                }
+                LogicalScanOperator newScanOperator = builder.build();
+                return OptExpression.create(newScanOperator);
             }
         }
 
@@ -256,20 +275,6 @@ public class MVPartitionPruner {
                 Preconditions.checkState(externalExtraPredicate != null);
                 ScalarOperator finalPredicate = Utils.compoundAnd(refScanOperator.getPredicate(), externalExtraPredicate);
                 builder.setPredicate(finalPredicate);
-                if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-                    // refresh iceberg table's metadata
-                    Table refBaseTable = refScanOperator.getTable();
-                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
-                    String catalogName = cachedIcebergTable.getCatalogName();
-                    String dbName = cachedIcebergTable.getRemoteDbName();
-                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                    Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
-                    if (currentTable == null) {
-                        return null;
-                    }
-                    // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
-                    builder.setTable(currentTable);
-                }
                 LogicalScanOperator newScanOperator = builder.build();
                 return OptExpression.create(newScanOperator);
             } else {
