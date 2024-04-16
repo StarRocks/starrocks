@@ -244,11 +244,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             expected_values[i] = r;
             key_indexes_info.insert(i);
         }
-        ASSERT_OK(sst->multi_get(keys.data(), key_indexes_info, 100, values.data(), &found_keys_info));
-        ASSERT_EQ(key_indexes_info, found_keys_info);
-        for (int i = 0; i < N / 2; i++) {
-            ASSERT_EQ(expected_values[i], values[i]);
-        }
+        ASSERT_FALSE(sst->multi_get(keys.data(), key_indexes_info, 100, values.data(), &found_keys_info));
     }
     {
         // 4. multi get without version (all keys included)
@@ -298,11 +294,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             expected_values[i] = r;
             key_indexes_info.insert(i);
         }
-        ASSERT_OK(sst->multi_get(keys.data(), key_indexes_info, 99, values.data(), &found_keys_info));
-        ASSERT_TRUE(found_keys_info.empty());
-        for (int i = 0; i < N / 2; i++) {
-            ASSERT_EQ(NullIndexValue, values[i].get_value());
-        }
+        ASSERT_FALSE(sst->multi_get(keys.data(), key_indexes_info, 99, values.data(), &found_keys_info));
     }
     {
         // 6. multi get with version (some keys included)
@@ -325,11 +317,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             }
             key_indexes_info.insert(i);
         }
-        ASSERT_OK(sst->multi_get(keys.data(), key_indexes_info, 100, values.data(), &found_keys_info));
-        ASSERT_EQ(expected_found_cnt, found_keys_info.size());
-        for (int i = 0; i < N / 2; i++) {
-            ASSERT_EQ(expected_values[i], values[i]);
-        }
+        ASSERT_FALSE(sst->multi_get(keys.data(), key_indexes_info, 100, values.data(), &found_keys_info));
     }
     {
         // 7. multi get without version (some keys included)
@@ -371,7 +359,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             IndexValueWithVerPB index_value_with_ver_pb;
             ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
             ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-            ASSERT_EQ(index_value_with_ver_pb.values(0), i);
+            ASSERT_EQ(index_value_with_ver_pb.items(0).rowid(), i);
             i++;
         }
         ASSERT_OK(iter->status());
@@ -389,7 +377,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             IndexValueWithVerPB index_value_with_ver_pb;
             ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
             ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-            ASSERT_EQ(index_value_with_ver_pb.values(0), i);
+            ASSERT_EQ(index_value_with_ver_pb.items(0).rowid(), i);
             i--;
         }
         ASSERT_OK(iter->status());
@@ -410,7 +398,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
                 IndexValueWithVerPB index_value_with_ver_pb;
                 ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
                 ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-                ASSERT_EQ(index_value_with_ver_pb.values(0), r);
+                ASSERT_EQ(index_value_with_ver_pb.items(0).rowid(), r);
             } else {
                 ASSERT_FALSE(iter->Valid());
             }

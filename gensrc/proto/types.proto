@@ -171,9 +171,16 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
+message IndexValueWithVerItemPB {
+    // will be set after mvcc support
+    optional int64 version = 1;
+    // rowset id & segment id
+    optional uint32 rssid = 2;
+    optional uint32 rowid = 3;
+}
+
 message IndexValueWithVerPB {
-    repeated int64 versions = 1;
-    repeated uint64 values = 2;
+    repeated IndexValueWithVerItemPB items = 1;
 }
 
 message PersistentIndexSstablePB {

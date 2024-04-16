@@ -21,9 +21,11 @@ public:
 
     // Takes ownership of "iter" and will delete it when destroyed, or
     // when Set() is invoked again.
-    void Set(Iterator* iter) {
+    void Set(Iterator* iter, int64_t version = 0, size_t index = 0) {
         delete iter_;
         iter_ = iter;
+        version_ = version;
+        index_ = index;
         if (iter_ == nullptr) {
             valid_ = false;
         } else {
@@ -71,6 +73,8 @@ public:
         iter_->SeekToLast();
         Update();
     }
+    int64_t version() const { return version_; }
+    size_t index() const { return index_; }
 
 private:
     void Update() {
@@ -83,6 +87,10 @@ private:
     Iterator* iter_;
     bool valid_;
     Slice key_;
+    // sstable's version
+    int64_t version_;
+    // sstable's index in sstable meta
+    size_t index_;
 };
 
 } // namespace sstable

@@ -47,8 +47,9 @@ Status PersistentIndexSstable::build_sstable(
     for (const auto& [k, v] : map) {
         IndexValueWithVerPB index_value_pb;
         for (const auto& index_value_with_ver : v) {
-            index_value_pb.add_versions(index_value_with_ver.first);
-            index_value_pb.add_values(index_value_with_ver.second.get_value());
+            auto* item = index_value_pb.add_items();
+            item->set_rssid(index_value_with_ver.second.get_rssid());
+            item->set_rowid(index_value_with_ver.second.get_rowid());
         }
         builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
     }
@@ -77,17 +78,13 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
-        if (version < 0 && index_value_with_ver_pb.values_size() > 0) {
-            values[key_index] = IndexValue(index_value_with_ver_pb.values(0));
+        DCHECK(index_value_with_ver_pb.items_size() > 0);
+        if (version < 0) {
+            values[key_index] = IndexValue(((uint64_t)index_value_with_ver_pb.items(0).rssid() << 32) |
+                                           index_value_with_ver_pb.items(0).rowid());
             found_key_indexes->insert(key_index);
         } else {
-            for (size_t j = 0; j < index_value_with_ver_pb.versions_size(); ++j) {
-                if (index_value_with_ver_pb.versions(j) == version) {
-                    values[key_index] = IndexValue(index_value_with_ver_pb.values(j));
-                    found_key_indexes->insert(key_index);
-                    break;
-                }
-            }
+            return Status::NotSupported("persistent index not support mvcc yet");
         }
         ++i;
     }

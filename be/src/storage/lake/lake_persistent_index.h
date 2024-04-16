@@ -16,6 +16,7 @@
 
 #include "storage/lake/tablet_metadata.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/iterator.h"
 
 namespace starrocks {
 class TxnLogPB;
@@ -39,10 +40,11 @@ using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class KeyValueMerger {
 public:
-    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder)
-            : _key(std::move(key)), _builder(builder) {}
+    explicit KeyValueMerger(const std::string& key, const sstable::EntryVersion& version,
+                            sstable::TableBuilder* builder)
+            : _key(std::move(key)), _version(version), _builder(builder) {}
 
-    Status merge(const std::string& key, const std::string& value);
+    Status merge(const std::string& key, const std::string& value, const sstable::EntryVersion& version);
 
     void finish() { flush(); }
 
@@ -51,6 +53,7 @@ private:
 
 private:
     std::string _key;
+    sstable::EntryVersion _version;
     sstable::TableBuilder* _builder;
     std::list<IndexValueWithVer> _index_value_vers;
 };
@@ -142,7 +145,10 @@ private:
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
-    std::unique_ptr<sstable::Iterator> prepare_merging_iterator();
+    // get sstable's iterator that need to compact and modify txn_log
+    Status prepare_merging_iterator(TxnLogPB* txn_log,
+                                    std::vector<std::shared_ptr<PersistentIndexSstable>>* clone_sstables,
+                                    std::unique_ptr<sstable::Iterator>* merge_iter_ptr);
 
     Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
 
@@ -154,7 +160,9 @@ private:
     // The size of sstables is not expected to be too large.
     // In major compaction, some sstables will be picked to be merged into one.
     // sstables are ordered with the smaller version on the left.
-    std::vector<std::unique_ptr<PersistentIndexSstable>> _sstables;
+    std::vector<std::shared_ptr<PersistentIndexSstable>> _sstables;
+    // Compact thread and publish version thread will visit _sstables concurrently.
+    mutable std::shared_mutex _sstables_mutex;
 };
 
 } // namespace lake

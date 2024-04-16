@@ -13,36 +13,39 @@ namespace starrocks::sstable {
 namespace {
 class MergingIterator : public Iterator {
 public:
-    MergingIterator(const Comparator* comparator, Iterator** children, int n)
-            : comparator_(comparator), children_(new IteratorWrapper[n]), n_(n) {
-        for (int i = 0; i < n; i++) {
-            children_[i].Set(children[i]);
+    MergingIterator(const Comparator* comparator, const std::vector<Iterator*>& childrens,
+                    const std::vector<int64_t>& versions)
+            : comparator_(comparator) {
+        DCHECK(childrens.size() == versions.size());
+        childrens_.resize(childrens.size());
+        for (size_t i = 0; i < childrens_.size(); i++) {
+            childrens_[i].Set(childrens[i], versions[i], i);
         }
     }
 
-    ~MergingIterator() override { delete[] children_; }
+    ~MergingIterator() override {}
 
     bool Valid() const override { return (current_ != nullptr); }
 
     void SeekToFirst() override {
-        for (int i = 0; i < n_; i++) {
-            children_[i].SeekToFirst();
+        for (int i = 0; i < childrens_.size(); i++) {
+            childrens_[i].SeekToFirst();
         }
         FindSmallest();
         direction_ = kForward;
     }
 
     void SeekToLast() override {
-        for (int i = 0; i < n_; i++) {
-            children_[i].SeekToLast();
+        for (int i = 0; i < childrens_.size(); i++) {
+            childrens_[i].SeekToLast();
         }
         FindLargest();
         direction_ = kReverse;
     }
 
     void Seek(const Slice& target) override {
-        for (int i = 0; i < n_; i++) {
-            children_[i].Seek(target);
+        for (int i = 0; i < childrens_.size(); i++) {
+            childrens_[i].Seek(target);
         }
         FindSmallest();
         direction_ = kForward;
@@ -57,8 +60,8 @@ public:
         // the smallest child and key() == current_->key().  Otherwise,
         // we explicitly position the non-current_ children.
         if (direction_ != kForward) {
-            for (int i = 0; i < n_; i++) {
-                IteratorWrapper* child = &children_[i];
+            for (int i = 0; i < childrens_.size(); i++) {
+                IteratorWrapper* child = &childrens_[i];
                 if (child != current_) {
                     child->Seek(key());
                     if (child->Valid() && comparator_->Compare(key(), child->key()) == 0) {
@@ -82,8 +85,8 @@ public:
         // the largest child and key() == current_->key().  Otherwise,
         // we explicitly position the non-current_ children.
         if (direction_ != kReverse) {
-            for (int i = 0; i < n_; i++) {
-                IteratorWrapper* child = &children_[i];
+            for (int i = 0; i < childrens_.size(); i++) {
+                IteratorWrapper* child = &childrens_[i];
                 if (child != current_) {
                     child->Seek(key());
                     if (child->Valid()) {
@@ -112,10 +115,12 @@ public:
         return current_->value();
     }
 
+    EntryVersion entry_version() const override { return {current_->version(), current_->index()}; }
+
     Status status() const override {
         Status status;
-        for (int i = 0; i < n_; i++) {
-            status = children_[i].status();
+        for (int i = 0; i < childrens_.size(); i++) {
+            status = childrens_[i].status();
             if (!status.ok()) {
                 break;
             }
@@ -134,16 +139,15 @@ private:
     // For now we use a simple array since we expect a very small number
     // of children in leveldb.
     const Comparator* comparator_;
-    IteratorWrapper* children_;
-    int n_;
+    std::vector<IteratorWrapper> childrens_;
     IteratorWrapper* current_{nullptr};
     Direction direction_{kForward};
 };
 
 void MergingIterator::FindSmallest() {
     IteratorWrapper* smallest = nullptr;
-    for (int i = 0; i < n_; i++) {
-        IteratorWrapper* child = &children_[i];
+    for (int i = 0; i < childrens_.size(); i++) {
+        IteratorWrapper* child = &childrens_[i];
         if (child->Valid()) {
             if (smallest == nullptr) {
                 smallest = child;
@@ -157,8 +161,8 @@ void MergingIterator::FindSmallest() {
 
 void MergingIterator::FindLargest() {
     IteratorWrapper* largest = nullptr;
-    for (int i = n_ - 1; i >= 0; i--) {
-        IteratorWrapper* child = &children_[i];
+    for (int i = childrens_.size() - 1; i >= 0; i--) {
+        IteratorWrapper* child = &childrens_[i];
         if (child->Valid()) {
             if (largest == nullptr) {
                 largest = child;
@@ -171,14 +175,12 @@ void MergingIterator::FindLargest() {
 }
 } // namespace
 
-Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children, int n) {
-    assert(n >= 0);
-    if (n == 0) {
+Iterator* NewMergingIterator(const Comparator* comparator, const std::vector<Iterator*>& childrens,
+                             const std::vector<int64_t>& versions) {
+    if (childrens.empty()) {
         return NewEmptyIterator();
-    } else if (n == 1) {
-        return children[0];
     } else {
-        return new MergingIterator(comparator, children, n);
+        return new MergingIterator(comparator, childrens, versions);
     }
 }
 

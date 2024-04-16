@@ -255,6 +255,7 @@ Status TableBuilder::Finish() {
     }
     // sync file at last
     r->status = r->file->sync();
+    LOG(INFO) << "sst build finish : " << r->file->filename();
     return r->status;
 }
 

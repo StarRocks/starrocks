@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <vector>
+
 namespace starrocks::sstable {
 
 class Comparator;
@@ -16,7 +18,8 @@ class Iterator;
 // The result does no duplicate suppression.  I.e., if a particular
 // key is present in K child iterators, it will be yielded K times.
 //
-// REQUIRES: n >= 0
-Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children, int n);
+// REQUIRES: childrens.size() == versions.size()
+Iterator* NewMergingIterator(const Comparator* comparator, const std::vector<Iterator*>& childrens,
+                             const std::vector<int64_t>& versions);
 
 } // namespace starrocks::sstable

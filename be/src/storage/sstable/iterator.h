@@ -9,6 +9,31 @@
 
 namespace starrocks::sstable {
 
+// Entry's version in Iterator.
+struct EntryVersion {
+    EntryVersion(int64_t v, size_t s) : version(v), sub_version(s) {}
+    int64_t version = 0;
+    size_t sub_version = 0;
+
+    bool operator==(const EntryVersion& other) const {
+        return version == other.version && sub_version == other.sub_version;
+    }
+
+    bool operator<(const EntryVersion& other) const {
+        if (version == other.version) {
+            return sub_version < other.sub_version;
+        }
+        return version < other.version;
+    }
+
+    bool operator>(const EntryVersion& other) const {
+        if (version == other.version) {
+            return sub_version > other.sub_version;
+        }
+        return version > other.version;
+    }
+};
+
 class Iterator {
 public:
     Iterator();
@@ -59,6 +84,9 @@ public:
 
     // If an error has occurred, return it.  Else return an ok status.
     virtual Status status() const = 0;
+
+    // Return the version and index for the current entry. Will used in merge iter.
+    virtual EntryVersion entry_version() const { return {0, 0}; }
 
     // Clients are allowed to register function/arg1/arg2 triples that
     // will be invoked when this iterator is destroyed.
