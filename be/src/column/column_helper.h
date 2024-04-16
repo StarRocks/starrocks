@@ -452,7 +452,7 @@ public:
                 matches &= 0x8888'8888'8888'8888ull;
                 for (; matches > 0; matches &= matches - 1) {
                     uint32_t index = __builtin_ctzll(matches) >> 2;
-                    *(data + result_offset++) = *(data + index);
+                    *(data + result_offset++) = *(data + start_offset + index);
                 }
             }
 
