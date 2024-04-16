@@ -2101,7 +2101,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- Default: 3600
+- Default: 4 * 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
