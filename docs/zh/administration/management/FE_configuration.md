@@ -1042,6 +1042,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
 - 引入版本：v3.1.5
 
+#### metadata_enable_recovery_mode
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
+- 引入版本：v3.3.0
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -3731,17 +3740,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：
 - 引入版本：-
--->
-
-<!--
-#### metadata_enable_recovery_mode
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 含义：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
-- 默认值：FALSE
-- 引入版本：3.3
 -->
 
 <!--
