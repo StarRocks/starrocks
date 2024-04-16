@@ -265,6 +265,10 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 
 假设您的 StarRocks 集群中已创建数据库 `test`，并且您拥有 `root` 账号权限。示例的参数配置基于 Spark Connector 1.1.0 版本。
 
+### 网络设置
+
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 所在机器的 `http_port` 和 `query_port` 端口，以及 BE 所在机器的 `http_port` 端口。
+
 ### 数据样例
 
 执行如下步骤，准备数据样例：

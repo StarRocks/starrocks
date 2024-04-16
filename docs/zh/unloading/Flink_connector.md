@@ -164,6 +164,10 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 >
 > 如果读取任务失败，您需要重新创建读取任务。
 
+### 网络设置
+
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 所在机器的 `http_port` 和 `query_port` 端口，以及 BE 所在机器的 `http_port` 端口。
+
 ### 数据样例
 
 1. 进入 `test` 数据库，创建一张名为 `score_board` 的表。

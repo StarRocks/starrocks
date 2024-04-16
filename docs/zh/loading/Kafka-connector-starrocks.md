@@ -35,7 +35,7 @@ StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka�
 
   Kafka connector 目前尚未上传到 Confluent Hub，您需要下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 ZIP 文件并上传到 Confluent Cloud。
 
-#### 网络配置
+### 网络配置
 
 确保 Kafka 所在机器能够访问 StarRocks 集群中 FE 所在机器的 `http_port` 和 `query_port` 端口，以及 BE 所在机器的 `http_port` 端口。
 
