@@ -86,7 +86,9 @@ public class MvRefreshArbiter {
             mvBaseTableUpdateInfo.getToRefreshPartitionNames().addAll(baseTableUpdatedPartitionNames);
         } else {
             Set<String> updatePartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
-
+            if (updatePartitionNames == null) {
+                return null;
+            }
             Map<Table, Column> partitionTableAndColumns = mv.getRelatedPartitionTableAndColumn();
             if (!partitionTableAndColumns.containsKey(baseTable)) {
                 // ATTENTION: This partition value is not formatted to mv partition type.
@@ -243,7 +245,9 @@ public class MvRefreshArbiter {
 
             // once mv's base table has updated, refresh the materialized view totally.
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
-            if (mvBaseTableUpdateInfo == null || CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
+            // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
+            if (mvBaseTableUpdateInfo != null &&
+                    CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
             }
