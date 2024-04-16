@@ -1041,6 +1041,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics.
 - Introduced in: v3.1.5
 
+#### metadata_enable_recovery_mode
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
+- Introduced in: v3.3.0
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -3401,17 +3410,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description:
 - Introduced in: -
--->
-
-<!--
-#### metadata_enable_recovery_mode
-
-- **Default:** FALSE
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- **Description:** Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
-- **Introduced in:** 3.3
 -->
 
 <!--
