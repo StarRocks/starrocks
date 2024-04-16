@@ -563,6 +563,7 @@ void TabletManager::remove_in_writing_data_size(int64_t tablet_id) {
 }
 
 void TabletManager::clean_in_writing_data_size() {
+#ifdef USE_STAROS
     std::unique_lock wrlock(_meta_lock);
     for (auto it = _tablet_in_writing_size.begin(); it != _tablet_in_writing_size.end();) {
         VLOG(1) << "clean in writing data size of tablet " << it->first << " size: " << it->second;
@@ -572,6 +573,7 @@ void TabletManager::clean_in_writing_data_size() {
             ++it;
         }
     }
+#endif
 }
 
 void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchemaPtr schema) {
