@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
+import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Test;
@@ -117,5 +118,63 @@ public class ComputeNodeTest {
         boolean needSync = node.handleHbResponse(hbResponse, false);
         Assert.assertTrue(node.getLastStartTime() == 1000000L);
         Assert.assertTrue(needSync);
+    }
+
+    @Test
+    public void testShutdownStatus() {
+        ComputeNode node = new ComputeNode();
+        ComputeNode nodeInFollower = new ComputeNode();
+        long hbTimestamp = System.currentTimeMillis();
+        BackendHbResponse hbResponse =
+                new BackendHbResponse(node.getId(), node.getBePort(), node.getHttpPort(), node.getBrpcPort(),
+                        node.getStarletPort(), hbTimestamp, node.getVersion(), node.getCpuCores());
+
+        node.handleHbResponse(hbResponse, false);
+        { // regular HbResponse
+            Assert.assertFalse(node.handleHbResponse(hbResponse, false));
+            Assert.assertTrue(node.isAlive());
+            Assert.assertEquals(ComputeNode.Status.OK, node.getStatus());
+        }
+        { // first shutdown HbResponse
+            BackendHbResponse shutdownResponse =
+                    new BackendHbResponse(node.getId(), TStatusCode.SHUTDOWN, "BE is in shutting down");
+
+            Assert.assertTrue(node.handleHbResponse(shutdownResponse, false));
+            Assert.assertFalse(node.isAlive());
+            Assert.assertEquals(ComputeNode.Status.SHUTDOWN, node.getStatus());
+            Assert.assertEquals(shutdownResponse.getHbTime(), node.getLastUpdateMs());
+        }
+        { // second shutdown HbResponse
+            BackendHbResponse shutdownResponse =
+                    new BackendHbResponse(node.getId(), TStatusCode.SHUTDOWN, "BE is in shutting down");
+
+            Assert.assertTrue(node.handleHbResponse(shutdownResponse, false));
+            Assert.assertTrue(nodeInFollower.handleHbResponse(shutdownResponse, true));
+            Assert.assertFalse(node.isAlive());
+            Assert.assertEquals(ComputeNode.Status.SHUTDOWN, node.getStatus());
+            Assert.assertEquals(ComputeNode.Status.SHUTDOWN, nodeInFollower.getStatus());
+            Assert.assertEquals(shutdownResponse.getHbTime(), node.getLastUpdateMs());
+            Assert.assertEquals(shutdownResponse.getHbTime(), nodeInFollower.getLastUpdateMs());
+        }
+        long lastUpdateTime = node.getLastUpdateMs();
+        for (int i = 0; i <= Config.heartbeat_retry_times + 2; ++i) {
+            BackendHbResponse errorResponse =
+                    new BackendHbResponse(node.getId(), TStatusCode.INTERNAL_ERROR, "Internal Error");
+
+            Assert.assertTrue(node.handleHbResponse(errorResponse, false));
+            Assert.assertTrue(nodeInFollower.handleHbResponse(errorResponse, true));
+            Assert.assertFalse(node.isAlive());
+            // lasUpdateTime will not be updated
+            Assert.assertEquals(lastUpdateTime, node.getLastUpdateMs());
+
+            // start from the (heartbeat_retry_times-1)th response (started from 0), the status changed to disconnected.
+            if (i >= Config.heartbeat_retry_times - 1) {
+                Assert.assertEquals(String.format("i=%d", i), ComputeNode.Status.DISCONNECTED, node.getStatus());
+                Assert.assertEquals(String.format("i=%d", i), ComputeNode.Status.DISCONNECTED, nodeInFollower.getStatus());
+            } else {
+                Assert.assertEquals(String.format("i=%d", i), ComputeNode.Status.SHUTDOWN, node.getStatus());
+                Assert.assertEquals(String.format("i=%d", i), ComputeNode.Status.SHUTDOWN, nodeInFollower.getStatus());
+            }
+        }
     }
 }
