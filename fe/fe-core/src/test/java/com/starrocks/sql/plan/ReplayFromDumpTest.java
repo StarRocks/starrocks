@@ -575,8 +575,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [10: o_custkey, INT, true] = [1: c_custkey, INT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (1: c_custkey), remote = false\n" +
                 "  |  output columns: 4, 9\n" +
                 "  |  cardinality: 22765073"));
     }

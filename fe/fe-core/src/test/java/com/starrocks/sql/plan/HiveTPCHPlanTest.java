@@ -41,7 +41,6 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         connectContext.changeCatalogDb("hive0.tpch");
-        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSelectivity(0);
         connectContext.getSessionVariable().setRuneTimeFilterScanMaxWaitTime(
                 connectContext.getSessionVariable().getGlobalRuntimeFilterWaitTimeout());
     }
