@@ -260,8 +260,9 @@ Status LakePersistentIndex::prepare_merging_iterator(
         }
     });
 
-    auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
-    iters.reserve(max_compaction_versions);
+    auto max_compaction_bytes = config::lake_pk_index_sst_max_compaction_bytes;
+    iters.reserve(metadata.sstable_meta().sstables().size());
+    size_t total_filesize = 0;
     std::stringstream ss_debug;
     for (const auto& sstable_pb : metadata.sstable_meta().sstables()) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
@@ -272,10 +273,12 @@ Status LakePersistentIndex::prepare_merging_iterator(
         merging_sstables->push_back(merging_sstable);
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
+        total_filesize += sstable_pb.filesize();
         // add input sstable.
         txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
         ss_debug << sstable_pb.filename() << " | ";
-        if (iters.size() >= max_compaction_versions) {
+        if (total_filesize >= max_compaction_bytes &&
+            merging_sstables->size() >= config::lake_pk_index_sst_min_compaction_versions) {
             break;
         }
     }

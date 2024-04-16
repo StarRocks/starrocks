@@ -1162,7 +1162,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     }
     // Prepare data for writing
     std::vector<Chunk> chunks;
-    int N = config::lake_pk_index_sst_max_compaction_versions + 5;
+    int N = 10;
     for (int i = 0; i < N; i++) {
         chunks.push_back(generate_data(kChunkSize, i));
     }
@@ -1209,7 +1209,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     version++;
     ASSERT_EQ(kChunkSize * N, read(version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(config::lake_pk_index_sst_max_compaction_versions, new_tablet_metadata->orphan_files_size());
+    EXPECT_EQ(N - 1, new_tablet_metadata->orphan_files_size());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
@@ -1220,7 +1220,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
     }
     // Prepare data for writing
     std::vector<Chunk> chunks;
-    int N = config::lake_pk_index_sst_max_compaction_versions + 5;
+    int N = 10;
     for (int i = 0; i < N; i++) {
         chunks.push_back(generate_data(kChunkSize, i));
     }
