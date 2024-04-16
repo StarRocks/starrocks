@@ -109,9 +109,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
 
     roaring::Roaring result;
     try {
-        if (opts != nullptr) {
-            SCOPED_RAW_TIMER(&opts->stats->gin_index_filter_lib_ns);   
-        }
+        SCOPED_RAW_TIMER(&opts->stats->gin_index_filter_lib_ns);   
         RETURN_IF_ERROR(match_operator->match(&result));
     } catch (CLuceneError& e) {
         LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();
