@@ -894,7 +894,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/no_cte_operator_test"),
                         null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("23:Project\n" +
                 "  |  <slot 193> : 193: mock_081\n" +
                 "  |  <slot 194> : 194: mock_089\n" +
