@@ -85,10 +85,14 @@ public class DropStmtAnalyzer {
             }
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
-            Table table;
+            Table table = null;
             String tableName = statement.getTableName();
             try {
-                table = MetaUtils.getSessionAwareTable(context, db, new TableName(catalogName, dbName, tableName));
+                try {
+                    table = MetaUtils.getSessionAwareTable(context, db, new TableName(catalogName, dbName, tableName));
+                } catch (Exception e) {
+                    // an exception will be thrown if table is not found, just ignore it
+                }
                 if (table == null) {
                     if (statement.isSetIfExists()) {
                         LOG.info("drop table[{}] which does not exist", tableName);
