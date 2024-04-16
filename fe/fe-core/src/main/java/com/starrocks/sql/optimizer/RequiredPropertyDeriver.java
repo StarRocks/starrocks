@@ -359,7 +359,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             Map<ColumnRefOperator, ScalarOperator> colMap = node.getProjection().getColumnRefMap();
             Set<Integer> colIds = Sets.newHashSet();
             colMap.entrySet().stream().forEach(e -> {
-                if (e.getKey().equals(e.getValue()) ) {
+                if (e.getKey().equals(e.getValue())) {
                     colIds.add(e.getKey().getId());
                 }
             });
