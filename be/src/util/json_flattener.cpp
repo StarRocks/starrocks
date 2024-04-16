@@ -17,6 +17,7 @@
 
 #include "util/json_flattener.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -36,41 +37,6 @@
 #include "util/json_converter.h"
 
 namespace starrocks {
-
-void append_to_bool(const vpack::Slice* json, NullableColumn* result) {
-    try {
-        if (json->isNone() || json->isNull()) {
-            result->append_nulls(1);
-        } else if (json->isBool()) {
-            result->null_column()->append(0);
-            auto res = json->getBool();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
-        } else if (json->isString()) {
-            vpack::ValueLength len;
-            const char* str = json->getStringUnchecked(len);
-            StringParser::ParseResult parseResult;
-            auto r = StringParser::string_to_int<int32_t>(str, len, &parseResult);
-            if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
-                bool b = StringParser::string_to_bool(str, len, &parseResult);
-                if (parseResult != StringParser::PARSE_SUCCESS) {
-                    result->append_nulls(1);
-                } else {
-                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
-                }
-            } else {
-                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
-            }
-        } else if (json->isNumber()) {
-            result->null_column()->append(0);
-            auto res = json->getNumber<double>();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
-        } else {
-            result->append_nulls(1);
-        }
-    } catch (const vpack::Exception& e) {
-        result->append_nulls(1);
-    }
-}
 
 template <LogicalType TYPE>
 void append_to_number(const vpack::Slice* json, NullableColumn* result) {
@@ -127,7 +93,8 @@ void append_to_json(const vpack::Slice* json, NullableColumn* result) {
 }
 
 using JsonFlatAppendFunc = void (*)(const vpack::Slice* json, NullableColumn* result);
-static const uint8_t JSON_BASE_TYPE_BITS = 0; // least flat to JSON type
+static const uint8_t JSON_BASE_TYPE_BITS = 0;     // least flat to JSON type
+static const uint8_t JSON_BIGINT_TYPE_BITS = 225; // 011000 10, bigint compatible type
 
 // clang-format off
 // bool will flatting as string, because it's need save string-literal(true/false)
@@ -135,15 +102,16 @@ static const uint8_t JSON_BASE_TYPE_BITS = 0; // least flat to JSON type
 static const std::unordered_map<vpack::ValueType, uint8_t> JSON_TYPE_BITS{
         {vpack::ValueType::None, 255},      // 111111 11, 255
         {vpack::ValueType::SmallInt, 241},  // 111100 01, 241
-        {vpack::ValueType::UInt, 224},      // 111000 00, 224
         {vpack::ValueType::Int, 225},       // 111000 01, 225
+        {vpack::ValueType::UInt, 224},      // 111000 00, 224
         {vpack::ValueType::Double, 192},    // 110000 00, 192
         {vpack::ValueType::String, 8},      // 000010 00, 8
 };
 
+// starrocks json fucntio only support read as bigint/string/bool/double, smallint will cast to bigint, so we save as bigint directly
 static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
-    {JSON_TYPE_BITS.at(vpack::ValueType::None),        LogicalType::TYPE_BOOLEAN},
-    {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    LogicalType::TYPE_SMALLINT},
+    {JSON_TYPE_BITS.at(vpack::ValueType::None),        LogicalType::TYPE_TINYINT},
+    {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    LogicalType::TYPE_BIGINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::Int),         LogicalType::TYPE_BIGINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        LogicalType::TYPE_LARGEINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::Double),      LogicalType::TYPE_DOUBLE},
@@ -152,8 +120,8 @@ static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE 
 };
 
 static const std::unordered_map<uint8_t, JsonFlatAppendFunc> JSON_BITS_FUNC {
-    {JSON_TYPE_BITS.at(vpack::ValueType::None),        &append_to_bool},
-    {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    &append_to_number<LogicalType::TYPE_SMALLINT>},
+    {JSON_TYPE_BITS.at(vpack::ValueType::None),        &append_to_number<LogicalType::TYPE_TINYINT>},
+    {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    &append_to_number<LogicalType::TYPE_BIGINT>},
     {JSON_TYPE_BITS.at(vpack::ValueType::Int),         &append_to_number<LogicalType::TYPE_BIGINT>},
     {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        &append_to_number<LogicalType::TYPE_LARGEINT>},
     {JSON_TYPE_BITS.at(vpack::ValueType::Double),      &append_to_number<LogicalType::TYPE_DOUBLE>},
@@ -208,6 +176,9 @@ struct FlatColumnDesc {
     uint64_t hits = 0;
     // how many rows need to be cast to a compatible type
     uint16_t casts = 0;
+
+    // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
+    uint64_t max = 0;
 };
 
 void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
@@ -261,11 +232,15 @@ void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
             for (const auto& it : iter) {
                 std::string_view name = it.key.stringView();
                 derived_maps[name].hits++;
-                uint8_t type = derived_maps[name].type;
-                uint8_t compatibility_type =
-                        JsonFlattener::get_compatibility_type(it.value.type(), derived_maps[name].type);
+                uint8_t base_type = derived_maps[name].type;
+                vpack::ValueType json_type = it.value.type();
+                uint8_t compatibility_type = JsonFlattener::get_compatibility_type(json_type, base_type);
                 derived_maps[name].type = compatibility_type;
-                derived_maps[name].casts += (type != compatibility_type);
+                derived_maps[name].casts += (base_type != compatibility_type);
+
+                if (json_type == vpack::ValueType::UInt) {
+                    derived_maps[name].max = std::max(derived_maps[name].max, it.value.getUIntUnchecked());
+                }
             }
         }
     }
@@ -274,6 +249,14 @@ void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
         VLOG(8) << "flat json, internal column too less: " << derived_maps.size()
                 << ", at least: " << config::json_flat_internal_column_min_limit;
         return;
+    }
+
+    // try downgrade json-uint to bigint
+    int128_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
+    for (auto& [name, desc] : derived_maps) {
+        if (desc.type == JSON_TYPE_BITS.at(vpack::ValueType::UInt) && desc.max <= max) {
+            desc.type = JSON_BIGINT_TYPE_BITS;
+        }
     }
 
     // sort by hit, casts
