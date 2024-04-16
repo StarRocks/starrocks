@@ -320,6 +320,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
                 String tblName = tblRef.getName().getTbl();
+                // @TODO if it is a temporary table, should return different message?
                 Table tbl = db.getTable(tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);

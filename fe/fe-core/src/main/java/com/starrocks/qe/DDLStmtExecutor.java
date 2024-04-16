@@ -307,7 +307,14 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropTableStatement(DropTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+                if (stmt.getTemporaryTableMark()) {
+                    DropTemporaryTableStmt dropTemporaryTableStmt = new DropTemporaryTableStmt(
+                            stmt.isSetIfExists(), stmt.getTbl(), stmt.isForceDrop());
+                    dropTemporaryTableStmt.setSessionId(context.getSessionId());
+                    context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
+                } else {
+                    context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+                }
             });
             return null;
         }
