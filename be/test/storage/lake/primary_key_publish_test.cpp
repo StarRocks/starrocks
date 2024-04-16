@@ -619,6 +619,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
         // only test persistent index
         return;
     }
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    if (GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
+        config::l0_max_mem_usage = 10;
+    }
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -656,6 +660,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
+    config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
