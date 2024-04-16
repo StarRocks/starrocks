@@ -106,7 +106,7 @@ public:
 
     Status minor_compact();
 
-    Status major_compact(int64_t min_retain_version, TxnLogPB* txn_log);
+    Status major_compact(const TabletMetadata& metadata, int64_t min_retain_version, TxnLogPB* txn_log);
 
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
 
@@ -142,7 +142,10 @@ private:
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
-    std::unique_ptr<sstable::Iterator> prepare_merging_iterator();
+    // get sstable's iterator that need to compact and modify txn_log
+    Status prepare_merging_iterator(const TabletMetadata& metadata, TxnLogPB* txn_log,
+                                    std::vector<std::shared_ptr<PersistentIndexSstable>>* sstable_vec,
+                                    std::unique_ptr<sstable::Iterator>* merging_iter_ptr);
 
     Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
 
