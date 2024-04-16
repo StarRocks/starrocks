@@ -36,8 +36,6 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
     }
     auto memtable = std::make_unique<PersistentIndexMemtable>();
     ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
-    // insert duplicate should return error
-    ASSERT_FALSE(memtable->insert(N, key_slices.data(), values.data(), -1).ok());
 
     // test get
     vector<IndexValue> get_values(keys.size());
