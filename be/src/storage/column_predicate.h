@@ -48,6 +48,7 @@ class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
 struct NgramBloomFilterReaderOptions;
+class SegmentReadOptions;
 } // namespace starrocks
 
 namespace starrocks {
@@ -176,7 +177,7 @@ public:
     }
 
     [[nodiscard]] virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                     roaring::Roaring* row_bitmap) const {
+                                                     roaring::Roaring* row_bitmap, SegmentReadOptions* opts = nullptr) const {
         return Status::Cancelled("not implemented");
     }
 

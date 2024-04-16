@@ -96,7 +96,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, SegmentReadOptions* opts = nullptr) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring indices;
         for (auto value : _values) {
@@ -249,7 +249,7 @@ public:
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap, SegmentReadOptions* opts = nullptr) const override {
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring indices;
         for (const std::string& s : _zero_padded_strs) {

@@ -21,9 +21,11 @@
 
 #include "match_operator.h"
 #include "storage/inverted/index_descriptor.hpp"
+#include "storage/rowset/segment_options.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -48,7 +50,7 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
 
 Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const std::string& column_name,
                                             const void* query_value, InvertedIndexQueryType query_type,
-                                            roaring::Roaring* bit_map) {
+                                            roaring::Roaring* bit_map, SegmentReadOptions* opts) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
@@ -107,6 +109,9 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
 
     roaring::Roaring result;
     try {
+        if (opts != nullptr) {
+            SCOPED_RAW_TIMER(&opts->stats->gin_index_filter_lib_ns);   
+        }
         RETURN_IF_ERROR(match_operator->match(&result));
     } catch (CLuceneError& e) {
         LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();

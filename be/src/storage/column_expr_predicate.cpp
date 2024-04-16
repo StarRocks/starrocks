@@ -16,6 +16,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
+#include "storage/rowset/segment_options.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -284,7 +285,11 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     return Status::OK();
 }
 Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                roaring::Roaring* row_bitmap) const {
+                                                roaring::Roaring* row_bitmap, SegmentReadOptions* opts) const {
+    if (opts != nullptr) {
+        SCOPED_RAW_TIMER(&opts->stats->gin_index_filter_predicate_ns);
+    }
+
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
     // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
@@ -337,7 +342,10 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
     }
     roaring::Roaring roaring;
-    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    if (opts != nullptr) {
+        SCOPED_RAW_TIMER(&opts->stats->gin_index_filter_query_ns);
+    }
+    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring, opts));
     if (with_not) {
         *row_bitmap -= roaring;
     } else {

@@ -17,8 +17,9 @@
 namespace starrocks {
 
 Status InvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                                       InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
-    RETURN_IF_ERROR(_reader->query(_stats, column_name, query_value, query_type, bit_map));
+                                                       InvertedIndexQueryType query_type, roaring::Roaring* bit_map,
+                                                       SegmentReadOptions* opts) {
+    RETURN_IF_ERROR(_reader->query(_stats, column_name, query_value, query_type, bit_map, opts));
     return Status::OK();
 }
 

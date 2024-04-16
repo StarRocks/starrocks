@@ -23,6 +23,7 @@ namespace starrocks {
 class InvertedReader;
 enum class InvertedIndexParserType;
 enum class InvertedIndexReaderType;
+class SegmentReadOptions;
 
 class InvertedIndexIterator {
 public:
@@ -33,7 +34,8 @@ public:
     }
 
     Status read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                    InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
+                                    InvertedIndexQueryType query_type, roaring::Roaring* bit_map,
+                                    SegmentReadOptions* opts = nullptr);
 
     Status read_null(const std::string& column_name, roaring::Roaring* bit_map);
 

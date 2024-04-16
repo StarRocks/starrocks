@@ -73,7 +73,7 @@ public:
     }
 
     Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
+                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map, SegmentReadOptions* opts = nullptr) override;
 
     Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override;
 

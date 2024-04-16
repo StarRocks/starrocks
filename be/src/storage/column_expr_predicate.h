@@ -62,7 +62,7 @@ public:
     Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
                                               std::vector<const ColumnExprPredicate*>* output) const;
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                               roaring::Roaring* row_bitmap) const override;
+                               roaring::Roaring* row_bitmap, SegmentReadOptions* opts = nullptr) const override;
 
     const std::vector<ExprContext*>& get_expr_ctxs() const { return _expr_ctxs; }
 

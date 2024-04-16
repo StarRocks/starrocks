@@ -26,6 +26,7 @@
 namespace starrocks {
 
 class InvertedIndexIterator;
+class SegmentReadOptions;
 enum class InvertedIndexReaderType;
 enum class InvertedIndexQueryType;
 
@@ -40,7 +41,8 @@ public:
     virtual Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator) = 0;
 
     virtual Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                         InvertedIndexQueryType query_type, roaring::Roaring* bit_map) = 0;
+                         InvertedIndexQueryType query_type, roaring::Roaring* bit_map,
+                         SegmentReadOptions* opts = nullptr) = 0;
 
     virtual Status query_null(OlapReaderStatistics* stats, const std::string& column_name,
                               roaring::Roaring* bit_map) = 0;

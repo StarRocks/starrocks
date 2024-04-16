@@ -1914,7 +1914,7 @@ Status SegmentIterator::_apply_inverted_index() {
         std::string column_name(_schema.field(it->second)->name());
         for (const ColumnPredicate* pred : pred_list) {
             if (_inverted_index_iterators[cid]->is_untokenized() || pred->type() == PredicateType::kExpr) {
-                Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
+                Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap, &_opts);
                 if (res.ok()) {
                     erased_preds.emplace_back(pred);
                 }
