@@ -87,6 +87,8 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
         l.unlock();
         _scheduler->remove_states(tmp);
+        tmp.clear();
+        TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:finish_task");
     }
 }
 
@@ -359,8 +361,12 @@ Status CompactionScheduler::abort(int64_t txn_id) {
          node = node->next()) {
         CompactionTaskContext* context = node->value();
         if (context->txn_id == txn_id) {
+            auto cb = context->callback;
             l.unlock();
-            context->callback->update_status(Status::Aborted("aborted on demand"));
+            // Do NOT touch |context| since here, it may have been destroyed.
+            TEST_SYNC_POINT("lake::CompactionScheduler::abort:unlock:1");
+            TEST_SYNC_POINT("lake::CompactionScheduler::abort:unlock:2");
+            cb->update_status(Status::Aborted("aborted on demand"));
             return Status::OK();
         }
     }
