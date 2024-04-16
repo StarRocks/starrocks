@@ -419,6 +419,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
+    public static final String RUNTIME_FILTER_SCAN_MAX_WAIT_TIME = "runtime_filter_scan_max_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
@@ -809,6 +810,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
+
+    @VarAttr(name = RUNTIME_FILTER_SCAN_MAX_WAIT_TIME, flag = VariableMgr.INVISIBLE)
+    private long runeTimeFilterScanMaxWaitTime = 1000L;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
     private boolean runtimeFilterOnExchangeNode = false;
@@ -1277,8 +1281,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int globalRuntimeFilterWaitTimeout = 20;
+
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int globalRuntimeFilterRpcTimeout = 400;
+
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
@@ -1432,6 +1438,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPruneJsonSubfield(boolean cboPruneJsonSubfield) {
         this.cboPruneJsonSubfield = cboPruneJsonSubfield;
+    }
+
+    public long getRuneTimeFilterScanMaxWaitTime() {
+        return runeTimeFilterScanMaxWaitTime;
+    }
+
+    public long getRuntimeFilterScanWaitTime() {
+        return runtimeFilterScanWaitTime;
+    }
+
+    public int getGlobalRuntimeFilterWaitTimeout() {
+        return globalRuntimeFilterWaitTimeout;
     }
 
     public void setEnableArrayLowCardinalityOptimize(boolean enableArrayLowCardinalityOptimize) {
@@ -2787,6 +2805,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setGlobalRuntimeFilterProbeMinSize(long globalRuntimeFilterProbeMinSize) {
         this.globalRuntimeFilterProbeMinSize = globalRuntimeFilterProbeMinSize;
+    }
+
+    public int getGlobalRuntimeFilterRpcTimeout() {
+        return globalRuntimeFilterRpcTimeout;
     }
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
