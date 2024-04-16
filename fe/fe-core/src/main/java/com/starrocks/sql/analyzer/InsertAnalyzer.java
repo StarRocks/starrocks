@@ -172,6 +172,7 @@ public class InsertAnalyzer {
         } else {
             targetColumns = new ArrayList<>();
             Set<String> requiredKeyColumns = table.getBaseSchema().stream().filter(Column::isKey)
+                    .filter(c -> c.getDefaultValueType() == Column.DefaultValueType.NULL)
                     .filter(c -> !c.isAutoIncrement()).map(c -> c.getName().toLowerCase()).collect(Collectors.toSet());
             for (String colName : insertStmt.getTargetColumnNames()) {
                 Column column = table.getColumn(colName);
