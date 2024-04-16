@@ -30,6 +30,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.sql.common.RyuDouble;
+import com.starrocks.sql.common.RyuFloat;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -332,6 +334,8 @@ public class FeExecuteCoordinator extends Coordinator {
                             value = String.valueOf(constantOperator.getTinyInt());
                             break;
                         case SMALLINT:
+                            value = String.valueOf(constantOperator.getSmallint());
+                            break;
                         case INT:
                             value = String.valueOf(constantOperator.getInt());
                             break;
@@ -342,11 +346,10 @@ public class FeExecuteCoordinator extends Coordinator {
                             value = String.valueOf(constantOperator.getLargeInt());
                             break;
                         case FLOAT:
+                            value = RyuFloat.floatToString((float) constantOperator.getFloat());
+                            break;
                         case DOUBLE:
-                        case TIME:
-                            double val = constantOperator.getDouble();
-                            BigDecimal decimal = BigDecimal.valueOf(val);
-                            value = decimal.stripTrailingZeros().toPlainString();
+                            value = RyuDouble.doubleToString(constantOperator.getDouble());
                             break;
                         case DECIMALV2:
                             value = constantOperator.getDecimal().toPlainString();

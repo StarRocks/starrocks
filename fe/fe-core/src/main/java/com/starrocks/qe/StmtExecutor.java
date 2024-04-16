@@ -52,6 +52,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
@@ -165,7 +166,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -2312,29 +2312,28 @@ public class StmtExecutor {
 
     // scenes can execute in FE should meet all these requirements:
     // 1. enable_constant_execute_in_fe = true
-    // 2. not in prepare protocol
-    // 3. all values are constantOperator
+    // 2. is mysql text protocol
+    // 3. all values are constantOperator and not time type
     private boolean canExecuteInFe(ConnectContext context, OptExpression optExpression) {
         if (!context.getSessionVariable().isEnableConstantReturnInFE()) {
             return false;
         }
 
-        if (context.getCommand() == MysqlCommand.COM_STMT_EXECUTE) {
+        if (context instanceof HttpConnectContext || context.getCommand() == MysqlCommand.COM_STMT_EXECUTE) {
             return false;
         }
 
         if (optExpression.getOp() instanceof PhysicalValuesOperator) {
             PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpression.getOp();
             boolean isAllConstants = true;
-            if (CollectionUtils.isNotEmpty(valuesOperator.getRows())) {
-                isAllConstants = valuesOperator.getRows().stream()
-                        .allMatch(row -> row.stream().allMatch(e -> e.isConstantRef()));
+            if (valuesOperator.getProjection() != null) {
+                isAllConstants = valuesOperator.getProjection().getColumnRefMap().values().stream()
+                        .allMatch(e -> e.isConstantRef() && e.getType().getPrimitiveType() != PrimitiveType.TIME);
+            } else if (CollectionUtils.isNotEmpty(valuesOperator.getRows())) {
+                isAllConstants = valuesOperator.getRows().stream().allMatch(row ->
+                        row.stream().allMatch(e -> e.isConstantRef() && e.getType().getPrimitiveType() != PrimitiveType.TIME));
             }
 
-            if (valuesOperator.getProjection() != null) {
-                isAllConstants &= valuesOperator.getProjection().getColumnRefMap().values().stream()
-                        .allMatch(ScalarOperator::isConstantRef);
-            }
             return isAllConstants;
         }
         return false;

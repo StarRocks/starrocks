@@ -14,7 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.scheduler.FeExecuteCoordinator;
+import org.junit.Assert;
 import org.junit.Test;
+
+import java.nio.charset.StandardCharsets;
 
 public class SelectConstTest extends PlanTestBase {
     @Test
@@ -150,5 +155,53 @@ public class SelectConstTest extends PlanTestBase {
         String sql = "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 " +
                 "WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
         assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
+    }
+
+    @Test
+    public void testExecuteInFe() throws Exception {
+        assertFeExecuteResult("select -1", "-1");
+        assertFeExecuteResult("select -123456.789", "-123456.789");
+        assertFeExecuteResult("select 100000000000000", "100000000000000");
+        assertFeExecuteResult("select cast(0.00001 as float)", "1.0e-5");
+        assertFeExecuteResult("select cast(0.00000000000001 as double)", "1.0e-14");
+        assertFeExecuteResult("select '2021-01-01'", "2021-01-01");
+        assertFeExecuteResult("select '2021-01-01 01:01:01.1234'", "2021-01-01 01:01:01.1234");
+        assertFeExecuteResult("select cast(1.23456000 as decimalv2)", "1.23456");
+        assertFeExecuteResult("select cast(1.23456000 as DECIMAL(10, 2))", "1.23");
+        assertFeExecuteResult("select cast(1.234560 as DECIMAL(12, 10))", "1.2345600000");
+        assertFeExecuteResult("select '\\'abc'", "'abc");
+        assertFeExecuteResult("select '\"abc'", "\"abc");
+        assertFeExecuteResult("select '\\\\\\'abc'", "\\'abc");
+    }
+
+    private void assertFeExecuteResult (String sql, String expected) throws Exception {
+        ExecPlan execPlan = getExecPlan(sql);
+        FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
+        RowBatch rowBatch = coordinator.getNext();
+        byte[] bytes = rowBatch.getBatch().getRows().get(0).array();
+        int lengthOffset = getOffset(bytes);
+        String value;
+        if (lengthOffset == -1) {
+            value = "NULL";
+        } else {
+            value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
+        }
+        Assert.assertEquals(expected, value);
+    }
+
+    private static int getOffset(byte[] bytes) {
+        int sw = bytes[0] & 0xff;
+        switch (sw) {
+            case 251:
+                return -1;
+            case 252:
+                return 3;
+            case 253:
+                return 4;
+            case 254:
+                return 9;
+            default:
+                return 1;
+        }
     }
 }
