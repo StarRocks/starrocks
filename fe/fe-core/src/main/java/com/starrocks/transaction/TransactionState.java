@@ -263,7 +263,7 @@ public class TransactionState implements Writable {
     private Set<Long> errorReplicas;
 
     @SerializedName("ctl")
-    private boolean combinedTxnLog;
+    private boolean useCombinedTxnLog;
 
     private final CountDownLatch latch;
 
@@ -996,12 +996,12 @@ public class TransactionState implements Writable {
         this.writeDurationMs = writeDurationMs;
     }
 
-    public void setCombinedTxnLog(boolean combinedTxnLog) {
-        this.combinedTxnLog = combinedTxnLog;
+    public void setUseCombinedTxnLog(boolean useCombinedTxnLog) {
+        this.useCombinedTxnLog = useCombinedTxnLog;
     }
 
-    public boolean isCombinedTxnLog() {
-        return combinedTxnLog;
+    public boolean isUseCombinedTxnLog() {
+        return useCombinedTxnLog;
     }
 
     public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {

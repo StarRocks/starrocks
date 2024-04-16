@@ -189,7 +189,7 @@ public class DatabaseTransactionMgr {
                 coordinator, listenerId, timeoutSecond * 1000);
         transactionState.setPrepareTime(System.currentTimeMillis());
         transactionState.setWarehouseId(warehouseId);
-        transactionState.setCombinedTxnLog(combinedTxnLog);
+        transactionState.setUseCombinedTxnLog(combinedTxnLog);
         transactionState.writeLock();
         try {
             writeLock();

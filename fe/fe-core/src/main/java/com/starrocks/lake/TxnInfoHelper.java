@@ -21,7 +21,7 @@ public class TxnInfoHelper {
     public static TxnInfoPB fromTransactionState(TransactionState state) {
         TxnInfoPB infoPB = new TxnInfoPB();
         infoPB.txnId = state.getTransactionId();
-        infoPB.combinedTxnLog = state.isCombinedTxnLog();
+        infoPB.combinedTxnLog = state.isUseCombinedTxnLog();
         infoPB.commitTime = state.getCommitTime() / 1000; // milliseconds to seconds
         infoPB.txnType = state.getTxnTypePB();
         return infoPB;
