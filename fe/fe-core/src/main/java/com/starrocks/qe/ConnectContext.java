@@ -991,7 +991,10 @@ public class ConnectContext {
         if (sessionId == null) {
             return;
         }
-        LOG.info("clean temporary table on session {}", sessionId);
+        if (!GlobalStateMgr.getCurrentState().getTemporaryTableMgr().sessionExists(sessionId)) {
+            return;
+        }
+        LOG.debug("clean temporary table on session {}", sessionId);
         try {
             setQueryId(UUIDUtil.genUUID());
             CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);

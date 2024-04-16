@@ -89,6 +89,9 @@ public class BackupRestoreAnalyzer {
                                         "`Config.enable_backup_materialized_view=false`", tbl.getName());
                         continue;
                     }
+                    if (tbl.isTemporaryTable()) {
+                        continue;
+                    }
                     TableName tableName = new TableName(dbName, tbl.getName());
                     TableRef tableRef = new TableRef(tableName, null, null);
                     tableRefs.add(tableRef);
@@ -382,7 +385,6 @@ public class BackupRestoreAnalyzer {
 
         PartitionNames partitionNames = tableRef.getPartitionNames();
         Table tbl = db.getTable(tableName.getTbl());
-        // @TODO if we found a temporary table, should we report an specific error message?
         if (null == tbl) {
             throw new SemanticException(ErrorCode.ERR_WRONG_TABLE_NAME.formatErrorMsg(tableName.getTbl()));
         }

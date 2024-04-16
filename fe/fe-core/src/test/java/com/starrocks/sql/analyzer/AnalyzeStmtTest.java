@@ -176,7 +176,7 @@ public class AnalyzeStmtTest {
     public void testAnalyzeHiveResource() {
         new MockUp<MetaUtils>() {
             @Mock
-            public Table getTable(ConnectContext session, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext session, Database database, TableName tableName) {
                 return new HiveTable(1, "customer", Lists.newArrayList(), "resource_name",
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("resource_name", "hive"),
                         "hive", "tpch", "", "",

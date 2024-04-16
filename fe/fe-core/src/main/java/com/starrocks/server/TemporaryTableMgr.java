@@ -154,6 +154,10 @@ public class TemporaryTableMgr {
         return result;
     }
 
+    public boolean sessionExists(UUID sessionId) {
+        return tablesMap.containsKey(sessionId);
+    }
+
     public Set<UUID> listSessions() {
         return tablesMap.keySet();
     }

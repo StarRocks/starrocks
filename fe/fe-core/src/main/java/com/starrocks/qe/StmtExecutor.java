@@ -113,7 +113,6 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ExplainAnalyzer;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -1526,10 +1525,6 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        if (parsedStmt instanceof ShowTemporaryTableStmt) {
-            ((ShowTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
-        }
-
         ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
             // state changed in execute

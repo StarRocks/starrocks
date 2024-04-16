@@ -409,12 +409,6 @@ public class AnalyzeMgr implements Writable {
                     tables.add(table.getId());
                 }
             }
-            // consider temporary table
-            for (Table table : db.getTemporaryTables()) {
-                if (!StatisticUtils.isEmptyTable(table)) {
-                    tables.add(table.getId());
-                }
-            }
         }
 
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
