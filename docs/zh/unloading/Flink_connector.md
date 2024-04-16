@@ -101,7 +101,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ### 网络设置
 
-确保 Flink 所在机器能够访问 StarRocks 集群中 FE 所在机器的 `http_port` 和 `query_port` 端口，以及 BE 所在机器的 `http_port` 端口。
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 所在机器的 [`http_port`](../administration/management/FE_configuration.md#http_port) 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口，以及 BE 所在机器的 [`http_port`](../administration/management/BE_configuration.md#be_http_port) 端口。
 
 ## 参数说明
 
