@@ -19,6 +19,9 @@
 #include <vector>
 #ifdef __SSE2__
 #include <emmintrin.h>
+#elif defined(__ARM_NEON__) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
 #endif
 
 namespace SIMD {
@@ -189,5 +192,19 @@ inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start, size
     size_t pos = find_nonzero(list, start, count);
     return pos < list.size() && pos < start + count;
 }
+
+#if defined(__ARM_NEON__) && defined(__aarch64__)
+
+/// Returns a 64-bit mask, each 4-bit represents a byte of the input.
+/// The input containes 16 bytes and is expected to either 0x00 or 0xff for each byte.
+/// The returned 4-bit is 0x if the corresponding byte of the input is 0x00, otherwise it is 0xf.
+inline uint64_t get_nibble_mask(uint8x16_t values) {
+    // vshrn_n_u16(values, 4) operates on each 16 bits. It right shifts 4 bits and then keeps the low 8 bits.
+    // Therefore, 2 bytes of value can be compressed into 1 byte.
+    // For example, 0x00'00 -> 0x00, 0xff'00 -> 0xf0, 0x00'ff -> 0x0f, 0xff'ff -> 0xff,
+    return vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(values), 4)), 0);
+}
+
+#endif
 
 } // namespace SIMD

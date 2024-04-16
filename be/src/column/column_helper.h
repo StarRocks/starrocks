@@ -33,6 +33,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
+#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/phmap/phmap.h"
@@ -391,9 +392,9 @@ public:
         auto m = (mask >> SHIFT) & MASK;                                        \
         if (m) {                                                                \
             __m512i dst;                                                        \
-            __m512i src = _mm512_loadu_epi##WIDTH(data + start_offset + SHIFT); \
-            dst = _mm512_mask_compress_epi##WIDTH(dst, m, src);                 \
-            _mm512_storeu_epi##WIDTH(data + result_offset, dst);                \
+            __m512i src = _mm512_loadu_epi## WIDTH(data + start_offset + SHIFT); \
+            dst = _mm512_mask_compress_epi## WIDTH(dst, m, src);                 \
+            _mm512_storeu_epi## WIDTH(data + result_offset, dst);                \
             result_offset += __builtin_popcount(m);                             \
         }                                                                       \
     }
@@ -432,26 +433,24 @@ public:
 
             start_offset += kBatchNums;
         }
-#elif defined(__ARM_NEON__) || defined(__aarch64__)
+#elif defined(__ARM_NEON__) && defined(__aarch64__)
         const uint8_t* filter_data = filter.data() + from;
         constexpr size_t data_type_size = sizeof(T);
 
         constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
         while (start_offset + kBatchNums < to) {
             const uint8x16_t vfilter = vld1q_u8(filter_data);
-            const uint16x8_t non_zero_mask = vreinterpretq_u16_u8(vmvnq_u8(vceqzq_u8(vfilter)));
-            const uint8x8_t res = vshrn_n_u16(non_zero_mask, 4);
-            uint64_t matches = vget_lane_u64(vreinterpret_u64_u8(res), 0);
-
-            if (matches == 0) {
+            uint64_t nibble_mask = SIMD::get_nibble_mask(vmvnq_u8(vceqzq_u8(vfilter)));
+            if (nibble_mask == 0) {
                 // skip
-            } else if (matches == 0xffff'ffff'ffff'ffffull) {
+            } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
                 memmove(data + result_offset, data + start_offset, kBatchNums * data_type_size);
                 result_offset += kBatchNums;
             } else {
-                matches &= 0x8888'8888'8888'8888ull;
-                for (; matches > 0; matches &= matches - 1) {
-                    uint32_t index = __builtin_ctzll(matches) >> 2;
+                // Make each nibble only keep the highest bit 1, that is 0b1111 -> 0b1000.
+                nibble_mask &= 0x8888'8888'8888'8888ull;
+                for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                    uint32_t index = __builtin_ctzll(nibble_mask) >> 2;
                     *(data + result_offset++) = *(data + start_offset + index);
                 }
             }
