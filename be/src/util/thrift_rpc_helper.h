@@ -28,6 +28,10 @@ class FrontendServiceClient;
 template <class T>
 class ClientConnection;
 
+template <typename T>
+static Status rpc_exec(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
+                       const TNetworkAddress& address) noexcept;
+
 // this class is a helper for jni call. easy for unit test
 class ThriftRpcHelper {
 public:
