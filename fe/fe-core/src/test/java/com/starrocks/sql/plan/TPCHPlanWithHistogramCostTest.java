@@ -39,6 +39,9 @@ public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
         FeConstants.runningUnitTest = true;
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSelectivity(0);
+        connectContext.getSessionVariable().setRuneTimeFilterScanMaxWaitTime(
+                connectContext.getSessionVariable().getGlobalRuntimeFilterWaitTimeout());
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;

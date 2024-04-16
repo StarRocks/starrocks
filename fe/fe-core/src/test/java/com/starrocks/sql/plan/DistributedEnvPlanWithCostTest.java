@@ -879,15 +879,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "  4:HASH JOIN\n" +
                 "  |  join op: RIGHT SEMI JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [2: L_PARTKEY, INT, false] = [18: P_PARTKEY, INT, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true");
+                "  |  output columns: 18, 19, 20, 21, 22, 23, 24, 25, 26, 27\n" +
+                "  |  cardinality: 600000000");
         sql = "select * from lineitem right outer join [shuffle] part on lineitem.l_partkey = part.p_partkey";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  4:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [2: L_PARTKEY, INT, true] = [18: P_PARTKEY, INT, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true");
+                "  |  cardinality: 600000000");
     }
 
     @Test

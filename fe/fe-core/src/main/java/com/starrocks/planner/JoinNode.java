@@ -194,8 +194,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
-        double selectivity = getChild(0).getCardinality() == 0 ? 0 :
-                Math.max(Math.min(1.0 * getCardinality() / getChild(0).getCardinality(), 1.0), 0);
+        double selectivity = 1 - (getChild(0).getCardinality() == 0 ? 0 :
+                Math.max(Math.min(1.0 * getCardinality() / getChild(0).getCardinality(), 1.0), 0));
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
@@ -247,15 +247,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected void pushDownJoinRuntimeFilters(DescriptorTable descTbl, ExecGroupSets execGroupSets,
                                               boolean forcePushDown) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        // join may be 1-N relation, the value will be negative, but it's ok
-        double selectivity = getChild(0).getCardinality() == 0 ? 0 :
-                Math.max(Math.min(1.0 * getCardinality() / getChild(0).getCardinality(), 1.0), 0);
-        if (!forcePushDown && !isEffectiveFilter(sessionVariable, getChild(1).getCardinality(), selectivity)) {
-            return;
-        }
         for (RuntimeFilterDescription rf : unPushDownRuntimeFilters) {
-            RuntimeFilterPushDownContext context = new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+            if (!forcePushDown &&
+                    !isEffectiveFilter(sessionVariable, getChild(1).getCardinality(), rf.getSelectivity())) {
+                continue;
+            }
 
+            RuntimeFilterPushDownContext context = new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
             if (getChild(0).pushDownRuntimeFilters(context, rf.getProbeExpr(), probePartitionByExprs)) {
                 buildRuntimeFilters.add(rf);
             }
@@ -269,20 +267,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             descTbl, ExecGroupSets execGroupSets) {
         buildJoinRuntimeFilters(runtimeFilterIdIdGenerator);
         pushDownJoinRuntimeFilters(descTbl, execGroupSets, false);
-    }
-
-    protected boolean isEffectiveFilter(SessionVariable sessionVariable, long buildRows, double selectivity) {
-        long probeMin = sessionVariable.getGlobalRuntimeFilterProbeMinSize();
-        long buildMin = sessionVariable.getGlobalRuntimeFilterBuildMinSize();
-        if (probeMin == 0 || (buildMin > 0 && buildRows <= buildMin)) {
-            return true;
-        }
-
-        if (cardinality > probeMin) {
-            // don't push down if the filter is meaningless
-            return selectivity <= sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity();
-        }
-        return true;
     }
 
     /**
@@ -308,6 +292,20 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
         return !newSlotExprs.isEmpty() ? Optional.of(newSlotExprs) : Optional.empty();
+    }
+
+    protected boolean isEffectiveFilter(SessionVariable sessionVariable, long buildRows, double selectivity) {
+        long probeMin = sessionVariable.getGlobalRuntimeFilterProbeMinSize();
+        long buildMin = sessionVariable.getGlobalRuntimeFilterBuildMinSize();
+        if (probeMin == 0 || (buildMin > 0 && buildRows <= buildMin)) {
+            return true;
+        }
+
+        if (cardinality > probeMin) {
+            // don't push down if the filter is meaningless
+            return selectivity >= sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity();
+        }
+        return true;
     }
 
     public Optional<List<List<Expr>>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {

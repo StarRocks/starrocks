@@ -584,7 +584,7 @@ public class RuntimeFilterDescription {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
         }
 
-        t.setWait_time_ms(waitTimeMs);
+        //        t.setWait_time_ms(waitTimeMs);
 
         return t;
     }

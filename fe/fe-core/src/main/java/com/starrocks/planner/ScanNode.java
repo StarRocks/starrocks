@@ -124,7 +124,7 @@ public abstract class ScanNode extends PlanNode {
         for (RuntimeFilterDescription scanProbeRF : probeRuntimeFilters) {
             // modify new runtime filter
             double selectivity = scanProbeRF.getSelectivity();
-            double saveBytes = this.getAvgRowSize() * (1 - selectivity) * this.getCardinality();
+            double saveBytes = this.getAvgRowSize() * selectivity * this.getCardinality();
             double costMs = saveBytes * 1000 / speed;
             scanProbeRF.setWaitTimeMs((int) Math.max(Math.min(maxWaitMs, costMs), baseWaitMs));
         }

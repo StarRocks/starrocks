@@ -153,8 +153,6 @@ OutPut Exchange Id: 20
 18:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  equal join conjunct: [1: C_CUSTKEY, INT, false] = [11: O_CUSTKEY, INT, false]
-|  build runtime filters:
-|  - filter_id = 3, build_expr = (11: O_CUSTKEY), remote = false
 |  output columns: 4, 10
 |  cardinality: 22765073
 |  column statistics:
@@ -174,8 +172,6 @@ preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
-probe runtime filters:
-- filter_id = 3, probe_expr = (1: C_CUSTKEY)
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
 * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE

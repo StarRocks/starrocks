@@ -1444,6 +1444,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runeTimeFilterScanMaxWaitTime;
     }
 
+    public void setRuneTimeFilterScanMaxWaitTime(long runeTimeFilterScanMaxWaitTime) {
+        this.runeTimeFilterScanMaxWaitTime = runeTimeFilterScanMaxWaitTime;
+    }
+
     public long getRuntimeFilterScanWaitTime() {
         return runtimeFilterScanWaitTime;
     }
@@ -2813,6 +2817,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
+    }
+
+    public void setGlobalRuntimeFilterProbeMinSelectivity(float globalRuntimeFilterProbeMinSelectivity) {
+        this.globalRuntimeFilterProbeMinSelectivity = globalRuntimeFilterProbeMinSelectivity;
     }
 
     public void setEnablePipelineLevelMultiPartitionedRf(boolean on) {
