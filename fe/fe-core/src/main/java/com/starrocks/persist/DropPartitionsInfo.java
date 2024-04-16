@@ -31,6 +31,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
@@ -42,29 +43,31 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-public class DropPartitionInfo implements Writable {
+public class DropPartitionsInfo implements Writable {
     @SerializedName(value = "dbId")
     private Long dbId;
     @SerializedName(value = "tableId")
     private Long tableId;
-    @SerializedName(value = "partitionName")
-    private String partitionName;
     @SerializedName(value = "isTempPartition")
     private boolean isTempPartition = false;
     @SerializedName(value = "forceDrop")
     private boolean forceDrop = false;
+    @SerializedName(value = "partitionNames")
+    private List<String> partitionNames = new ArrayList<>();
 
-    private DropPartitionInfo() {
+    private DropPartitionsInfo() {
     }
 
-    public DropPartitionInfo(Long dbId, Long tableId, String partitionName, boolean isTempPartition,
-                             boolean forceDrop) {
+    public DropPartitionsInfo(Long dbId, Long tableId, boolean isTempPartition, boolean forceDrop, List<String> partitionNames) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.partitionName = partitionName;
         this.isTempPartition = isTempPartition;
         this.forceDrop = forceDrop;
+        this.partitionNames = partitionNames;
     }
 
     public Long getDbId() {
@@ -75,10 +78,6 @@ public class DropPartitionInfo implements Writable {
         return tableId;
     }
 
-    public String getPartitionName() {
-        return partitionName;
-    }
-
     public boolean isTempPartition() {
         return isTempPartition;
     }
@@ -87,9 +86,17 @@ public class DropPartitionInfo implements Writable {
         return forceDrop;
     }
 
-    public static DropPartitionInfo read(DataInput in) throws IOException {
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionNames(List<String> partitionNames) {
+        this.partitionNames = partitionNames;
+    }
+
+    public static DropPartitionsInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropPartitionInfo.class);
+        return GsonUtils.GSON.fromJson(json, DropPartitionsInfo.class);
     }
 
     @Override
@@ -98,26 +105,29 @@ public class DropPartitionInfo implements Writable {
         Text.writeString(out, json);
     }
 
-    @Override
     public int hashCode() {
-        return Objects.hashCode(dbId, tableId, partitionName);
+        return Objects.hashCode(dbId, tableId, partitionNames != null ? partitionNames : Collections.emptyList());
     }
 
-    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof DropPartitionInfo)) {
+        if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-
-        DropPartitionInfo info = (DropPartitionInfo) obj;
-
-        return (dbId.equals(info.dbId))
-                && (tableId.equals(info.tableId))
-                && (partitionName.equals(info.partitionName))
-                && (isTempPartition == info.isTempPartition)
-                && (forceDrop == info.forceDrop);
+        DropPartitionsInfo info = (DropPartitionsInfo) obj;
+        return (dbId.equals(info.dbId)) && (tableId.equals(info.tableId)) &&
+                ((partitionNames == null && info.partitionNames == null) ||
+                        (partitionNames != null && partitionNames.equals(info.partitionNames))) &&
+                (isTempPartition == info.isTempPartition) && (forceDrop == info.forceDrop);
     }
 }
+
+// [partitionName] -》 旧读[partitionName,partitionNames]  -》 新写[partitionName,partitionNames] -》新读[partitionName,partitionNames]
+// [null] -》新写[单个分区][] -》[partitionName,partitionNames] -》 新读[partitionName,partitionNames]
+// [null] -》新写[多个分区][] -》[null,partitionNames]          -》 新读[null,partitionNames]
+// [null] -》新写[我的版本代码][单个分区][] -》[partitionName,partitionNames] -》 降级[从我的版本切换到之前的版本]         -》旧读[partitionName][可降级]
+// [null] -》新写[我的版本代码][多个分区][] -》[null,partitionNames]          -》 降级[从我的版本切换到之前的版本]         -》旧读[无法降级]
+// [------------方案-------------]
+// JournalEntity

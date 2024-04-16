@@ -155,6 +155,8 @@ import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
+import com.starrocks.persist.DropPartitionsInfo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -1582,12 +1584,10 @@ public class LocalMetastore implements ConnectorMetadata {
                     ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO);
                 }
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
                 if (partitionColumns.size() != 1) {
                     ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS,
                             partitionColumns.size());
-
                 }
                 Map<String, String> properties = clause.getProperties();
                 List<SingleRangePartitionDesc> singleRangePartitionDescs =
@@ -1604,7 +1604,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         List<String> existPartitions = Lists.newArrayList();
         List<String> notExistPartitions = Lists.newArrayList();
-
         for (String partitionName : partitionNames) {
             if (olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
                 existPartitions.add(partitionName);
@@ -1665,11 +1664,24 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("fail to refresh materialized views when dropping partition", e);
             }
         }
-        DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), isTempPartition,
-                clause.isForceDrop(), partitionNames);
-        GlobalStateMgr.getCurrentState().getEditLog().logDropPartition(info);
-        LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionNames, isTempPartition,
-                clause.isForceDrop());
+        long dbId = db.getId();
+        long tableId = olapTable.getId();
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+
+        if (clause.getPartitionName() != null) {
+            String partitionName = clause.getPartitionName();
+            DropPartitionInfo info = new DropPartitionInfo(dbId, tableId, partitionName, isTempPartition, clause.isForceDrop());
+            editLog.logDropPartition(info);
+            LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
+                    clause.isForceDrop());
+        } else {
+            DropPartitionsInfo info =
+                    new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), partitionNames);
+            editLog.logDropPartitions(info);
+            LOG.info("succeed in dropping partitions[{}], is temp : {}, is force : {}", partitionNames, isTempPartition,
+                    clause.isForceDrop());
+        }
+
     }
 
     private List<SingleRangePartitionDesc> convertMultiRangePartitionDescToSingleRangePartitionDescs(PartitionInfo partitionInfo,
@@ -1713,6 +1725,22 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayDropPartition(DropPartitionInfo info) {
+        Database db = this.getDb(info.getDbId());
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+            if (info.isTempPartition()) {
+                olapTable.dropTempPartition(info.getPartitionName(), true);
+            } else {
+                olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+            }
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
+    }
+
+    public void replayDropPartitions(DropPartitionsInfo info) {
         Database db = this.getDb(info.getDbId());
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
@@ -5645,4 +5673,5 @@ public class LocalMetastore implements ConnectorMetadata {
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
     }
+
 }

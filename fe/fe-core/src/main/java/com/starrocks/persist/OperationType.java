@@ -88,6 +88,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_PARTITION = 13;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_PARTITIONS = 20;
+
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PARTITION = 14;

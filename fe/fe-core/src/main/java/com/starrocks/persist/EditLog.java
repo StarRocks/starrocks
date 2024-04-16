@@ -294,8 +294,16 @@ public class EditLog {
                     DropPartitionInfo info = (DropPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
-                            + " partitionName = " + info.getPartitionNames());
+                            + " partitionName = " + info.getPartitionName());
                     globalStateMgr.getLocalMetastore().replayDropPartition(info);
+                    break;
+                }
+                case OperationType.OP_DROP_PARTITIONS: {
+                    DropPartitionsInfo info = (DropPartitionsInfo) journal.getData();
+                    LOG.info("Begin to unprotect drop partitions. db = " + info.getDbId()
+                            + " table = " + info.getTableId()
+                            + " partitionNames = " + info.getPartitionNames());
+                    globalStateMgr.getLocalMetastore().replayDropPartitions(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_PARTITION:
@@ -1387,6 +1395,10 @@ public class EditLog {
 
     public void logDropPartition(DropPartitionInfo info) {
         logEdit(OperationType.OP_DROP_PARTITION, info);
+    }
+
+    public void logDropPartitions(DropPartitionsInfo info) {
+        logEdit(OperationType.OP_DROP_PARTITIONS, info);
     }
 
     public void logErasePartition(long partitionId) {
