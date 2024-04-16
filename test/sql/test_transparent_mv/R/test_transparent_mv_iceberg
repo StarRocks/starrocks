@@ -59,7 +59,7 @@ use db_${uuid0};
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
   SELECT dt, sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 -- result:
@@ -412,7 +412,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
   SELECT dt,sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 -- result:
@@ -596,7 +596,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY str2date(dt, '%Y-%m-%d')
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
   SELECT dt,sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 GROUP BY dt;
 -- result:
@@ -780,7 +780,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS  select * from (
 SELECT dt, sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt 
 UNION ALL
@@ -931,7 +931,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv20
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
   SELECT dt, date_trunc('day', dt) as format_dt, sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 -- result:
@@ -939,7 +939,7 @@ AS
 CREATE MATERIALIZED VIEW test_mv21
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
   SELECT str2date(dt, '%Y-%m-%d') as dt, sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 GROUP BY dt;
 -- result:
@@ -949,7 +949,7 @@ REFRESH MATERIALIZED VIEW test_mv21 WITH SYNC MODE;
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS  select * from (SELECT dt, num FROM test_mv20 UNION ALL SELECT dt, num FROM test_mv21)as t order by 1, 2;
 -- result:
 -- !result

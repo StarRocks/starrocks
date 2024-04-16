@@ -54,7 +54,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MvRewriteTestBase {
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         " PROPERTIES (\n" +
-                        " 'enable_transparent_rewrite' = 'true'" +
+                        " 'transparent_mv_rewrite_mode' = 'true'" +
                         " ) " +
                         "AS SELECT l_orderkey, l_suppkey, l_shipdate FROM hive0.partitioned_db.lineitem_par as a;",
                 (obj) -> {
@@ -72,7 +72,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MvRewriteTestBase {
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         " PROPERTIES (\n" +
-                        " 'enable_transparent_rewrite' = 'true'" +
+                        " 'transparent_mv_rewrite_mode' = 'true'" +
                         " ) " +
                         "AS SELECT l_shipdate, l_orderkey, sum(l_suppkey) FROM " +
                         " hive0.partitioned_db.lineitem_par as a GROUP BY l_orderkey, l_shipdate;",
@@ -91,7 +91,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MvRewriteTestBase {
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         " PROPERTIES (\n" +
-                        " 'enable_transparent_rewrite' = 'true'" +
+                        " 'transparent_mv_rewrite_mode' = 'true'" +
                         " ) " +
                         "AS SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
                         "   hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +

@@ -4495,7 +4495,7 @@ public class CreateMaterializedViewTest {
         // disable
         starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
                 "refresh async " +
-                "properties('enable_transparent_rewrite' = 'false') " +
+                "properties('transparent_mv_rewrite_mode' = 'false') " +
                 "as select * from t1 limit 10");
         String sql = starRocksAssert.showCreateTable("show create table mv_invalid");
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_invalid` " +
@@ -4505,7 +4505,7 @@ public class CreateMaterializedViewTest {
                 "REFRESH ASYNC\n" +
                 "PROPERTIES (\n" +
                 "\"replicated_storage\" = \"true\",\n" +
-                "\"enable_transparent_rewrite\" = \"false\",\n" +
+                "\"transparent_mv_rewrite_mode\" = \"false\",\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
@@ -4518,7 +4518,7 @@ public class CreateMaterializedViewTest {
         // enable
         starRocksAssert.withMaterializedView("create materialized view mv_enable " +
                 "refresh async " +
-                "properties('enable_transparent_rewrite' = 'true') " +
+                "properties('transparent_mv_rewrite_mode' = 'true') " +
                 "as select * from t1");
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
@@ -4526,7 +4526,7 @@ public class CreateMaterializedViewTest {
                         "REFRESH ASYNC\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
-                        "\"enable_transparent_rewrite\" = \"true\",\n" +
+                        "\"transparent_mv_rewrite_mode\" = \"true\",\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
@@ -4540,7 +4540,7 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(mv.isEnableTransparentRewrite());
         Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRUE));
 
-        starRocksAssert.ddl("alter materialized view mv_enable set('enable_transparent_rewrite'='false') ");
+        starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='false') ");
         sql = starRocksAssert.showCreateTable("show create table mv_enable");
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
@@ -4548,7 +4548,7 @@ public class CreateMaterializedViewTest {
                         "REFRESH ASYNC\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
-                        "\"enable_transparent_rewrite\" = \"FALSE\",\n" +
+                        "\"transparent_mv_rewrite_mode\" = \"FALSE\",\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
@@ -4559,14 +4559,14 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(!mv.isEnableTransparentRewrite());
         Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.FALSE));
 
-        starRocksAssert.ddl("alter materialized view mv_enable set('enable_transparent_rewrite'='transparent_or_error') ");
+        starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='transparent_or_error') ");
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
-                        "\"enable_transparent_rewrite\" = \"TRANSPARENT_OR_ERROR\",\n" +
+                        "\"transparent_mv_rewrite_mode\" = \"TRANSPARENT_OR_ERROR\",\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
@@ -4577,14 +4577,14 @@ public class CreateMaterializedViewTest {
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         Assert.assertTrue(mv.isEnableTransparentRewrite());
         Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_ERROR));
-        starRocksAssert.ddl("alter materialized view mv_enable set('enable_transparent_rewrite'='TRANSPARENT_OR_DEFAULT') ");
+        starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='TRANSPARENT_OR_DEFAULT') ");
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
-                        "\"enable_transparent_rewrite\" = \"TRANSPARENT_OR_DEFAULT\",\n" +
+                        "\"transparent_mv_rewrite_mode\" = \"TRANSPARENT_OR_DEFAULT\",\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +

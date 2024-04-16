@@ -361,6 +361,17 @@ public class Optimizer {
         }
     }
 
+    /**
+     * Rewrite transparent materialized view.
+     */
+    private OptExpression transparentMVRewrite(OptExpression tree, TaskContext rootTaskContext) {
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new MaterializedViewTransparentRewriteRule());
+        if (MvUtils.isOptHasAppliedRule(tree, Operator.OP_TRANSPARENT_MV_BIT)) {
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        }
+        return tree;
+    }
+
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
                                                   TaskContext rootTaskContext) {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
@@ -432,10 +443,7 @@ public class Optimizer {
         }
 
         // rewrite transparent materialized view
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new MaterializedViewTransparentRewriteRule());
-        if (MvUtils.isOptHasAppliedRule(tree, Operator.OP_TRANSPARENT_MV_BIT)) {
-            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-        }
+        tree = transparentMVRewrite(tree, rootTaskContext);
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node

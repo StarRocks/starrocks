@@ -143,7 +143,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     /**
-     * The value for enable_transparent_rewrite variable
+     * The value for transparent_mv_rewrite_mode variable
      */
     public enum MVTransparentRewriteMode {
         FALSE, // default, mv acts as a normal table, only return the contained data no matter it's fresh or not
@@ -514,7 +514,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildMVTransparentRewriteMode() {
-        String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE);
+        String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
         this.mvTransparentRewriteMode = MVTransparentRewriteMode.parse(value);
         return this;
     }
@@ -524,7 +524,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (res == null) {
             String valueList = MVTransparentRewriteMode.valueList();
             throw new SemanticException(
-                    PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE
+                    PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE
                             + " can only be " + valueList + " but got " + value);
         }
         return res;

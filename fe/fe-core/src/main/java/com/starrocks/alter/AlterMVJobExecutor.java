@@ -154,10 +154,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         TableProperty.MVTransparentRewriteMode mvTransparentRewriteMode =
                 materializedView.getTableProperty().getMvTransparentRewriteMode();
-        if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE)) {
-            String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             mvTransparentRewriteMode = TableProperty.analyzeMVTransparentRewrite(value);
-            properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE);
+            properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
         }
 
         // warehouse
@@ -273,10 +273,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
             isChanged = true;
         }
-        // enable_transparent_rewrite
-        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE)) {
+        // transparent_mv_rewrite_mode
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
             materializedView.getTableProperty().getProperties()
-                    .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE, String.valueOf(mvTransparentRewriteMode));
+                    .put(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, String.valueOf(mvTransparentRewriteMode));
             materializedView.getTableProperty().setMvTransparentRewriteMode(mvTransparentRewriteMode);
             isChanged = true;
         }

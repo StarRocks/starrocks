@@ -95,7 +95,7 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GRO
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "true");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "true");
 
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
@@ -152,7 +152,7 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GRO
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "true");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "true");
 
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
@@ -173,7 +173,7 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GRO
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "transparent_or_default");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "transparent_or_default");
 
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
@@ -194,7 +194,7 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GRO
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "transparent_or_error");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "transparent_or_error");
 
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
@@ -216,13 +216,13 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GRO
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 
 INSERT INTO t2 VALUES (3, "2020-06-18");
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "false");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "false");
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "true");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "true");
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "transparent_or_error");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "transparent_or_error");
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
-ALTER MATERIALIZED VIEW test_mv1 set("enable_transparent_rewrite" = "transparent_or_default");
+ALTER MATERIALIZED VIEW test_mv1 set("transparent_mv_rewrite_mode" = "transparent_or_default");
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 
 drop materialized view default_catalog.db_${uuid0}.test_mv1;

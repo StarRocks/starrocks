@@ -87,7 +87,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
@@ -110,7 +110,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS SELECT k1, k2, sum(v1) as agg1, count(v2) as agg2 from m1 group by k1, k2;",
                     () -> {
@@ -134,7 +134,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS SELECT m1.k1, m1.k2, sum(m1.v1), sum(m2.v2) " +
                             "from m1 join m2 on m1.k1=m2.k1 group by m1.k1, m1.k2;",
@@ -289,7 +289,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS SELECT m1.k1, m1.k2, sum(m1.v1), sum(m2.v2) " +
                             "from m1 join m2 on m1.k1=m2.k1 group by m1.k1, m1.k2;",
@@ -347,7 +347,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                     " DISTRIBUTED BY HASH(k1) " +
                                     " REFRESH DEFERRED MANUAL " +
                                     " PROPERTIES (\n" +
-                                    " 'enable_transparent_rewrite' = 'true'" +
+                                    " 'transparent_mv_rewrite_mode' = 'true'" +
                                     " ) AS" +
                                     " select * from (SELECT m1.k1, m1.k2, sum(m1.v1), sum(m2.v2) from m1 join m2 on m1.k1=m2.k1" +
                                     "   group by m1.k1, m1.k2" +
@@ -408,7 +408,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                     " DISTRIBUTED BY HASH(k1) " +
                                     " REFRESH DEFERRED MANUAL " +
                                     " PROPERTIES (\n" +
-                                    " 'enable_transparent_rewrite' = 'true'" +
+                                    " 'transparent_mv_rewrite_mode' = 'true'" +
                                     " ) AS" +
                                     " select * from (SELECT k1, sum(v1) as num from m1 group by k1" +
                                     " %s " +
@@ -443,7 +443,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS SELECT k1, k2, sum(v1) over (partition by k1 order by k2) as agg1 from m1 ;",
                     () -> {
@@ -473,7 +473,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS SELECT k1, k2, sum(v1) as agg1 from m1 group by k1, k2 order by k2, k1 limit 10 offset 1;",
                     () -> {
@@ -503,7 +503,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS SELECT k1, k2, sum(v1) from m1 group by rollup(k1, k2) " +
                             " order by k2, k1 limit 10 offset 1;",
@@ -534,7 +534,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS with cte1 as (SELECT k1, k2, sum(v1) as agg1, count(v1) as agg2 from m1 " +
                             "group by rollup(k1, k2) order by k2, k1 limit 10 offset 1) " +
@@ -566,7 +566,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS with cte1 as (SELECT k1, k2, sum(v1) as agg1 from m1 group by k1, k2 " +
                             "   union all select cast('2023-01-01 00:00:00' as date) as k1, 'bb' as k2, 2 as agg1) " +
@@ -598,7 +598,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
-                            " 'enable_transparent_rewrite' = 'true'" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
                             " AS select m1.*, unnest.* from m1, unnest(split(k2, ',')) unnest ;",
                     () -> {

@@ -3557,13 +3557,13 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             // enable_query_rewrite
-            if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE)) {
-                String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE);
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
                 TableProperty.MVTransparentRewriteMode value = TableProperty.analyzeMVTransparentRewrite(str);
                 materializedView.getTableProperty().setMvTransparentRewriteMode(value);
                 materializedView.getTableProperty().getProperties().put(
-                        PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE, str);
-                properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_TRANSPARENT_REWRITE);
+                        PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             }
 
             // lake storage info

@@ -86,7 +86,7 @@ INSERT INTO t3 VALUES
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS SELECT dt, sum(num) as num FROM t1 GROUP BY dt;
 
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
@@ -174,7 +174,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
  SELECT t1.dt, sum(t2.num) as num
  FROM t1 join t2 on t1.dt = t2.dt
@@ -267,7 +267,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS  select * from (
 SELECT dt, sum(num) as num FROM t1 GROUP BY dt 
 UNION ALL
@@ -319,14 +319,14 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv10
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
   SELECT dt, date_trunc('day', dt) as format_dt, sum(num) as num FROM t2 GROUP BY dt;
 
 CREATE MATERIALIZED VIEW test_mv12
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS 
   SELECT dt,sum(num) as num FROM t3 GROUP BY dt;
 
@@ -336,7 +336,7 @@ REFRESH MATERIALIZED VIEW test_mv12 WITH SYNC MODE;
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS  select * from (SELECT dt, num FROM test_mv10 UNION ALL SELECT dt, num FROM test_mv12)as t order by 1, 2;
 
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
@@ -387,7 +387,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv12;
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS with cte1 as (SELECT dt, num FROM t1 UNION ALL SELECT dt, num FROM t3) select * from cte1 union select * from cte1 order by 1, 2;
 
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
@@ -435,7 +435,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("enable_transparent_rewrite" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS select dt, sum(num) over (partition by dt) as num from t1 where date_trunc('month', dt) = '2020-06-01' order by 1, 2;
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 INSERT INTO t1 VALUES (3, "2020-06-15");
