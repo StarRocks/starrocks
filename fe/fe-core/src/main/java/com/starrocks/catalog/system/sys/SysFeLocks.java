@@ -35,13 +35,12 @@ import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.ThreadUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.thrift.TException;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.List;
+import java.util.Set;
 
 public class SysFeLocks {
 
@@ -99,7 +98,7 @@ public class SysFeLocks {
         lockItem.setLock_object(db.getFullName());
 
         Thread owner = lock.getOwner();
-        List<Long> sharedLockThreadIds = lock.getSharedLockThreadIds();
+        Set<Thread> sharedLockThreads = lock.getSharedLockThreads();
         long currentTime = System.currentTimeMillis();
 
         if (owner != null) {
@@ -114,12 +113,12 @@ public class SysFeLocks {
             long lockStartTime = lock.getExclusiveLockStartTimeMs();
             lockItem.setStart_time(lockStartTime);
             lockItem.setHold_time_ms(currentTime - lockStartTime);
-        } else if (CollectionUtils.isNotEmpty(sharedLockThreadIds)) {
+        } else if (CollectionUtils.isNotEmpty(sharedLockThreads)) {
             lockItem.setLock_mode("SHARED");
             lockItem.setGranted(true);
 
             // lock start
-            long lockStart = ListUtils.emptyIfNull(sharedLockThreadIds).stream()
+            long lockStart = SetUtils.emptyIfNull(sharedLockThreads).stream()
                     .map(lock::getSharedLockStartTimeMs)
                     .filter(x -> x > 0)
                     .min(Comparator.naturalOrder()).orElse(0L);
@@ -128,13 +127,10 @@ public class SysFeLocks {
 
             // thread info
             JsonArray sharedLockInfo = new JsonArray();
-            for (long threadId : ListUtils.emptyIfNull(sharedLockThreadIds)) {
+            for (Thread thread : SetUtils.emptyIfNull(sharedLockThreads)) {
                 JsonObject lockInfo = new JsonObject();
-                lockInfo.addProperty("threadId", threadId);
-                Thread thread = ThreadUtils.findThreadById(threadId);
-                if (thread != null) {
-                    lockInfo.addProperty("threadName", thread.getName());
-                }
+                lockInfo.addProperty("threadId", thread.getId());
+                lockInfo.addProperty("threadName", thread.getName());
                 sharedLockInfo.add(lockInfo);
             }
             lockItem.setThread_info(sharedLockInfo.toString());

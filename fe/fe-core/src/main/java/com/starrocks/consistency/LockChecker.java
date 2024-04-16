@@ -29,13 +29,13 @@ import org.apache.logging.log4j.Logger;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class LockChecker extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(LockChecker.class);
-    private static final int DEFAULT_STACK_RESERVE_LEVELS = 15;
+    private static final int DEFAULT_STACK_RESERVE_LEVELS = 20;
 
     public LockChecker() {
         super("DeadlockChecker", 1000 * Config.lock_checker_interval_second);
@@ -58,7 +58,7 @@ public class LockChecker extends FrontendDaemon {
             QueryableReentrantReadWriteLock lock = db.getRwLock();
             // holder information
             Thread exclusiveLockThread = lock.getOwner();
-            List<Long> sharedLockThreadIds = lock.getSharedLockThreadIds();
+            Set<Thread> sharedLockThreads = lock.getSharedLockThreads();
             if (exclusiveLockThread != null) {
                 long lockStartTime = db.getRwLock().getExclusiveLockStartTimeMs();
                 if (lockStartTime > 0L && System.currentTimeMillis() - lockStartTime > Config.slow_lock_threshold_ms) {
@@ -70,7 +70,7 @@ public class LockChecker extends FrontendDaemon {
                     ownerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                             exclusiveLockThread, 0, DEFAULT_STACK_RESERVE_LEVELS));
                 }
-            } else if (!sharedLockThreadIds.isEmpty()) {
+            } else if (!sharedLockThreads.isEmpty()) {
                 JsonArray currReaders =
                         lock.getCurrReadersInfoToJsonArray(true, true, DEFAULT_STACK_RESERVE_LEVELS);
                 if (!currReaders.isEmpty()) {
