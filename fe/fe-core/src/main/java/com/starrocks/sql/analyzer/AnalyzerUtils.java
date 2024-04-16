@@ -552,26 +552,52 @@ public class AnalyzerUtils {
         }
 
         // find all TableRelations or ViewRelations in 'select * from ...'
-        private void fillStarRelation(Relation relation, Set<TableName> starRelationNames) {
+        private void fillStarRelation(Relation relation, Set<TableName> starRelationNames,
+                                      Map<String, Set<String>> starTableColumns) {
             if (relation instanceof TableRelation || relation instanceof ViewRelation) {
                 // except virtual relation like FileTableFunctionRelation
                 if (!(relation instanceof FileTableFunctionRelation)) {
-                    starRelationNames.add(relation.getResolveTableName());
+                    TableName resolveTableName = relation.getResolveTableName();
+                    if (resolveTableName != null && starTableColumns.containsKey(relation.getResolveTableName().toString())) {
+                        starRelationNames.add(resolveTableName);
+                    }
                 }
             } else if (relation instanceof JoinRelation) {
                 JoinRelation joinRelation = (JoinRelation) relation;
-                fillStarRelation(joinRelation.getLeft(), starRelationNames);
-                fillStarRelation(joinRelation.getRight(), starRelationNames);
+                fillStarRelation(joinRelation.getLeft(), starRelationNames, starTableColumns);
+                fillStarRelation(joinRelation.getRight(), starRelationNames, starTableColumns);
             }
         }
 
         protected void doVisitSelect(SelectRelation node) {
             Relation relation = node.getRelation();
-            if (node.getOutputExpression().stream().allMatch(FieldReference.class::isInstance)) {
-                Set<TableName> starRelationNames = Sets.newHashSet();
-                fillStarRelation(relation, starRelationNames);
-                starRelationNames.forEach(name -> put(name, "*"));
-            }
+            Map<String, Set<String>> starTableColumns = Maps.newHashMap();
+
+            RelationFields relationFields = relation.getRelationFields();
+            node.getOutputExpression().stream().filter(FieldReference.class::isInstance).forEach(expr -> {
+                FieldReference fieldRef = (FieldReference) expr;
+                Field field = relationFields.getFieldByIndex(fieldRef.getFieldIndex());
+                String fieldName = field.getName();
+                starTableColumns.compute(field.getRelationAlias().toString(), (k, v) -> {
+                    if (v == null) {
+                        HashSet<String> fieldNames = new HashSet<>();
+                        fieldNames.add(fieldName);
+                        return fieldNames;
+                    } else {
+                        v.add(fieldName);
+                        return v;
+                    }
+                });
+            });
+
+            Set<TableName> starRelationNames = Sets.newHashSet();
+            fillStarRelation(relation, starRelationNames, starTableColumns);
+
+            starRelationNames.forEach(tableName -> {
+                if (starTableColumns.containsKey(tableName.toString())) {
+                    starTableColumns.remove(tableName.toString()).forEach(fieldName -> put(tableName, fieldName));
+                }
+            });
         }
 
         @Override
