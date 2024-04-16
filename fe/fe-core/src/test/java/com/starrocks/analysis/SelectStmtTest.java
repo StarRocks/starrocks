@@ -329,7 +329,12 @@ public class SelectStmtTest {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  3:AGGREGATE (update finalize)\n" +
+                "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(4: count)\n" +
+                "  |  group by: 3: expr\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(2: split)\n" +
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
