@@ -39,14 +39,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.DynamicPartitionUtil;
-import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.CreateTableInfo;
-import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
->>>>>>> a6a5778234 ([BugFix] Fix expr dynamic partition table check (#44163))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
