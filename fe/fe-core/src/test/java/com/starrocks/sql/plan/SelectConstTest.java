@@ -174,7 +174,7 @@ public class SelectConstTest extends PlanTestBase {
         assertFeExecuteResult("select '\\\\\\'abc'", "\\'abc");
     }
 
-    private void assertFeExecuteResult (String sql, String expected) throws Exception {
+    private void assertFeExecuteResult(String sql, String expected) throws Exception {
         ExecPlan execPlan = getExecPlan(sql);
         FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
         RowBatch rowBatch = coordinator.getNext();

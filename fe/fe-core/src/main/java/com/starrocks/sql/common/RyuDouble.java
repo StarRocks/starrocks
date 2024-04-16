@@ -76,7 +76,8 @@ public final class RyuDouble {
                     if (k == 0) {
                         POW5_INV_SPLIT[i][k] = inv.shiftRight((3 - k) * POW5_INV_QUARTER_BITCOUNT).intValueExact();
                     } else {
-                        POW5_INV_SPLIT[i][k] = inv.shiftRight((3 - k) * POW5_INV_QUARTER_BITCOUNT).and(invMask).intValueExact();
+                        POW5_INV_SPLIT[i][k] =
+                                inv.shiftRight((3 - k) * POW5_INV_QUARTER_BITCOUNT).and(invMask).intValueExact();
                     }
                 }
             }
@@ -90,12 +91,22 @@ public final class RyuDouble {
     public static String doubleToString(double value, RoundingMode roundingMode) {
         // Step 1: Decode the floating point number, and unify normalized and subnormal cases.
         // First, handle all the trivial cases.
-        if (Double.isNaN(value)) return "NaN";
-        if (value == Double.POSITIVE_INFINITY) return "Infinity";
-        if (value == Double.NEGATIVE_INFINITY) return "-Infinity";
+        if (Double.isNaN(value)) {
+            return "NaN";
+        }
+        if (value == Double.POSITIVE_INFINITY) {
+            return "Infinity";
+        }
+        if (value == Double.NEGATIVE_INFINITY) {
+            return "-Infinity";
+        }
         long bits = Double.doubleToLongBits(value);
-        if (bits == 0) return "0.0";
-        if (bits == 0x8000000000000000L) return "-0.0";
+        if (bits == 0) {
+            return "0.0";
+        }
+        if (bits == 0x8000000000000000L) {
+            return "-0.0";
+        }
 
         // Otherwise extract the mantissa and exponent bits and run the full algorithm.
         int ieeeExponent = (int) ((bits >>> DOUBLE_MANTISSA_BITS) & DOUBLE_EXPONENT_MASK);
@@ -127,7 +138,9 @@ public final class RyuDouble {
         e2 -= 2;
 
         if (DEBUG) {
-            String sv, sp, sm;
+            String sv;
+            String sp;
+            String sm;
             int e10;
             if (e2 >= 0) {
                 sv = BigInteger.valueOf(mv).shiftLeft(e2).toString();
@@ -153,9 +166,12 @@ public final class RyuDouble {
 
         // Step 3: Convert to a decimal power base using 128-bit arithmetic.
         // -1077 = 1 - 1023 - 53 - 2 <= e_2 - 2 <= 2046 - 1023 - 53 - 2 = 968
-        long dv, dp, dm;
+        long dv;
+        long dp;
+        long dm;
         final int e10;
-        boolean dmIsTrailingZeros = false, dvIsTrailingZeros = false;
+        boolean dmIsTrailingZeros = false;
+        boolean dvIsTrailingZeros = false;
         if (e2 >= 0) {
             final int q = Math.max(0, ((e2 * 78913) >>> 18) - 1);
             // k = constant + floor(log_2(5^q))
@@ -275,7 +291,8 @@ public final class RyuDouble {
                 lastRemovedDigit = 4;
             }
             output = dv +
-                    ((dv == dm && !(dmIsTrailingZeros && roundingMode.acceptLowerBound(even))) || (lastRemovedDigit >= 5) ? 1 : 0);
+                    ((dv == dm && !(dmIsTrailingZeros && roundingMode.acceptLowerBound(even))) ||
+                            (lastRemovedDigit >= 5) ? 1 : 0);
         } else {
             while (dp / 10 > dm / 10) {
                 if ((dp < 100) && scientificNotation) {
@@ -314,7 +331,8 @@ public final class RyuDouble {
         if (scientificNotation) {
             // Print in the format x.xxxxxE-yy.
             for (int i = 0; i < olength - 1; i++) {
-                int c = (int) (output % 10); output /= 10;
+                int c = (int) (output % 10);
+                output /= 10;
                 result[index + olength - i] = (char) ('0' + c);
             }
             result[index] = (char) ('0' + output % 10);
@@ -387,24 +405,60 @@ public final class RyuDouble {
     }
 
     private static int decimalLength(long v) {
-        if (v >= 1000000000000000000L) return 19;
-        if (v >= 100000000000000000L) return 18;
-        if (v >= 10000000000000000L) return 17;
-        if (v >= 1000000000000000L) return 16;
-        if (v >= 100000000000000L) return 15;
-        if (v >= 10000000000000L) return 14;
-        if (v >= 1000000000000L) return 13;
-        if (v >= 100000000000L) return 12;
-        if (v >= 10000000000L) return 11;
-        if (v >= 1000000000L) return 10;
-        if (v >= 100000000L) return 9;
-        if (v >= 10000000L) return 8;
-        if (v >= 1000000L) return 7;
-        if (v >= 100000L) return 6;
-        if (v >= 10000L) return 5;
-        if (v >= 1000L) return 4;
-        if (v >= 100L) return 3;
-        if (v >= 10L) return 2;
+        if (v >= 1000000000000000000L) {
+            return 19;
+        }
+        if (v >= 100000000000000000L) {
+            return 18;
+        }
+        if (v >= 10000000000000000L) {
+            return 17;
+        }
+        if (v >= 1000000000000000L) {
+            return 16;
+        }
+        if (v >= 100000000000000L) {
+            return 15;
+        }
+        if (v >= 10000000000000L) {
+            return 14;
+        }
+        if (v >= 1000000000000L) {
+            return 13;
+        }
+        if (v >= 100000000000L) {
+            return 12;
+        }
+        if (v >= 10000000000L) {
+            return 11;
+        }
+        if (v >= 1000000000L) {
+            return 10;
+        }
+        if (v >= 100000000L) {
+            return 9;
+        }
+        if (v >= 10000000L) {
+            return 8;
+        }
+        if (v >= 1000000L) {
+            return 7;
+        }
+        if (v >= 100000L) {
+            return 6;
+        }
+        if (v >= 10000L) {
+            return 5;
+        }
+        if (v >= 1000L) {
+            return 4;
+        }
+        if (v >= 100L) {
+            return 3;
+        }
+        if (v >= 10L) {
+            return 2;
+        }
         return 1;
     }
 
@@ -414,10 +468,18 @@ public final class RyuDouble {
 
     private static int pow5Factor(long value) {
         // We want to find the largest power of 5 that divides value.
-        if ((value % 5) != 0) return 0;
-        if ((value % 25) != 0) return 1;
-        if ((value % 125) != 0) return 2;
-        if ((value % 625) != 0) return 3;
+        if ((value % 5) != 0) {
+            return 0;
+        }
+        if ((value % 25) != 0) {
+            return 1;
+        }
+        if ((value % 125) != 0) {
+            return 2;
+        }
+        if ((value % 625) != 0) {
+            return 3;
+        }
         int count = 4;
         value /= 625;
         while (value > 0) {

@@ -37,7 +37,7 @@ public final class RyuFloat {
     private static final long LOG10_5_NUMERATOR = (long) (LOG10_5_DENOMINATOR * Math.log10(5));
 
     private static final long LOG2_5_DENOMINATOR = 10000000L;
-    private static final long LOG2_5_NUMERATOR = (long) (LOG2_5_DENOMINATOR * (Math.log(5)/Math.log(2)));
+    private static final long LOG2_5_NUMERATOR = (long) (LOG2_5_DENOMINATOR * (Math.log(5) / Math.log(2)));
 
     private static final int POS_TABLE_SIZE = 47;
     private static final int INV_TABLE_SIZE = 31;
@@ -89,12 +89,22 @@ public final class RyuFloat {
     public static String floatToString(float value, RoundingMode roundingMode) {
         // Step 1: Decode the floating point number, and unify normalized and subnormal cases.
         // First, handle all the trivial cases.
-        if (Float.isNaN(value)) return "NaN";
-        if (value == Float.POSITIVE_INFINITY) return "Infinity";
-        if (value == Float.NEGATIVE_INFINITY) return "-Infinity";
+        if (Float.isNaN(value)) {
+            return "NaN";
+        }
+        if (value == Float.POSITIVE_INFINITY) {
+            return "Infinity";
+        }
+        if (value == Float.NEGATIVE_INFINITY) {
+            return "-Infinity";
+        }
         int bits = Float.floatToIntBits(value);
-        if (bits == 0) return "0.0";
-        if (bits == 0x80000000) return "-0.0";
+        if (bits == 0) {
+            return "0.0";
+        }
+        if (bits == 0x80000000) {
+            return "-0.0";
+        }
 
         // Otherwise extract the mantissa and exponent bits and run the full algorithm.
         int ieeeExponent = (bits >> FLOAT_MANTISSA_BITS) & FLOAT_EXPONENT_MASK;
@@ -124,7 +134,9 @@ public final class RyuFloat {
         e2 -= 2;
 
         if (DEBUG) {
-            String sv, sp, sm;
+            String sv;
+            String sp;
+            String sm;
             int e10;
             if (e2 >= 0) {
                 sv = BigInteger.valueOf(mv).shiftLeft(e2).toString();
@@ -152,9 +164,13 @@ public final class RyuFloat {
 
         // Step 3: Convert to a decimal power base using 128-bit arithmetic.
         // -151 = 1 - 127 - 23 - 2 <= e_2 - 2 <= 254 - 127 - 23 - 2 = 102
-        int dp, dv, dm;
+        int dp;
+        int dv;
+        int dm;
         int e10;
-        boolean dpIsTrailingZeros, dvIsTrailingZeros, dmIsTrailingZeros;
+        boolean dpIsTrailingZeros;
+        boolean dvIsTrailingZeros;
+        boolean dmIsTrailingZeros;
         int lastRemovedDigit = 0;
         if (e2 >= 0) {
             // Compute m * 2^e_2 / 10^q = m * 2^(e_2 - q) / 5^q
@@ -194,7 +210,8 @@ public final class RyuFloat {
             }
             e10 = q + e2; // Note: e2 and e10 are both negative here.
             if (DEBUG) {
-                System.out.println(mv + " * 5^" + (-e2) + " / 10^" + q + " = " + mv + " * 5^" + (-e2 - q) + " / 2^" + q);
+                System.out.println(
+                        mv + " * 5^" + (-e2) + " / 10^" + q + " = " + mv + " * 5^" + (-e2 - q) + " / 2^" + q);
             }
 
             dpIsTrailingZeros = 1 >= q;
@@ -263,7 +280,8 @@ public final class RyuFloat {
             lastRemovedDigit = 4;
         }
         int output = dv +
-                ((dv == dm && !(dmIsTrailingZeros && roundingMode.acceptLowerBound(even))) || (lastRemovedDigit >= 5) ? 1 : 0);
+                ((dv == dm && !(dmIsTrailingZeros && roundingMode.acceptLowerBound(even))) || (lastRemovedDigit >= 5) ?
+                        1 : 0);
         int olength = dplength - removed;
 
         if (DEBUG) {
@@ -291,7 +309,8 @@ public final class RyuFloat {
         if (scientificNotation) {
             // Print in the format x.xxxxxE-yy.
             for (int i = 0; i < olength - 1; i++) {
-                int c = output % 10; output /= 10;
+                int c = output % 10;
+                output /= 10;
                 result[index + olength - i] = (char) ('0' + c);
             }
             result[index] = (char) ('0' + output % 10);
@@ -355,7 +374,7 @@ public final class RyuFloat {
     }
 
     private static int pow5bits(int e) {
-        return e == 0 ? 1 : (int) ((e * LOG2_5_NUMERATOR + LOG2_5_DENOMINATOR - 1)/LOG2_5_DENOMINATOR);
+        return e == 0 ? 1 : (int) ((e * LOG2_5_NUMERATOR + LOG2_5_DENOMINATOR - 1) / LOG2_5_DENOMINATOR);
     }
 
     /**
