@@ -2171,7 +2171,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- 默认值：3600
+- 默认值：4 * 3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：否

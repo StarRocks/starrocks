@@ -336,7 +336,7 @@ public class Config extends ConfigBase {
      * It will run every *task_check_interval_second* to do background job.
      */
     @ConfField
-    public static int task_check_interval_second = 1 * 3600; // 1 hour
+    public static int task_check_interval_second = 4 * 3600; // 4 hours
 
     /**
      * for task set expire time
