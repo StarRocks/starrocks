@@ -6,7 +6,9 @@ displayed_sidebar: "English"
 
 ## Description
 
-Manually setting the partition version is a dangerous operation and is only used when there is a problem with the cluster metadata. Under normal circumstances, the partition version will automatically be consistent with the tablet version.
+Sets a partition to a specific data version.
+
+Note that manually setting the partition version is a high-risk operation and is recommended only when problems occur in the cluster metadata. In normal circumstances, the version of a partition is consistent with that of the tablets within.
 
 :::tip
 
@@ -17,29 +19,32 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 ## Syntax
 
 ```sql
-ADMIN SET TABLE table_name PARTITION (partition_name | partition_id) TO VERSION xxx;
+ADMIN SET TABLE <table_name> PARTITION ( <partition_name> | <partition_id> ) 
+TO VERSION <version>
 ```
 
-Note:
+## Parameters
 
-1. For non-partitioned tables, partition_name is the same as the table name.
-2. For random distribution tables, partition_id needs to be used to specify the partition.
+- `table_name`: The name of the table to which the partition belongs.
+- `partition_name`: The name of the partition. You need to specify a partition using either `partition_name` or `partition_id`. For non-partitioned tables, `partition_name` is the same as the table name.
+- `partition_id`: The ID of the partition. You need to specify a partition using either `partition_name` or `partition_id`. For tables with the random bucketing strategy, you can only use `partition_id` to specify the partition.
+- `version`: The version you want to set for the partition.
 
 ## Examples
 
-1. Set the version of table t1 to 10. t1 is a non-partitioned table.
+1. Set the version of the non-partitioned table `t1` to `10`.
 
     ```sql
     ADMIN SET TABLE t1 PARTITION(t1) TO VERSION 10;
     ```
 
-2. Set the p1 partition version of partitioned table t2 to 10
+2. Set the version of partition `p1` in table `t2` to `10`.
 
     ```sql
     ADMIN SET TABLE t2 PARTITION(p1) TO VERSION 10;
     ```
 
-3. Set the partition whose id is 123456 version to 10. t3 is a random distribution table.
+3. Set the version of the partition whose ID is `123456` to `10`. `t3` is a table with the random bucketing strategy.
 
     ```sql
     ADMIN SET TABLE t3 PARTITION('123456') TO VERSION 10;
