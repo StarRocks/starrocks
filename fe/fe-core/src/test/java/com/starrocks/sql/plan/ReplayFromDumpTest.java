@@ -963,4 +963,67 @@ public class ReplayFromDumpTest {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testListPartitionPrunerWithNEExpr() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/list_partition_prune_dump"));
+        // partitions should not be pruned
+        Assert.assertTrue(replayPair.second, !replayPair.second.contains("partitionsRatio=2/3, tabletsRatio=20/20"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
+                "     table: partitions2_keys311, rollup: partitions2_keys311\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: [7: undef_signed_not_null, VARCHAR, false] != 'j'\n" +
+                "     partitionsRatio=3/3, tabletsRatio=30/30"));
+    }
+
+    @Test
+    public void testTopNPushDownBelowUnionAll() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/topn_push_down_union"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+
+        // Topn should be pushed down below union all and contains no duplicated ording columns
+        PlanTestBase.assertContains(replayPair.second, "  26:TOP-N\n" +
+                "  |  order by: <slot 240> 240: expr ASC, <slot 241> 241: cast DESC, <slot 206> 206: mock_025 DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 200");
+        PlanTestBase.assertContains(replayPair.second, "17:TOP-N\n" +
+                "  |  order by: <slot 165> 165: cast ASC, <slot 153> 153: cast DESC, <slot 166> 166: expr ASC, " +
+                "<slot 167> 167: cast DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 200");
+    }
+
+    @Test
+    public void testViewDeltaRewriter() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+    }
+
+    @Test
+    public void testNoCTEOperatorPropertyDerived() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/no_cte_operator_test"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("23:Project\n" +
+                "  |  <slot 193> : 193: mock_081\n" +
+                "  |  <slot 194> : 194: mock_089\n" +
+                "  |  <slot 233> : 233: mock_065\n" +
+                "  |  <slot 391> : 379: case\n" +
+                "  |  <slot 395> : '1'\n" +
+                "  |  \n" +
+                "  22:Project"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:SORT\n" +
+                "  |  order by: <slot 194> 194: mock_089 ASC, <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
+                "<slot 233> 233: mock_065 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  24:EXCHANGE"));
+    }
+>>>>>>> 3afec4e5ff ([BugFix] fix required property derived for no cte operator (#44090))
 }
