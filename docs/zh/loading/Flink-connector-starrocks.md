@@ -235,6 +235,10 @@ DISTRIBUTED BY HASH(id);
     ./bin/start-cluster.sh
     ```
 
+#### 网络配置
+
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 所在机器的 [`http_port`](../administration/management/FE_configuration.md#http_port) 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口，以及 BE 所在机器的 [`http_port`](../administration/management/BE_configuration.md#be_http_port) 端口。
+
 ### 使用 Flink SQL 写入数据
 
 - 运行以下命令以启动 Flink SQL 客户端。
