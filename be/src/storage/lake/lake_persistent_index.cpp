@@ -248,10 +248,13 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
     return Status::OK();
 }
 
-Status LakePersistentIndex::prepare_merging_iterator(const TabletMetadata& metadata, TxnLogPB* txn_log,
-                                                     std::vector<std::shared_ptr<PersistentIndexSstable>>* sstable_vec,
-                                                     std::unique_ptr<sstable::Iterator>* merging_iter_ptr) {
+Status LakePersistentIndex::prepare_merging_iterator(
+        const TabletMetadata& metadata, TxnLogPB* txn_log,
+        std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
+        std::unique_ptr<sstable::Iterator>* merging_iter_ptr) {
     sstable::ReadOptions read_options;
+    // No need to cache input sst's blocks.
+    read_options.fill_cache = false;
     std::vector<sstable::Iterator*> iters;
     DeferOp free_iters([&] {
         for (sstable::Iterator* iter : iters) {
@@ -270,13 +273,14 @@ Status LakePersistentIndex::prepare_merging_iterator(const TabletMetadata& metad
         if (block_cache == nullptr) {
             return Status::InternalError("Block cache is null.");
         }
-        auto merge_sstable = std::make_shared<PersistentIndexSstable>();
-        RETURN_IF_ERROR(merge_sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
-        sstable_vec->push_back(merge_sstable);
-        sstable::Iterator* iter = merge_sstable->new_iterator(read_options);
+        auto merging_sstable = std::make_shared<PersistentIndexSstable>();
+        RETURN_IF_ERROR(
+                merging_sstable->init(std::move(rf), sstable_pb, block_cache->cache(), false /** no filter **/));
+        merging_sstables->push_back(merging_sstable);
+        sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
         // add input sstable.
-        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merge_sstable->sstable_pb());
+        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
         ss_debug << sstable_pb.filename() << " | ";
         if (iters.size() >= max_compaction_versions) {
             break;

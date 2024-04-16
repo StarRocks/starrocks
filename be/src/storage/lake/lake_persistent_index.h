@@ -144,7 +144,7 @@ private:
 
     // get sstable's iterator that need to compact and modify txn_log
     Status prepare_merging_iterator(const TabletMetadata& metadata, TxnLogPB* txn_log,
-                                    std::vector<std::shared_ptr<PersistentIndexSstable>>* sstable_vec,
+                                    std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
                                     std::unique_ptr<sstable::Iterator>* merging_iter_ptr);
 
     Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);

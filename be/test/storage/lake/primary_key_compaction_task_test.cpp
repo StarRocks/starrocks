@@ -1193,9 +1193,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
-    ASSERT_EQ(kChunkSize * 10, read(version));
+    ASSERT_EQ(kChunkSize * N, read(version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 10);
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), N);
 
     auto txn_id = next_id();
     auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
@@ -1207,7 +1207,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
-    ASSERT_EQ(10 * kChunkSize, read(version));
+    ASSERT_EQ(kChunkSize * N, read(version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(config::lake_pk_index_sst_max_compaction_versions, new_tablet_metadata->orphan_files_size());
 
@@ -1251,9 +1251,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
-    ASSERT_EQ(kChunkSize * 10, read(version));
+    ASSERT_EQ(kChunkSize * N, read(version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 10);
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), N);
 
     std::vector<std::thread> workers;
     workers.emplace_back([&]() {
@@ -1264,6 +1264,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
             check_task(task);
             ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
             EXPECT_EQ(100, task_context->progress.value());
+            _update_mgr->TEST_remove_compaction_cache(tablet_id, txn_id);
         }
     });
     workers.emplace_back([&]() {
