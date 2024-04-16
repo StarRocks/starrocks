@@ -54,6 +54,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -362,7 +363,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
         GlobalStateMgr.getCurrentState().initDefaultWarehouse();
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
@@ -387,7 +388,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assert.assertEquals(0L, alterJobV2.warehouseId);
 
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
