@@ -191,6 +191,28 @@ select * from `t1` order by `c1`,`c2`;
 4	4
 5	5
 -- !result
+-- name: test_truncate_table 
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into `t0` values (1,1),(2,2),(3,3);
+-- result:
+-- !result
+select * from `t0` order by `c1`,`c2`;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+truncate table `t0`;
+-- result:
+-- !result
+select * from `t0` order by `c1`,`c2`;
+-- result:
+-- !result
 -- name: test_name_conflict
 create table `t` (
     `c1` int,
@@ -227,6 +249,32 @@ select * from `t` order by `c1`,`c2`;
 1	1
 2	2
 3	3
+-- !result
+-- name: test_ddl_on_temporary_table
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+alter table `t` add column `c3` int default null;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: temporary table doesn't support alter table statement.")
+-- !result
+-- name: test_submit_task_on_temporary_table
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+submit task as insert into `t` select * from `t`;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Cannot submit task based on temporary table.')
+-- !result
+submit task as create table `t0` as select * from `t`;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Cannot submit task based on temporary table.')
 -- !result
 -- name: test_select_out_file
 create temporary table `t` (
@@ -292,4 +340,53 @@ drop database temp_table_test_${uuid0}_new;
 -- !result
 drop database temp_table_test_${uuid0}_new force;
 -- result:
+-- name: test_create_view
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create view `v1` as select * from `t`;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: View can't base on temporary table.")
+-- !result
+create materialized view `mv1` as select * from `t`;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Materialized view can't base on temporary table.")
+-- !result
+create materialized view `m1` refresh immediate manual as select * from `t`;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Materialized view can't base on temporary table.")
+-- !result
+create table `t1` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create view `v1` as select * from `t1`;
+-- result:
+-- !result
+alter view `v1` as select * from `t`;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: View can't base on temporary table.")
+-- !result
+-- name: test_export
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+export table `t`
+TO "oss://${oss_bucket}/test_temporary_table/${uuid0}/"
+WITH BROKER
+(
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "fs.oss.endpoint" = "${oss_endpoint}"
+);
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Do not support exporting temporary table.')
 -- !result

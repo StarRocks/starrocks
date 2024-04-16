@@ -319,18 +319,27 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
+            StatementBase taskStmt = null;
             if (statement.getCreateTableAsSelectStmt() != null) {
                 CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
                 QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
                 Analyzer.analyze(queryStatement, context);
+                taskStmt = queryStatement;
             } else if (statement.getInsertStmt() != null) {
                 InsertStmt insertStmt = statement.getInsertStmt();
                 InsertAnalyzer.analyze(insertStmt, context);
+                taskStmt = insertStmt;
             } else if (statement.getDataCacheSelectStmt() != null) {
                 DataCacheStmtAnalyzer.analyze(statement.getDataCacheSelectStmt(), context);
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }
+            boolean hasTemporaryTable = AnalyzerUtils.collectAllTable(taskStmt)
+                    .values().stream().anyMatch(t -> t.isTemporaryTable());
+            if (hasTemporaryTable) {
+                throw new SemanticException("Cannot submit task based on temporary table");
+            }
+
             OriginStatement origStmt = statement.getOrigStmt();
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);

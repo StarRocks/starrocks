@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -87,7 +88,7 @@ public class DropStmtAnalyzer {
             Table table;
             String tableName = statement.getTableName();
             try {
-                table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+                table = MetaUtils.getSessionAwareTable(context, db, new TableName(catalogName, dbName, tableName));
                 if (table == null) {
                     if (statement.isSetIfExists()) {
                         LOG.info("drop table[{}] which does not exist", tableName);
@@ -101,6 +102,9 @@ public class DropStmtAnalyzer {
                                 "The data of '%s' cannot be dropped because '%s' is a materialized view," +
                                         "use 'drop materialized view %s' to drop it.",
                                 tableName, tableName, tableName);
+                    }
+                    if (table.isTemporaryTable()) {
+                        statement.setTemporaryTableMark(true);
                     }
                 }
             } finally {
