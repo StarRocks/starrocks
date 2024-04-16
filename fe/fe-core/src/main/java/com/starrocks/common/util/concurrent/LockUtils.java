@@ -50,7 +50,8 @@ public class LockUtils {
 
     private static void logSlowLockEventIfNeeded(long startMs, LockType type,
                                                  long objectId, String objectName,
-                                                 JsonObject beforeLockInfo, JsonObject afterLockInfo,
+                                                 JsonObject beforeLockInfo, boolean acquired,
+                                                 QueryableReentrantReadWriteLock rwLock,
                                                  SlowLockLogStats slowLockLogStats) {
         long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         if (endMs - startMs > Config.slow_lock_threshold_ms &&
@@ -58,6 +59,7 @@ public class LockUtils {
             slowLockLogStats.updateLastSlowLockLogTime(endMs);
             JsonObject slowLockInfoJObj = new JsonObject();
             slowLockInfoJObj.add("beforeLockInfo", beforeLockInfo);
+            JsonObject afterLockInfo = acquired ? getLockInfoWithCurrStack(rwLock) : getLockInfoWithOwnerStack(rwLock);
             slowLockInfoJObj.add("afterLockInfo", afterLockInfo);
 
             // using json style instead of multi-line style, because for some logging collection
@@ -95,9 +97,9 @@ public class LockUtils {
             default:
                 throw new UnsupportedOperationException("unknown lock type: " + type);
         }
-        JsonObject afterLockInfo = getLockInfoWithCurrStack(rwLock);
 
-        logSlowLockEventIfNeeded(startMs, type, objectId, objectName, beforeLockInfo, afterLockInfo, slowLockLogStats);
+        logSlowLockEventIfNeeded(startMs, type, objectId, objectName,
+                beforeLockInfo, true, rwLock, slowLockLogStats);
     }
 
     private static boolean tryLock(QueryableReentrantReadWriteLock rwLock,
@@ -120,14 +122,13 @@ public class LockUtils {
                 throw new UnsupportedOperationException("unknown lock type: " + type);
         }
 
-        JsonObject afterLockInfo;
+
         if (lockingResult) {
-            afterLockInfo = getLockInfoWithCurrStack(rwLock);
             logSlowLockEventIfNeeded(startMs, type,
-                    objectId, objectName, beforeLockInfo, afterLockInfo, slowLockLogStats);
+                    objectId, objectName, beforeLockInfo, true, rwLock, slowLockLogStats);
         } else {
             // log try lock failure
-            afterLockInfo = getLockInfoWithOwnerStack(rwLock);
+            JsonObject afterLockInfo = getLockInfoWithOwnerStack(rwLock);
             logTryLockFailure(type, timeout, unit, objectId, objectName, beforeLockInfo, afterLockInfo);
         }
 
