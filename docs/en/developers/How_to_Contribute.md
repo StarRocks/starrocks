@@ -22,7 +22,7 @@ Contributing to StarRocks is cordially welcome from everyone. Contributing to St
 
 ## Community resources
 
-The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack Channel](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ). For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.
+The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack Channel](https://try.starrocks.com/join-starrocks-on-slack) For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.
 
 You can also report issues and problems, or suggest new features, on [GitHub](https://github.com/StarRocks/starrocks/).
 
@@ -203,7 +203,7 @@ If you don't know how to get started, this is the process we suggest for contrib
 
 1. Sign the [Contributor License Agreement (CLA)](https://cla-assistant.io/StarRocks/starrocks).
 
-2. Start a discussion by creating a Github [issue](https://github.com/StarRocks/starrocks/issues), or asking on [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ)(unless the change is trivial).
+2. Start a discussion by creating a Github [issue](https://github.com/StarRocks/starrocks/issues), or asking on [Slack channel](https://try.starrocks.com/join-starrocks-on-slack) unless the change is trivial).
 
    Before getting your hands on codes, you should comment in the issue body, and inform the maintainer to assign you the issue that you wish to solve. It is recommended to share your plan on how to solve this problem in the issue body as well.
 
