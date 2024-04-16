@@ -97,10 +97,10 @@ void BitmapValueTest::check_bitmap(BitmapDataType type, const BitmapValue& bitma
 
 TEST_F(BitmapValueTest, concurrency_compress) {
     BitmapValue bitmap;
-    for (size_t i = 0; i < 10000; i+=1) {
+    for (size_t i = 0; i < 10000; i += 1) {
         bitmap.add(i);
     }
-    for (size_t i = 100; i < 1000; i+=100) {
+    for (size_t i = 100; i < 1000; i += 100) {
         bitmap.remove(i);
     }
 
