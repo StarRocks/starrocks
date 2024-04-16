@@ -39,6 +39,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -313,6 +314,10 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table str2dateTable = db.getTable("partition_str2date");
+        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(str2dateTable));
+
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_from_unixtime (\n" +
                         "        create_time bigint,\n" +
@@ -333,6 +338,8 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
+        Table fromUnixtimeTable = db.getTable("partition_from_unixtime");
+        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(fromUnixtimeTable));
     }
 
     @Test
