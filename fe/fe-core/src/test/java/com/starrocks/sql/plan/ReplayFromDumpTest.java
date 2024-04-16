@@ -888,4 +888,25 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
     }
+
+    @Test
+    public void testNoCTEOperatorPropertyDerived() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/no_cte_operator_test"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("23:Project\n" +
+                "  |  <slot 193> : 193: mock_081\n" +
+                "  |  <slot 194> : 194: mock_089\n" +
+                "  |  <slot 233> : 233: mock_065\n" +
+                "  |  <slot 391> : 379: case\n" +
+                "  |  <slot 395> : '1'\n" +
+                "  |  \n" +
+                "  22:Project"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:SORT\n" +
+                "  |  order by: <slot 194> 194: mock_089 ASC, <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
+                "<slot 233> 233: mock_065 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  24:EXCHANGE"));
+    }
 }
