@@ -287,7 +287,7 @@ public class Locker {
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, timeout);
-                } else if (lockType == LockType.READ) {
+                } else {
                     this.lock(database.getId(), LockType.INTENTION_SHARED, timeout);
                 }
             } catch (IllegalLockStateException e) {
