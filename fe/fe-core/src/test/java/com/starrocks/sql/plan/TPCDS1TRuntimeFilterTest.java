@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class TPCDS1TRuntimeFilterTest extends TPCDS1TTestBase {
-    private final static Pattern RUNTIME_FILTER_PATTERN = Pattern.compile("-.+((probe_expr)|(build_expr)) =.+\n");
+    private static final Pattern RUNTIME_FILTER_PATTERN = Pattern.compile("-.+((probe_expr)|(build_expr)) =.+\n");
 
     @BeforeAll
     public static void beforeClass() throws Exception {
