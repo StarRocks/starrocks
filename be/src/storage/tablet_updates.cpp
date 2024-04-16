@@ -2407,6 +2407,7 @@ int64_t TabletUpdates::get_compaction_score() {
     size_t total_inputs = 0;
     size_t total_deletes = 0;
     bool has_error = false;
+    std::map<int32_t, std::pair<size_t, size_t>> candidates_by_level;
     {
         std::lock_guard lg(_rowset_stats_lock);
         for (auto rowsetid : rowsets) {
@@ -2423,6 +2424,17 @@ int64_t TabletUpdates::get_compaction_score() {
                 total_score += itr->second->compaction_score;
                 total_inputs += std::max(1UL, itr->second->num_segments);
                 total_deletes += itr->second->num_dels;
+                if (config::enable_pk_size_tiered_compaction_strategy) {
+                    int32_t level = _calc_compaction_level(itr->second.get());
+                    auto candidate_itr = candidates_by_level.find(level);
+                    if (candidate_itr == candidates_by_level.end()) {
+                        candidates_by_level[level] =
+                                std::make_pair(std::max(1UL, itr->second->num_segments), itr->second->num_dels);
+                    } else {
+                        candidate_itr->second.first += std::max(1UL, itr->second->num_segments);
+                        candidate_itr->second.second += itr->second->num_dels;
+                    }
+                }
             }
         }
     }
@@ -2434,6 +2446,18 @@ int64_t TabletUpdates::get_compaction_score() {
     if (total_inputs == 1 && total_deletes == 0) {
         // only 1 input and no delete, no need to do compaction
         return -1;
+    }
+    if (config::enable_pk_size_tiered_compaction_strategy) {
+        bool flag = false;
+        for (auto [_, candidate] : candidates_by_level) {
+            if (candidate.first > 1 || (candidate.first == 1 && candidate.second > 0)) {
+                flag = true;
+                break;
+            }
+        }
+        if (!flag) {
+            return -1;
+        }
     }
     // scale score to a reasonable range relative to the number of files * 10
     return total_score / std::max(1L, config::update_compaction_size_threshold / 10);
