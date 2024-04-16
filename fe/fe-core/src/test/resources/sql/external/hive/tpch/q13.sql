@@ -86,8 +86,6 @@ OutPut Exchange Id: 10
 5:HASH JOIN
 |  join op: RIGHT OUTER JOIN (PARTITIONED)
 |  equal join conjunct: [10: o_custkey, INT, true] = [1: c_custkey, INT, true]
-|  build runtime filters:
-|  - filter_id = 0, build_expr = (1: c_custkey), remote = true
 |  output columns: 1, 9
 |  cardinality: 112500000
 |  column statistics:
@@ -140,8 +138,6 @@ NON-PARTITION PREDICATES: NOT (17: o_comment LIKE '%unusual%deposits%')
 partitions=1/1
 avgRowSize=95.0
 cardinality: 112500000
-probe runtime filters:
-- filter_id = 0, probe_expr = (10: o_custkey)
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.125E8] ESTIMATE
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE

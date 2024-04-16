@@ -113,8 +113,6 @@ OutPut Exchange Id: 25
 18:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [19: l_suppkey, INT, true] = [10: s_suppkey, INT, true]
-|  build runtime filters:
-|  - filter_id = 2, build_expr = (10: s_suppkey), remote = true
 |  output columns: 18, 19, 21, 22, 23, 42, 48
 |  cardinality: 150009476
 |  column statistics:
@@ -327,7 +325,6 @@ avgRowSize=44.0
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 0, probe_expr = (18: l_partkey)
-- filter_id = 2, probe_expr = (19: l_suppkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
