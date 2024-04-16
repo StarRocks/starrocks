@@ -33,16 +33,20 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
-public class SessionCleaner extends FrontendDaemon  {
-    private static final Logger LOG = LogManager.getLogger(SessionCleaner.class);
-    private static final int SESSION_CLEANER_THREAD_NUM = 1;
-    private static final int SESSION_CLEANER_QUEUE_SIZE = 100000;
+// TemporaryTableCleaner is used to automatically clean up temporary tables.
+// It is only executed on the FE leader.
+// It periodically obtains the active session IDs related to all temporary tables on all FEs and
+// automatically cleans up temporary tables that are no longer active.
+public class TemporaryTableCleaner extends FrontendDaemon  {
+    private static final Logger LOG = LogManager.getLogger(TemporaryTableCleaner.class);
+    private static final int TEMP_TABLE_CLEANER_THREAD_NUM = 1;
+    private static final int TEMP_TABLE_CLEANER_QUEUE_SIZE = 100000;
 
     private final ExecutorService executor;
 
-    public SessionCleaner() {
-        this.executor = ThreadPoolManager.newDaemonFixedThreadPool(SESSION_CLEANER_THREAD_NUM, SESSION_CLEANER_QUEUE_SIZE,
-                "session-cleaner-pool", false);
+    public TemporaryTableCleaner() {
+        this.executor = ThreadPoolManager.newDaemonFixedThreadPool(TEMP_TABLE_CLEANER_THREAD_NUM, TEMP_TABLE_CLEANER_QUEUE_SIZE,
+                "temp-table-cleaner-pool", false);
     }
 
     @Override
@@ -59,7 +63,7 @@ public class SessionCleaner extends FrontendDaemon  {
             try {
                 TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
                 TListSessionResponse response = FrontendServiceProxy.call(
-                        thriftAddress, 1000, Config.thrift_rpc_retry_times, client -> client.listSessions(request));
+                        thriftAddress, Config.thrift_rpc_timeout_ms, Config.thrift_rpc_retry_times, client -> client.listSessions(request));
                 if (response.getSessions() != null) {
                     List<TSessionInfo> sessions = response.getSessions();
                     for (TSessionInfo sessionInfo : sessions) {
@@ -70,7 +74,7 @@ public class SessionCleaner extends FrontendDaemon  {
                     }
                 }
             } catch (Throwable e) {
-                LOG.info("listSessions return error from {}:{}, skip clean session",
+                LOG.warn("listSessions return error from {}:{}, skip clean temporary tables",
                         frontend.getHost(), frontend.getRpcPort(), e);
                 return;
             }

@@ -19,7 +19,9 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.UUID;
 
-// only used by internal, clean all temporary tables created by session.
+// clean all temporary tables created by a specific session.
+// when a session is closed, if there are temporary tables on it,
+// FE will automatically execute this command to delete the temporary table in time.
 public class CleanTemporaryTableStmt extends DdlStmt {
     private UUID sessionId;
 
