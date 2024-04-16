@@ -897,9 +897,10 @@ size_t BitmapValue::serialize(uint8_t* dst) const {
 
 // When you persist bitmap value to disk, you could call this method.
 // This method should be called before `serialize_size`.
-void BitmapValue::compress() const {
+void BitmapValue::compress() {
     if (_type == BITMAP) {
         _mem_usage = 0;
+        _copy_on_write();
         // no need to copy on write
         _bitmap->runOptimize();
         _bitmap->shrinkToFit();

@@ -254,7 +254,7 @@ void ObjectColumn<T>::_build_slices() const {
     // Do we really need compress bitmap here?
     if constexpr (std::is_same_v<T, BitmapValue>) {
         for (size_t i = 0; i < _pool.size(); ++i) {
-            _pool[i].compress();
+            const_cast<T*>(&_pool[i])->compress();
         }
     }
 
