@@ -238,9 +238,9 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesInfo;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TListPipesResult;
-import com.starrocks.thrift.TListSessionOptions;
-import com.starrocks.thrift.TListSessionRequest;
-import com.starrocks.thrift.TListSessionResponse;
+import com.starrocks.thrift.TListSessionsOptions;
+import com.starrocks.thrift.TListSessionsRequest;
+import com.starrocks.thrift.TListSessionsResponse;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadJobType;
@@ -2824,11 +2824,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TListSessionResponse listSessions(TListSessionRequest request) throws TException {
+    public TListSessionsResponse listSessions(TListSessionsRequest request) throws TException {
         if (!request.isSetOptions()) {
             throw new SemanticException("options must be set");
         }
-        TListSessionOptions options = request.options;
+        TListSessionsOptions options = request.options;
         if (options.isSetTemporary_table_only() && options.temporary_table_only) {
             TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
             Set<UUID> sessions = ExecuteEnv.getInstance().getScheduler().listAllSessionsId();
@@ -2839,7 +2839,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 sessionInfo.setSession_id(session.toString());
                 sessionInfos.add(sessionInfo);
             }
-            TListSessionResponse response = new TListSessionResponse();
+            TListSessionsResponse response = new TListSessionsResponse();
             response.setSessions(sessionInfos);
             return response;
         } else {

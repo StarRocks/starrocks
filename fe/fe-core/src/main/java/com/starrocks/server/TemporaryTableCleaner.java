@@ -19,9 +19,9 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.system.Frontend;
-import com.starrocks.thrift.TListSessionOptions;
-import com.starrocks.thrift.TListSessionRequest;
-import com.starrocks.thrift.TListSessionResponse;
+import com.starrocks.thrift.TListSessionsOptions;
+import com.starrocks.thrift.TListSessionsRequest;
+import com.starrocks.thrift.TListSessionsResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TSessionInfo;
 import org.apache.logging.log4j.LogManager;
@@ -54,16 +54,17 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         List<UUID> aliveSessions = new ArrayList<>();
 
-        TListSessionOptions options = new TListSessionOptions();
+        TListSessionsOptions options = new TListSessionsOptions();
         options.setTemporary_table_only(true);
-        TListSessionRequest request = new TListSessionRequest();
+        TListSessionsRequest request = new TListSessionsRequest();
         request.setOptions(options);
 
         for (Frontend frontend : frontends) {
             try {
                 TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
-                TListSessionResponse response = FrontendServiceProxy.call(
-                        thriftAddress, Config.thrift_rpc_timeout_ms, Config.thrift_rpc_retry_times, client -> client.listSessions(request));
+                TListSessionsResponse response = FrontendServiceProxy.call(
+                        thriftAddress, Config.thrift_rpc_timeout_ms, Config.thrift_rpc_retry_times,
+                        client -> client.listSessions(request));
                 if (response.getSessions() != null) {
                     List<TSessionInfo> sessions = response.getSessions();
                     for (TSessionInfo sessionInfo : sessions) {

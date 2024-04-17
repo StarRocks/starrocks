@@ -1735,20 +1735,21 @@ struct TReportLakeCompactionResponse {
     1: optional bool valid
 }
 
-struct TListSessionOptions {
+struct TListSessionsOptions {
     1: optional bool temporary_table_only;
 }
 
-struct TListSessionRequest {
-    1: optional TListSessionOptions options;
+struct TListSessionsRequest {
+    1: optional TListSessionsOptions options;
 }
 
 struct TSessionInfo {
     1: optional string session_id;
 }
 
-struct TListSessionResponse {
-    1: optional list<TSessionInfo> sessions;
+struct TListSessionsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TSessionInfo> sessions;
 }
 
 service FrontendService {
@@ -1856,6 +1857,6 @@ service FrontendService {
 
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 
-    TListSessionResponse listSessions(1: TListSessionRequest request)
+    TListSessionsResponse listSessions(1: TListSessionsRequest request)
 }
 
