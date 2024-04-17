@@ -2063,6 +2063,7 @@ temporalClause
     | FOR SYSTEM_TIME BETWEEN expression AND expression
     | FOR SYSTEM_TIME FROM expression TO expression
     | FOR SYSTEM_TIME ALL
+    | FOR VERSION AS OF expression
     ;
 
 queryPrimary
