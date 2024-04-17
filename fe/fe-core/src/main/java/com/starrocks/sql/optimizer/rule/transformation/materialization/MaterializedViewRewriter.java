@@ -720,6 +720,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 queryExpression, queryPredicateSplit, queryEc, queryRelationIdToColumns, queryColumnRefFactory,
                 mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet);
+        // add agg push down rewrite info
+        rewriteContext.setAggregatePushDownContext(mvRewriteContext.getAggregatePushDownContext());
 
         // collect partition and distribution related predicates in mv
         // used to prune partition and buckets after mv rewrite

@@ -69,5 +69,12 @@ public class AggRewriteInfo {
     public void setOp(OptExpression op) {
         this.op = op;
     }
-}
 
+    /**
+     * Output rewrite info's remapping and context to the given remapping and context
+     */
+    public void output(AggColumnRefRemapping remapping, AggregatePushDownContext aggregatePushDownContext) {
+        getRemapping().ifPresent(remapping::combine);
+        aggregatePushDownContext.combine(ctx);
+    }
+}

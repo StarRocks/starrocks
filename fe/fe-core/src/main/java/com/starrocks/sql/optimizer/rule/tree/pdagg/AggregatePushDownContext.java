@@ -25,12 +25,22 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Map;
 
-class AggregatePushDownContext {
+public class AggregatePushDownContext {
     public static final AggregatePushDownContext EMPTY = new AggregatePushDownContext();
 
     public LogicalAggregationOperator origAggregator;
     public final Map<ColumnRefOperator, CallOperator> aggregations;
     public final Map<ColumnRefOperator, ScalarOperator> groupBys;
+
+    // Push-down aggregate function can be split into partial and final stage, partial stage is pushed down to
+    // scan operator and final stage is pushed down to the parent operator of scan operator.
+    // For equivalent aggregate function, we need to record the final stage aggregate function to replace the original
+    // aggregate function.
+    public final Map<CallOperator, CallOperator> aggToPartialAggMap = Maps.newHashMap();
+    public final Map<CallOperator, CallOperator> aggToFinalAggMap = Maps.newHashMap();
+    // Query's aggregate call operator to push down aggregate call operator mapping,
+    // those two operators are not the same so record it to be used later.
+    public final Map<ColumnRefOperator, CallOperator> aggColRefToPushDownAggMap = Maps.newHashMap();
 
     public boolean hasWindow = false;
 
@@ -54,5 +64,27 @@ class AggregatePushDownContext {
 
     public boolean isEmpty() {
         return origAggregator == null;
+    }
+
+    /**
+     * If the push-down agg has been rewritten, record its partial and final stage aggregate function.
+     */
+    public void registerAggRewriteInfo(CallOperator aggFunc,
+                                       CallOperator partialStageAgg,
+                                       CallOperator finalStageAgg) {
+        aggToPartialAggMap.put(aggFunc, partialStageAgg);
+        aggToFinalAggMap.put(aggFunc, finalStageAgg);
+    }
+
+    /**
+     * Combine input ctx into current context.
+     */
+    public void combine(AggregatePushDownContext ctx) {
+        aggToFinalAggMap.putAll(ctx.aggToFinalAggMap);
+        aggColRefToPushDownAggMap.putAll(ctx.aggColRefToPushDownAggMap);
+    }
+
+    public boolean isRewrittenByEquivalent(CallOperator aggCall) {
+        return aggToFinalAggMap.containsKey(aggCall);
     }
 }
