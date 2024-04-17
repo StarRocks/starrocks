@@ -486,7 +486,8 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCatalogStatement() throws Exception {
-        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ConnectContext ctx = starRocksAssert.getCtx();
 
         // Anyone can use default_catalog, but can't use other external catalog without any action on it
@@ -524,7 +525,8 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the DROP privilege(s)");
 
         // check show catalogs only show catalog where the user has any privilege on
-        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on catalog test_ex_catalog3 to test", ctx), ctx);
@@ -538,7 +540,8 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testExternalDBAndTablePEntryObject() throws Exception {
-        starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
