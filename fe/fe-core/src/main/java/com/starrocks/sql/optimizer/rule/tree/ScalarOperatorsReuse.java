@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -333,7 +334,8 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visit(ScalarOperator scalarOperator, Void context) {
-            if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
+            if ((ConnectContext.get().getSessionVariable().isCboPruneSubfield() && scalarOperator.isConstant())
+                    || scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
 
@@ -356,7 +358,8 @@ public class ScalarOperatorsReuse {
                 // for example:
                 // select (rnd + 1) as rnd1, (rnd + 2) as rnd2 from (select rand() as rnd) sub
                 return collectCommonOperatorsByDepth(1, scalarOperator);
-            } else if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
+            } else if ((ConnectContext.get().getSessionVariable().isCboPruneSubfield() && scalarOperator.isConstant())
+                    || scalarOperator.getChildren().isEmpty()) {
                 // to keep the same logic as origin
                 return 0;
             } else {
