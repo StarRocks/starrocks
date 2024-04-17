@@ -134,8 +134,8 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
 
 void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks::ExprContext* context,
                                        FunctionContext::FunctionStateScope scope) {
-    // _fn_context_index > 0 means this function call has call opened
-    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index > 0) {
+    // _fn_context_index >= 0 means this function call has call opened
+    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index >= 0) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
         (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
 
