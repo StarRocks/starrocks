@@ -496,6 +496,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 Strings.nullToEmpty(otherMsg));
     }
 
+    public void clearOtherMsg() {
+        this.otherMsg = "";
+    }
+
     public String getDbFullName() throws MetaNotFoundException {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
@@ -1208,7 +1212,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (txnStatus == TransactionStatus.ABORTED) {
                 RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
-                newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr);
+                newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr, true);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
                         .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
                 GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
