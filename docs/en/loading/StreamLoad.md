@@ -30,6 +30,10 @@ Stream Load and Broker Load both support data transformation at data loading and
 
 <InsertPrivNote />
 
+#### Check network configuration
+
+Make sure that the machine on which the data you want to load resides can access the machine where the FE or FEs in a StarRocks cluster are located through the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`query_port`](../administration/management/FE_configuration.md#query_port), and access the machines where the BEs in a StarRocks cluster are located through the [`http_port`](../administration/management/BE_configuration.md#be_http_port).
+
 ## Loading from a local file system via Stream Load
 
 Stream Load is an HTTP PUT-based synchronous loading method. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
