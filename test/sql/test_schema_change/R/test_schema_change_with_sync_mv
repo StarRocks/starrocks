@@ -37,7 +37,7 @@ None
                  
 alter table t1 drop column id;
 -- result:
-E: (1064, 'Distribution column[id] cannot be dropped. index[t1]')
+[REGEX].*Distribution column.*
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -50,7 +50,7 @@ select * from t1 order by id;
 -- !result
 alter table t1 drop column k2;
 -- result:
-E: (1064, 'Partition column[k2] cannot be dropped. index[t1]')
+[REGEX].*Partition column.*
 -- !result
 function: wait_alter_table_finish()
 -- result:

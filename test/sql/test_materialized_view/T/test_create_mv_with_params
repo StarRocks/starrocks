@@ -41,7 +41,7 @@ AS SELECT dt,sum(col_int)
 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 
 refresh materialized view test_iceberg_mv0_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}", 2)
+function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}")
 -- result should be > 1, because it refresh partitions one by one
 select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
@@ -57,7 +57,7 @@ AS SELECT dt,sum(col_int)
 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 
 refresh materialized view test_iceberg_mv1_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}", 2)
+function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}")
 -- result should be > 1, because it refresh partitions one by one
 select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
