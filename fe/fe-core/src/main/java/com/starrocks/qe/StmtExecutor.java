@@ -2313,9 +2313,9 @@ public class StmtExecutor {
     // scenes can execute in FE should meet all these requirements:
     // 1. enable_constant_execute_in_fe = true
     // 2. is mysql text protocol
-    // 3. all values are constantOperator and not time type
+    // 3. all values are constantOperator
     private boolean canExecuteInFe(ConnectContext context, OptExpression optExpression) {
-        if (!context.getSessionVariable().isEnableConstantReturnInFE()) {
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
             return false;
         }
 

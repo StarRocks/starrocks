@@ -2021,7 +2021,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePipelineLevelShuffle = true;
 
     @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
-    private boolean enableConstantReturnInFE = false;
+    private boolean enableConstantExecuteInFE = false;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -3657,12 +3657,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePredicateMoveAround = enablePredicateMoveAround;
     }
 
-    public boolean isEnableConstantReturnInFE() {
-        return enableConstantReturnInFE;
+    public boolean isEnableConstantExecuteInFE() {
+        return enableConstantExecuteInFE;
     }
 
-    public void setEnableConstantReturnInFE(boolean enableConstantReturnInFE) {
-        this.enableConstantReturnInFE = enableConstantReturnInFE;
+    public void setEnableConstantExecuteInFE(boolean enableConstantExecuteInFE) {
+        this.enableConstantExecuteInFE = enableConstantExecuteInFE;
     }
 
     // Serialize to thrift object
