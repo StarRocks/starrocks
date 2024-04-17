@@ -86,6 +86,16 @@ The Stream Load transaction interface has the following limits:
 - If you the label of a previous transaction to call the `/api/transaction/begin` operation to start a new transaction, the previous transaction will fail and be rolled back.
 - The default column separator and row delimiter that StarRocks supports for CSV-formatted data are `\t` and `\n`. If your data file does not use the default column separator or row delimiter, you must use `"column_separator: <column_separator>"` or `"row_delimiter: <row_delimiter>"` to specify the column separator or row delimiter that is actually used in your data file when calling the `/api/transaction/load` operation.
 
+## Before you begin
+
+### Check privileges
+
+<InsertPrivNote />
+
+#### Check network configuration
+
+Make sure that the machine on which the data you want to load resides can access the FE and BE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`) , respectively.
+
 ## Basic operations
 
 ### Prepare sample data
