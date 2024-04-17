@@ -118,6 +118,16 @@ public class LogicalRepeatOperator extends LogicalOperator {
             return new LogicalRepeatOperator();
         }
 
+        public LogicalRepeatOperator.Builder setOutputGrouping(List<ColumnRefOperator> outputGrouping) {
+            builder.outputGrouping = outputGrouping;
+            return this;
+        }
+
+        public LogicalRepeatOperator.Builder setRepeatColumnRefList(List<List<ColumnRefOperator>> repeatColumnRefList) {
+            builder.repeatColumnRefList = repeatColumnRefList;
+            return this;
+        }
+
         @Override
         public LogicalRepeatOperator.Builder withOperator(LogicalRepeatOperator operator) {
             super.withOperator(operator);

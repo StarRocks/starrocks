@@ -198,7 +198,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
 
         for (ScalarOperator predicate : ranges) {
             OptExpression unionChild = buildOriginalUnionChildOpt(predicate, otherPredicates, input, withProjection);
-            OptExpressionDuplicator duplicator = new OptExpressionDuplicator(context.getColumnRefFactory());
+            OptExpressionDuplicator duplicator = new OptExpressionDuplicator(context.getColumnRefFactory(), context);
             OptExpression newChildOpt = duplicator.duplicate(unionChild);
             List<ColumnRefOperator> orderedCols = Lists.newArrayList();
             for (ColumnOutputInfo colInfo : aggColInfoList) {
