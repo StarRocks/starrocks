@@ -213,6 +213,13 @@ private:
     DEFINE_VECTORIZED_FN(_flat_json_length);
     DEFINE_VECTORIZED_FN(_full_json_length);
 
+    /**
+     * Returns the keys from the top-level value of a JSON object as a JSON array
+     */
+    DEFINE_VECTORIZED_FN(_json_keys_without_path);
+    DEFINE_VECTORIZED_FN(_flat_json_keys_with_path);
+    DEFINE_VECTORIZED_FN(_full_json_keys_with_path);
+
     template <LogicalType RresultType>
     DEFINE_VECTORIZED_FN(_get_json_value);
 
