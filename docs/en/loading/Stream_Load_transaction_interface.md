@@ -92,7 +92,7 @@ The Stream Load transaction interface has the following limits:
 
 #### Check network configuration
 
-Make sure that the machine on which the data you want to load resides can access the machine where the FE or FEs in a StarRocks cluster are located through the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`query_port`](../administration/management/FE_configuration.md#query_port), and access the machines where the BEs in a StarRocks cluster are located through the [`http_port`](../administration/management/BE_configuration.md#be_http_port).
+Make sure that the machine on which the data you want to load resides can access the machine where the FE or FEs in the StarRocks cluster are located through the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`query_port`](../administration/management/FE_configuration.md#query_port), and access the machines where the BEs in the StarRocks cluster are located through the [`http_port`](../administration/management/BE_configuration.md#be_http_port).
 
 ## Basic operations
 
