@@ -5,9 +5,9 @@ set enable_constant_execute_in_fe = true;
 select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
 1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
 cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
-x'123456', x'AABBCC11';
+timediff('2028-01-01 11:25:36', '2000-11-21 12:12:12'), timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';
 -- result:
-1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	4V	b'\xaa\xbb\xcc\x11'
+1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	237647:13:24	-237647:13:24	4V	b'\xaa\xbb\xcc\x11'
 -- !result
 select 1 as a union all select 2 union all select 1000000000;
 -- result:
@@ -26,6 +26,14 @@ select cast(10000000 as float), cast(1000000000000000 as double);
 select cast(0.00001 as float), cast(0.00001 as double);
 -- result:
 1e-05	1e-05
+-- !result
+select cast(100 as time);
+-- result:
+0:01:00
+-- !result
+select cast(1.123 as time);
+-- result:
+0:00:01
 -- !result
 set enable_constant_execute_in_fe = false;
 -- result:
@@ -33,9 +41,9 @@ set enable_constant_execute_in_fe = false;
 select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
 1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
 cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
-x'123456', x'AABBCC11';
+timediff('2028-01-01 11:25:36', '2000-11-21 12:12:12'), timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';
 -- result:
-1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	4V	b'\xaa\xbb\xcc\x11'
+1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	237647:13:24	-237647:13:24	4V	b'\xaa\xbb\xcc\x11'
 -- !result
 select 1 as a union all select 2 union all select 1000000000;
 -- result:
@@ -54,4 +62,12 @@ select cast(10000000 as float), cast(1000000000000000 as double);
 select cast(0.00001 as float), cast(0.00001 as double);
 -- result:
 1e-05	1e-05
+-- !result
+select cast(100 as time);
+-- result:
+0:01:00
+-- !result
+select cast(1.123 as time);
+-- result:
+0:00:01
 -- !result
