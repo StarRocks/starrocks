@@ -4429,6 +4429,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         return Status::OK();
     }
     // 1. load current l2 vec
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
     DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
@@ -4437,7 +4438,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major(),
                                                  prev_index_meta.l2_versions(i).minor(),
                                                  prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
-        ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
+        ASSIGN_OR_RETURN(auto l2_rfile, fs->new_random_access_file(l2_block_path));
         ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
         l2_vec.emplace_back(std::move(l2_index));
     }
