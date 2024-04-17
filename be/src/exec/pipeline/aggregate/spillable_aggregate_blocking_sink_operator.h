@@ -20,6 +20,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 // TODO: implements reset_state
@@ -66,6 +67,7 @@ private:
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     bool _is_finished = false;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class SpillableAggregateBlockingSinkOperatorFactory : public OperatorFactory {
