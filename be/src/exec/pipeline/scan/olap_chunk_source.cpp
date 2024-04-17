@@ -135,6 +135,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _gin_filtered_predicate_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterPredicate", segment_init_name);
     _gin_filtered_query_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterQuery", segment_init_name);
     _gin_filtered_lib_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterLib", segment_init_name);
+    _gin_filtered_roaring_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterWithoutRoaring", segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT,
                                            _get_counter_min_max_type("SegmentZoneMapFilterRows"), segment_init_name);
@@ -613,6 +614,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_gin_filtered_predicate_timer, _reader->stats().gin_index_filter_predicate_ns);
     COUNTER_UPDATE(_gin_filtered_query_timer, _reader->stats().gin_index_filter_query_ns);
     COUNTER_UPDATE(_gin_filtered_lib_timer, _reader->stats().gin_index_filter_lib_ns);
+    COUNTER_UPDATE(_gin_filtered_roaring_timer, _reader->stats().gin_index_filter_roaring_ns);
 
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 

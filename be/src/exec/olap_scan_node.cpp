@@ -579,6 +579,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _gin_filtered_predicate_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterPredicate", "SegmentInit");
     _gin_filtered_query_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterQuery", "SegmentInit");
     _gin_filtered_lib_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterLib", "SegmentInit");
+    _gin_filtered_roaring_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilterWithoutRoaring", "SegmentInit");
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");

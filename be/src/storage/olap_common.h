@@ -270,6 +270,7 @@ struct OlapReaderStatistics {
     int64_t gin_index_filter_predicate_ns = 0;
     int64_t gin_index_filter_query_ns = 0;
     int64_t gin_index_filter_lib_ns = 0;
+    int64_t gin_index_filter_roaring_ns = 0;
 
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;

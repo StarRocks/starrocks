@@ -381,6 +381,7 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_gin_filtered_predicate_timer, _reader->stats().gin_index_filter_predicate_ns);
     COUNTER_UPDATE(_parent->_gin_filtered_query_timer, _reader->stats().gin_index_filter_query_ns);
     COUNTER_UPDATE(_parent->_gin_filtered_lib_timer, _reader->stats().gin_index_filter_lib_ns);
+    COUNTER_UPDATE(_parent->_gin_filtered_roaring_timer, _reader->stats().gin_index_filter_roaring_ns);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_parent->_rowsets_read_count, _reader->stats().rowsets_read_count);

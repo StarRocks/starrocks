@@ -1921,8 +1921,10 @@ Status SegmentIterator::_apply_inverted_index() {
             }
         }
     }
+
     DCHECK_LE(row_bitmap.cardinality(), _scan_range.span_size());
     _scan_range = roaring2range(row_bitmap);
+    SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_roaring_ns);
 
     // ---------------------------------------------------------
     // Erase predicates that hit inverted index.
