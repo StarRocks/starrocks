@@ -51,13 +51,8 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     public PulsarTaskInfo(long timeToExecuteMs, PulsarTaskInfo pulsarTaskInfo, Map<String, Long> initialPositions) {
-<<<<<<< HEAD
-        super(UUID.randomUUID(), pulsarTaskInfo.getJobId(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
-                timeToExecuteMs, pulsarTaskInfo.getBeId());
-=======
         super(UUID.randomUUID(), pulsarTaskInfo.getJob(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
-                timeToExecuteMs, pulsarTaskInfo.getBeId(), pulsarTaskInfo.getTimeoutMs());
->>>>>>> 17d6b689db ([BugFix] Fix routine load deadlock (#44225))
+                timeToExecuteMs, pulsarTaskInfo.getBeId());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);
     }
