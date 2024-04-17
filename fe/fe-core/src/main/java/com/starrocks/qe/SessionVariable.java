@@ -682,6 +682,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
+    public static final String ALLOW_HIVE_WITHOUT_PARTITION_FILTER = "allow_hive_without_partition_filter";
+
+    public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
+
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
@@ -1825,6 +1829,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean enableExprPrunePartition = true;
+
+    @VarAttr(name = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
+    private boolean allowHiveWithoutPartitionFilter = true;
+
+    // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
+    @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
+    private int scanHivePartitionNumLimit = 0;
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
@@ -3530,6 +3541,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableExprPrunePartition(boolean enableExprPrunePartition) {
         this.enableExprPrunePartition = enableExprPrunePartition;
+    }
+
+    public boolean isAllowHiveWithoutPartitionFilter() {
+        return allowHiveWithoutPartitionFilter;
+    }
+
+    public void setAllowHiveWithoutPartitionFilter(boolean allowHiveWithoutPartitionFilter) {
+        this.allowHiveWithoutPartitionFilter = allowHiveWithoutPartitionFilter;
+    }
+
+    public int getScanHivePartitionNumLimit() {
+        return scanHivePartitionNumLimit;
+    }
+
+    public void setScanHivePartitionNumLimit(int scanHivePartitionNumLimit) {
+        this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
     }
 
     public boolean enableCboDeriveRangeJoinPredicate() {
