@@ -16,12 +16,14 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -69,6 +71,25 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
         String fn = call.getFnName();
         return fn.equalsIgnoreCase(FunctionSet.ARRAY_AGG_DISTINCT) ||
                 (call.isDistinct() && fn.equalsIgnoreCase(ARRAY_AGG));
+    }
+
+    private static final ImmutableSet<String> SUPPORTED_PUSH_DOWN_AGG_FUNCTIONS = ImmutableSet.of(
+            MULTI_DISTINCT_COUNT, MULTI_DISTINCT_SUM
+    );
+    private static final ImmutableSet<String> SUPPORTED_PUSH_DOWN_AGG_DISTINCT_FUNCTIONS = ImmutableSet.of(
+            COUNT, SUM, ARRAY_AGG
+    );
+
+    @Override
+    public boolean isSupportPushDownRewrite(CallOperator call) {
+        String fn = call.getFnName();
+        if (!call.isDistinct() && SUPPORTED_PUSH_DOWN_AGG_FUNCTIONS.contains(fn)) {
+            return true;
+        }
+        if (call.isDistinct() && SUPPORTED_PUSH_DOWN_AGG_DISTINCT_FUNCTIONS.contains(fn)) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -164,6 +185,24 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             String mapped = MAPPING.get(fn);
             Preconditions.checkState(mapped != null);
             return makeNoRollupAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL, mapped);
+        }
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        String fn = aggFunc.getFnName();
+        if (fn.equals(ARRAY_AGG)) {
+            CallOperator partialFn = makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+            CallOperator finalFn = makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+            return Pair.create(partialFn, finalFn);
+        } else {
+            String mapped = MAPPING.get(fn);
+            Preconditions.checkState(mapped != null);
+            CallOperator partialFn = makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+            CallOperator finalFn = makeRollupAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL, mapped);
+            return Pair.create(partialFn, finalFn);
         }
     }
 }
