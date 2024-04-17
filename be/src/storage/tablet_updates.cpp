@@ -654,20 +654,22 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                                  << _debug_string(false, true);
                     return st;
                 }
-                LOG(INFO) << "add rowset to pending commits tablet:" << _tablet.tablet_id() << " version:" << version
-                          << " txn_id: " << rowset->txn_id() << " #pending:" << _pending_commits.size();
+                VLOG(2) << "add rowset to pending commits tablet:" << _tablet.tablet_id() << " version:" << version
+                        << " txn_id: " << rowset->txn_id() << " #pending:" << _pending_commits.size();
             }
             return Status::OK();
         }
         st = _rowset_commit_unlocked(version, rowset);
         if (st.ok()) {
-            LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
-                      << " txn_id: " << rowset->txn_id() << " " << rowset->rowset_id().to_string()
-                      << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
-                      << " #delfile:" << rowset->num_delete_files() << " #uptfile:" << rowset->num_update_files()
-                      << " #row:" << rowset->num_rows()
-                      << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
-                      << " #pending:" << _pending_commits.size();
+            if (rowset->num_segments() > 0 || rowset->num_delete_files() > 0 || rowset->num_update_files() > 0) {
+                LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
+                          << " txn_id: " << rowset->txn_id() << " " << rowset->rowset_id().to_string()
+                          << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                          << " #seg:" << rowset->num_segments() << " #delfile:" << rowset->num_delete_files()
+                          << " #uptfile:" << rowset->num_update_files() << " #row:" << rowset->num_rows()
+                          << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
+                          << " #pending:" << _pending_commits.size();
+            }
             _try_commit_pendings_unlocked();
             _check_for_apply();
             if (wait_time > 0) {
@@ -801,11 +803,11 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
                                << " #pending:" << _pending_commits.size() << " " << st.to_string();
                     return;
                 }
-                LOG(INFO) << "commit rowset (pending) tablet:" << _tablet.tablet_id() << " version:" << version
-                          << " txn_id: " << rowset->txn_id() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
-                          << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
-                          << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
-                          << " #pending:" << _pending_commits.size();
+                VLOG(2) << "commit rowset (pending) tablet:" << _tablet.tablet_id() << " version:" << version
+                        << " txn_id: " << rowset->txn_id() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                        << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+                        << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
+                        << " #pending:" << _pending_commits.size();
                 itr = _pending_commits.erase(itr);
                 current_version = _edit_version_infos.back()->version.major_number();
             } else {
@@ -1125,8 +1127,8 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
             uint32_t rowset_id = (*i)->deltas[0];
             RowsetSharedPtr rowset = _get_rowset(rowset_id);
             if (rowset->is_column_mode_partial_update()) {
-                LOG(INFO) << "delta column group is generated in tablet_id: " << _tablet.tablet_id()
-                          << " version: " << (*i)->version;
+                VLOG(2) << "delta column group is generated in tablet_id: " << _tablet.tablet_id()
+                        << " version: " << (*i)->version;
                 return true;
             }
         }
@@ -1693,8 +1695,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
         MonotonicStopWatch watch;
         watch.start();
         RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get()));
-        LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
-                  << iostat->print_str();
+        VLOG(2) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
+                << iostat->print_str();
     }
 
     return Status::OK();
@@ -2585,7 +2587,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     // give 10s time gitter, so same table's compaction don't start at same time
     _last_compaction_time_ms = UnixMillis() + rand() % 10000;
     if (info->inputs.empty()) {
-        LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }
@@ -2750,7 +2752,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     // 1. no candidate rowsets, skip compaction
     // 2. only an empty rowset, skip compaction
     if (info->inputs.empty() || (info->inputs.size() <= 1 && compaction_level == -1 && del_rows == 0)) {
-        LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }
@@ -2881,12 +2883,12 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
         }
     }
     if (info->inputs.empty()) {
-        LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }
     if (total_segments == 1) {
-        LOG(INFO) << "only 1 segment, skip update compaction, tablet:" << _tablet.tablet_id();
+        VLOG(2) << "only 1 segment, skip update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }
