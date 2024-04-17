@@ -10,7 +10,7 @@ displayed_sidebar: "English"
 
 This version has been taken offline due to privilege issues in querying external tables in external catalogs such as Hive and Iceberg.
 
-- **Problem**: When users query data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this tables. SHOW GRANTS also shows that the user has this privilege.
+- **Problem**: When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege.
 
 - **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
 
