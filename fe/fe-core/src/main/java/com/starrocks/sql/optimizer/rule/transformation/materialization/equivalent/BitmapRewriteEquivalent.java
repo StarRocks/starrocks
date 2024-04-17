@@ -13,9 +13,11 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -91,6 +93,28 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
                         IS_IDENTICAL));
     }
 
+    public static final ImmutableSet<String> SUPPORT_AGG_FUNC = ImmutableSet.of(
+            MULTI_DISTINCT_COUNT,
+            BITMAP_UNION_COUNT,
+            BITMAP_AGG
+    );
+
+    @Override
+    public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
+        if (aggFunc == null) {
+            return false;
+        }
+
+        String aggFuncName = aggFunc.getFnName();
+        if (SUPPORT_AGG_FUNC.contains(aggFuncName)) {
+            return true;
+        }
+        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public ScalarOperator rewrite(RewriteEquivalentContext eqContext,
                                   EquivalentShuttleContext shuttleContext,
@@ -157,6 +181,22 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
             return makeBitmapUnionFunc(replace);
         } else {
             return makeBitmapCountFunc(replace);
+        }
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equals(BITMAP_AGG)) {
+            CallOperator partialFn = makeBitmapUnionFunc(replace);
+            CallOperator finalFn = makeBitmapUnionFunc(replace);
+            return Pair.create(partialFn, finalFn);
+        } else {
+            CallOperator partialFn = makeBitmapUnionFunc(replace);
+            CallOperator finalFn = makeBitmapUnionCountFunc(replace);
+            return Pair.create(partialFn, finalFn);
         }
     }
 }

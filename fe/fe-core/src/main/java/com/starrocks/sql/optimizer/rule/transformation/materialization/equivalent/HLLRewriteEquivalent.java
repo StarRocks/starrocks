@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -79,6 +80,19 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     public static ImmutableSet<String> SUPPORT_AGG_FUNC = ImmutableSet.of(APPROX_COUNT_DISTINCT, NDV, HLL_UNION_AGG);
+
+    @Override
+    public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
+        if (aggFunc == null) {
+            return false;
+        }
+
+        String aggFuncName = aggFunc.getFnName();
+        if (SUPPORT_AGG_FUNC.contains(aggFuncName)) {
+            return true;
+        }
+        return false;
+    }
 
     @Override
     public ScalarOperator rewrite(RewriteEquivalentContext eqContext,
@@ -158,5 +172,14 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
                                                CallOperator aggFunc,
                                                ColumnRefOperator replace) {
         return makeHllCardinalityFunc(replace);
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        CallOperator partialFn = makeHllUnion(replace);
+        CallOperator finalFn = makeHllUnionAggFunc(replace);
+        return Pair.create(partialFn, finalFn);
     }
 }
