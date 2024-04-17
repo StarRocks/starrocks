@@ -224,7 +224,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
 
     std::unique_ptr<ColumnPredicate> predicate;
     predicate.reset(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, "prefix"));
-    seg_opts.predicates[1].push_back(predicate.get());
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
@@ -332,7 +334,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     seg_opts.global_dictmaps = &dict_map;
     std::unique_ptr<ColumnPredicate> predicate;
     predicate.reset(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, values[0].c_str()));
-    seg_opts.predicates[1].push_back(predicate.get());
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
