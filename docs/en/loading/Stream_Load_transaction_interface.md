@@ -5,6 +5,8 @@ keywords: ['Stream Load']
 
 # Load data using Stream Load transaction interface
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 From v2.4 onwards, StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads.
 
 This topic describes the Stream Load transaction interface and how to load data into StarRocks by using this interface.
