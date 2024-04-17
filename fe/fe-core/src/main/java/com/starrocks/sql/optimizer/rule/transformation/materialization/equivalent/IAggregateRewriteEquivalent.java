@@ -14,9 +14,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
 
 public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent {
     public RewriteEquivalentType getRewriteEquivalentType() {
@@ -24,10 +26,18 @@ public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent 
     }
 
     /**
+     * Whether the equivalent supports the input call to push down rewrite.
+     */
+    public boolean isSupportPushDownRewrite(CallOperator call) {
+        return false;
+    }
+
+    /**
      * Rewrite the aggregate function with rollup.
+     *
      * @param shuttleContext: the context of equivalent shuttle
-     * @param aggFunc: the aggregate function to rewrite
-     * @param replace: the column ref to replace
+     * @param aggFunc:        the aggregate function to rewrite
+     * @param replace:        the column ref to replace
      * @return: the rewritten aggregate function
      */
     abstract ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
@@ -36,9 +46,10 @@ public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent 
 
     /**
      * Rewrite the aggregate function with no rollup.
+     *
      * @param shuttleContext: the context of equivalent shuttle
-     * @param aggFunc: the aggregate function to rewrite
-     * @param replace: the column ref to replace
+     * @param aggFunc:        the aggregate function to rewrite
+     * @param replace:        the column ref to replace
      * @return: the rewritten aggregate function
      */
     abstract ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
@@ -46,19 +57,42 @@ public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent 
                                                  ColumnRefOperator replace);
 
     /**
-     * Rewrite the aggregate function after check.
+     * Rewrite the aggregate function with rollup and push down.
+     *
      * @param shuttleContext: the context of equivalent shuttle
-     * @param aggFunc: the aggregate function to rewrite
-     * @param replace: the column ref to replace
-     * @param isRollup: whether the rewrite is for rollup
+     * @param aggFunc:        the aggregate function to rewrite
+     * @param replace:        the column ref to replace
+     * @return: the rewritten partial and final stage aggregate function
+     */
+    abstract Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                                 CallOperator aggFunc,
+                                                                                 ColumnRefOperator replace);
+
+    /**
+     * Rewrite the aggregate function after check.
+     *
+     * @param shuttleContext: the context of equivalent shuttle
+     * @param aggFunc:        the aggregate function to rewrite
+     * @param replace:        the column ref to replace
+     * @param isRollup:       whether the rewrite is for rollup
      * @return: the rewritten aggregate function
      */
     public ScalarOperator rewriteImpl(EquivalentShuttleContext shuttleContext,
                                       CallOperator aggFunc,
                                       ColumnRefOperator replace,
                                       boolean isRollup) {
+        RewriteContext rewriteContext = shuttleContext.getRewriteContext();
         if (isRollup) {
-            return rewriteRollupAggregateFunc(shuttleContext, aggFunc, replace);
+            if (rewriteContext != null && rewriteContext.getAggregatePushDownContext() != null) {
+                // final agg is used to rewrite query which will be remapping in the final stage.
+                Pair<CallOperator, CallOperator> result = rewritePushDownRollupAggregateFunc(shuttleContext, aggFunc, replace);
+                CallOperator partialFn = result.first;
+                CallOperator finalFn = result.second;
+                rewriteContext.getAggregatePushDownContext().registerAggRewriteInfo(aggFunc, partialFn, finalFn);
+                return partialFn;
+            } else {
+                return rewriteRollupAggregateFunc(shuttleContext, aggFunc, replace);
+            }
         } else {
             return rewriteAggregateFunc(shuttleContext, aggFunc, replace);
         }
