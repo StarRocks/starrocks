@@ -21,6 +21,7 @@
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
@@ -76,6 +77,8 @@ private:
     void _add_streaming_chunk(ChunkPtr chunk);
 
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
+
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     std::queue<ChunkPtr> _streaming_chunks;
