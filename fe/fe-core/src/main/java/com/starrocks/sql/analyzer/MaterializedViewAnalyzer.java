@@ -252,8 +252,7 @@ public class MaterializedViewAnalyzer {
             Analyzer.analyze(queryStatement, context);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
 
-            boolean hasTemporaryTable = AnalyzerUtils.collectAllTable(queryStatement)
-                    .values().stream().anyMatch(t -> t.isTemporaryTable());
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
             if (hasTemporaryTable) {
                 throw new SemanticException("Materialized view can't base on temporary table");
             }

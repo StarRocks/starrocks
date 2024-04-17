@@ -49,8 +49,7 @@ public class ViewAnalyzer {
             FeNameFormat.checkTableName(tableName);
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
-            boolean hasTemporaryTable = AnalyzerUtils.collectAllTable(
-                    stmt.getQueryStatement()).values().stream().anyMatch(t -> t.isTemporaryTable());
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
             if (hasTemporaryTable) {
                 throw new SemanticException("View can't base on temporary table");
             }
@@ -77,8 +76,7 @@ public class ViewAnalyzer {
             AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
             Analyzer.analyze(alterViewClause.getQueryStatement(), context);
-            boolean hasTemporaryTable = AnalyzerUtils.collectAllTable(
-                    alterViewClause.getQueryStatement()).values().stream().anyMatch(t -> t.isTemporaryTable());
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
             if (hasTemporaryTable) {
                 throw new SemanticException("View can't base on temporary table");
             }

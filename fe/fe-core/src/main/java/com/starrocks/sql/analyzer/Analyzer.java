@@ -334,8 +334,7 @@ public class Analyzer {
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }
-            boolean hasTemporaryTable = AnalyzerUtils.collectAllTable(taskStmt)
-                    .values().stream().anyMatch(t -> t.isTemporaryTable());
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(taskStmt);
             if (hasTemporaryTable) {
                 throw new SemanticException("Cannot submit task based on temporary table");
             }
