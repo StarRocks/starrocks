@@ -158,6 +158,39 @@ public class SelectConstTest extends PlanTestBase {
     }
 
     @Test
+    public void testSystemVariable() throws Exception {
+        String sql = "SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, " +
+                "@@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, " +
+                "@@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, " +
+                "@@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@sql_mode, " +
+                "@@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout";
+        String plan = getFragmentPlan(sql);
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  <slot 3> : 'utf8'\n" +
+                "  |  <slot 4> : 'utf8'\n" +
+                "  |  <slot 5> : 'utf8'\n" +
+                "  |  <slot 6> : 'utf8'\n" +
+                "  |  <slot 7> : 'utf8_general_ci'\n" +
+                "  |  <slot 8> : 'utf8_general_ci'\n" +
+                "  |  <slot 9> : ''\n" +
+                "  |  <slot 10> : 3600\n" +
+                "  |  <slot 11> : '/starrocks/share/english/'\n" +
+                "  |  <slot 12> : 'Apache License 2.0'\n" +
+                "  |  <slot 13> : 0\n" +
+                "  |  <slot 14> : 33554432\n" +
+                "  |  <slot 15> : 60\n" +
+                "  |  <slot 16> : FALSE\n" +
+                "  |  <slot 17> : 1048576\n" +
+                "  |  <slot 18> : 0\n" +
+                "  |  <slot 19> : 'ONLY_FULL_GROUP_BY'\n" +
+                "  |  <slot 20> : 'Asia/Shanghai'\n" +
+                "  |  <slot 21> : 'Asia/Shanghai'\n" +
+                "  |  <slot 22> : 'REPEATABLE-READ'\n" +
+                "  |  <slot 23> : 28800");
+    }
+
+    @Test
     public void testExecuteInFe() throws Exception {
         assertFeExecuteResult("select -1", "-1");
         assertFeExecuteResult("select -123456.789", "-123456.789");
