@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <string>
+#include <thread>
 
 #include "column/vectorized_fwd.h"
 #include "types/bitmap_value_detail.h"
@@ -34,6 +35,18 @@ public:
     void check_bitmap(BitmapDataType type, const BitmapValue& bitmap, uint64_t start, uint64_t end);
     void check_bitmap(BitmapDataType type, const BitmapValue& bitmap, uint64_t start_1, uint64_t end_1,
                       uint64_t start_2, uint64_t end_2);
+
+    static void compress_thread(void* arg1) {
+        BitmapValue v = *(BitmapValue*)(arg1);
+        v.compress();
+    }
+
+    static void compress_mem_usage_thread(void* arg1) {
+        for (size_t i = 0; i < 10000; i++) {
+            BitmapValue v = *(BitmapValue*)(arg1);
+            v.get_size_in_bytes();
+        }
+    }
 
 protected:
     BitmapValue _large_bitmap;
@@ -80,6 +93,22 @@ void BitmapValueTest::check_bitmap(BitmapDataType type, const BitmapValue& bitma
         ASSERT_TRUE(bitmap.contains(i));
     }
     ASSERT_EQ(bitmap.mem_usage(), bitmap.serialize_size());
+}
+
+TEST_F(BitmapValueTest, concurrency_compress) {
+    BitmapValue bitmap;
+    for (size_t i = 0; i < 10000; i += 1) {
+        bitmap.add(i);
+    }
+    for (size_t i = 100; i < 1000; i += 100) {
+        bitmap.remove(i);
+    }
+
+    std::thread t1(compress_mem_usage_thread, &bitmap);
+    std::thread t2(compress_thread, &bitmap);
+
+    t1.join();
+    t2.join();
 }
 
 TEST_F(BitmapValueTest, copy_construct) {

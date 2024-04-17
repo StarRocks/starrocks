@@ -183,7 +183,7 @@ public:
 
     // When you persist bitmap value to disk, you could call this method.
     // This method should be called before `serialize_size`.
-    void compress() const;
+    void compress();
 
     void clear();
     void reset();
