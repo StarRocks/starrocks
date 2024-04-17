@@ -67,7 +67,7 @@ public class RoutineLoadTaskSchedulerTest {
         Deencapsulation.setField(kafkaProgress, "partitionIdToOffset", partitionIdToOffset);
 
         Queue<RoutineLoadTaskInfo> routineLoadTaskInfoQueue = Queues.newLinkedBlockingQueue();
-        KafkaTaskInfo routineLoadTaskInfo1 = new KafkaTaskInfo(new UUID(1, 1), 1L, 20000,
+        KafkaTaskInfo routineLoadTaskInfo1 = new KafkaTaskInfo(new UUID(1, 1), kafkaRoutineLoadJob1, 20000,
                 System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
         routineLoadTaskInfoQueue.add(routineLoadTaskInfo1);
 

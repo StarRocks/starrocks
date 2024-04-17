@@ -26,10 +26,12 @@ public class PulsarTaskInfoTest {
 
     @Test
     public void testRenew() {
+        PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(1L, "test", 1L, 1L, "host:port", "topic", "subscription");
+
         Map<String, Long> offsets1 = Maps.newHashMap();
         offsets1.put("0", 101L);
         offsets1.put("1", 102L);
-        PulsarTaskInfo task1 = new PulsarTaskInfo(UUID.randomUUID(), 1, 1000,
+        PulsarTaskInfo task1 = new PulsarTaskInfo(UUID.randomUUID(), routineLoadJob, 1000,
                 2000, Arrays.asList("0", "1"), offsets1, 3000);
 
         Map<String, Long> offsets2 = Maps.newHashMap();
