@@ -250,6 +250,20 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
                         "Property " + PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE +
                                 " must be bool type(false/true)");
             }
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                boolean hasGIN = false;
+                for (Index index : olapTable.getIndexes()) {
+                    if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                        hasGIN = true;
+                        break;
+                    }
+                }
+                if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasGIN) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                                        "Can not modify replicated storage as TRUE when the table has GIN");
+                }
+            }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
