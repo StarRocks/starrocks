@@ -73,20 +73,20 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
                 (call.isDistinct() && fn.equalsIgnoreCase(ARRAY_AGG));
     }
 
-    private static final ImmutableSet<String> SUPPORTED_PUSH_DOWN_AGG_FUNCTIONS = ImmutableSet.of(
+    private static final ImmutableSet<String> SUPPORTED_PUSHDOWN_AGG_FUNCTIONS = ImmutableSet.of(
             MULTI_DISTINCT_COUNT, MULTI_DISTINCT_SUM
     );
-    private static final ImmutableSet<String> SUPPORTED_PUSH_DOWN_AGG_DISTINCT_FUNCTIONS = ImmutableSet.of(
+    private static final ImmutableSet<String> SUPPORTED_PUSHDOWN_AGG_DISTINCT_FUNCTIONS = ImmutableSet.of(
             COUNT, SUM, ARRAY_AGG
     );
 
     @Override
     public boolean isSupportPushDownRewrite(CallOperator call) {
         String fn = call.getFnName();
-        if (!call.isDistinct() && SUPPORTED_PUSH_DOWN_AGG_FUNCTIONS.contains(fn)) {
+        if (!call.isDistinct() && SUPPORTED_PUSHDOWN_AGG_FUNCTIONS.contains(fn)) {
             return true;
         }
-        if (call.isDistinct() && SUPPORTED_PUSH_DOWN_AGG_DISTINCT_FUNCTIONS.contains(fn)) {
+        if (call.isDistinct() && SUPPORTED_PUSHDOWN_AGG_DISTINCT_FUNCTIONS.contains(fn)) {
             return true;
         }
         return false;

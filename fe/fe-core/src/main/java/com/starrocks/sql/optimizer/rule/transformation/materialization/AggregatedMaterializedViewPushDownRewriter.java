@@ -90,10 +90,8 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
         OptExpression input = mvContext.getQueryExpression();
 
         // try push down
-        AggregatedMaterializedViewPushDownRewriter rewriter =
-                new AggregatedMaterializedViewPushDownRewriter(mvContext, optimizerContext, rule);
         OptExpression inputDuplicator = duplicateOptExpression(mvContext, input);
-        AggRewriteInfo rewriteInfo = rewriter.process(inputDuplicator, AggregatePushDownContext.EMPTY);
+        AggRewriteInfo rewriteInfo = process(inputDuplicator, AggregatePushDownContext.EMPTY);
         if (rewriteInfo.hasRewritten()) {
             Optional<OptExpression> res = rewriteInfo.getOp();
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite success");
@@ -226,7 +224,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             if (RewriteEquivalent.AGGREGATE_EQUIVALENTS.stream().anyMatch(x -> x.isSupportPushDownRewrite(call))) {
                 return true;
             }
-            return true;
+            return false;
         }
 
         @Override

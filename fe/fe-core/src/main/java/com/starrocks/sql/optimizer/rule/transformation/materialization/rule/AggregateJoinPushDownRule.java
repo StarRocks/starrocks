@@ -120,13 +120,13 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     public List<MaterializationContext> doPrune(OptExpression queryExpression,
                                                 OptimizerContext context,
                                                 List<MaterializationContext> mvCandidateContexts) {
-        List<MaterializationContext> prunedCandidateContexts = Lists.newArrayList();
+        List<MaterializationContext> validCandidateContexts = Lists.newArrayList();
         for (MaterializationContext mvContext : mvCandidateContexts) {
             if (isLogicalSPG(mvContext.getMvExpression())) {
-                prunedCandidateContexts.add(mvContext);
+                validCandidateContexts.add(mvContext);
             }
         }
-        return prunedCandidateContexts;
+        return validCandidateContexts;
     }
 
     @Override
