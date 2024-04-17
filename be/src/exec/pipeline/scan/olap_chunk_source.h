@@ -26,6 +26,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "util/runtime_profile.h"
@@ -78,6 +79,7 @@ private:
     const int64_t _limit; // -1: no limit
     TInternalScanRange* _scan_range;
 
+    PredicateTree _non_pushdown_pred_tree;
     ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 

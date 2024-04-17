@@ -84,13 +84,14 @@ private:
     RuntimeState* _runtime_state = nullptr;
     OlapScanNode* _parent = nullptr;
 
-    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     ObjectPool _pool;
     std::vector<ExprContext*> _conjunct_ctxs;
+    PredicateTree _pred_tree;
     ConjunctivePredicates _predicates;
     std::vector<uint8_t> _selection;
 
     // for release memory.
+    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     std::vector<PredicatePtr> _predicate_free_pool;
 
     bool _is_open = false;

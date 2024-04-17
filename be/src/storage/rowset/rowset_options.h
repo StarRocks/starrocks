@@ -23,6 +23,7 @@
 #include "storage/olap_common.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -37,6 +38,7 @@ class TabletSchema;
 
 class ColumnPredicate;
 class DeletePredicates;
+class ChunkPredicate;
 struct RowidRangeOption;
 struct ShortKeyRangesOption;
 
@@ -51,7 +53,7 @@ public:
 
     std::vector<SeekRange> ranges;
 
-    std::unordered_map<ColumnId, PredicateList> predicates;
+    PredicateTree pred_tree;
     std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
 
     // whether rowset should return rows in sorted order.

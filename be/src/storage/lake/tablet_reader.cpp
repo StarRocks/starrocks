@@ -207,8 +207,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
-    rs_opts.predicates = _pushdown_predicates;
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
+    rs_opts.pred_tree = params.pred_tree;
+    auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
                                                                      &rs_opts.predicates_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
@@ -273,9 +274,6 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 }
 
 Status TabletReader::init_predicates(const TabletReaderParams& params) {
-    for (const ColumnPredicate* pred : params.predicates) {
-        _pushdown_predicates[pred->column_id()].emplace_back(pred);
-    }
     return Status::OK();
 }
 

@@ -160,7 +160,11 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
 StatusOr<ChunkIteratorPtr> LocalTabletReader::scan(const std::vector<std::string>& value_columns,
                                                    const std::vector<const ColumnPredicate*>& predicates) {
     TabletReaderParams tablet_reader_params;
-    tablet_reader_params.predicates = predicates;
+    PredicateAndNode and_node;
+    for (const auto* pred : predicates) {
+        and_node.add_child(PredicateColumnNode{pred});
+    }
+    tablet_reader_params.pred_tree = PredicateTree::create(std::move(and_node));
     auto& full_schema = *_tablet->tablet_schema()->schema();
     vector<ColumnId> column_ids;
     for (auto& cname : value_columns) {

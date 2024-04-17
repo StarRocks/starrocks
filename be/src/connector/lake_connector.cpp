@@ -15,11 +15,13 @@
 #include "connector/lake_connector.h"
 
 #include "exec/connector_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "util/starrocks_metrics.h"
@@ -235,18 +237,23 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(parser, &preds));
-    decide_chunk_size(!preds.empty());
-    _has_any_predicate = (!preds.empty());
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _not_push_down_predicates.add(p.get());
+    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager.get_predicate_tree(parser, _predicate_free_pool));
+    decide_chunk_size(!pred_tree.empty());
+    _has_any_predicate = !pred_tree.empty();
+    PredicateAndNode pushdown_pred_root;
+    PredicateAndNode non_pushdown_pred_root;
+    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
+                                    &pushdown_pred_root, &non_pushdown_pred_root);
+    _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+    _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
+
+    for (const auto& [_, col_nodes] : _non_pushdown_pred_tree.root().col_children_map()) {
+        for (const auto& col_node : col_nodes) {
+            _not_push_down_predicates.add(col_node.col_pred());
         }
-        _predicate_free_pool.emplace_back(std::move(p));
     }
+    // TODO(liuzihe): support OR predicate.
+    DCHECK(_non_pushdown_pred_tree.root().compound_children().empty());
 
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
@@ -521,7 +528,7 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);

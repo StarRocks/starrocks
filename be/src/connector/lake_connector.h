@@ -20,6 +20,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks::connector {
 
@@ -75,6 +76,7 @@ private:
     Status _status = Status::OK();
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
+    PredicateTree _non_pushdown_pred_tree;
     ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
