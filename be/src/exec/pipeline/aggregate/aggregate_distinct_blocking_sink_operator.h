@@ -54,6 +54,7 @@ protected:
     AggregatorPtr _aggregator = nullptr;
 
 private:
+    DECLARE_ONCE_DETECTOR(_set_finishing_once)
     // Whether prev operator has no output
     bool _is_finished = false;
 };

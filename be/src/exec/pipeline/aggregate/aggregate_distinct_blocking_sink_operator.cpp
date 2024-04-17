@@ -15,6 +15,7 @@
 #include "aggregate_distinct_blocking_sink_operator.h"
 
 #include "runtime/current_thread.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
@@ -33,8 +34,17 @@ void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
 
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
+<<<<<<< HEAD
 
     _is_finished = true;
+=======
+    ONCE_DETECT(_set_finishing_once);
+    auto defer = DeferOp([this]() {
+        COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
+        _aggregator->sink_complete();
+        _is_finished = true;
+    });
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
 
     // skip processing if cancelled
     if (state->is_cancelled()) {
@@ -85,6 +95,7 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
 Status AggregateDistinctBlockingSinkOperator::reset_state(RuntimeState* state,
                                                           const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 } // namespace starrocks::pipeline

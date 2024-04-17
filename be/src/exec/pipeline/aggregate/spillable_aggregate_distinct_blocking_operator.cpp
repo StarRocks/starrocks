@@ -18,6 +18,7 @@
 
 #include "exec/sorted_streaming_aggregator.h"
 #include "exec/spill/spiller.hpp"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {
@@ -29,6 +30,8 @@ bool SpillableAggregateDistinctBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
@@ -97,6 +100,18 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SpillableAggregateDistinctBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                                   const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::reset_state(state, refill_chunks));
+    ONCE_RESET(_set_finishing_once);
+    return Status::OK();
+}
+
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
 Status SpillableAggregateDistinctBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
     _aggregator->hash_set_variant().visit(
             [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
