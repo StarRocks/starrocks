@@ -45,6 +45,8 @@ public class CreateTableStmt extends DdlStmt {
     private String engineName;
     private String charsetName;
     private String comment;
+    private String owner;
+
     private List<AlterClause> rollupAlterClauseList;
 
     // set in analyze
@@ -252,6 +254,14 @@ public class CreateTableStmt extends DdlStmt {
 
     public String getComment() {
         return comment;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public void setOwner(String owner) {
+        this.owner = owner;
     }
 
     public List<AlterClause> getRollupAlterClauseList() {

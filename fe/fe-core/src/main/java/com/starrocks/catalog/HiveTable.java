@@ -125,6 +125,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public static final String HIVE_TABLE_COLUMN_TYPES = "hive.table.column.types";
 
     private String catalogName;
+    private String owner;
     @SerializedName(value = "dn")
     private String hiveDbName;
     @SerializedName(value = "tn")
@@ -162,7 +163,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
                      String hiveDbName, String hiveTableName, String tableLocation, long createTime,
                      List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties,
-                     Map<String, String> serdeProperties, HiveStorageFormat storageFormat, HiveTableType hiveTableType) {
+                     Map<String, String> serdeProperties, HiveStorageFormat storageFormat,
+                     HiveTableType hiveTableType, String owner) {
         super(id, name, TableType.HIVE, fullSchema);
         this.resourceName = resourceName;
         this.catalogName = catalog;
@@ -176,6 +178,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         this.serdeProperties = serdeProperties;
         this.storageFormat = storageFormat;
         this.hiveTableType = hiveTableType;
+        this.owner = owner;
     }
 
     public String getHiveDbTable() {
@@ -194,6 +197,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public String getDbName() {
         return hiveDbName;
+    }
+
+    public String getOwner() {
+        return owner;
     }
 
     @Override
@@ -572,6 +579,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         private String hiveTableName;
         private String resourceName;
         private String tableLocation;
+        private String owner;
         private long createTime;
         private List<Column> fullSchema;
         private List<String> partitionColNames = Lists.newArrayList();
@@ -619,6 +627,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setOwner(String owner) {
+            this.owner = owner;
+            return this;
+        }
+
         public Builder setCreateTime(long createTime) {
             this.createTime = createTime;
             return this;
@@ -662,7 +675,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         public HiveTable build() {
             return new HiveTable(id, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
                     tableLocation, createTime, partitionColNames, dataColNames, properties, serdeProperties,
-                    storageFormat, hiveTableType);
+                    storageFormat, hiveTableType, owner);
         }
     }
 }

@@ -61,6 +61,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public void dropTable(ConnectContext session) throws AnalysisException {
         try {
+            createTableStmt.setOwner(session.getQualifiedUser());
             session.getGlobalStateMgr().getMetadataMgr().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
         } catch (Exception e) {
             throw new AnalysisException(e.getMessage());

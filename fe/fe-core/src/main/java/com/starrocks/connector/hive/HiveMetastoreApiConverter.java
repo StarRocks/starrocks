@@ -166,6 +166,7 @@ public class HiveMetastoreApiConverter {
                 .map(HiveMetastoreApiConverter::toMetastoreApiFieldSchema)
                 .collect(Collectors.toList()));
         apiTable.setSd(makeStorageDescriptorFromHiveTable(table));
+        apiTable.setOwner(table.getOwner());
         return apiTable;
     }
 

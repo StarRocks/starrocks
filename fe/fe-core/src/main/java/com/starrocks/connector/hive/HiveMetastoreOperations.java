@@ -163,6 +163,7 @@ public class HiveMetastoreOperations {
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
                 .setTableName(tableName)
                 .setCatalogName(catalogName)
+                .setOwner(stmt.getOwner())
                 .setResourceName(toResourceName(catalogName, "hive"))
                 .setHiveDbName(dbName)
                 .setHiveTableName(tableName)
