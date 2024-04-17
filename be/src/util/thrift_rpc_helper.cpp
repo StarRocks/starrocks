@@ -60,8 +60,8 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
 }
 
 template <typename T>
-Status rpc_exec(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
-                const TNetworkAddress& address) noexcept {
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
+                                 const TNetworkAddress& address) noexcept {
     std::stringstream ss;
     try {
         callback(client);
@@ -89,7 +89,7 @@ Status rpc_exec(std::function<void(ClientConnection<T>&)> callback, ClientConnec
     return Status::OK();
 }
 
-template<typename T>
+template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
     TNetworkAddress address = make_network_address(ip, port);
@@ -101,7 +101,7 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
     }
 
     // 1st call
-    status = rpc_exec(callback, client, address);
+    status = rpc_impl(callback, client, address);
     if (status.ok()) {
         return status;
     }
@@ -116,7 +116,7 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
     }
 
     // 2nd call
-    status = rpc_exec(callback, client, address);
+    status = rpc_impl(callback, client, address);
     if (!status.ok()) {
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
         // just reopen to disable this connection
@@ -137,5 +137,9 @@ template Status ThriftRpcHelper::rpc<BackendServiceClient>(
 template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
         const std::string& ip, const int32_t port,
         std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback, int timeout_ms);
+
+template Status ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
+        std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+        ClientConnection<FrontendServiceClient>& client, const TNetworkAddress& address) noexcept;
 
 } // namespace starrocks
