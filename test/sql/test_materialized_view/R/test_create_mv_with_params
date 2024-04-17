@@ -55,7 +55,7 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
 -- !result
 refresh materialized view test_iceberg_mv0_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}", 2)
+function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}")
 -- result:
 None
 -- !result
@@ -83,7 +83,7 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
 -- !result
 refresh materialized view test_iceberg_mv1_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}", 2)
+function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}")
 -- result:
 None
 -- !result
