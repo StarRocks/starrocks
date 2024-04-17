@@ -32,7 +32,7 @@ Stream Load and Broker Load both support data transformation at data loading and
 
 #### Check network configuration
 
-Make sure that the machine on which the data you want to load resides can access the FE and BE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`be_http_port`](../administration/management/BE_configuration.md#be_http_port), respectively.
+Make sure that the machine on which the data you want to load resides can access the FE and BE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`) , respectively.
 
 ## Loading from a local file system via Stream Load
 
