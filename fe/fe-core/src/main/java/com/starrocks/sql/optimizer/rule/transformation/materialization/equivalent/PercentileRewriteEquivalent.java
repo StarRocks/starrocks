@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
 
 import java.util.Arrays;
 
@@ -85,15 +84,13 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
 
-        RewriteContext rewriteContext = shuttleContext.getRewriteContext();
         boolean isRollup = shuttleContext.isRollup();
         if (aggFuncName.equalsIgnoreCase(PERCENTILE_APPROX)) {
             ScalarOperator eqArg = aggFunc.getChild(0);
-            ScalarOperator arg1 = aggFunc.getChild(1);
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(rewriteContext, aggFunc, replace, arg1, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         }
         return null;
     }
@@ -126,15 +123,19 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
         return new CallOperator(PERCENTILE_APPROX_RAW, Type.DOUBLE, Arrays.asList(rollup, arg1), approxRawFn);
     }
 
-    private ScalarOperator rewriteImpl(RewriteContext rewriteContext,
-                                       CallOperator aggFunc,
-                                       ScalarOperator replace,
-                                       ScalarOperator arg1,
-                                       boolean isRollup) {
-        if (isRollup) {
-            return makeRollupFunc(replace, arg1);
-        } else {
-            return makePercentileApproxRaw(replace, arg1);
-        }
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        ScalarOperator arg1 = aggFunc.getChild(1);
+        return makeRollupFunc(replace, arg1);
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        ScalarOperator arg1 = aggFunc.getChild(1);
+        return makePercentileApproxRaw(replace, arg1);
     }
 }

@@ -35,7 +35,7 @@ public interface IMaterializedViewRewriter {
      * 2. partition prune
      * 3. bucket prune
      */
-    OptExpression doPostAfterRewrite(OptimizerContext optimizerContext,
-                                     MvRewriteContext mvRewriteContext,
-                                     OptExpression candidate);
+    OptExpression postRewrite(OptimizerContext optimizerContext,
+                              MvRewriteContext mvRewriteContext,
+                              OptExpression candidate);
 }

@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
 
 import java.util.Arrays;
 
@@ -92,13 +91,12 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
         boolean isRollup = shuttleContext.isRollup();
-        RewriteContext rewriteContext = shuttleContext.getRewriteContext();
         if (aggFuncName.equals(APPROX_COUNT_DISTINCT) || aggFuncName.equals(NDV)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(rewriteContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         } else if (aggFuncName.equals(HLL_UNION_AGG)) {
             ScalarOperator eqArg = aggFunc.getChild(0);
             if (eqArg instanceof CallOperator) {
@@ -122,38 +120,40 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(rewriteContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         }
         return null;
     }
 
-    private CallOperator makeHllUnionAggFunc(ScalarOperator arg0, CallOperator aggFunc) {
+    private CallOperator makeHllUnionAggFunc(ScalarOperator arg0) {
         Function fn = Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL);
         Preconditions.checkState(fn != null);
-        return new CallOperator(HLL_UNION_AGG, aggFunc.getType(), Arrays.asList(arg0), fn);
+        return new CallOperator(HLL_UNION_AGG, Type.BIGINT, Arrays.asList(arg0), fn);
     }
 
-    private CallOperator makeHllCardinalityFunc(ScalarOperator arg0, CallOperator aggFunc) {
+    private CallOperator makeHllCardinalityFunc(ScalarOperator arg0) {
         Function fn = Expr.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] {Type.HLL}, IS_IDENTICAL);
         Preconditions.checkState(fn != null);
-        return new CallOperator(HLL_CARDINALITY, aggFunc.getType(), Arrays.asList(arg0), fn);
+        return new CallOperator(HLL_CARDINALITY, Type.BIGINT, Arrays.asList(arg0), fn);
     }
 
-    private CallOperator makeHllUnion(ScalarOperator arg0, CallOperator aggFunc) {
+    private CallOperator makeHllUnion(ScalarOperator arg0) {
         Function fn = Expr.getBuiltinFunction(HLL_UNION, new Type[] {arg0.getType()}, IS_IDENTICAL);
         Preconditions.checkState(fn != null);
-        return new CallOperator(HLL_UNION, aggFunc.getType(), Arrays.asList(arg0), fn);
+        return new CallOperator(HLL_UNION, Type.HLL, Arrays.asList(arg0), fn);
     }
 
-    private ScalarOperator rewriteImpl(RewriteContext rewriteContext,
-                                       CallOperator aggFunc,
-                                       ScalarOperator replace,
-                                       boolean isRollup) {
-        if (isRollup) {
-            CallOperator partialFn = makeHllUnion(replace, aggFunc);
-            return makeHllCardinalityFunc(partialFn, aggFunc);
-        } else {
-            return makeHllCardinalityFunc(replace, aggFunc);
-        }
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        return makeHllUnionAggFunc(replace);
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        return makeHllCardinalityFunc(replace);
     }
 }
