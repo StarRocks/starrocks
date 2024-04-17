@@ -32,7 +32,7 @@ Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及�
 
 ### 查看网络配置
 
-确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 所在机器的 [`http_port`](../administration/management/FE_configuration.md#http_port) 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口，以及 BE 所在机器的 [`http_port`](../administration/management/BE_configuration.md#be_http_port) 端口。
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port) 端口、以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口。
 
 ## 使用 Stream Load 从本地导入
 
