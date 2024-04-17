@@ -158,9 +158,11 @@ public:
 
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+    void add_in_writing_data_size(int64_t tablet_id, int64_t size);
 
-    void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
+    void remove_in_writing_data_size(int64_t tablet_id);
+
+    void clean_in_writing_data_size();
 
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
@@ -180,15 +182,15 @@ public:
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
+    Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
 
-    Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
-
-    StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t index_id);
+    StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
 
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
@@ -199,7 +201,7 @@ private:
     UpdateManager* _update_mgr;
 
     std::shared_mutex _meta_lock;
-    std::unordered_map<int64_t, std::unordered_map<int64_t, int64_t>> _tablet_in_writing_txn_size;
+    std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
 };
 
 } // namespace starrocks::lake

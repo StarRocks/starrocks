@@ -236,8 +236,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     case TKeysType::PRIMARY_KEYS:
         schema->set_keys_type(KeysType::PRIMARY_KEYS);
         break;
-    default:
-        CHECK(false) << "unsupported keys type " << tablet_schema.keys_type;
     }
 
     switch (compression_type) {
@@ -310,7 +308,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                 index_pb->set_index_type(IndexType::GIN);
 
                 const auto& index_col_name = index.columns[0];
-                const auto& mit = column_map.find(index_col_name);
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
 
                 // TODO: Fix abnormal scenes when index column can not be found
                 if (mit != column_map.end()) {
@@ -371,4 +369,13 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     return validate_tablet_schema(*schema);
 }
 
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TCompressionType::type compression_type,
+                                     TabletSchemaPB* out_schema) {
+    auto col_idx_to_unique_id = std::unordered_map<uint32_t, uint32_t>{};
+    auto next_unique_id = t_schema.columns.size();
+    for (auto col_idx = uint32_t{0}; col_idx < next_unique_id; ++col_idx) {
+        col_idx_to_unique_id[col_idx] = col_idx;
+    }
+    return convert_t_schema_to_pb_schema(t_schema, next_unique_id, col_idx_to_unique_id, out_schema, compression_type);
+}
 } // namespace starrocks

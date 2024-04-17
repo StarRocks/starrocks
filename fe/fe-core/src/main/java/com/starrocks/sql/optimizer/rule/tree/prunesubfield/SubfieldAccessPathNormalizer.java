@@ -109,7 +109,8 @@ public class SubfieldAccessPathNormalizer {
                                 (childPath.getType() == TAccessPathType.KEY && pathType == TAccessPathType.OFFSET);
                         childPath.setType(isOffsetOrKey ? TAccessPathType.KEY : TAccessPathType.ALL);
                     }
-                    childPath.setValueType(deriverCompatibleType(childPath.getValueType(), accessPath.getValueType()));
+                    childPath.setValueType(
+                            deriverCompatibleJsonType(childPath.getValueType(), accessPath.getValueType()));
                     parentPath = childPath;
                 } else {
                     ColumnAccessPath childPath = new ColumnAccessPath(accessPath.pathTypes.get(i),
@@ -124,14 +125,25 @@ public class SubfieldAccessPathNormalizer {
         return rootPath;
     }
 
-    private Type deriverCompatibleType(Type one, Type two) {
-        // json function used, keep same with BE's JsonFlater
-        if (one == Type.INVALID || two == Type.INVALID) {
+    /*
+     * dervier compatible flat json type, like:
+     * select get_json_int(j1, "$.a"), get_json_string(j1, "$.a") from js
+     * j1->"$.a" read as int/string at the sametime, so need use the compatible type to read from storage
+     */
+    private Type deriverCompatibleJsonType(Type first, Type second) {
+        // only json type used, other semi-type are explicit types, so we set INVALID
+        if (first == Type.INVALID || second == Type.INVALID) {
             return Type.INVALID;
         }
 
-        if (one.getPrimitiveType() == two.getPrimitiveType()) {
-            return one;
+        if (first.getPrimitiveType() == second.getPrimitiveType()) {
+            return first;
+        }
+
+        // now json function support read type: BOOLEAN/JSON/STRING/BIGINT/DOUBLE
+        // only bigint & double is compatible, other combinations need
+        if ((first.isBigint() && second.isDouble()) || (first.isDouble() && second.isBigint())) {
+            return Type.DOUBLE;
         }
 
         // the compatible type of two types use JSON,

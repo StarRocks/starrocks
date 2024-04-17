@@ -22,6 +22,7 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -86,12 +87,15 @@ LakePersistentIndex::~LakePersistentIndex() {
 }
 
 Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     for (auto& sstable_pb : sstable_meta.sstables()) {
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        ASSIGN_OR_RETURN(auto rf,
+                         fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+        if (block_cache == nullptr) {
+            return Status::InternalError("Block cache is null.");
+        }
         auto sstable = std::make_unique<PersistentIndexSstable>();
-        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
         _sstables.emplace_back(std::move(sstable));
     }
     return Status::OK();
@@ -120,13 +124,16 @@ Status LakePersistentIndex::minor_compact() {
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(location));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
     sstable_pb.set_version(_version.major_number());
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     _sstables.emplace_back(std::move(sstable));
     return Status::OK();
 }
@@ -239,23 +246,45 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
     return Status::OK();
 }
 
-std::unique_ptr<sstable::Iterator> LakePersistentIndex::prepare_merging_iterator() {
+Status LakePersistentIndex::prepare_merging_iterator(
+        const TabletMetadata& metadata, TxnLogPB* txn_log,
+        std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
+        std::unique_ptr<sstable::Iterator>* merging_iter_ptr) {
     sstable::ReadOptions read_options;
+    // No need to cache input sst's blocks.
+    read_options.fill_cache = false;
     std::vector<sstable::Iterator*> iters;
+    DeferOp free_iters([&] {
+        for (sstable::Iterator* iter : iters) {
+            delete iter;
+        }
+    });
+
     auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
     iters.reserve(max_compaction_versions);
-    for (const auto& sstable : _sstables) {
-        sstable::Iterator* iter = sstable->new_iterator(read_options);
+    std::stringstream ss_debug;
+    for (const auto& sstable_pb : metadata.sstable_meta().sstables()) {
+        // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
+        ASSIGN_OR_RETURN(auto rf,
+                         fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        auto merging_sstable = std::make_shared<PersistentIndexSstable>();
+        RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/));
+        merging_sstables->push_back(merging_sstable);
+        sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
+        // add input sstable.
+        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
+        ss_debug << sstable_pb.filename() << " | ";
         if (iters.size() >= max_compaction_versions) {
             break;
         }
     }
     sstable::Options options;
-    std::unique_ptr<sstable::Iterator> iter_ptr(
-            sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
-    iter_ptr->SeekToFirst();
-    return iter_ptr;
+    (*merging_iter_ptr).reset(sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
+    (*merging_iter_ptr)->SeekToFirst();
+    iters.clear(); // Clear the vector without deleting iterators since they are now managed by merge_iter_ptr.
+    VLOG(2) << "prepare sst for merge : " << ss_debug.str();
+    return Status::OK();
 }
 
 Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr,
@@ -270,14 +299,18 @@ Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> it
     return builder->Finish();
 }
 
-Status LakePersistentIndex::major_compact(int64_t min_retain_version, TxnLogPB* txn_log) {
-    if (_sstables.size() < config::lake_pk_index_sst_min_compaction_versions) {
+Status LakePersistentIndex::major_compact(const TabletMetadata& metadata, int64_t min_retain_version,
+                                          TxnLogPB* txn_log) {
+    if (metadata.sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
         return Status::OK();
     }
 
-    auto iter_ptr = prepare_merging_iterator();
-    if (!iter_ptr->Valid()) {
-        return iter_ptr->status();
+    std::vector<std::shared_ptr<PersistentIndexSstable>> sstable_vec;
+    std::unique_ptr<sstable::Iterator> merging_iter_ptr;
+    // build merge iterator
+    RETURN_IF_ERROR(prepare_merging_iterator(metadata, txn_log, &sstable_vec, &merging_iter_ptr));
+    if (!merging_iter_ptr->Valid()) {
+        return merging_iter_ptr->status();
     }
 
     auto filename = gen_sst_filename();
@@ -288,18 +321,10 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version, TxnLogPB* 
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf.get());
-    RETURN_IF_ERROR(merge_sstables(std::move(iter_ptr), &builder));
+    RETURN_IF_ERROR(merge_sstables(std::move(merging_iter_ptr), &builder));
     RETURN_IF_ERROR(wf->close());
 
-    auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
-    for (const auto& sstable : _sstables) {
-        auto input_sstable = txn_log->mutable_op_compaction()->add_input_sstables();
-        auto sstable_pb = sstable->sstable_pb();
-        input_sstable->CopyFrom(sstable_pb);
-        if (txn_log->op_compaction().input_sstables_size() >= max_compaction_versions) {
-            break;
-        }
-    }
+    // record output sstable pb
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(filename);
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(builder.FileSize());
     return Status::OK();
@@ -314,10 +339,12 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     sstable_pb.CopyFrom(op_compaction.output_sstable());
     sstable_pb.set_version(op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).version());
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    ASSIGN_OR_RETURN(auto rf,
-                     fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
 
     std::unordered_set<std::string> filenames;
     for (const auto& input_sstable : op_compaction.input_sstables()) {
@@ -443,6 +470,17 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         }
     }
     return Status::OK();
+}
+
+size_t LakePersistentIndex::memory_usage() const {
+    size_t mem_usage = 0;
+    if (_memtable != nullptr) {
+        mem_usage += _memtable->memory_usage();
+    }
+    if (_immutable_memtable != nullptr) {
+        mem_usage += _immutable_memtable->memory_usage();
+    }
+    return mem_usage;
 }
 
 } // namespace starrocks::lake

@@ -6,23 +6,31 @@ displayed_sidebar: "English"
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks supports real-time data synchronization from MySQL within seconds, delivering ultra-low latency real-time analytics at scale and enabling users to query real-time data as they happen.
+StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
-This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-connector-starrocks.
+This topic describes how to synchronize data from MySQL to StarRocks in real-time (within seconds) through Apache Flink®.
 
 <InsertPrivNote />
 
 ## How it works
 
+:::tip
+
+Flink CDC is used in the synchronization from MySQL to Flink. This topic uses Flink CDC whose version is less than 3.0, so SMT is used to synchronize table schemas. However, if Flink CDC 3.0 is used, it is not necessary to use SMT to synchronize table schemas to StarRocks. Flink CDC 3.0 can even synchronize the schemas of the entire MySQL database, the sharded databases and tables, and also supports schema changes synchronization. For detailed usage, see [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
+
+:::
+
 The following figure illustrates the entire synchronization process.
 
 ![img](../assets/4.9.2.png)
 
-Real-time synchronization from MySQL is implemented in two stages: synchronizing database & table schema and synchronizing data. First, the SMT converts MySQL database & table schema into table creation statements for StarRocks. Then, the Flink cluster runs Flink jobs to synchronize full and incremental MySQL data to StarRocks.
+Real-time synchronization from MySQL through Flink to StarRocks is implemented in two stages: synchronizing database & table schema and synchronizing data. First, the SMT converts MySQL database & table schema into table creation statements for StarRocks. Then, the Flink cluster runs Flink jobs to synchronize full and incremental MySQL data to StarRocks.
 
-> **Note**
->
-> The synchronization process guarantees exactly-once semantics.
+:::info
+
+The synchronization process guarantees exactly-once semantics.
+
+:::
 
 **Synchronization process**:
 
@@ -38,9 +46,11 @@ Real-time synchronization from MySQL is implemented in two stages: synchronizing
 
    c. flink-connector-starrocks accumulates data in mini-batches, and synchronizes each batch of data to StarRocks.
 
-> **Note**
->
-> Only data manipulation language (DML) operations in MySQL can be synchronized to StarRocks. Data definition language (DDL) operations cannot be synchronized.
+    :::info
+
+    Only data manipulation language (DML) operations in MySQL can be synchronized to StarRocks. Data definition language (DDL) operations cannot be synchronized.
+
+    :::
 
 ## Scenarios
 

@@ -68,3 +68,16 @@ select * from test3 order by pk;
 2	v2	2	3
 3		3	4
 -- !result
+create table test4 (pk bigint NOT NULL, v0 string not null, v1 int not null default '0')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 order by (v1) PROPERTIES("replication_num" = "1");
+-- result:
+[]
+-- !result
+insert into test4 values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+[]
+-- !result
+insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');
+-- result:
+[REGEX].*table with sort key do not support partial update.*
+-- !result

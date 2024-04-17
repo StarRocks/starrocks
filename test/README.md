@@ -21,7 +21,7 @@ Reference documentation for the syntax format and other functions.
 <table>
   <tr>
     <td>Python</td>
-    <td>>= 3.6.8</td>
+    <td>>= 3.7</td>
   </tr>
 </table>
 

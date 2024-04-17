@@ -1,4 +1,6 @@
 -- name: test_basic_create_index
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_test_basic_create_index_pk` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `id2` bigint(20) NOT NULL COMMENT "",
@@ -56,6 +58,8 @@ CREATE INDEX index_6 ON t_test_basic_create_index_dup (id7) USING GIN;
 function: wait_alter_table_finish()
 
 -- not supported
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_test_basic_create_index_replicated` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `id2` bigint(20) NOT NULL COMMENT "",
@@ -79,6 +83,8 @@ DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
 
 -- name: test_query_gin_index
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_test_gin_index_query` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `query_none_analyzer` varchar(255) NOT NULL COMMENT "",
@@ -119,6 +125,8 @@ select count(*) from t_test_gin_index_query where query_english match '%teria%';
 drop table t_test_gin_index_query;
 
 -- name: test_gin_index_single_predicate_none
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_gin_index_single_predicate_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -159,6 +167,8 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match "AB%";
 DROP TABLE t_gin_index_single_predicate_none;
 
 -- name: test_gin_index_single_predicate_english
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_gin_index_single_predicate_english` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -199,6 +209,8 @@ SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "thi%"
 DROP TABLE t_gin_index_single_predicate_english;
 
 -- name: test_gin_index_multiple_predicate_none
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_gin_index_multiple_predicate_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -236,6 +248,8 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" 
 DROP TABLE t_gin_index_multiple_predicate_none;
 
 -- name: test_gin_index_multiple_predicate_english
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_gin_index_multiple_predicate_english` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -265,6 +279,8 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%th
 DROP TABLE t_gin_index_multiple_predicate_english;
 
 -- name: test_gin_index_compaction
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_gin_index_compaction_none_base` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -365,6 +381,8 @@ DROP TABLE t_gin_index_compaction_english_cumu;
 
 
 -- name: test_gin_index_type
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_gin_index_type_1` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `test_column` varchar(255) NULL COMMENT "",
@@ -464,6 +482,8 @@ PROPERTIES (
 );
 
 -- name: test_clone_for_gin
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_clone_for_gin` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -486,6 +506,8 @@ function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 
 -- name: test_complex_predicate_for_gin
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_complex_predicate_for_gin_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -530,6 +552,8 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "
 SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match "%abc%";
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "c");
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match "";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
 
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 INSERT INTO t_complex_predicate_for_gin_english VALUES (2, "cbd edf");
@@ -547,6 +571,56 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) matc
 SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match "%abc%";
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "c");
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match "";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match NULL;
 
 DROP TABLE t_complex_predicate_for_gin_none;
 DROP TABLE t_complex_predicate_for_gin_english;
+
+-- name: test_delete_and_column_prune
+CREATE TABLE `t_delete_and_column_prune` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "english") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_delete_and_column_prune VALUES (1, "b"),(2, "b"),(3, "b");
+SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
+DELETE FROM t_delete_and_column_prune WHERE id1 = 2;
+SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
+
+DROP TABLE t_delete_and_column_prune;
+
+-- name: test_upper_case_column_name
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
+
+CREATE TABLE `t_upper_case_column_name` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `TeXt` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`TeXt`) USING GIN ("parser" = "english") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_delete_and_column_prune VALUES (1, "b"),(2, "b"),(3, "b");
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
+
+DROP TABLE t_upper_case_column_name;

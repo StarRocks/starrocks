@@ -479,7 +479,9 @@ public:
     size_t memory_usage() {
         size_t mem_usage = 0;
         for (auto& bf : _bf_vec) {
-            mem_usage += bf->size();
+            if (bf != nullptr) {
+                mem_usage += bf->size();
+            }
         }
         return mem_usage;
     }
@@ -656,7 +658,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
-    size_t memory_usage() const { return _memory_usage.load(); }
+    virtual size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
 
@@ -703,6 +705,14 @@ public:
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                           IOStat* stat = nullptr);
 
+    // batch replace without return old values
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |replace_indexes|: The index of the |keys| array that need to replace.
+    virtual Status replace(size_t n, const Slice* keys, const IndexValue* values,
+                           const std::vector<uint32_t>& replace_indexes);
+
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -747,7 +757,7 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
@@ -773,6 +783,8 @@ public:
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
+    void test_calc_memory_usage() { return _calc_memory_usage(); }
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,

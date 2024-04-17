@@ -1404,7 +1404,13 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         }
     }
     full_row_size += rowset->rowset_meta()->total_row_size();
-    full_rowset_size = rowset->total_segment_data_size();
+    if (auto r = rowset->total_segment_data_size(); r.ok()) {
+        full_rowset_size = r.value();
+    } else {
+        LOG(WARNING) << r.status();
+        failure_handler("fail to get segment file size", true);
+        return;
+    }
 
     PersistentIndexMetaPB index_meta;
     if (enable_persistent_index) {
@@ -1525,19 +1531,24 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
         // TODO reset tablet schema in rowset
         if (rowset_meta_pb.has_txn_meta()) {
-            full_rowset_size = rowset->total_segment_data_size();
-            rowset->rowset_meta()->clear_txn_meta();
-            rowset->rowset_meta()->set_total_row_size(full_row_size);
-            rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
-            rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
-            rowset->set_schema(apply_tschema);
-            rowset->rowset_meta()->set_tablet_schema(apply_tschema);
-            (void)rowset->reload();
-            RowsetMetaPB full_rowset_meta_pb;
-            rowset->rowset_meta()->get_full_meta_pb(&full_rowset_meta_pb);
-            st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                        new_del_vecs, index_meta, enable_persistent_index,
-                                                        &full_rowset_meta_pb);
+            auto r = rowset->total_segment_data_size();
+            if (r.ok()) {
+                full_rowset_size = r.value();
+                rowset->rowset_meta()->clear_txn_meta();
+                rowset->rowset_meta()->set_total_row_size(full_row_size);
+                rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
+                rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
+                rowset->set_schema(apply_tschema);
+                rowset->rowset_meta()->set_tablet_schema(apply_tschema);
+                (void)rowset->reload();
+                RowsetMetaPB full_rowset_meta_pb;
+                rowset->rowset_meta()->get_full_meta_pb(&full_rowset_meta_pb);
+                st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
+                                                            new_del_vecs, index_meta, enable_persistent_index,
+                                                            &full_rowset_meta_pb);
+            } else {
+                st.update(r.status());
+            }
         } else {
             st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                         new_del_vecs, index_meta, enable_persistent_index, nullptr);
@@ -2465,6 +2476,7 @@ int64_t TabletUpdates::get_compaction_score() {
     size_t total_inputs = 0;
     size_t total_deletes = 0;
     bool has_error = false;
+    std::map<int32_t, std::pair<size_t, size_t>> candidates_by_level;
     {
         std::lock_guard lg(_rowset_stats_lock);
         for (auto rowsetid : rowsets) {
@@ -2481,6 +2493,17 @@ int64_t TabletUpdates::get_compaction_score() {
                 total_score += itr->second->compaction_score;
                 total_inputs += std::max(1UL, itr->second->num_segments);
                 total_deletes += itr->second->num_dels;
+                if (config::enable_pk_size_tiered_compaction_strategy) {
+                    int32_t level = _calc_compaction_level(itr->second.get());
+                    auto candidate_itr = candidates_by_level.find(level);
+                    if (candidate_itr == candidates_by_level.end()) {
+                        candidates_by_level[level] =
+                                std::make_pair(std::max(1UL, itr->second->num_segments), itr->second->num_dels);
+                    } else {
+                        candidate_itr->second.first += std::max(1UL, itr->second->num_segments);
+                        candidate_itr->second.second += itr->second->num_dels;
+                    }
+                }
             }
         }
     }
@@ -2492,6 +2515,18 @@ int64_t TabletUpdates::get_compaction_score() {
     if (total_inputs == 1 && total_deletes == 0) {
         // only 1 input and no delete, no need to do compaction
         return -1;
+    }
+    if (config::enable_pk_size_tiered_compaction_strategy) {
+        bool flag = false;
+        for (auto [_, candidate] : candidates_by_level) {
+            if (candidate.first > 1 || (candidate.first == 1 && candidate.second > 0)) {
+                flag = true;
+                break;
+            }
+        }
+        if (!flag) {
+            return -1;
+        }
     }
     // scale score to a reasonable range relative to the number of files * 10
     return total_score / std::max(1L, config::update_compaction_size_threshold / 10);
@@ -4994,12 +5029,12 @@ Status TabletUpdates::get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, E
     if (timeout_ms <= 0) {
         _index_lock.lock();
     } else {
-        if (!_index_lock.try_lock_for(std::chrono::milliseconds(timeout_ms))) {
+        if (!_index_lock.try_lock_shared_for(std::chrono::milliseconds(timeout_ms))) {
             return Status::TimedOut("get_rss_rowids_by_pk try lock timeout");
         }
     }
     auto st = get_rss_rowids_by_pk_unlock(tablet, keys, read_version, rss_rowids);
-    _index_lock.unlock();
+    _index_lock.unlock_shared();
     return st;
 }
 

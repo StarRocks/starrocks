@@ -47,7 +47,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -62,12 +61,10 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -99,6 +96,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.operator.Operator.OP_UNION_ALL_BIT;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMvTransparentPlan;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 
 /*
  * SPJG materialized view rewriter, based on
@@ -106,7 +104,7 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
  *
  *  This rewriter is for single table or multi table join query rewrite
  */
-public class MaterializedViewRewriter {
+public class MaterializedViewRewriter implements IMaterializedViewRewriter {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewRewriter.class);
     protected final MvRewriteContext mvRewriteContext;
     protected final MaterializationContext materializationContext;
@@ -115,7 +113,7 @@ public class MaterializedViewRewriter {
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
 
-    private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
+    public static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
                     .put(JoinOperator.INNER_JOIN, Lists.newArrayList(JoinOperator.LEFT_SEMI_JOIN, JoinOperator.RIGHT_SEMI_JOIN))
                     .put(JoinOperator.LEFT_OUTER_JOIN, Lists.newArrayList(JoinOperator.INNER_JOIN, JoinOperator.LEFT_ANTI_JOIN))
@@ -320,63 +318,7 @@ public class MaterializedViewRewriter {
                 }
                 return true;
             }
-
-            if (!JOIN_COMPATIBLE_MAP.containsKey(mvJoinType) ||
-                    !JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
-                logMVRewrite(mvRewriteContext, "join type is not compatible {} not contains {}", mvJoinType,
-                        queryJoinType);
-                return false;
-            }
-
-            // only support table column equality predicates like A.c1 = B.c1 && A.c2 = B.c2
-            // should know the right table
-            ScalarOperator queryOnPredicate = queryJoin.getOnPredicate();
-            // relationId -> join on predicate used columns
-            Map<Integer, ColumnRefSet> tableToJoinColumns = Maps.newHashMap();
-            // first is from left, second is from right
-            List<Pair<ColumnRefOperator, ColumnRefOperator>> joinColumnPairs = Lists.newArrayList();
-            ColumnRefSet leftColumns = queryExpr.inputAt(0).getOutputColumns();
-            boolean isSupported = isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(),
-                    leftColumns, tableToJoinColumns, joinColumnPairs);
-            if (!isSupported) {
-                logMVRewrite(mvRewriteContext, "join predicate is not supported {}", queryOnPredicate);
-                return false;
-            }
-            // use join columns from query
-            Map<ColumnRefSet, Table> usedColumnsToTable = Maps.newHashMap();
-            for (Map.Entry<Integer, ColumnRefSet> entry : tableToJoinColumns.entrySet()) {
-                Table table = materializationContext.getQueryRefFactory().getTableForColumn(entry.getValue().getFirstId());
-                usedColumnsToTable.put(entry.getValue(), table);
-            }
-
-            ColumnRefSet leftJoinColumns = new ColumnRefSet();
-            ColumnRefSet rightJoinColumns = new ColumnRefSet();
-            for (Pair<ColumnRefOperator, ColumnRefOperator> pair : joinColumnPairs) {
-                leftJoinColumns.union(pair.first);
-                rightJoinColumns.union(pair.second);
-            }
-            List<List<ColumnRefOperator>> joinColumnRefs = Lists.newArrayList(Lists.newArrayList(), Lists.newArrayList());
-            // query based join columns pair
-            List<Pair<ColumnRefOperator, ColumnRefOperator>> compensatedEquivalenceColumns = Lists.newArrayList();
-            boolean isCompatible = isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType,
-                    leftJoinColumns, rightJoinColumns, joinColumnPairs, joinColumnRefs, compensatedEquivalenceColumns);
-            if (!isCompatible) {
-                logMVRewrite(mvRewriteContext, "join columns not compatible {} != {}, query join type: {}, mv join type: {}",
-                        leftJoinColumns, rightJoinColumns, queryJoinType, mvJoinType);
-                return false;
-            }
-            // here collect output columns to compensate the derived predicates if necessary.
-            // use mv output columns because the output is decided by mv.
-            // if the column is not in mv's output, it can not be used as compensated predicate.
-            List<List<ColumnRefOperator>> childOutputColumns = Lists.newArrayList();
-            childOutputColumns.add(mvExpr.getChildOutputColumns(0)
-                    .getColumnRefOperators(materializationContext.getMvColumnRefFactory()));
-            childOutputColumns.add(mvExpr.getChildOutputColumns(1)
-                    .getColumnRefOperators(materializationContext.getMvColumnRefFactory()));
-            JoinDeriveContext joinDeriveContext = new JoinDeriveContext(
-                    queryJoinType, mvJoinType, joinColumnRefs, compensatedEquivalenceColumns, childOutputColumns);
-            mvRewriteContext.addJoinDeriveContext(joinDeriveContext);
-            return true;
+            return processJoinDerive(queryExpr, mvExpr);
         } else if (queryOp instanceof LogicalScanOperator) {
             Preconditions.checkState(mvOp instanceof LogicalScanOperator);
             Table queryTable = ((LogicalScanOperator) queryOp).getTable();
@@ -553,7 +495,8 @@ public class MaterializedViewRewriter {
         return true;
     }
 
-    public OptExpression rewrite() {
+    @Override
+    public OptExpression doRewrite(MvRewriteContext mvContext) {
         final OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
         final List<Table> queryTables = mvRewriteContext.getQueryTables();
@@ -583,11 +526,29 @@ public class MaterializedViewRewriter {
         if (matchMode == MatchMode.VIEW_DELTA) {
             return rewriteViewDelta(queryTables, mvTables, mvPredicateSplit, mvColumnRefRewriter,
                     queryExpression, mvExpression);
-        } else {
-            Preconditions.checkState(matchMode == MatchMode.COMPLETE);
+        } else if (matchMode == MatchMode.COMPLETE) {
             return rewriteComplete(queryTables, mvTables, matchMode, mvPredicateSplit, mvColumnRefRewriter,
                     null, null, null);
+        } else {
+            return null;
         }
+    }
+
+    /**
+     * After plan is rewritten by MV, still do some actions for new MV's plan.
+     * 1. column prune
+     * 2. partition prune
+     * 3. bucket prune
+     */
+    public OptExpression postRewrite(OptimizerContext optimizerContext,
+                                     MvRewriteContext mvRewriteContext,
+                                     OptExpression candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        candidate = new MVColumnPruner().pruneColumns(candidate);
+        candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
+        return candidate;
     }
 
     /**
@@ -636,8 +597,12 @@ public class MaterializedViewRewriter {
                     "can not try view delta rewrite because no FK constraints", queryTables.size(), mvTables.size()));
             return null;
         }
-        List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
-        List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
+        List<TableScanDesc> queryTableScanDescs =
+                MvUtils.getTableScanDescs(queryExpression, materializationContext.getQueryRefFactory());
+        mvRewriteContext.setQueryTableScanDescs(queryTableScanDescs);
+        List<TableScanDesc> mvTableScanDescs =
+                MvUtils.getTableScanDescs(mvExpression, materializationContext.getMvColumnRefFactory());
+        mvRewriteContext.setMvTableScanDescs(mvTableScanDescs);
 
         // NOTE: When queries/mvs have multi same tables in snowflake-schema mode, eg:
         // MV   : B <-> A <-> D <-> C <-> E <-> A <-> B
@@ -783,6 +748,12 @@ public class MaterializedViewRewriter {
                     return null;
                 }
                 rewriteContext.setQueryEquivalenceClasses(newQueryEc);
+
+                // should check join type here to support join derive rewrite
+                boolean ret = processJoinDeriveForViewDelta(relationIdMapping);
+                if (!ret) {
+                    continue;
+                }
             }
 
             // construct query based view EC
@@ -818,6 +789,109 @@ public class MaterializedViewRewriter {
             }
         }
         return null;
+    }
+
+    private boolean processJoinDeriveForViewDelta(BiMap<Integer, Integer> relationIdMapping) {
+        mvRewriteContext.clearJoinDeriveContexts();
+        Map<Integer, TableScanDesc> queryRelationToTableScan =
+                constructRelationToScanMap(mvRewriteContext.getQueryTableScanDescs());
+        Map<Integer, TableScanDesc> mvRelationToTableScan =
+                constructRelationToScanMap(mvRewriteContext.getMvTableScanDescs());
+        for (Integer queryRelationId : queryRelationToTableScan.keySet()) {
+            TableScanDesc queryTableScanDesc = queryRelationToTableScan.get(queryRelationId);
+            Preconditions.checkNotNull(queryTableScanDesc);
+            if (queryTableScanDesc.getJoinOptExpression() == null) {
+                continue;
+            }
+            Integer mvRelationId = relationIdMapping.get(queryRelationId);
+            Preconditions.checkNotNull(mvRelationId);
+            TableScanDesc mvTableScanDesc = mvRelationToTableScan.get(mvRelationId);
+            Preconditions.checkNotNull(mvTableScanDesc);
+            if (mvTableScanDesc.getJoinOptExpression() == null) {
+                continue;
+            }
+            if (mvTableScanDesc.isMatch(queryTableScanDesc)) {
+                continue;
+            }
+            boolean ret = processJoinDerive(queryTableScanDesc.getJoinOptExpression(), mvTableScanDesc.getJoinOptExpression());
+            if (!ret) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Map<Integer, TableScanDesc> constructRelationToScanMap(List<TableScanDesc> tableScanDescs) {
+        Map<Integer, TableScanDesc> relationToTableScan = Maps.newHashMap();
+        tableScanDescs.forEach(desc -> relationToTableScan.put(desc.getRelationid(), desc));
+        return relationToTableScan;
+    }
+
+    private boolean processJoinDerive(OptExpression queryExpr, OptExpression mvExpr) {
+        LogicalJoinOperator queryJoin = (LogicalJoinOperator) queryExpr.getOp();
+        JoinOperator queryJoinType = queryJoin.getJoinType();
+
+        LogicalJoinOperator mvJoin = (LogicalJoinOperator) mvExpr.getOp();
+        JoinOperator mvJoinType = mvJoin.getJoinType();
+        if (queryJoinType == mvJoinType) {
+            return true;
+        }
+        if (!JOIN_COMPATIBLE_MAP.containsKey(mvJoinType) ||
+                !JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
+            logMVRewrite(mvRewriteContext, "join type is not compatible {} not contains {}", mvJoinType,
+                    queryJoinType);
+            return false;
+        }
+
+        // only support table column equality predicates like A.c1 = B.c1 && A.c2 = B.c2
+        // should know the right table
+        ScalarOperator queryOnPredicate = queryJoin.getOnPredicate();
+        // relationId -> join on predicate used columns
+        Map<Integer, ColumnRefSet> tableToJoinColumns = Maps.newHashMap();
+        // first is from left, second is from right
+        List<Pair<ColumnRefOperator, ColumnRefOperator>> joinColumnPairs = Lists.newArrayList();
+        ColumnRefSet leftColumns = queryExpr.inputAt(0).getOutputColumns();
+        boolean isSupported = isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(),
+                leftColumns, tableToJoinColumns, joinColumnPairs);
+        if (!isSupported) {
+            logMVRewrite(mvRewriteContext, "join predicate is not supported {}", queryOnPredicate);
+            return false;
+        }
+        // use join columns from query
+        Map<ColumnRefSet, Table> usedColumnsToTable = Maps.newHashMap();
+        for (Map.Entry<Integer, ColumnRefSet> entry : tableToJoinColumns.entrySet()) {
+            Table table = materializationContext.getQueryRefFactory().getTableForColumn(entry.getValue().getFirstId());
+            usedColumnsToTable.put(entry.getValue(), table);
+        }
+
+        ColumnRefSet leftJoinColumns = new ColumnRefSet();
+        ColumnRefSet rightJoinColumns = new ColumnRefSet();
+        for (Pair<ColumnRefOperator, ColumnRefOperator> pair : joinColumnPairs) {
+            leftJoinColumns.union(pair.first);
+            rightJoinColumns.union(pair.second);
+        }
+        List<List<ColumnRefOperator>> joinColumnRefs = Lists.newArrayList(Lists.newArrayList(), Lists.newArrayList());
+        // query based join columns pair
+        List<Pair<ColumnRefOperator, ColumnRefOperator>> compensatedEquivalenceColumns = Lists.newArrayList();
+        boolean isCompatible = isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType,
+                leftJoinColumns, rightJoinColumns, joinColumnPairs, joinColumnRefs, compensatedEquivalenceColumns);
+        if (!isCompatible) {
+            logMVRewrite(mvRewriteContext, "join columns not compatible {} != {}, query join type: {}, mv join type: {}",
+                    leftJoinColumns, rightJoinColumns, queryJoinType, mvJoinType);
+            return false;
+        }
+        // here collect output columns to compensate the derived predicates if necessary.
+        // use mv output columns because the output is decided by mv.
+        // if the column is not in mv's output, it can not be used as compensated predicate.
+        List<List<ColumnRefOperator>> childOutputColumns = Lists.newArrayList();
+        childOutputColumns.add(mvExpr.getChildOutputColumns(0)
+                .getColumnRefOperators(materializationContext.getMvColumnRefFactory()));
+        childOutputColumns.add(mvExpr.getChildOutputColumns(1)
+                .getColumnRefOperators(materializationContext.getMvColumnRefFactory()));
+        JoinDeriveContext joinDeriveContext = new JoinDeriveContext(
+                queryJoinType, mvJoinType, joinColumnRefs, compensatedEquivalenceColumns, childOutputColumns);
+        mvRewriteContext.addJoinDeriveContext(joinDeriveContext);
+        return true;
     }
 
     /**
@@ -1286,7 +1360,7 @@ public class MaterializedViewRewriter {
                 if (optimizerContext.getSessionVariable().getQueryDebugOptions().isEnableNormalizePredicateAfterMVRewrite()) {
                     normalizedPredicate = MvUtils.canonizePredicateForRewrite(queryMaterializationContext, normalizedPredicate);
                 }
-                mvScanOptExpression = addExtraPredicate(mvScanOptExpression, normalizedPredicate);
+                mvScanOptExpression = MvUtils.addExtraPredicate(mvScanOptExpression, normalizedPredicate);
 
                 mvScanOptExpression.setLogicalProperty(null);
                 deriveLogicalProperty(mvScanOptExpression);
@@ -2110,7 +2184,7 @@ public class MaterializedViewRewriter {
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
         // NOTE: selected partitions and tablets should be deduced again.
-        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput);
+        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput, false);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         // rewrite viewInput
@@ -2151,32 +2225,11 @@ public class MaterializedViewRewriter {
 
         // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            result = addExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
+            result = MvUtils.addExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
 
         deriveLogicalProperty(result);
         return result;
-    }
-
-    protected OptExpression addExtraPredicate(OptExpression result,
-                                              ScalarOperator extraPredicate) {
-        Operator op = result.getOp();
-        if (op instanceof LogicalSetOperator) {
-            LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
-            // use PUSH_DOWN_PREDICATE rule to push down filter after union all set after mv rewrite rule.
-            return OptExpression.create(filter, result);
-        } else {
-            // If op is aggregate operator, use setPredicate directly.
-            ScalarOperator origPredicate = op.getPredicate();
-            if (op.getProjection() != null) {
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
-                ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
-                op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
-            } else {
-                op.setPredicate(Utils.compoundAnd(origPredicate, extraPredicate));
-            }
-            return result;
-        }
     }
 
     protected EquationRewriter buildEquationRewriter(
@@ -2203,6 +2256,9 @@ public class MaterializedViewRewriter {
             if (isQueryToMV) {
                 rewriteScalarOp = useEc ? columnRewriter.rewriteToTargetWithEc(rewritten, isViewBased)
                         : columnRewriter.rewriteViewToQuery(rewritten);
+                if (rewriteScalarOp == null) {
+                    continue;
+                }
                 // if rewriteScalarOp == rewritten and !rewritten.getUsedColumns().isEmpty(),
                 // it means the rewritten can not be mapped from mv to query.
                 // and ColumnRefOperator may conflict between mv and query(same id but not same name),
@@ -2212,6 +2268,9 @@ public class MaterializedViewRewriter {
                 }
             } else {
                 rewriteScalarOp = columnRewriter.rewriteByEc(rewritten, isViewBased);
+                if (rewriteScalarOp == null) {
+                    continue;
+                }
                 rewriter.addMapping(rewriteScalarOp, entry.getKey());
             }
 
@@ -2331,23 +2390,6 @@ public class MaterializedViewRewriter {
             matchMode = MatchMode.VIEW_DELTA;
         }
         return matchMode;
-    }
-
-    protected OptExpression deriveOptExpression(OptExpression root) {
-        deriveLogicalProperty(root);
-        return root;
-    }
-
-    protected void deriveLogicalProperty(OptExpression root) {
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
-
-        if (root.getLogicalProperty() == null) {
-            ExpressionContext context = new ExpressionContext(root);
-            context.deriveLogicalProperty();
-            root.setLogicalProperty(context.getRootProperty());
-        }
     }
 
     // TODO: consider no-loss type cast

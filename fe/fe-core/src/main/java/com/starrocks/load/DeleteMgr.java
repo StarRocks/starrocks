@@ -193,7 +193,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             } catch (Throwable t) {
                 LOG.warn("error occurred during delete process", t);
                 // if transaction has been begun, need to abort it
-                long transactionId = deleteJob == null ? null : deleteJob.getTransactionId();
+                long transactionId = deleteJob == null ? -1 : deleteJob.getTransactionId();
                 if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getTransactionState(db.getId(), transactionId) != null) {
                     cancelJob(deleteJob, CancelType.UNKNOWN, t.getMessage());

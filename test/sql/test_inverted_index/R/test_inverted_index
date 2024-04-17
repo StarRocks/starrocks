@@ -1,4 +1,10 @@
 -- name: test_basic_create_index
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_test_basic_create_index_pk` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `id2` bigint(20) NOT NULL COMMENT "",
@@ -117,6 +123,12 @@ DROP TABLE t_test_basic_create_index_dup;
 -- result:
 -- !result
 -- name: test_query_gin_index
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_test_gin_index_query` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `query_none_analyzer` varchar(255) NOT NULL COMMENT "",
@@ -176,6 +188,12 @@ drop table t_test_gin_index_query;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_none
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_single_predicate_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -280,6 +298,12 @@ DROP TABLE t_gin_index_single_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_english
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_single_predicate_english` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -371,6 +395,12 @@ DROP TABLE t_gin_index_single_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_none
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_multiple_predicate_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -463,6 +493,12 @@ DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_english
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_multiple_predicate_english` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -506,6 +542,12 @@ DROP TABLE t_gin_index_multiple_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_compaction
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_compaction_none_base` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -667,6 +709,12 @@ DROP TABLE t_gin_index_compaction_english_cumu;
 -- result:
 -- !result
 -- name: test_gin_index_type
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_gin_index_type_1` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `test_column` varchar(255) NULL COMMENT "",
@@ -777,6 +825,12 @@ PROPERTIES (
 E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
 -- !result
 -- name: test_clone_for_gin
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_clone_for_gin` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -810,6 +864,12 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 2	ABC
 -- !result
 -- name: test_complex_predicate_for_gin
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 CREATE TABLE `t_complex_predicate_for_gin_none` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -887,10 +947,18 @@ E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must b
 -- !result
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "c");
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "%");
 -- result:
-1	abc cbd
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 -- result:
@@ -939,15 +1007,110 @@ E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must b
 -- !result
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "c");
 -- result:
-1	abc cbd
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT("ab", "%");
 -- result:
-1	abc cbd
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
 DROP TABLE t_complex_predicate_for_gin_none;
 -- result:
 -- !result
 DROP TABLE t_complex_predicate_for_gin_english;
+-- result:
+-- !result
+-- name: test_delete_and_column_prune
+CREATE TABLE `t_delete_and_column_prune` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "english") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_delete_and_column_prune VALUES (1, "b"),(2, "b"),(3, "b");
+-- result:
+-- !result
+SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+DELETE FROM t_delete_and_column_prune WHERE id1 = 2;
+-- result:
+-- !result
+SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
+-- result:
+1
+3
+-- !result
+DROP TABLE t_delete_and_column_prune;
+-- result:
+-- !result
+-- name: test_upper_case_column_name
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+CREATE TABLE `t_upper_case_column_name` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `TeXt` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`TeXt`) USING GIN ("parser" = "english") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_upper_case_column_name VALUES (1, "b"),(2, "b"),(3, "b");
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+DROP TABLE t_upper_case_column_name;
 -- result:
 -- !result

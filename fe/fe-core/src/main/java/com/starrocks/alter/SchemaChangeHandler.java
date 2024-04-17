@@ -66,6 +66,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
@@ -140,10 +141,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
 
     // all shadow indexes should have this prefix in name
-    public static final String SHADOW_NAME_PRFIX = "__starrocks_shadow_";
-    // before version 1.18, use "__doris_shadow_" as shadow index prefix
-    // check "__doris_shadow_" to prevent compatibility problems
-    public static final String SHADOW_NAME_PRFIX_V1 = "__doris_shadow_";
+    public static final String SHADOW_NAME_PREFIX = "__starrocks_shadow_";
 
     public SchemaChangeHandler() {
         super("schema change");
@@ -409,8 +407,6 @@ public class SchemaChangeHandler extends AlterHandler {
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
-        // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
-        boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
@@ -601,7 +597,7 @@ public class SchemaChangeHandler extends AlterHandler {
                  * And if the column type is not changed, the same column name is still to the same column type,
                  * so no need to add prefix.
                  */
-                modColumn.setName(SHADOW_NAME_PRFIX + originalModColumnName);
+                modColumn.setName(SHADOW_NAME_PREFIX + originalModColumnName);
             }
 
             if (KeysType.AGG_KEYS == olapTable.getKeysType() || KeysType.UNIQUE_KEYS == olapTable.getKeysType() ||
@@ -646,7 +642,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for handling other indices
 
-        return fastSchemaEvolution;
+        return false;
     }
 
     // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
@@ -1394,6 +1390,18 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds);
 
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+
+            jobBuilder.withWarehouse(warehouseId);
+        }
+
         long tableId = olapTable.getId();
         Long alterIndexId = olapTable.getBaseIndexId();
         List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
@@ -1596,8 +1604,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (alterClause instanceof AddColumnClause) {
                 // add column
                 fastSchemaEvolution &=
-                        processAddColumn((AddColumnClause) alterClause, olapTable, indexSchemaMap,
-                                colUniqueIdSupplier);
+                        processAddColumn((AddColumnClause) alterClause, olapTable, indexSchemaMap, colUniqueIdSupplier);
             } else if (alterClause instanceof AddColumnsClause) {
                 // add columns
                 fastSchemaEvolution &=
@@ -1665,7 +1672,7 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolutionInShareNothingMode(schemaChangeData);
             return null;
         } else {
-            throw new NotImplementedException("fast schema evolution not supported for shared data mode yet");
+            return createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
         }
     }
 
@@ -1751,7 +1758,8 @@ public class SchemaChangeHandler extends AlterHandler {
         return null;
     }
 
-    public AlterJobV2 createAlterMetaJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws UserException {
+    public AlterJobV2 createAlterMetaJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
+            throws UserException {
         LakeTableAlterMetaJob alterMetaJob;
         Preconditions.checkState(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
@@ -1805,7 +1813,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // 3. write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(alterMetaJob);
-        LOG.info("finished to create alter meta job {} of cloud table: {}", alterMetaJob.getJobId(), olapTable.getName());
+        LOG.info("finished to create alter meta job {} of cloud table: {}", alterMetaJob.getJobId(),
+                olapTable.getName());
         return null;
     }
 
@@ -2562,7 +2571,6 @@ public class SchemaChangeHandler extends AlterHandler {
         long jobId = globalStateMgr.getNextId();
         long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getTransactionIDGenerator().getNextTransactionId();
-        long baseIndexId = schemaChangeData.getTable().getBaseIndexId();
         // for schema change add/drop value column optimize, direct modify table meta.
         // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.
         // try to copy first before modifying, avoiding in-place changes.
@@ -2576,6 +2584,37 @@ public class SchemaChangeHandler extends AlterHandler {
         modifyTableAddOrDropColumns(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
                 schemaChangeData.getNewIndexSchema(), schemaChangeData.getIndexes(), jobId, txnId,
                 indexToNewSchemaId, false);
+    }
+
+    private AlterJobV2 createFastSchemaEvolutionJobInSharedDataMode(SchemaChangeData schemaChangeData) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        long jobId = globalStateMgr.getNextId();
+        long dbId = schemaChangeData.getDatabase().getId();
+        long tableId = schemaChangeData.getTable().getId();
+        long timeoutMs = schemaChangeData.getTimeoutInSeconds() * 1000L;
+        String tableName = schemaChangeData.getTable().getName();
+        LakeTableAsyncFastSchemaChangeJob job = new LakeTableAsyncFastSchemaChangeJob(jobId, dbId, tableId, tableName, timeoutMs);
+        for (Map.Entry<Long, List<Column>> entry : schemaChangeData.getNewIndexSchema().entrySet()) {
+            long indexId = entry.getKey();
+            String indexName = schemaChangeData.getTable().getIndexNameById(indexId);
+            int schemaVersion = 1 + schemaChangeData.getTable().getIndexMetaByIndexId(indexId).getSchemaVersion();
+            SchemaInfo schemaInfo = SchemaInfo.newBuilder()
+                    .setId(globalStateMgr.getNextId())
+                    .setKeysType(schemaChangeData.getTable().getKeysType())
+                    .setShortKeyColumnCount(schemaChangeData.getNewIndexShortKeyCount().get(indexId))
+                    .setStorageType(schemaChangeData.getTable().getStorageType())
+                    .setVersion(schemaVersion)
+                    .addColumns(entry.getValue())
+                    .setBloomFilterColumnNames(schemaChangeData.getBloomFilterColumns())
+                    .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
+                    .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
+                    .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
+                    .setIndexes(schemaChangeData.getIndexes())
+                    .build();
+            job.setIndexTabletSchema(indexId, indexName, schemaInfo);
+        }
+        job.setWarehouseId(schemaChangeData.getWarehouseId());
+        return job;
     }
 
     private AlterJobV2 createJob(@NotNull SchemaChangeData schemaChangeData) throws UserException {

@@ -26,10 +26,15 @@
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
+#include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Types_types.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
+#include "testutil/assert.h"
+#include "types/logical_type.h"
 
 namespace starrocks::parquet {
 
@@ -390,6 +395,84 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
     EXPECT_EQ("[1, {a_rename:2,b_rename:3,c_rename:4,d_rename:NULL}]", chunk->debug_row(0));
 }
 
+static void _create_null_conjunct_ctxs(SlotId slot_id, std::vector<ExprContext*>* conjunct_ctxs, ObjectPool& pool,
+                                       RuntimeState* runtime_state) {
+    std::vector<TExpr> t_conjuncts;
+    std::vector<TExprNode> nodes;
+
+    // create "is_null_pred" FunctionCall
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::FUNCTION_CALL);
+    node.__set_num_children(1);
+    node.__set_has_nullable_child(true);
+
+    {
+        // FunctionCall's type
+        TScalarType booleanType;
+        booleanType.__set_type(TPrimitiveType::BOOLEAN);
+        TTypeNode typeNode;
+        typeNode.__set_scalar_type(booleanType);
+        TTypeDesc typeDesc;
+        typeDesc.__set_types({typeNode});
+        node.__set_type(typeDesc);
+    }
+
+    {
+        // create "is_null_pred" Function
+        TFunctionName name;
+        name.__set_function_name("is_null_pred");
+        TFunction func;
+        func.__set_name(name);
+        func.__set_binary_type(TFunctionBinaryType::BUILTIN);
+
+        {
+            // Function arg type
+            TScalarType argType;
+            argType.__set_type(TPrimitiveType::INVALID_TYPE);
+            TTypeNode typeNode;
+            typeNode.__set_scalar_type(argType);
+            TTypeDesc typeDesc;
+            typeDesc.__set_types({typeNode});
+            func.__set_arg_types({typeDesc});
+        }
+
+        {
+            // Function ret type
+            TScalarType booleanType;
+            booleanType.__set_type(TPrimitiveType::BOOLEAN);
+            TTypeNode typeNode;
+            typeNode.__set_scalar_type(booleanType);
+            TTypeDesc typeDesc;
+            typeDesc.__set_types({typeNode});
+            func.__set_ret_type(typeDesc);
+        }
+        func.__set_id(0);
+        func.__set_fid(0);
+        node.__set_fn(func);
+    }
+    nodes.emplace_back(node);
+
+    // create "is_null_pred" FunctionCall's child
+    TExprNode child;
+    child.node_type = TExprNodeType::SLOT_REF;
+    child.type = gen_type_desc(TPrimitiveType::INT);
+    child.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = slot_id;
+    t_slot_ref.tuple_id = 0;
+    child.__set_slot_ref(t_slot_ref);
+    child.is_nullable = true;
+    nodes.emplace_back(child);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+    t_conjuncts.emplace_back(t_expr);
+
+    ASSERT_OK(Expr::create_expr_trees(&pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(Expr::prepare(*conjunct_ctxs, runtime_state));
+    ASSERT_OK(Expr::open(*conjunct_ctxs, runtime_state));
+}
+
 TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
@@ -407,6 +490,10 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
     field_col.__set_field_id(7);
     field_col.__set_name("new_column");
 
+    TIcebergSchemaField field_new_conjunct{};
+    field_col.__set_field_id(8);
+    field_col.__set_name("new_conjunct");
+
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
     ctx->iceberg_schema = &schema;
@@ -415,7 +502,21 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
-    Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {""}};
+    TypeDescriptor new_conjunct = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    Utils::SlotDesc slot_descs[] = {{"id", id}, {"col", col}, {"new_conjunct", new_conjunct}, {""}};
+
+    {
+        Utils::SlotDesc min_max_slots[] = {
+                {"new_conjunct", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 2},
+                {""},
+        };
+        ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+
+        // create min max conjuncts
+        // new_conjunct is null
+        _create_null_conjunct_ctxs(2, &ctx->min_max_conjunct_ctxs, _pool, _runtime_state);
+    }
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
@@ -433,12 +534,16 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(id, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(col, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(new_conjunct, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
+    if (!status.ok()) {
+        std::cout << status.message() << std::endl;
+    }
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[1, NULL, NULL]", chunk->debug_row(0));
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {

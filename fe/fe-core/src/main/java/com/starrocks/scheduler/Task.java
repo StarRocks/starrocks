@@ -51,6 +51,9 @@ public class Task implements Writable {
     @SerializedName("createTime")
     private long createTime;
 
+    @SerializedName("catalogName")
+    private String catalogName;
+
     @SerializedName("dbName")
     private String dbName;
 
@@ -130,6 +133,14 @@ public class Task implements Writable {
 
     public void setCreateTime(long createTime) {
         this.createTime = createTime;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
     }
 
     public String getDbName() {

@@ -96,7 +96,6 @@ private:
     MemPool _mempool;
     ObjectPool _obj_pool;
 
-    PredicateMap _pushdown_predicates;
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 

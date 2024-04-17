@@ -144,7 +144,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.service.InformationSchemaDataSource;
+import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -259,6 +261,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -515,6 +518,51 @@ public class ShowExecutor {
         }
 
         @Override
+        public ShowResultSet visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, ConnectContext context) {
+            statement.setSessionId(context.getSessionId());
+
+            ShowTemporaryTableStmt showTemporaryTableStmt = statement;
+            List<List<String>> rows = Lists.newArrayList();
+            String catalogName = showTemporaryTableStmt.getCatalogName();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+
+            String dbName = showTemporaryTableStmt.getDb();
+            UUID sessionId = showTemporaryTableStmt.getSessionId();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
+            PatternMatcher matcher = null;
+            if (showTemporaryTableStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showTemporaryTableStmt.getPattern(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+            }
+
+            Map<String, String> tableMap = Maps.newTreeMap();
+            MetaUtils.checkDbNullAndReport(db, showTemporaryTableStmt.getDb());
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                List<String> tableNames = temporaryTableMgr.listTemporaryTables(sessionId, db.getId());
+                for (String tableName : tableNames) {
+                    if (matcher != null && !matcher.match(tableName)) {
+                        continue;
+                    }
+                    rows.add(Lists.newArrayList(tableName));
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+
+            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
+                rows.add(Lists.newArrayList(entry.getKey()));
+            }
+            return new ShowResultSet(showTemporaryTableStmt.getMetaData(), rows);
+        }
+
+        @Override
         public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getDb());
@@ -637,20 +685,20 @@ public class ShowExecutor {
                 catalogName = context.getCurrentCatalog();
             }
             if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return showCreateInternalCatalogTable(statement);
+                return showCreateInternalCatalogTable(statement, context);
             } else {
                 return showCreateExternalCatalogTable(statement, tbl, catalogName);
             }
         }
 
-        private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) {
+        private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt, ConnectContext connectContext) {
             Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(showStmt.getTable());
+                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
                 if (table == null) {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
@@ -1640,7 +1688,8 @@ public class ShowExecutor {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    Table table = db.getTable(statement.getTableName());
+                    Table table = MetaUtils.getSessionAwareTable(
+                            context, db, new TableName(statement.getDbName(), statement.getTableName()));
                     if (table == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
                     }
@@ -2142,7 +2191,7 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(statement.getTableName().getTbl());
+                Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
                 if (table == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
                             db.getOriginName() + "." + statement.getTableName().toString());

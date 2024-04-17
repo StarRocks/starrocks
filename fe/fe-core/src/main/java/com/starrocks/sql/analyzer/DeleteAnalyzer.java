@@ -186,7 +186,7 @@ public class DeleteAnalyzer {
         MetaUtils.normalizationTableName(session, tableName);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         MetaUtils.getDatabase(session, tableName);
-        Table table = MetaUtils.getTable(session, tableName);
+        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof MaterializedView) {
             String msg = String.format("The data of '%s' cannot be deleted because it is a materialized view," +

@@ -969,8 +969,8 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("left operand of MATCH must be column ref");
             }
 
-            if (!type2.isStringType() && !type2.isNull()) {
-                throw new SemanticException("right operand of MATCH must be of type STRING with NOT NULL");
+            if (!(node.getChild(1) instanceof StringLiteral) || type2.isNull()) {
+                throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
             }
 
             return null;

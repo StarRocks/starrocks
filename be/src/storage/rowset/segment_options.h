@@ -25,6 +25,7 @@
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -47,13 +48,11 @@ using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 
 class SegmentReadOptions {
 public:
-    using PredicateList = std::vector<const ColumnPredicate*>;
-
     std::shared_ptr<FileSystem> fs;
 
     std::vector<SeekRange> ranges;
 
-    std::unordered_map<ColumnId, PredicateList> predicates;
+    PredicateTree pred_tree;
     std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
 
     DisjunctivePredicates delete_predicates;
@@ -101,6 +100,8 @@ public:
     TabletSchemaCSPtr tablet_schema = nullptr;
 
     bool asc_hint = true;
+
+    bool prune_column_after_index_filter = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

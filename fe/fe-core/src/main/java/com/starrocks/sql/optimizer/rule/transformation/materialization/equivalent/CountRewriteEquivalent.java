@@ -21,11 +21,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewRewriter;
 
 public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
-    public static IRewriteEquivalent INSTANCE = new CountRewriteEquivalent();
+    public static IAggregateRewriteEquivalent INSTANCE = new CountRewriteEquivalent();
 
     public CountRewriteEquivalent() {}
 
-    private boolean check(ScalarOperator op) {
+    public static boolean check(ScalarOperator op) {
         if (op == null || !(op instanceof CallOperator)) {
             return false;
         }
@@ -58,9 +58,23 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
             return null;
         }
         if (shuttleContext.isRollup()) {
-            return AggregatedMaterializedViewRewriter.getRollupAggregate((CallOperator) eqContext.getInput(), replace);
+            return AggregatedMaterializedViewRewriter.getRollupAggregateFunc((CallOperator) eqContext.getInput(), replace, false);
         } else {
             return replace;
         }
+    }
+
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        return AggregatedMaterializedViewRewriter.getRollupAggregateFunc(aggFunc, replace, false);
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        return replace;
     }
 }
