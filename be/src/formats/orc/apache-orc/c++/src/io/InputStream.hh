@@ -35,10 +35,18 @@
 
 #pragma once
 
+#include <openssl/evp.h>
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <list>
+#include <memory>
 #include <sstream>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "Adaptor.hh"
@@ -128,5 +136,28 @@ public:
     void seek(PositionProvider& position) override;
     std::string getName() const override;
 };
+  class DecryptionInputStream : public SeekableInputStream {
+   public:
+    DecryptionInputStream(std::unique_ptr<SeekableInputStream> input,std::vector<unsigned char> key,
+                          std::vector<unsigned char> iv,const EVP_CIPHER* cipher,MemoryPool& pool);
+    virtual ~DecryptionInputStream();
 
+    virtual bool Next(const void** data, int* size) override;
+    virtual void BackUp(int count) override;
+    virtual bool Skip(int count) override;
+    virtual google::protobuf::int64 ByteCount() const override;
+    virtual void seek(PositionProvider& position) override;
+    virtual std::string getName() const override;
+    void changeIv(long offset);
+
+   private:
+    std::unique_ptr<SeekableInputStream> input_;
+    std::vector<unsigned char> key_;
+    std::vector<unsigned char> iv_;
+    EVP_CIPHER_CTX* ctx_;
+    const EVP_CIPHER* cipher;
+    MemoryPool& pool;
+    std::unique_ptr<DataBuffer<unsigned char>> inputBuffer_;
+    std::unique_ptr<DataBuffer<unsigned char>> outputBuffer_;
+  };
 } // namespace orc

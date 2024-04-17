@@ -233,4 +233,99 @@ std::string SeekableFileInputStream::getName() const {
     return result.str();
 }
 
-} // namespace orc
+  DecryptionInputStream::DecryptionInputStream(std::unique_ptr<SeekableInputStream> input,
+                                               std::vector<unsigned char> key,
+                                               std::vector<unsigned char> iv,
+                                               const EVP_CIPHER* cipher,MemoryPool& pool)
+      : input_(std::move(input)),
+        key_(key),
+        iv_(iv),
+        cipher(cipher),
+        pool(pool){
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (ctx == nullptr) {
+      throw std::runtime_error("Failed to create EVP cipher context");
+    }
+    int ret = EVP_DecryptInit_ex(ctx, cipher, NULL, key_.data(), iv_.data());
+    if (ret != 1) {
+      EVP_CIPHER_CTX_free(ctx);
+      //EVP_CIPHER_free(const_cast<evp_cipher_st*>(cipher));
+      throw std::runtime_error("Failed to initialize EVP cipher context");
+    }
+    ctx_ = ctx;
+    outputBuffer_.reset(new DataBuffer<unsigned char>(pool));
+    inputBuffer_.reset(new DataBuffer<unsigned char>(pool));
+  }
+
+  DecryptionInputStream::~DecryptionInputStream() {
+    EVP_CIPHER_CTX_free(ctx_);
+    //EVP_CIPHER_free(const_cast<evp_cipher_st*>(cipher));
+  }
+
+  bool DecryptionInputStream::Next(const void** data, int* size) {
+    int bytesRead = 0;
+    //const void* ptr;
+    const void* inptr = static_cast<void*>(inputBuffer_->data());
+    input_->Next(&inptr, &bytesRead);
+    if (bytesRead == 0) {
+      return false;
+    }
+    // decrypt data
+    const unsigned char* result = static_cast<const unsigned char*>(inptr);
+    int outlen = 0;
+    //int blockSize = EVP_CIPHER_block_size(this->cipher);
+    outputBuffer_->resize(bytesRead);
+    int ret = EVP_DecryptUpdate(ctx_, outputBuffer_->data(), &outlen, result, bytesRead);
+    if (ret != 1) {
+      throw std::runtime_error("Failed to decrypt data");
+    }
+    outputBuffer_->resize(outlen);
+    *data = outputBuffer_->data();
+    *size = outputBuffer_->size();
+    return true;
+  }
+  void DecryptionInputStream::BackUp(int count) {
+    this->input_->BackUp(count);
+  }
+
+  bool DecryptionInputStream::Skip(int count) {
+    return this->input_->Skip(count);
+  }
+
+  google::protobuf::int64 DecryptionInputStream::ByteCount() const {
+    return input_->ByteCount();
+  }
+
+  void DecryptionInputStream::seek(PositionProvider& position) {
+    //std::cout<<"PPP:DecryptionInputStream::seek:"<<position.current()<<std::endl;
+    changeIv(position.current());
+    input_->seek(position);
+  }
+  void DecryptionInputStream::changeIv(long offset) {
+    int blockSize = EVP_CIPHER_key_length(cipher);
+    long encryptionBlocks = offset / blockSize;
+    long extra = offset % blockSize;
+    std::fill(iv_.end() - 8, iv_.end(), 0);
+    if (encryptionBlocks != 0) {
+      // Add the encryption blocks into the initial iv, to compensate for
+      // skipping over decrypting those bytes.
+      int posn = iv_.size() - 1;
+      while (encryptionBlocks > 0) {
+        long sum = (iv_[posn] & 0xff) + encryptionBlocks;
+        iv_[posn--] = (unsigned char) sum;
+        encryptionBlocks = sum / 0x100;
+      }
+    }
+    EVP_DecryptInit_ex(ctx_, cipher, NULL, key_.data(), iv_.data());
+    // If the range starts at an offset that doesn't match the encryption
+    // block, we need to advance some bytes within an encryption block.
+    if (extra > 0) {
+      std::vector<unsigned char> decrypted(extra);
+      int decrypted_len;
+      EVP_DecryptUpdate(ctx_, decrypted.data(), &decrypted_len, decrypted.data(), extra);
+    }
+  }
+  std::string DecryptionInputStream::getName() const {
+    return "DecryptionInputStream("+input_->getName()+")";
+  }
+}  // namespace orc

@@ -168,6 +168,7 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _hdfs_base_path = tdesc.hdfsTable.hdfs_base_dir;
     _columns = tdesc.hdfsTable.columns;
     _partition_columns = tdesc.hdfsTable.partition_columns;
+    _properties = tdesc.hdfsTable.properties;
     for (const auto& entry : tdesc.hdfsTable.partitions) {
         auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hdfsTable, entry.second));
         _partition_id_to_desc_map[entry.first] = partition;
@@ -421,7 +422,13 @@ StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
 
     return tPartitionMap;
 }
-
+std::string HiveTableDescriptor::get_property_by_key(std::string key) const{
+    auto it = _properties.find(key);
+    if (it == _properties.end()) {
+        return "";
+    }
+    return it->second;
+}
 // =============================================
 
 OlapTableDescriptor::OlapTableDescriptor(const TTableDescriptor& tdesc) : TableDescriptor(tdesc) {}

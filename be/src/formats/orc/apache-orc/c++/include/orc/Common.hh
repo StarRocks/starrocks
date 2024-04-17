@@ -210,7 +210,27 @@ public:
      * Get the writer timezone.
      */
     virtual const std::string& getWriterTimezone() const = 0;
-};
+    /**
+     *Get the list of Localkeys for all columns in the Stripe, with each encrypted column
+     *corresponding to a Localkey.
+     * @return
+     */
+    virtual std::shared_ptr<std::vector<std::vector<unsigned char>>>
+    getEncryptedLocalKeys() const = 0;
+    /**
+     *Get the Localkey for a specific column in this Stripe.
+     * @param col
+     * @return
+     */
+    virtual std::vector<unsigned char>& getEncryptedLocalKeyByVariantId(int col) const = 0;
+    /**
+     * In general, only the first stripe in an ORC file will store the LocalKey.In this case, the
+     * stripeId and originalStripeId are equal. If an ORC file has multiple stripes storing the
+     * LocalKey, the values of stripeId and originalStripeId may not be equal.
+     * @return
+     */
+    virtual long getOriginalStripeId() const = 0;
+  };
 
 // Return true if val1 < val2; otherwise return false
 template <typename T>

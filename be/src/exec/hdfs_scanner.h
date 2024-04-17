@@ -223,6 +223,7 @@ struct HdfsScannerParams {
     MORParams mor_params;
 
     int64_t connector_max_split_size = 0;
+    std::string decrypt_key = "";
 };
 
 struct HdfsScannerContext {

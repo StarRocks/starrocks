@@ -18,6 +18,8 @@
 
 #include "exec/exec_node.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
+#include "exprs/base64.h"
+#include "formats/orc/apache-orc/c++/src/security/InMemoryKeystore.hh"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
@@ -463,6 +465,16 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
+        if(!_scanner_params.decrypt_key.empty()) {
+            const char* in = _scanner_params.decrypt_key.c_str();
+            int len = _scanner_params.decrypt_key.length();
+            char out[len];
+            int64_t outlen = base64_decode2(in,len,out);
+            std::vector<unsigned char> vecOutput(out, out + outlen);
+            std::shared_ptr<orc::InMemoryKeystore> keyStore = std::make_shared<orc::InMemoryKeystore>();
+            keyStore->addKey("AES_CTR_128",0,orc::EncryptionAlgorithm::AES_CTR_128,vecOutput);
+            options.setKeyProvider(keyStore);
+        }
         if (_scanner_ctx.split_context != nullptr) {
             auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
             options.setSerializedFileTail(*(split_context->footer.get()));

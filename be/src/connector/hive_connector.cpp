@@ -296,7 +296,10 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.use_partition_column_value_only) {
         _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
     }
-
+    std::string key = _hive_table->get_property_by_key("orc.decrypt.ezk");
+    if (!key.empty()) {
+        _decrypt_key =  key;
+    }
     // The reason why we need double check here is for iceberg table.
     // for some partitions, partition column maybe is not constant value.
     // If partition column is not constant value, we can not use this optimization,
@@ -565,6 +568,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;
+    scanner_params.decrypt_key = _decrypt_key;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

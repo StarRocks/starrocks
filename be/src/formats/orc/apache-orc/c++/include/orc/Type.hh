@@ -65,6 +65,12 @@ public:
     virtual std::vector<std::string> getAttributeKeys() const = 0;
     virtual std::string getAttributeValue(const std::string& key) const = 0;
     virtual std::string toString() const = 0;
+    /**
+     * Get the Type with the given column ID
+     * @param colId the column ID
+     * @return the type corresponding to the column Id, nullptr if not exists
+     */
+    virtual const Type* getTypeByColumnId(uint64_t colId) const = 0;
 
     /**
      * Create a row batch for this type.
