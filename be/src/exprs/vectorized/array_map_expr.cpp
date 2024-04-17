@@ -37,8 +37,15 @@ inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::P
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     std::vector<ColumnPtr> input_elements;
+<<<<<<< HEAD:be/src/exprs/vectorized/array_map_expr.cpp
     NullColumnPtr input_null_map = nullptr;
     std::shared_ptr<ArrayColumn> input_array = nullptr;
+=======
+    NullColumnPtr null_column = nullptr;
+    bool is_single_nullable_child = false;
+    ArrayColumn* input_array = nullptr;
+    ColumnPtr input_array_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
+>>>>>>> 70db73d348 ([BugFix] Do not reuse input null and offset column for array_map (#44226)):be/src/exprs/array_map_expr.cpp
     // for many valid arguments:
     // if one of them is a null literal, the result is a null literal;
     // if one of them is only null, then results are null;
@@ -61,12 +68,21 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable != nullptr);
             column = nullable->data_column();
             // empty null array with non-zero elements
+<<<<<<< HEAD:be/src/exprs/vectorized/array_map_expr.cpp
             std::dynamic_pointer_cast<ArrayColumn>(column)->empty_null_array(nullable->null_column());
             if (input_null_map) {
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
+=======
+            column->empty_null_in_complex_column(nullable->null_column()->get_data(),
+                                                 down_cast<const ArrayColumn*>(column.get())->offsets().get_data());
+            if (null_column) {
+                is_single_nullable_child = false;
+                null_column = FunctionHelper::union_null_column(nullable->null_column(), null_column); // merge null
+>>>>>>> 70db73d348 ([BugFix] Do not reuse input null and offset column for array_map (#44226)):be/src/exprs/array_map_expr.cpp
             } else {
-                input_null_map = nullable->null_column();
+                is_single_nullable_child = true;
+                null_column = nullable->null_column();
             }
         }
         DCHECK(column->is_array());
@@ -80,6 +96,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             }
         }
         input_elements.push_back(cur_array->elements_column());
+    }
+
+    if (is_single_nullable_child) {
+        DCHECK(null_column != nullptr);
+        // If there are more than one nullable children, the nullable column has been cloned when calling
+        // union_null_column to merge, so only one nullable child needs to be cloned.
+        null_column = ColumnHelper::as_column<NullColumn>(null_column->clone_shared());
     }
 
     ColumnPtr column = nullptr;
@@ -136,9 +159,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         }
     }
     // attach offsets
-    auto array_col = std::make_shared<ArrayColumn>(column, input_array->offsets_column());
-    if (input_null_map != nullptr) {
-        return NullableColumn::create(std::move(array_col), input_null_map);
+    auto array_col = std::make_shared<ArrayColumn>(
+            column, ColumnHelper::as_column<UInt32Column>(input_array->offsets_column()->clone_shared()));
+    if (null_column != nullptr) {
+        return NullableColumn::create(std::move(array_col), null_column);
     }
     return array_col;
 }
