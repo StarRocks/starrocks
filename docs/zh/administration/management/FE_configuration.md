@@ -53,7 +53,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Int
 - 单位：MB
 - 是否动态：否
-- 描述：系统日志和审计日志文件的大小。
+- 描述：单个系统日志或审计日志文件的大小上限。
 - 引入版本：-
 
 ##### sys_log_dir
