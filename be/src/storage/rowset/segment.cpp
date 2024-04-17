@@ -399,12 +399,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     if (_column_readers.contains(id)) {
         auto source_type = _column_readers[id]->column_type();
         auto target_type = column.type();
-        auto source_iter = _column_readers[id]->new_iterator(path);
+        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path));
         if (source_type == target_type) {
             return source_iter;
         } else {
             auto nullable = _column_readers[id]->is_nullable();
-            return std::make_unique<CastColumnIterator>(source_iter->release(), source_type, target_type, nullable);
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
     } else if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(

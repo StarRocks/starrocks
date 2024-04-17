@@ -21,14 +21,14 @@
 
 namespace starrocks {
 
-CastColumnIterator::CastColumnIterator(ColumnIterator* source_iter, LogicalType source_type, LogicalType target_type,
-                                       bool nullable)
-        : ColumnIteratorDecorator(source_iter, kTakesOwnership),
+CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_iter, LogicalType source_type,
+                                       LogicalType target_type, bool nullable_source)
+        : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
           _obj_pool(new ObjectPool()),
           _cast_expr(nullptr),
           _source_chunk() {
     auto slot_id = SlotId{0};
-    auto column = ChunkHelper::column_from_field_type(source_type, nullable);
+    auto column = ChunkHelper::column_from_field_type(source_type, nullable_source);
     auto slot_desc = SlotDescriptor(slot_id, "", TypeDescriptor::from_logical_type(source_type));
     auto column_ref = _obj_pool->add(new ColumnRef(&slot_desc));
     CHECK(column != nullptr) << "source type=" << source_type;

@@ -32,8 +32,9 @@ class CastColumnIteratorWithDefaultValueColumnIteratorTest : public CastColumnIt
 TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test01) {
     auto source_type = LogicalType::TYPE_INT;
     auto target_type = LogicalType::TYPE_BIGINT;
-    auto source_iter = new DefaultValueColumnIterator(true, "NULL", true, get_type_info(source_type), 0, 2);
-    auto cast_iter = new CastColumnIterator(source_iter, source_type, target_type, true);
+    auto source_iter =
+            std::make_unique<DefaultValueColumnIterator>(true, "NULL", true, get_type_info(source_type), 0, 2);
+    auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, true);
     DeferOp defer([&]() { delete cast_iter; });
     auto opts = ColumnIteratorOptions{};
     ASSERT_OK(cast_iter->init(opts));
@@ -51,8 +52,9 @@ TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test01) {
 TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test02) {
     auto source_type = LogicalType::TYPE_INT;
     auto target_type = LogicalType::TYPE_BIGINT;
-    auto source_iter = new DefaultValueColumnIterator(true, "10", false, get_type_info(source_type), 0, 2);
-    auto cast_iter = new CastColumnIterator(source_iter, source_type, target_type, true);
+    auto source_iter =
+            std::make_unique<DefaultValueColumnIterator>(true, "10", false, get_type_info(source_type), 0, 2);
+    auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, true);
     DeferOp defer([&]() { delete cast_iter; });
     auto opts = ColumnIteratorOptions{};
     ASSERT_OK(cast_iter->init(opts));
@@ -79,8 +81,9 @@ class CastColumnIteratorWithNumericTypeTest : public CastColumnIteratorTestBase,
 TEST_P(CastColumnIteratorWithNumericTypeTest, test) {
     auto source_type = LogicalType::TYPE_SMALLINT;
     auto target_type = LogicalType::TYPE_BIGINT;
-    auto source_iter = new SeriesColumnIterator<int16_t>(0, 31);
-    auto cast_iter = new CastColumnIterator(source_iter, source_type, target_type, GetParam().nullable_source);
+    auto source_iter = std::make_unique<SeriesColumnIterator<int16_t>>(0, 31);
+    auto nullable_source = GetParam().nullable_source;
+    auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, nullable_source);
     DeferOp defer([&]() { delete cast_iter; });
     auto opts = ColumnIteratorOptions{};
     ASSERT_OK(cast_iter->init(opts));
