@@ -2825,8 +2825,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TListSessionsResponse listSessions(TListSessionsRequest request) throws TException {
+        TListSessionsResponse response = new TListSessionsResponse();
         if (!request.isSetOptions()) {
-            throw new SemanticException("options must be set");
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.addToError_msgs("options must be set");
+            response.setStatus(status);
+            return response;
         }
         TListSessionsOptions options = request.options;
         if (options.isSetTemporary_table_only() && options.temporary_table_only) {
@@ -2839,11 +2843,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 sessionInfo.setSession_id(session.toString());
                 sessionInfos.add(sessionInfo);
             }
-            TListSessionsResponse response = new TListSessionsResponse();
+            response.setStatus(new TStatus(TStatusCode.OK));
+            response.setStatus(new TStatus(TStatusCode.INVALID_ARGUMENT));
             response.setSessions(sessionInfos);
-            return response;
         } else {
-            throw new SemanticException("only support temporary_table_only for now");
+            TStatus status = new TStatus(NOT_IMPLEMENTED_ERROR);
+            status.addToError_msgs("only support temporary_table_only options now");
+            response.setStatus(status);
         }
+        return response;
     }
 }

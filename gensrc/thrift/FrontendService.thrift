@@ -1748,7 +1748,7 @@ struct TSessionInfo {
 }
 
 struct TListSessionsResponse {
-    1: optional Status.TStatus status;
+    1: required Status.TStatus status;
     2: optional list<TSessionInfo> sessions;
 }
 

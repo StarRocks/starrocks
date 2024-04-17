@@ -24,6 +24,7 @@ import com.starrocks.thrift.TListSessionsRequest;
 import com.starrocks.thrift.TListSessionsResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TSessionInfo;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,6 +66,9 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
                 TListSessionsResponse response = FrontendServiceProxy.call(
                         thriftAddress, Config.thrift_rpc_timeout_ms, Config.thrift_rpc_retry_times,
                         client -> client.listSessions(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    throw new Exception("response status is not ok: " + response.getStatus().getStatus_code());
+                }
                 if (response.getSessions() != null) {
                     List<TSessionInfo> sessions = response.getSessions();
                     for (TSessionInfo sessionInfo : sessions) {
