@@ -46,6 +46,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### Logging
 
+##### log_roll_size_mb
+
+- Default: 1024
+- Type: Int
+- Unit: MB
+- Is mutable: No
+- Description: The maximum size of the system log and audit log files.
+- Introduced in: -
+
 ##### sys_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
