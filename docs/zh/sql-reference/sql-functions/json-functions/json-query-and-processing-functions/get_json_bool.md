@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```Haskell
-get_json_bool(json_str, json_path)
+BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 ```
 
 ## 参数说明
