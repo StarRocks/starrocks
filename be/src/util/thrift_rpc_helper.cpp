@@ -100,30 +100,19 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         return status;
     }
 
-    // 1st call
-    status = rpc_impl(callback, client, address);
-    if (status.ok()) {
-        return status;
-    }
-    LOG(WARNING) << status << ", first try";
+    // Try 2 times.
+    for (int i = 0; i < 2; i++) {
+        status = rpc_impl(callback, client, address);
+        if (status.ok()) return status;
 
-    SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
+        LOG(WARNING) << status << ", tried times: " << i + 1;
 
-    status = client.reopen(timeout_ms);
-    if (!status.ok()) {
-        LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << status;
-        return status;
+        SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
+        // reopen failure will disable this connection to prevent it from being used again.
+        RETURN_IF_ERROR_WITH_WARN(client.reopen(timeout_ms),
+                                  fmt::format("client reopen failed, address={}:{}", ip, port));
     }
-
-    // 2nd call
-    status = rpc_impl(callback, client, address);
-    if (!status.ok()) {
-        SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
-        // just reopen to disable this connection
-        (void)client.reopen(timeout_ms);
-        LOG(WARNING) << status << ", last try";
-    }
-    return status;
+    return Status::OK();
 }
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
