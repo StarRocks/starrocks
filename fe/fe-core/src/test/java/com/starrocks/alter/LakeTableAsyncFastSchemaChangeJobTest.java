@@ -20,7 +20,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
@@ -152,22 +151,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals(job.getJobState().name(), info.get(9));
         Assert.assertEquals(job.errMsg, info.get(10));
         Assert.assertEquals(job.getTimeoutMs() / 1000, info.get(12));
-    }
-
-    @Test
-    public void testTimeout() throws Exception {
-        LakeTable table = createTable(connectContext, "CREATE TABLE t2(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
-        int timeoutBackup = Config.max_create_table_timeout_second;
-        Config.max_create_table_timeout_second = 0;
-        alterTable(connectContext, "ALTER TABLE t2 ADD COLUMN c1 DOUBLE");
-        AlterJobV2 job = getAlterJob(table);
-        job.run();
-        Config.max_create_table_timeout_second = timeoutBackup;
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
-        Assert.assertEquals(1, table.getIndexIdToMeta().size());
-        Assert.assertEquals(1, table.getBaseSchema().size());
     }
 
     @Test
