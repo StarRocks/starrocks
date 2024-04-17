@@ -24,7 +24,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.Utils;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.CollectionUtils;
@@ -177,8 +177,9 @@ public class PartitionInfoView {
                     if (lakeTabletOptional.isPresent()) {
                         LakeTablet lakeTablet = lakeTabletOptional.get();
                         try {
+                            long workerGroupId = Utils.selectWorkerGroupByBackgroundWarehouse().get();
                             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                                    .getShardInfo(lakeTablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                                    .getShardInfo(lakeTablet.getShardId(), workerGroupId);
                             pvo.setStoragePath(shardInfo.getFilePath().getFullPath());
                         } catch (StarClientException e) {
                             throw new IllegalStateException(e.getMessage(), e);

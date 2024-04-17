@@ -189,8 +189,9 @@ public class LakeTable extends OlapTable {
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
+            long workerGroupId = Utils.selectWorkerGroupByBackgroundWarehouse().get();
             shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
-                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                    workerGroupId);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

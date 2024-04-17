@@ -51,7 +51,6 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -338,7 +337,7 @@ public class TabletStatMgr extends FrontendDaemon {
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
             for (Tablet tablet : tablets.values()) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                        .getComputeNodeAssignedToTablet(Config.lake_background_warehouse, (LakeTablet) tablet);
 
                 if (node == null) {
                     LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());

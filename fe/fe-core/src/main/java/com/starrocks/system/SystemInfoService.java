@@ -59,7 +59,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
-import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.Utils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.CancelDisableDiskInfo;
@@ -168,8 +168,10 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
 
-        newComputeNode.setWorkerGroupId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         newComputeNode.setWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        newComputeNode.setWorkerGroupId(
+                Utils.selectWorkerGroupByWarehouseId(warehouseManager, WarehouseManager.DEFAULT_WAREHOUSE_ID).get());
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);

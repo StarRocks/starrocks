@@ -200,8 +200,8 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getWorkerIdByBackendId(long backendId) {
-            Optional<Worker> worker = workers.stream().filter(w -> w.backendId == backendId).findFirst();
+        public long getWorkerIdByNodeId(long nodeId) {
+            Optional<Worker> worker = workers.stream().filter(w -> w.backendId == nodeId).findFirst();
             return worker.map(value -> value.workerId).orElse(-1L);
         }
 

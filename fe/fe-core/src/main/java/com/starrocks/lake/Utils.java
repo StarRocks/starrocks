@@ -19,6 +19,7 @@ import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -55,7 +56,7 @@ public class Utils {
     }
 
     public static Long chooseNodeId(ShardInfo shardInfo) {
-        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllBackendIdsByShard(shardInfo, true);
+        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
         if (!ids.isEmpty()) {
             return ids.iterator().next();
         }
@@ -234,5 +235,12 @@ public class Utils {
         }
 
         return Optional.of(node.getWarehouseId());
+    }
+
+    public static Optional<Long> selectWorkerGroupByBackgroundWarehouse() {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseManager.getWarehouse(Config.lake_background_warehouse);
+        long warehouseId = warehouse.getId();
+        return selectWorkerGroupByWarehouseId(warehouseManager, warehouseId);
     }
 }
