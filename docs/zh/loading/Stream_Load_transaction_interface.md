@@ -92,7 +92,7 @@ Stream Load 事务接口具有如下优势：
 
 ### 查看网络配置
 
-确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/Configuration.md) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/Configuration.md) 端口（默认 `8040`）。
 
 ## 基本操作
 
