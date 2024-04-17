@@ -4,7 +4,19 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
-## 3.1.10
+## 3.1.10 (Deprecated)
+
+:::tip
+
+This version has been taken offline due to privilege issues in querying external tables in external catalogs such as Hive and Iceberg.
+
+- **Problem**: When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege.
+
+- **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
+
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.1.11, users can run `REVOKE` to remove one of the privilege entries.
+
+:::
 
 Release date: March 29, 2024
 
