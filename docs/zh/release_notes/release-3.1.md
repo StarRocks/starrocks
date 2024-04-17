@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
-## 3.1.10
+## 3.1.10（已下线）
 
 发布日期：2024 年 3 月 29 日
 
