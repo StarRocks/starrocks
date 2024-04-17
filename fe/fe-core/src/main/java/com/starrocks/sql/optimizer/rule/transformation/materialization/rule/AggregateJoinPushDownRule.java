@@ -41,8 +41,8 @@ import java.util.List;
  * MV:
  *  create materialized view mv0
  *  distributed by random as
- *  select a.dt, a.col, array_agg_distinct(a.user_id) as count_distinct_im_uv
- *  from a group by a.dt, a.cal;
+ *  select a.id, a.dt, a.col, array_agg_distinct(a.user_id) as count_distinct_im_uv
+ *  from a group by a.id, a.dt, a.cal;
  *
  * Query:
  *  select a.dt, a.col, array_agg_distinct(a.user_id) as count_distinct_im_uv
@@ -53,6 +53,10 @@ import java.util.List;
  * from
  *  (select id, dt, col, array_agg_unique(count_distinct_im_uv) from mv0 group by id,dt,col) as a join b on a.id = b.id
  * group by a.dt, a.cal;
+ *
+ * Rewrite result:
+ * select a.dt, a.col, cardinility(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
+ * from mv0 as a join b on a.id = b.id group by a.dt, a.cal;
  */
 public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     private static AggregateJoinPushDownRule INSTANCE = new AggregateJoinPushDownRule();
