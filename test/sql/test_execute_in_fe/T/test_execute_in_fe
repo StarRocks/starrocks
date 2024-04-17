@@ -10,6 +10,9 @@ select 1 as a union all select 2 union all select 1000000000;
 select @@character_set_results AS character_set_results;
 select cast(10000000 as float), cast(1000000000000000 as double);
 select cast(0.00001 as float), cast(0.00001 as double);
+-- cast cannot be folding in fe
+select cast(100 as time);
+select cast(1.123 as time);
 
 -- execute in be
 set enable_constant_execute_in_fe = false;
@@ -22,3 +25,6 @@ select 1 as a union all select 2 union all select 1000000000;
 select @@character_set_results AS character_set_results;
 select cast(10000000 as float), cast(1000000000000000 as double);
 select cast(0.00001 as float), cast(0.00001 as double);
+
+select cast(100 as time);
+select cast(1.123 as time);
