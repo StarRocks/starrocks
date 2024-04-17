@@ -19,6 +19,7 @@
 #include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
+#include "util/race_detect.h"
 namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
@@ -75,6 +76,7 @@ size_t HashJoinBuildOperator::output_amplification_factor() const {
 }
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     DeferOp op([this]() { _is_finished = true; });
 
     if (state->is_cancelled()) {

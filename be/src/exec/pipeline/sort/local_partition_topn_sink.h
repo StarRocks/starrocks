@@ -53,6 +53,7 @@ private:
     bool _is_finished = false;
 
     LocalPartitionTopnContext* _partition_topn_ctx;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class LocalPartitionTopnSinkOperatorFactory final : public OperatorFactory {

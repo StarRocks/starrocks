@@ -31,6 +31,7 @@ Status HashPartitionSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 }
 
 Status HashPartitionSinkOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     _hash_partition_ctx->sink_complete();
     COUNTER_UPDATE(_partition_num, _hash_partition_ctx->num_partitions());
     _is_finished = true;

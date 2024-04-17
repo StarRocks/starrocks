@@ -34,7 +34,7 @@ public:
     ~ColumnarSerde() override = default;
 
     Status prepare() override {
-        RACE_DETECT(detect_prepare, var1);
+        RACE_DETECT(detect_prepare);
         if (_encode_context == nullptr) {
             auto column_number = _parent->chunk_builder().column_number();
             auto encode_level = _parent->options().encode_level;

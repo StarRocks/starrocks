@@ -89,6 +89,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 }
 
 Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     // skip sorting if cancelled
     if (state->is_cancelled()) {
         _is_finished = true;
