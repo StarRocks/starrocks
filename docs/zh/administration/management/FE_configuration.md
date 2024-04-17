@@ -47,6 +47,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### 日志
 
+##### log_roll_size_mb
+
+- 默认值：1024
+- 类型：Int
+- 单位：MB
+- 是否动态：否
+- 描述：单个系统日志或审计日志文件的大小上限。
+- 引入版本：-
+
 ##### sys_log_dir
 
 - 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
