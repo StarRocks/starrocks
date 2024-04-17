@@ -272,7 +272,7 @@ The following examples assume you have created a database named `test` in your S
 
 ### Network configuration
 
-Ensure that the machine where Spark is located can access the machine where the FE or FEs in a StarRocks cluster are located through the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`query_port`](../administration/management/FE_configuration.md#query_port), and access the machines where the BEs in a StarRocks cluster are located through the [`http_port`](../administration/management/BE_configuration.md#be_http_port).
+Ensure that the machine where Spark is located can access the machine where the FE or FEs in a StarRocks cluster are located through the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`query_port`](../administration/management/FE_configuration.md#query_port), and access the machines where the BEs in a StarRocks cluster are located through the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port).
 
 ### Data example
 
