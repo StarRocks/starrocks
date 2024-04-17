@@ -36,7 +36,7 @@ import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 
 public class UnifiedConnector implements Connector {
     public static final String UNIFIED_METASTORE_TYPE = "unified.metastore.type";
