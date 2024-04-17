@@ -269,13 +269,8 @@ Status LakePersistentIndex::prepare_merging_iterator(
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         ASSIGN_OR_RETURN(auto rf,
                          fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-        if (block_cache == nullptr) {
-            return Status::InternalError("Block cache is null.");
-        }
         auto merging_sstable = std::make_shared<PersistentIndexSstable>();
-        RETURN_IF_ERROR(
-                merging_sstable->init(std::move(rf), sstable_pb, block_cache->cache(), false /** no filter **/));
+        RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/));
         merging_sstables->push_back(merging_sstable);
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
