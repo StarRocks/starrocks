@@ -87,7 +87,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eq)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, call, mapped, replace, shuttleContext.isRollup());
+            return rewriteImpl(shuttleContext, call, replace, shuttleContext.isRollup());
         } else if (fn.equalsIgnoreCase(ARRAY_AGG)) {
             if (!call.isDistinct()) {
                 return null;
@@ -96,7 +96,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eq)) {
                 return null;
             }
-            return rewriteArrayAggDistinctImpl(shuttleContext, call, replace, shuttleContext.isRollup());
+            return rewriteImpl(shuttleContext, call, replace, shuttleContext.isRollup());
         }
         return null;
     }
@@ -139,30 +139,31 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
         return new CallOperator(mapped, call.getType(), Lists.newArrayList(replace), replaced);
     }
 
-    private ScalarOperator rewriteArrayAggDistinctImpl(EquivalentShuttleContext shuttleContext,
-                                                       CallOperator call,
-                                                       ColumnRefOperator replace,
-                                                       boolean isRollup) {
-        Function.CompareMode compareMode = Function.CompareMode.IS_IDENTICAL;
-        if (isRollup) {
-            return makeArrayUniqAggFunc(replace, call, compareMode);
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        String fn = aggFunc.getFnName();
+        if (fn.equals(ARRAY_AGG)) {
+            return makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
         } else {
-            // rewrite into fn(col)
-            return makeArrayUniqAggFunc(replace, call, compareMode);
+            String mapped = MAPPING.get(fn);
+            Preconditions.checkState(mapped != null);
+            return makeRollupAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL, mapped);
         }
     }
 
-    private ScalarOperator rewriteImpl(EquivalentShuttleContext shuttleContext,
-                                       CallOperator call,
-                                       String mapped,
-                                       ColumnRefOperator replace,
-                                       boolean isRollup) {
-        Function.CompareMode compareMode = Function.CompareMode.IS_IDENTICAL;
-        if (isRollup) {
-            return makeRollupAggFunc(replace, call, compareMode, mapped);
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        String fn = aggFunc.getFnName();
+        if (fn.equals(ARRAY_AGG)) {
+            return makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
         } else {
-            // rewrite into fn(col)
-            return makeNoRollupAggFunc(replace, call, compareMode, mapped);
+            String mapped = MAPPING.get(fn);
+            Preconditions.checkState(mapped != null);
+            return makeNoRollupAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL, mapped);
         }
     }
 }
