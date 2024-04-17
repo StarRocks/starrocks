@@ -73,33 +73,22 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         return null;
     }
 
-    private CallOperator makeBitmapUnionCountFunc(ScalarOperator arg0, CallOperator aggFunc) {
-        return new CallOperator(BITMAP_UNION_COUNT, aggFunc.getType(),
+    private CallOperator makeBitmapUnionCountFunc(ScalarOperator arg0) {
+        return new CallOperator(BITMAP_UNION_COUNT, Type.BIGINT,
                 Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
 
-    private CallOperator makeBitmapUnionFunc(ScalarOperator arg0, CallOperator aggFunc) {
-        return new CallOperator(BITMAP_UNION, aggFunc.getType(),
+    private CallOperator makeBitmapUnionFunc(ScalarOperator arg0) {
+        return new CallOperator(BITMAP_UNION, Type.BITMAP,
                 Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
 
-    private CallOperator makeBitmapCountFunc(ScalarOperator arg0, CallOperator aggFunc) {
-        return new CallOperator(FunctionSet.BITMAP_COUNT, aggFunc.getType(),
+    private CallOperator makeBitmapCountFunc(ScalarOperator arg0) {
+        return new CallOperator(FunctionSet.BITMAP_COUNT, Type.BIGINT,
                 Arrays.asList(arg0), Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
-    }
-
-    private ScalarOperator rewriteImpl(EquivalentShuttleContext shuttleContext,
-                                       CallOperator aggFunc,
-                                       ScalarOperator replace,
-                                       boolean isRollup) {
-        if (isRollup) {
-            return makeBitmapUnionCountFunc(replace, aggFunc);
-        } else {
-            return makeBitmapCountFunc(replace, aggFunc);
-        }
     }
 
     @Override
@@ -142,13 +131,32 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            if (isRollup) {
-                CallOperator partialFn = makeBitmapUnionFunc(replace, aggFunc);
-                return partialFn;
-            } else {
-                return makeBitmapUnionFunc(replace, aggFunc);
-            }
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         }
         return null;
+    }
+
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equals(BITMAP_AGG)) {
+            return makeBitmapUnionFunc(replace);
+        } else {
+            return makeBitmapUnionCountFunc(replace);
+        }
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equals(BITMAP_AGG)) {
+            return makeBitmapUnionFunc(replace);
+        } else {
+            return makeBitmapCountFunc(replace);
+        }
     }
 }

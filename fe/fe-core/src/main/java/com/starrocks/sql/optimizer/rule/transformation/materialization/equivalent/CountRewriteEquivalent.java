@@ -63,4 +63,18 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
             return replace;
         }
     }
+
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        return AggregatedMaterializedViewRewriter.getRollupAggregateFunc(aggFunc, replace, false);
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        return replace;
+    }
 }
