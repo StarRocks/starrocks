@@ -379,6 +379,10 @@ DISTRIBUTED BY HASH(`id`);
     ./bin/start-cluster.sh
     ```
 
+#### Network configuration
+
+Ensure that the machine where Flink is located can access the machine where the FE or FEs in a StarRocks cluster are located through the [`http_port`](../administration/management/FE_configuration.md#http_port) and [`query_port`](../administration/management/FE_configuration.md#query_port), and access the machines where the BEs in a StarRocks cluster are located through the [`http_port`](../administration/management/BE_configuration.md#be_http_port).
+
 ### Run with Flink SQL
 
 - Run the following command to start a Flink SQL client.
