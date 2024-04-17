@@ -368,6 +368,9 @@ public class FeExecuteCoordinator extends Coordinator {
                         case VARCHAR:
                             value = constantOperator.getVarchar();
                             break;
+                        case TIME:
+                            value = convertToTimeString(constantOperator.getTime());
+                            break;
                         case DATE:
                             LocalDateTime date = constantOperator.getDate();
                             value = date.format(DateUtils.DATE_FORMATTER_UNIX);
@@ -380,7 +383,6 @@ public class FeExecuteCoordinator extends Coordinator {
                                 value = datetime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
                             }
                             break;
-                        case VARBINARY:
                         default:
                             value = constantOperator.toString();
                     }
@@ -390,5 +392,23 @@ public class FeExecuteCoordinator extends Coordinator {
             res.add(serializer.toByteBuffer());
         }
         return res;
+    }
+
+    private String convertToTimeString(double time) {
+        StringBuilder sb = new StringBuilder();
+        if (time < 0) {
+            sb.append("-");
+            time = Math.abs(time);
+        }
+
+        int day = (int) (time / 86400);
+        time = time % 86400;
+        int hour = (int) (time / 3600);
+        time = time % 3600;
+        int minute = (int) (time / 60);
+        time = time % 60;
+        int second = (int) time;
+        sb.append(String.format("%02d:%02d:%02d", hour + day * 24, minute, second));
+        return sb.toString();
     }
 }

@@ -4,7 +4,7 @@ set enable_constant_execute_in_fe = true;
 select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
 1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
 cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
-x'123456', x'AABBCC11';
+timeadd('2021-01-01 05:56:25', '2024-03-02 01:24:32'), timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';
 
 select 1 as a union all select 2 union all select 1000000000;
 select @@character_set_results AS character_set_results;
@@ -16,7 +16,7 @@ set enable_constant_execute_in_fe = false;
 select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
 1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
 cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
-x'123456', x'AABBCC11';
+timeadd('2021-01-01 05:56:25', '2024-03-02 01:24:32'), timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';
 
 select 1 as a union all select 2 union all select 1000000000;
 select @@character_set_results AS character_set_results;

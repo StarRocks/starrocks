@@ -172,6 +172,12 @@ public class SelectConstTest extends PlanTestBase {
         assertFeExecuteResult("select '\\'abc'", "'abc");
         assertFeExecuteResult("select '\"abc'", "\"abc");
         assertFeExecuteResult("select '\\\\\\'abc'", "\\'abc");
+        assertFeExecuteResult("select timediff('1000-01-02 01:01:01.123456', '1000-01-01 01:01:01.000001')",
+                "24:00:00");
+        assertFeExecuteResult("select timediff('9999-01-02 01:01:01.123456', '1000-01-01 01:01:01.000001')",
+                "78883632:00:00");
+        assertFeExecuteResult("select timediff('1000-01-01 01:01:01.000001', '9999-01-02 01:01:01.123456')",
+                "-78883632:00:01");
     }
 
     private void assertFeExecuteResult(String sql, String expected) throws Exception {

@@ -52,7 +52,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
@@ -166,6 +165,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -2328,10 +2328,10 @@ public class StmtExecutor {
             boolean isAllConstants = true;
             if (valuesOperator.getProjection() != null) {
                 isAllConstants = valuesOperator.getProjection().getColumnRefMap().values().stream()
-                        .allMatch(e -> e.isConstantRef() && e.getType().getPrimitiveType() != PrimitiveType.TIME);
+                        .allMatch(ScalarOperator::isConstantRef);
             } else if (CollectionUtils.isNotEmpty(valuesOperator.getRows())) {
                 isAllConstants = valuesOperator.getRows().stream().allMatch(row ->
-                        row.stream().allMatch(e -> e.isConstantRef() && e.getType().getPrimitiveType() != PrimitiveType.TIME));
+                        row.stream().allMatch(ScalarOperator::isConstantRef));
             }
 
             return isAllConstants;
