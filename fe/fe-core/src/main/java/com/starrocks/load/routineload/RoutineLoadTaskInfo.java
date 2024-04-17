@@ -102,13 +102,7 @@ public abstract class RoutineLoadTaskInfo {
 
     protected StreamLoadTask streamLoadTask = null;
 
-<<<<<<< HEAD
-    public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
-=======
-    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-
     public RoutineLoadTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs,
->>>>>>> 17d6b689db ([BugFix] Fix routine load deadlock (#44225))
                                long timeToExecuteMs, long taskTimeoutMs) {
         this.id = id;
         this.job = job;
@@ -226,22 +220,12 @@ public abstract class RoutineLoadTaskInfo {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
         //  label = job_name+job_id+task_id
-<<<<<<< HEAD
-        label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
-        txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
-                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),
-                timeoutMs / 1000);
-=======
         label = Joiner.on("-").join(job.getName(), job.getId(), DebugUtil.printId(id));
-
-        txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+        txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 job.getDbId(), Lists.newArrayList(job.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
-                timeoutMs / 1000, warehouseId);
->>>>>>> 17d6b689db ([BugFix] Fix routine load deadlock (#44225))
+                timeoutMs / 1000);
     }
 
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
