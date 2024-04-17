@@ -58,7 +58,7 @@ public class KafkaTaskInfoTest {
         Map<Integer, Long> offset1 = Maps.newHashMap();
         offset1.put(0, 99L);
         KafkaTaskInfo kafkaTaskInfo1 = new KafkaTaskInfo(UUID.randomUUID(),
-                1L,
+                kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset1,
@@ -69,7 +69,7 @@ public class KafkaTaskInfoTest {
         Map<Integer, Long> offset2 = Maps.newHashMap();
         offset1.put(0, 100L);
         KafkaTaskInfo kafkaTaskInfo2 = new KafkaTaskInfo(UUID.randomUUID(),
-                1L,
+                kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset2,
@@ -92,7 +92,7 @@ public class KafkaTaskInfoTest {
         Map<Integer, Long> offset1 = Maps.newHashMap();
         offset1.put(0, 100L);
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(),
-                1L,
+                kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset1,
@@ -126,7 +126,7 @@ public class KafkaTaskInfoTest {
         Map<Integer, Long> offset = Maps.newHashMap();
         offset.put(0, 99L);
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(),
-                1L,
+                kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset,
