@@ -147,7 +147,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private synchronized void delayPutToQueue(RoutineLoadTaskInfo routineLoadTaskInfo, String msg) {
         if (msg != null) {
-            routineLoadTaskInfo.setMsg(msg);
+            routineLoadTaskInfo.setMsg(msg, true);
         }
         scheduledExecutorService.schedule(() -> {
             try {
@@ -288,7 +288,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
         // set the executeStartTimeMs of task
         routineLoadTaskInfo.setExecuteStartTimeMs(System.currentTimeMillis());
-        routineLoadTaskInfo.setMsg("task submitted to execute");
+        routineLoadTaskInfo.setMsg("task submitted to execute", false);
     }
 
     private void releaseBeSlot(RoutineLoadTaskInfo routineLoadTaskInfo) {
