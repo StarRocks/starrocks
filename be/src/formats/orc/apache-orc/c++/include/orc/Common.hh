@@ -29,6 +29,8 @@
 
 namespace orc {
 
+using int128_t = __int128;
+
 class FileVersion {
 private:
     uint32_t majorVersion;
