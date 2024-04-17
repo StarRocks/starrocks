@@ -2021,7 +2021,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePipelineLevelShuffle = true;
 
     @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
-    private boolean enableConstantExecuteInFE = false;
+    private boolean enableConstantExecuteInFE = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
