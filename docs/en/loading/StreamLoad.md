@@ -5,6 +5,8 @@ keywords: ['Stream Load']
 
 # Load data from a local file system
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 StarRocks provides two methods of loading data from a local file system:
 
 - Synchronous loading using [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
