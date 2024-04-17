@@ -63,6 +63,7 @@ public abstract class Operator {
     //                                       /      \
     //                                  EXTRA-OP    MV-SCAN
     public static final int OP_UNION_ALL_BIT = 1 << 0;
+    public static final int OP_TRANSPARENT_MV_BIT = 1 << 2;
     protected int opRuleMask = 0;
 
     // an operator logically equivalent to 'this' operator

@@ -113,6 +113,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
             return new LogicalCTEAnchorOperator();
         }
 
+        public LogicalCTEAnchorOperator.Builder setCteId(int cteId) {
+            builder.cteId = cteId;
+            return this;
+        }
+
         @Override
         public LogicalCTEAnchorOperator.Builder withOperator(LogicalCTEAnchorOperator operator) {
             super.withOperator(operator);
