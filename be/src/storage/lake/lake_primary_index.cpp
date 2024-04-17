@@ -248,7 +248,7 @@ Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, TxnLogPB*
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            return lake_persistent_index->major_compact(0 /** min_retain_version **/, txn_log);
+            return lake_persistent_index->major_compact(metadata, 0 /** min_retain_version **/, txn_log);
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }

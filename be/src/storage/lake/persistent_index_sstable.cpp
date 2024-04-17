@@ -23,10 +23,12 @@
 namespace starrocks::lake {
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
-                                    Cache* cache) {
+                                    Cache* cache, bool need_filter) {
     sstable::Options options;
-    _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
-    options.filter_policy = _filter_policy.get();
+    if (need_filter) {
+        _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+        options.filter_policy = _filter_policy.get();
+    }
     options.block_cache = cache;
     sstable::Table* table;
     RETURN_IF_ERROR(sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table));
