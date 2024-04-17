@@ -163,6 +163,11 @@ public enum RuleType {
     TF_MV_AGGREGATE_SCAN_RULE,
     TF_MV_AGGREGATE_JOIN_RULE,
     TF_MV_CBO_SINGLE_TABLE_REWRITE_RULE,
+<<<<<<< HEAD
+=======
+    TF_MV_TRANSPARENT_REWRITE_RULE,
+    TF_MV_AGGREGATE_JOIN_PUSH_DOWN_RULE,
+>>>>>>> 508733ae8e ([Enhancement] Support aggregate push down below join mv rewrite (#42809))
 
     TF_GROUP_BY_COUNT_DISTINCT_DATA_SKEW_ELIMINATE_RULE,
 

@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -50,6 +51,19 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     @Override
+    public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
+        if (aggFunc == null) {
+            return false;
+        }
+
+        String aggFuncName = aggFunc.getFnName();
+        if (!aggFuncName.equals(FunctionSet.COUNT) || aggFunc.isDistinct()) {
+            return false;
+        }
+        return true;
+    }
+
+    @Override
     public ScalarOperator rewrite(RewriteEquivalentContext eqContext,
                                   EquivalentShuttleContext shuttleContext,
                                   ColumnRefOperator replace,
@@ -63,4 +77,28 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
             return replace;
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        return AggregatedMaterializedViewRewriter.getRollupAggregateFunc(aggFunc, replace, false);
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        return replace;
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        return null;
+    }
+>>>>>>> 508733ae8e ([Enhancement] Support aggregate push down below join mv rewrite (#42809))
 }

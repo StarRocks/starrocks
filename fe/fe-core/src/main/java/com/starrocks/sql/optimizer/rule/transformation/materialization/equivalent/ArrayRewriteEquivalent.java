@@ -15,12 +15,14 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -61,6 +63,25 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
     private static boolean isArrayAggDistinct(CallOperator call) {
         return call.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG_DISTINCT) ||
                 (call.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG) && call.isDistinct());
+    }
+
+    private static final ImmutableSet<String> SUPPORTED_PUSHDOWN_AGG_FUNCTIONS = ImmutableSet.of(
+            MULTI_DISTINCT_COUNT, MULTI_DISTINCT_SUM
+    );
+    private static final ImmutableSet<String> SUPPORTED_PUSHDOWN_AGG_DISTINCT_FUNCTIONS = ImmutableSet.of(
+            COUNT, SUM, ARRAY_AGG
+    );
+
+    @Override
+    public boolean isSupportPushDownRewrite(CallOperator call) {
+        String fn = call.getFnName();
+        if (!call.isDistinct() && SUPPORTED_PUSHDOWN_AGG_FUNCTIONS.contains(fn)) {
+            return true;
+        }
+        if (call.isDistinct() && SUPPORTED_PUSHDOWN_AGG_DISTINCT_FUNCTIONS.contains(fn)) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -106,4 +127,91 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
         }
         return null;
     }
+<<<<<<< HEAD
+=======
+
+    CallOperator makeArrayUniqAggFunc(ScalarOperator arg0, CallOperator aggFunc, Function.CompareMode compareMode) {
+        Type newInputArgType = aggFunc.getChild(0).getType();
+        Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
+        Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+        if (rollup == null) {
+            return null;
+        }
+        return new CallOperator(FunctionSet.ARRAY_UNIQUE_AGG, new ArrayType(newInputArgType), Lists.newArrayList(arg0), rollup);
+    }
+
+    CallOperator makeRollupAggFunc(ScalarOperator replace, CallOperator call,
+                                   Function.CompareMode compareMode, String mapped) {
+        Type newInputArgType = call.getChild(0).getType();
+        Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
+        Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
+        if (replaced == null) {
+            return null;
+        }
+        Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+        CallOperator res = new CallOperator(
+                FunctionSet.ARRAY_UNIQUE_AGG,
+                new ArrayType(newInputArgType),
+                Lists.newArrayList(replace),
+                rollup);
+        return new CallOperator(mapped, call.getType(), Lists.newArrayList(res), replaced);
+    }
+
+    CallOperator makeNoRollupAggFunc(ScalarOperator replace, CallOperator call,
+                                   Function.CompareMode compareMode, String mapped) {
+        Type newInputArgType = call.getChild(0).getType();
+        Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
+        Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
+        if (replaced == null) {
+            return null;
+        }
+        return new CallOperator(mapped, call.getType(), Lists.newArrayList(replace), replaced);
+    }
+
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        String fn = aggFunc.getFnName();
+        if (fn.equals(ARRAY_AGG)) {
+            return makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+        } else {
+            String mapped = MAPPING.get(fn);
+            Preconditions.checkState(mapped != null);
+            return makeRollupAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL, mapped);
+        }
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        String fn = aggFunc.getFnName();
+        if (fn.equals(ARRAY_AGG)) {
+            return makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+        } else {
+            String mapped = MAPPING.get(fn);
+            Preconditions.checkState(mapped != null);
+            return makeNoRollupAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL, mapped);
+        }
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        String fn = aggFunc.getFnName();
+        if (fn.equals(ARRAY_AGG)) {
+            CallOperator partialFn = makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+            CallOperator finalFn = makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+            return Pair.create(partialFn, finalFn);
+        } else {
+            String mapped = MAPPING.get(fn);
+            Preconditions.checkState(mapped != null);
+            CallOperator partialFn = makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);
+            CallOperator finalFn = makeRollupAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL, mapped);
+            return Pair.create(partialFn, finalFn);
+        }
+    }
+>>>>>>> 508733ae8e ([Enhancement] Support aggregate push down below join mv rewrite (#42809))
 }
