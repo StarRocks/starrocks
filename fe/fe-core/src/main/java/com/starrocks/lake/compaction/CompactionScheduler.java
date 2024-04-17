@@ -240,14 +240,17 @@ public class CompactionScheduler extends Daemon {
         if (db == null) {
             return false;
         }
+        // lake table or lake materialized view
+        OlapTable table = (OlapTable) db.getTable(partition.getTableId());
+        if (table == null) {
+            return false;
+        }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            // lake table or lake materialized view
-            OlapTable table = (OlapTable) db.getTable(partition.getTableId());
-            return table != null && table.getPhysicalPartition(partition.getPartitionId()) != null;
+            return table.getPhysicalPartition(partition.getPartitionId()) != null;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
