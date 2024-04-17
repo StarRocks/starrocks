@@ -31,9 +31,9 @@ function: assert_explain_contains("SELECT @@session.auto_increment_increment, @@
 -- result:
 None
 -- !result
-SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@sql_mode, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout;
+SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout;
 -- result:
-1	utf8	utf8	utf8	utf8	utf8_general_ci	utf8_general_ci		3600	/starrocks/share/english/	Apache License 2.0	0	33554432	60	0	1048576	0	ONLY_FULL_GROUP_BY	Asia/Shanghai	Asia/Shanghai	REPEATABLE-READ	28800
+1	utf8	utf8	utf8	utf8	utf8_general_ci	utf8_general_ci		3600	/starrocks/share/english/	Apache License 2.0	0	33554432	60	0	1048576	0	Asia/Shanghai	Asia/Shanghai	REPEATABLE-READ	28800
 -- !result
 select cast(100 as time);
 -- result:
@@ -57,9 +57,9 @@ function: assert_explain_not_contains("SELECT @@session.auto_increment_increment
 -- result:
 None
 -- !result
-SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@sql_mode, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout;
+SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout;
 -- result:
-1	utf8	utf8	utf8	utf8	utf8_general_ci	utf8_general_ci		3600	/starrocks/share/english/	Apache License 2.0	0	33554432	60	0	1048576	0	ONLY_FULL_GROUP_BY	Asia/Shanghai	Asia/Shanghai	REPEATABLE-READ	28800
+1	utf8	utf8	utf8	utf8	utf8_general_ci	utf8_general_ci		3600	/starrocks/share/english/	Apache License 2.0	0	33554432	60	0	1048576	0	Asia/Shanghai	Asia/Shanghai	REPEATABLE-READ	28800
 -- !result
 select 1 as a union all select 2 union all select 1000000000;
 -- result:
