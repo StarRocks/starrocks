@@ -117,7 +117,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }

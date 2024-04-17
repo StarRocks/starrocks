@@ -289,8 +289,8 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         auto lcked = query_ctx.lock();
         RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
-        RACE_DETECT(detect_flush, var1);
-
+        RACE_DETECT(detect_flush);
+        // concurrency test
         auto defer = DeferOp([&]() { _spiller->update_spilled_task_status(_decrease_running_flush_tasks()); });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {

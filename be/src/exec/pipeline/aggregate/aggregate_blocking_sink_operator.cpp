@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/current_thread.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
@@ -43,6 +44,19 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+    ONCE_DETECT(_set_finishing_once);
+    auto defer = DeferOp([this]() {
+        COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
+        _aggregator->sink_complete();
+        _is_finished = true;
+    });
+
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+
     if (!_aggregator->is_none_group_by_exprs()) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
         // If hash map is empty, we don't need to return value
@@ -63,15 +77,12 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
             _aggregator->set_ht_eos();
         }
     }
-    COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
-
-    _aggregator->sink_complete();
-    _is_finished = true;
     return Status::OK();
 }
 
 Status AggregateBlockingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 
