@@ -57,6 +57,7 @@ protected:
     AggregatorPtr _aggregator = nullptr;
 
 private:
+    DECLARE_ONCE_DETECTOR(_set_finishing_once)
     // Whether prev operator has no output
     bool _is_finished = false;
     std::atomic<int64_t>& _shared_limit_countdown;
