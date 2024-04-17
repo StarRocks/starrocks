@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
