@@ -295,6 +295,10 @@ public enum ErrorCode {
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
     ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+    ERR_NO_DATA_TO_LOAD(5603, new byte[] {'5', '8', '0', '3', '0'},
+            "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
+                    "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
+                    "to ensure such load jobs can succeed"),
 
     /**
      * 10000 - 10099: warehouse
