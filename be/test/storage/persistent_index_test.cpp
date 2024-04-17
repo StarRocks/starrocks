@@ -39,12 +39,16 @@ namespace starrocks {
 
 struct PersistentIndexTestParam {
     bool enable_pindex_compression;
+    bool enable_pindex_read_by_page;
 };
 
 class PersistentIndexTest : public testing::TestWithParam<PersistentIndexTestParam> {
 public:
     virtual ~PersistentIndexTest() {}
-    void SetUp() override { config::enable_pindex_compression = GetParam().enable_pindex_compression; }
+    void SetUp() override {
+        config::enable_pindex_compression = GetParam().enable_pindex_compression;
+        config::enable_pindex_read_by_page = GetParam().enable_pindex_read_by_page;
+    }
 };
 
 TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
@@ -431,7 +435,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         version.to_pb(snapshot_meta->mutable_version());
 
         std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
@@ -554,7 +558,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -633,7 +637,7 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -700,7 +704,7 @@ TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -767,7 +771,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -835,7 +839,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -950,7 +954,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -1076,7 +1080,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -1176,10 +1180,10 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     auto writer = std::make_unique<ImmutableIndexWriter>();
     ASSERT_TRUE(writer->init("./index.l1.1.1", EditVersion(1, 1), false).ok());
 
-    auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage((sizeof(Key) + 8) * N);
+    auto [nshard, npage_hint, page_size] = MutableIndex::estimate_nshard_and_npage((sizeof(Key) + 8) * N, N);
     auto nbucket = MutableIndex::estimate_nbucket(sizeof(Key), N, nshard, npage_hint);
 
-    ASSERT_TRUE(idx->flush_to_immutable_index(writer, nshard, npage_hint, nbucket, true).ok());
+    ASSERT_TRUE(idx->flush_to_immutable_index(writer, nshard, npage_hint, page_size, nbucket, true).ok());
     writer->finish();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
@@ -1523,7 +1527,7 @@ TEST_P(PersistentIndexTest, test_fixlen_replace) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -1613,7 +1617,7 @@ TEST_P(PersistentIndexTest, test_varlen_replace) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -1723,7 +1727,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -1974,7 +1978,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -2124,7 +2128,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_working) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -2177,6 +2181,142 @@ TEST_P(PersistentIndexTest, test_bloom_filter_working) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
+<<<<<<< HEAD
+=======
+TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
+    config::l0_max_mem_usage = 50;
+    config::max_tmp_l1_num = 10;
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_tmp_l1";
+    const std::string kIndexFile = "./PersistentIndexTest_test_multi_l2_tmp_l1/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 1000;
+    const int wal_n = 200;
+    int64_t cur_version = 0;
+    // insert
+    vector<Key> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values.emplace_back(i);
+        key_slices.emplace_back(keys[i]);
+    }
+    // erase
+    vector<Key> erase_keys(wal_n);
+    vector<Slice> erase_key_slices;
+    erase_key_slices.reserve(wal_n);
+    for (int i = 0; i < wal_n; i++) {
+        erase_keys[i] = "test_varlen_" + std::to_string(i);
+        erase_key_slices.emplace_back(erase_keys[i]);
+    }
+    // append invalid wal
+    std::vector<Key> invalid_keys(wal_n);
+    std::vector<Slice> invalid_key_slices;
+    std::vector<IndexValue> invalid_values;
+    invalid_key_slices.reserve(wal_n);
+    for (int i = 0; i < wal_n; i++) {
+        invalid_keys[i] = "test_varlen_" + std::to_string(i);
+        invalid_values.emplace_back(i);
+        invalid_key_slices.emplace_back(invalid_keys[i]);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    {
+        EditVersion version(cur_version++, 0);
+        index_meta.set_key_size(0);
+        index_meta.set_size(0);
+        version.to_pb(index_meta.mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+        IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+        version.to_pb(snapshot_meta->mutable_version());
+
+        PersistentIndex index(kPersistentIndexDir);
+
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
+        ASSERT_OK(index.insert(N, key_slices.data(), values.data(), false));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+
+        // generate 3 versions
+        for (int i = 0; i < 3; i++) {
+            std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
+            ASSERT_TRUE(index.prepare(EditVersion(cur_version++, 0), keys.size()).ok());
+            ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
+            ASSERT_TRUE(index.commit(&index_meta).ok());
+            ASSERT_TRUE(index.on_commited().ok());
+        }
+
+        vector<IndexValue> erase_old_values(erase_keys.size());
+        ASSERT_TRUE(index.prepare(EditVersion(cur_version++, 0), erase_keys.size()).ok());
+        ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
+        // update PersistentMetaPB in memory
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_TRUE(index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < wal_n; i++) {
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
+        }
+        for (int i = wal_n; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+
+    {
+        // rebuild mutableindex according PersistentIndexMetaPB
+        PersistentIndex new_index(kPersistentIndexDir);
+        ASSERT_TRUE(new_index.load(index_meta).ok());
+
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_TRUE(new_index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < wal_n; i++) {
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
+        }
+        for (int i = wal_n; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+
+        // upsert key/value to new_index
+        vector<IndexValue> old_values(invalid_keys.size(), IndexValue(NullIndexValue));
+        ASSERT_TRUE(new_index.prepare(EditVersion(cur_version++, 0), invalid_keys.size()).ok());
+        ASSERT_TRUE(new_index
+                            .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
+                                    old_values.data())
+                            .ok());
+        ASSERT_TRUE(new_index.commit(&index_meta).ok());
+        ASSERT_TRUE(new_index.on_commited().ok());
+    }
+    // rebuild mutableindex according to PersistentIndexMetaPB
+    {
+        PersistentIndex index(kPersistentIndexDir);
+        ASSERT_TRUE(index.load(index_meta).ok());
+        std::vector<IndexValue> get_values(keys.size());
+
+        ASSERT_TRUE(index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+>>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
     config::l0_max_mem_usage = 1 * 1024 * 1024; // 1MB
     FileSystem* fs = FileSystem::Default();
@@ -2206,7 +2346,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -2307,7 +2447,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -2418,7 +2558,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_delete) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -2550,7 +2690,7 @@ TEST_P(PersistentIndexTest, test_index_keep_delete) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -2650,7 +2790,7 @@ TEST_P(PersistentIndexTest, test_l0_append_load_small_data) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -2751,7 +2891,7 @@ TEST_P(PersistentIndexTest, test_keep_del_in_minor_compact) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -2835,7 +2975,7 @@ TEST_P(PersistentIndexTest, test_keep_del_in_minor_compact2) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -2923,7 +3063,7 @@ TEST_P(PersistentIndexTest, test_snapshot_with_minor_compact) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -3042,7 +3182,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
     index_meta.set_size(0);
     version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
@@ -3183,6 +3323,7 @@ TEST_P(PersistentIndexTest, pindex_major_compact_meta) {
 }
 
 INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
-                         ::testing::Values(PersistentIndexTestParam{true}, PersistentIndexTestParam{false}));
+                         ::testing::Values(PersistentIndexTestParam{true, false},
+                                           PersistentIndexTestParam{false, true}));
 
 } // namespace starrocks
