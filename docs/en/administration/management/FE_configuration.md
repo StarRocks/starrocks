@@ -52,7 +52,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: MB
 - Is mutable: No
-- Description: The maximum size of the system log and audit log files.
+- Description: The maximum size of a system log file or an audit log file.
 - Introduced in: -
 
 ##### sys_log_dir
