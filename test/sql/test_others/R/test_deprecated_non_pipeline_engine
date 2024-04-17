@@ -2,7 +2,7 @@
 set enable_pipeline_engine=false;
 -- result:
 -- !result
-set enable_constant_execute_in_fe = true;
+set enable_constant_execute_in_fe = false;
 -- result:
 -- !result
 select 1;
