@@ -114,8 +114,13 @@ private:
     DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
+<<<<<<< HEAD
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
     RACE_DETECT(detect_get_next, var1);
+=======
+StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
+    RACE_DETECT(detect_get_next);
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }
@@ -242,8 +247,13 @@ private:
     DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
+<<<<<<< HEAD
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
     RACE_DETECT(detect_get_next, var1);
+=======
+StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
+    RACE_DETECT(detect_get_next);
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }

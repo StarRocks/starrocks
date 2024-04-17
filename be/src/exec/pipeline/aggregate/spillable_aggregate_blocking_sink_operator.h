@@ -21,6 +21,7 @@
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
@@ -67,8 +68,22 @@ private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
 private:
+<<<<<<< HEAD
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
+=======
+    [[nodiscard]] Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
+
+    [[nodiscard]] Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
+
+    [[nodiscard]] Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
+
+    void _add_streaming_chunk(ChunkPtr chunk);
+
+    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
+
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     bool _is_finished = false;
