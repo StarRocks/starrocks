@@ -22,6 +22,7 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 // similar with query_cache::MultilaneOperator but it only proxy one operator.
@@ -78,6 +79,7 @@ public:
     void for_each_child_operator(const std::function<void(Operator*)>& apply) override { apply(_ctx->sink.get()); }
 
 private:
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
     BucketProcessContextPtr _ctx;
 };
 
