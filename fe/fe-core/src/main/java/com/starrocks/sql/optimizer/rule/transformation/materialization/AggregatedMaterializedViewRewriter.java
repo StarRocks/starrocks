@@ -419,7 +419,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
         // reset original partition predicates to prune partitions/tablets again
-        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput);
+        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput, false);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         Preconditions.checkState(viewInput.getOp().getProjection() != null);

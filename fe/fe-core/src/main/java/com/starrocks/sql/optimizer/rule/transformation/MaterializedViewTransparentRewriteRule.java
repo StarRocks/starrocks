@@ -330,7 +330,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                 List<ColumnRefOperator> originalOutputColumns) {
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvContext);
         OptExpression newMvQueryPlan = duplicator.duplicate(mvPlan);
-        newMvQueryPlan = MVPartitionPruner.resetSelectedPartitions(newMvQueryPlan);
+        newMvQueryPlan = MVPartitionPruner.resetSelectedPartitions(newMvQueryPlan, true);
 
         List<ColumnRefOperator> orgMvQueryOutputColumnRefs = mvContext.getMvOutputColumnRefs();
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(orgMvQueryOutputColumnRefs);
