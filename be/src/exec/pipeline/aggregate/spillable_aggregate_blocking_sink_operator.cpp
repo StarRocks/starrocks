@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 
+#include <glog/logging.h>
+
 #include <memory>
 
 #include "column/vectorized_fwd.h"
@@ -25,6 +27,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
@@ -39,6 +42,10 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) {
+        return Status::OK();
+    }
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
@@ -100,6 +107,34 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
+        set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
+        return Status::OK();
+    }
+
+    if (state->enable_agg_spill_preaggregation()) {
+        return _try_to_spill_by_auto(state, chunk);
+    } else {
+        return _try_to_spill_by_force(state, chunk);
+    }
+    return Status::OK();
+}
+
+Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                           const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::reset_state(state, refill_chunks));
+    return Status::OK();
+}
+
+Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk) {
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
     set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {

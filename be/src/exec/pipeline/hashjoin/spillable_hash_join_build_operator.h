@@ -66,7 +66,11 @@ private:
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;
+<<<<<<< HEAD
     size_t _push_numbers = 0;
+=======
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
 };
 
 class SpillableHashJoinBuildOperatorFactory final : public HashJoinBuildOperatorFactory {

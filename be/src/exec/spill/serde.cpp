@@ -31,6 +31,10 @@ public:
     ~ColumnarSerde() override = default;
 
     Status prepare() override {
+<<<<<<< HEAD
+=======
+        RACE_DETECT(detect_prepare);
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
         if (_encode_context == nullptr) {
             auto column_number = _parent->chunk_builder().column_number();
             auto encode_level = _parent->options().encode_level;

@@ -289,9 +289,18 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         auto lcked = query_ctx.lock();
         RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
+<<<<<<< HEAD
         RACE_DETECT(detect_flush, var1);
 
         auto defer = DeferOp([&]() { _spiller->update_spilled_task_status(_decrease_running_flush_tasks()); });
+=======
+        // concurrency test
+        RACE_DETECT(detect_flush);
+        auto defer = CancelableDefer([&]() {
+            _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
+            yield_ctx.set_finished();
+        });
+>>>>>>> 347f240bf6 ([BugFix] Fix Spill Limited AGG Distinct cause use-after-free (#44234))
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
