@@ -237,7 +237,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException("database id: " + dbId + " does not exist");
         }
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.READ)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
             throw new AlterCancelException("insert overwrite commit failed because locking db: " + dbId + " failed");
         }
 
@@ -538,7 +538,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 throw new AlterCancelException("database id:" + dbId + " does not exist");
             }
 
-            if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
                 throw new AlterCancelException("insert overwrite commit failed because locking db:" + dbId + " failed");
             }
 

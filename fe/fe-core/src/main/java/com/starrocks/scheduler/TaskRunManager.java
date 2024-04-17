@@ -17,8 +17,8 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
@@ -221,7 +221,7 @@ public class TaskRunManager implements MemoryTrackable {
             if (!taskRunLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskRunLock.getOwner();
                 if (owner != null) {
-                    LOG.warn("task run lock is held by: {}", () -> Util.dumpThread(owner, 50));
+                    LOG.warn("task run lock is held by: {}", () -> LogUtil.dumpThread(owner, 50));
                 } else {
                     LOG.warn("task run lock owner is null");
                 }
