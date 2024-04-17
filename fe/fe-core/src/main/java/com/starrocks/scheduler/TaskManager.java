@@ -28,8 +28,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -462,7 +462,7 @@ public class TaskManager implements MemoryTrackable {
             if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskLock.getOwner();
                 if (owner != null) {
-                    LOG.warn("task lock is held by: {}", Util.dumpThread(owner, 50));
+                    LOG.warn("task lock is held by: {}", LogUtil.dumpThread(owner, 50));
                 } else {
                     LOG.warn("task lock owner is null");
                 }

@@ -143,6 +143,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+    @ConfField(mutable = true)
+    public static int slow_lock_stack_trace_reserve_levels = 15;
+
     @ConfField
     public static String custom_config_dir = "/conf";
 

@@ -20,6 +20,7 @@
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
 #include "runtime/runtime_state.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 class AggregateBlockingSinkOperator : public Operator {
@@ -49,6 +50,7 @@ public:
     [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 protected:
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
     // It is used to perform aggregation algorithms shared by
     // AggregateBlockingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),

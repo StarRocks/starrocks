@@ -18,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -70,6 +71,19 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
             }
         }
         return null;
+    }
+
+    @Override
+    public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
+        if (aggFunc == null) {
+            return false;
+        }
+
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equalsIgnoreCase(PERCENTILE_APPROX)) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -137,5 +151,15 @@ public class PercentileRewriteEquivalent extends IAggregateRewriteEquivalent {
                                                ColumnRefOperator replace) {
         ScalarOperator arg1 = aggFunc.getChild(1);
         return makePercentileApproxRaw(replace, arg1);
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        ScalarOperator arg1 = aggFunc.getChild(1);
+        CallOperator finalFn = makeRollupFunc(replace, arg1);
+        CallOperator partialFn = makePercentileUnion(replace);
+        return Pair.create(partialFn, finalFn);
     }
 }

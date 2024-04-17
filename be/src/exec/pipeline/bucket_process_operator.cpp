@@ -60,6 +60,7 @@ bool BucketProcessSinkOperator::is_finished() const {
 }
 
 Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     auto defer = DeferOp([&]() {
         if (_ctx->spill_channel != nullptr) {
             _ctx->spill_channel->set_finishing();

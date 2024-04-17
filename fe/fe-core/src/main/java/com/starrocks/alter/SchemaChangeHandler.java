@@ -2235,7 +2235,7 @@ public class SchemaChangeHandler extends AlterHandler {
     public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.READ)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
             throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
         }
         TableProperty tableProperty;

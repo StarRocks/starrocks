@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.EquivalentShuttleContext;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -115,8 +116,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 rewriteGroupByKeys(rewriteContext, columnRewriter, queryAggOp.getGroupingKeys(), false);
         ScalarOperator queryRangePredicate = rewriteContext.getQueryPredicateSplit().getRangePredicates();
 
+        AggregatePushDownContext aggRewriteInfo = rewriteContext.getAggregatePushDownContext();
         // if it's agg push down rewrite, rewrite it by rollup.
-        boolean isRollup = isRollupAggregate(mvGroupingKeys, queryGroupingKeys, queryRangePredicate);
+        boolean isRollup = aggRewriteInfo != null ? true : isRollupAggregate(mvGroupingKeys, queryGroupingKeys,
+                queryRangePredicate);
 
         // Cannot ROLLUP distinct
         if (isRollup) {

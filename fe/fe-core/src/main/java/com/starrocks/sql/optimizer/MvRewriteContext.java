@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.List;
 
@@ -51,6 +52,7 @@ public class MvRewriteContext {
     private List<TableScanDesc> queryTableScanDescs;
     private List<TableScanDesc> mvTableScanDescs;
 
+    private AggregatePushDownContext aggregatePushDownContext;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -140,5 +142,13 @@ public class MvRewriteContext {
 
     public void setMvTableScanDescs(List<TableScanDesc> mvTableScanDescs) {
         this.mvTableScanDescs = mvTableScanDescs;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
     }
 }
