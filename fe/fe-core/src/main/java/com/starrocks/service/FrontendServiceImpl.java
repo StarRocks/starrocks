@@ -2826,6 +2826,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TListSessionsResponse listSessions(TListSessionsRequest request) throws TException {
         TListSessionsResponse response = new TListSessionsResponse();
+        if (!request.isSetOptions()) {
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.addToError_msgs("options must be set");
+            response.setStatus(status);
+            return response;
+        }
         TListSessionsOptions options = request.options;
         if (options.isSetTemporary_table_only() && options.temporary_table_only) {
             TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
