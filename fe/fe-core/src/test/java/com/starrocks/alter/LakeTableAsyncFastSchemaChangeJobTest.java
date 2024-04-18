@@ -139,7 +139,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         job.getInfo(infoList);
         Assert.assertEquals(1, infoList.size());
         List<Comparable> info = infoList.get(0);
-        Assert.assertEquals(13, info.size());
+        Assert.assertEquals(14, info.size());
         Assert.assertEquals(job.getJobId(), info.get(0));
         Assert.assertEquals(table.getName(), info.get(1));
         Assert.assertEquals(TimeUtils.longToTimeString(job.createTimeMs), info.get(2));
@@ -153,6 +153,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals(job.getJobState().name(), info.get(9));
         Assert.assertEquals(job.errMsg, info.get(10));
         Assert.assertEquals(job.getTimeoutMs() / 1000, info.get(12));
+        Assert.assertEquals("default_warehouse", info.get(13));
     }
 
     @Test
