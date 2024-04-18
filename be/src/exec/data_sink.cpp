@@ -40,10 +40,10 @@
 
 #include "common/logging.h"
 #include "connector/connector.h"
+#include "connector/file_chunk_sink.h"
 #include "connector/file_connector.h"
-#include "connector_sink/file_chunk_sink.h"
-#include "connector_sink/hive_chunk_sink.h"
-#include "connector_sink/iceberg_chunk_sink.h"
+#include "connector/hive_chunk_sink.h"
+#include "connector/iceberg_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
 #include "exec/hdfs_scanner_text.h"
