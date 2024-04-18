@@ -115,7 +115,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }
@@ -243,7 +243,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }
