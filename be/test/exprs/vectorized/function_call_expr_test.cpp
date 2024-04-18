@@ -268,9 +268,6 @@ TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {
     exprContext.close(nullptr);
 }
 
-<<<<<<< HEAD:be/test/exprs/vectorized/function_call_expr_test.cpp
-} // namespace starrocks::vectorized
-=======
 TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
     TFunction func;
     func.__set_fid(60010); // like
@@ -285,8 +282,8 @@ TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
     expr_node.__set_type(gen_type_desc(TPrimitiveType::BOOLEAN));
 
     VectorizedFunctionCallExpr expr(expr_node);
-    ColumnRef col1(TypeDescriptor::create_varbinary_type(10), 1);
-    ColumnRef col2(TypeDescriptor::create_varbinary_type(10), 2);
+    ColumnRef col1(TypeDescriptor::create_varchar_type(10), 1);
+    ColumnRef col2(TypeDescriptor::create_varchar_type(10), 2);
     expr.add_child(&col1);
     expr.add_child(&col2);
 
@@ -298,5 +295,4 @@ TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
     expr_context.close(&_runtime_state);
 }
 
-} // namespace starrocks
->>>>>>> e406099f2b ([BugFix] Fix the mem leak of VectorizedFunctionCallExpr (#44275)):be/test/exprs/function_call_expr_test.cpp
+} // namespace starrocks::vectorized
