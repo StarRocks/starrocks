@@ -41,6 +41,7 @@
 #include "storage/options.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
+#include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
