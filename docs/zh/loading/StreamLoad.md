@@ -26,7 +26,7 @@ Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及�
 
 ### 查看权限
 
-导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ### 查看网络配置
 
