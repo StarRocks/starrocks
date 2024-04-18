@@ -52,15 +52,16 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
-import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.exceptions.NotFoundException;
+import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
+import org.apache.iceberg.hadoop.SerializableConfiguration;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
@@ -70,6 +71,7 @@ import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.io.SeekableInputStream;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,7 +89,7 @@ import java.util.function.Function;
 /**
  * Implementation of FileIO that adds metadata content caching features.
  */
-public class IcebergCachingFileIO implements FileIO, Configurable {
+public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
     private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
     private static final long CACHE_MAX_ENTRY_SIZE = Config.iceberg_metadata_cache_max_entry_size;
@@ -100,14 +102,14 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
     public static final long DISK_CACHE_CAPACITY = Config.iceberg_metadata_disk_cache_capacity;
     public static final long DISK_CACHE_EXPIRATION_SECONDS = Config.iceberg_metadata_disk_cache_expiration_seconds;
 
-    private ContentCache fileContentCache;
+    private transient ContentCache fileContentCache;
     private FileIO wrappedIO;
-    private Configuration conf;
+    private SerializableSupplier<Configuration> conf;
 
     @Override
     public void initialize(Map<String, String> properties) {
         ResolvingFileIO resolvingFileIO = new ResolvingFileIO();
-        resolvingFileIO.setConf(conf);
+        resolvingFileIO.setConf(conf.get());
         wrappedIO = resolvingFileIO;
         wrappedIO.initialize(properties);
 
@@ -120,12 +122,19 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
 
     @Override
     public Configuration getConf() {
-        return conf;
+        return conf.get();
     }
 
     @Override
     public void setConf(Configuration conf) {
-        this.conf = conf;
+        this.conf = new SerializableConfiguration(conf)::get;
+    }
+
+    @Override
+    public void serializeConfWith(Function<Configuration, SerializableSupplier<Configuration>> confSerializer) {
+        if (wrappedIO instanceof HadoopConfigurable) {
+            ((HadoopConfigurable) wrappedIO).serializeConfWith(confSerializer);
+        }
     }
 
     @Override
