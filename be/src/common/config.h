@@ -973,7 +973,7 @@ CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
-CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
+CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
@@ -1252,7 +1252,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");

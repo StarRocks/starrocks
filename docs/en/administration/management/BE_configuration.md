@@ -3580,7 +3580,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### lake_vacuum_retry_min_delay_ms
 
-- Default: 10
+- Default: 100
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
@@ -4398,7 +4398,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### lake_vacuum_min_batch_delete_size
 
-- Default: 1000
+- Default: 100
 - Type: Int
 - Unit:
 - Is mutable: Yes
