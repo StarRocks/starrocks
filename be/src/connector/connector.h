@@ -18,7 +18,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "connector_sink/connector_chunk_sink.h"
+#include "connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
