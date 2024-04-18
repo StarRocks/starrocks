@@ -292,7 +292,40 @@ public class BrokerLoadJob extends BulkLoadJob {
                         context,  TLoadJobType.BROKER, priority, originStmt, mode);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+<<<<<<< HEAD
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
+=======
+                context.setExecutionId(loadId);
+
+                LoadLoadingTask task = new LoadLoadingTask.Builder()
+                        .setDb(db)
+                        .setTable(table)
+                        .setBrokerDesc(brokerDesc)
+                        .setFileGroups(brokerFileGroups)
+                        .setJobDeadlineMs(getDeadlineMs())
+                        .setExecMemLimit(loadMemLimit)
+                        .setStrictMode(strictMode)
+                        .setTxnId(transactionId)
+                        .setCallback(this)
+                        .setTimezone(timezone).setTimeoutS(timeoutSecond)
+                        .setCreateTimestamp(createTimestamp)
+                        .setPartialUpdate(partialUpdate)
+                        .setMergeConditionStr(mergeCondition)
+                        .setSessionVariables(sessionVariables)
+                        .setContext(context)
+                        .setLoadJobType(TLoadJobType.BROKER)
+                        .setPriority(priority)
+                        .setOriginStmt(originStmt)
+                        .setPartialUpdateMode(mode)
+                        .setFileStatusList(attachment.getFileStatusByTable(aggKey))
+                        .setFileNum(attachment.getFileNumByTable(aggKey))
+                        .setLoadId(loadId)
+                        .setJSONOptions(jsonOptions)
+                        .build();
+
+                task.prepare();
+
+>>>>>>> df457b39f7 ([BugFix] Fix load profile not finished (#44277))
                 // update total loading task scan range num
                 idToTasks.put(task.getSignature(), task);
                 // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
