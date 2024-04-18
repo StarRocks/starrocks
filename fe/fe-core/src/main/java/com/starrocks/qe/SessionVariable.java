@@ -3668,6 +3668,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // used for rest api
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
+        tResult.setCatalog(catalog);
         tResult.setMem_limit(maxExecMemByte);
         tResult.setQuery_mem_limit(queryMemLimit);
         tResult.setSql_dialect(sqlDialect.toLowerCase());

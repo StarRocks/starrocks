@@ -305,11 +305,8 @@ public:
         load_params->__set_filtered_rows(num_rows_load_filtered());
         load_params->__set_unselected_rows(num_rows_load_unselected());
         load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
-
         // Update datacache load metrics
-        if (config::datacache_enable) {
-            update_load_datacache_metrics(load_params);
-        }
+        update_load_datacache_metrics(load_params);
     }
 
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
@@ -333,6 +330,10 @@ public:
     }
 
     void update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+        if (!_query_options.__isset.catalog) {
+            return;
+        }
+
         TLoadDataCacheMetrics metrics{};
         metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
         metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
@@ -340,12 +341,21 @@ public:
         metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
         metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
 
-        const BlockCache* cache = BlockCache::instance();
-        TDataCacheMetrics t_metrics{};
-        DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
-        metrics.__set_metrics(t_metrics);
-
-        load_params->__set_load_datacache_metrics(metrics);
+        if (_query_options.catalog == "default_catalog") {
+#ifdef USE_STAROS
+            if (config::starlet_use_star_cache) {
+                // support this later
+            }
+#endif
+        } else {
+            if (config::datacache_enable) {
+                const BlockCache* cache = BlockCache::instance();
+                TDataCacheMetrics t_metrics{};
+                DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+                metrics.__set_metrics(t_metrics);
+                load_params->__set_load_datacache_metrics(metrics);
+            }
+        }
     }
 
     std::atomic_int64_t* mutable_total_spill_bytes();

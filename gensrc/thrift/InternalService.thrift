@@ -288,6 +288,8 @@ struct TQueryOptions {
 
   132: optional bool enable_datacache_async_populate_mode;
   133: optional bool enable_datacache_io_adaptor;
+
+  140: optional string catalog;
 }
 
 

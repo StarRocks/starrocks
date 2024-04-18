@@ -120,6 +120,6 @@ public class DataCacheStmtAnalyzerTest {
         analyzeSuccess("cache select * from hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1'");
         analyzeFail("cache select * from hive0.datacache_db.not_existed");
         analyzeFail("cache select * from default_catalog.test.t0",
-                "Currently cache select is only supported in external catalog");
+                "Currently cache select is not supported in local olap table");
     }
 }
