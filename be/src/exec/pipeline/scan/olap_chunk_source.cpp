@@ -235,9 +235,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     DCHECK(_non_pushdown_pred_tree.root().compound_children().empty());
 
     {
-        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                     *_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _not_push_down_predicates));
     }
 
     // Range
