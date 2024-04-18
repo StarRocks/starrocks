@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 
+#include <glog/logging.h>
+
 #include <memory>
 
 #include "column/vectorized_fwd.h"
@@ -25,6 +27,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
@@ -39,6 +42,10 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) {
+        return Status::OK();
+    }
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing();
         _is_finished = true;

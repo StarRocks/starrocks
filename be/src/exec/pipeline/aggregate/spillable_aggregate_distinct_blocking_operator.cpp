@@ -18,6 +18,7 @@
 
 #include "exec/sorted_streaming_aggregator.h"
 #include "exec/spill/spiller.hpp"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {
@@ -29,6 +30,8 @@ bool SpillableAggregateDistinctBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
