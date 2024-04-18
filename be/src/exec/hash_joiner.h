@@ -392,7 +392,6 @@ private:
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
-    bool _is_closed = false;
 
     const std::vector<bool>& _is_null_safes;
     // Equal conjuncts in Join On.
