@@ -159,7 +159,15 @@ public class LoadLoadingTask extends LoadTask {
         return new DefaultCoordinator.Factory();
     }
 
-    public RuntimeProfile buildTopLevelProfile() {
+    public RuntimeProfile buildFinishedTopLevelProfile() {
+        return buildTopLevelProfile(true);
+    }
+
+    public RuntimeProfile buildRunningTopLevelProfile() {
+        return buildTopLevelProfile(false);
+    }
+
+    public RuntimeProfile buildTopLevelProfile(boolean isFinished) {
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(getLoadId()));
@@ -172,14 +180,16 @@ public class LoadLoadingTask extends LoadTask {
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
-        summaryProfile.addInfoString(ProfileManager.QUERY_STATE,
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(
-                        db.getId(), txnId).getTransactionStatus().isFinalStatus() ? "Finished" : "Running");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isFinished ? "Finished" : "Running");
         summaryProfile.addInfoString("StarRocks Version",
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        summaryProfile.addInfoString("Memory Limit", DebugUtil.getPrettyStringBytes(execMemLimit));
+        summaryProfile.addInfoString("Timeout", DebugUtil.getPrettyStringMs(timeoutS * 1000));
+        summaryProfile.addInfoString("Strict Mode", String.valueOf(strictMode));
+        summaryProfile.addInfoString("Partial Update", String.valueOf(partialUpdate));
 
         SessionVariable variables = context.getSessionVariable();
         if (variables != null) {
@@ -217,7 +227,7 @@ public class LoadLoadingTask extends LoadTask {
         curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
         curCoordinator.setLoadJobType(loadJobType);
         curCoordinator.setExecPlan(loadPlanner.getExecPlan());
-        curCoordinator.setTopProfileSupplier(this::buildTopLevelProfile);
+        curCoordinator.setTopProfileSupplier(this::buildRunningTopLevelProfile);
 
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
@@ -225,7 +235,7 @@ public class LoadLoadingTask extends LoadTask {
             actualExecute(curCoordinator);
 
             if (context.getSessionVariable().isEnableProfile()) {
-                RuntimeProfile profile = buildTopLevelProfile();
+                RuntimeProfile profile = buildFinishedTopLevelProfile();
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
