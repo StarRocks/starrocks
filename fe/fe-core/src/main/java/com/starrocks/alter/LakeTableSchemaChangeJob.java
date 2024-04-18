@@ -622,30 +622,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return Sets.newHashSet();
         }
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-
         for (Map.Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
             Long shadowIdxId = entry.getKey();
             long originIndexId = indexIdMap.get(shadowIdxId);
             List<Column> shadowSchema = entry.getValue();
             List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-            if (shadowSchema.size() == originSchema.size()) {
-                // modify column
-                for (Column col : shadowSchema) {
-                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
-                        modifiedColumns.add(
-                                col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, col.getName()));
-                    }
-                }
-            } else if (shadowSchema.size() < originSchema.size()) {
-                // drop column
-                List<Column> differences = originSchema.stream().filter(element ->
-                        !shadowSchema.contains(element)).collect(Collectors.toList());
-                // can just drop one column one time, so just one element in differences
-                int dropIdx = originSchema.indexOf(differences.get(0));
-                modifiedColumns.add(originSchema.get(dropIdx).getName());
-            } else {
-                // add column should not affect old mv, just ignore.
-            }
+            modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, shadowSchema));
         }
         return modifiedColumns;
     }

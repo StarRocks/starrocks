@@ -83,6 +83,7 @@ add_library(Storage STATIC
     rowset/column_iterator.cpp
     rowset/json_column_iterator.cpp
     rowset/json_column_writer.cpp
+    rowset/cast_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
     rowset/column_decoder.cpp

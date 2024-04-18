@@ -379,4 +379,26 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             }
         }
     }
+
+    @Test
+    public void testModifyColumnsWithAMV6() {
+        try {
+            checkModifyColumnsWithMaterializedViews(starRocksAssert,
+                    "create materialized view mv1 distributed by random refresh deferred manual " +
+                            "as select timestamp, count(error_code) from sc_dup3 " +
+                            "where op_id * 2> 10 group by timestamp",
+                    "alter table sc_dup3 drop column error_code, add column col_add bigint",
+                    false);
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
+            Assert.assertFalse(mv.isActive());
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView("mv1");
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+    }
 }
