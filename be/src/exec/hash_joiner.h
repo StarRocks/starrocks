@@ -366,8 +366,6 @@ private:
         }
     }
 
-    [[nodiscard]] Status _build(RuntimeState* state);
-
     [[nodiscard]] StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
 
     [[nodiscard]] Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all,
