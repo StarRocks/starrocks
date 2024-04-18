@@ -52,9 +52,9 @@ message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 # set CMAKE_BUILD_TARGET_ARCH
 # use `lscpu | grep 'Architecture' | awk '{print $2}'` only support system which language is en_US.UTF-8
 execute_process(COMMAND bash "-c" "uname -m"
-        OUTPUT_VARIABLE
-        CMAKE_BUILD_TARGET_ARCH
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
+                OUTPUT_VARIABLE
+                CMAKE_BUILD_TARGET_ARCH
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
 message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
@@ -133,7 +133,7 @@ endif()
 # Compile generated source if necessary
 message(STATUS "build gensrc if necessary")
 execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
-        RESULT_VARIABLE MAKE_GENSRC_RESULT)
+                RESULT_VARIABLE MAKE_GENSRC_RESULT)
 if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
     message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
 endif()
@@ -195,11 +195,11 @@ set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/lib
 
 add_library(pprof STATIC IMPORTED)
 set_target_properties(pprof PROPERTIES IMPORTED_LOCATION
-        ${GPERFTOOLS_HOME}/lib/libprofiler.a)
+    ${GPERFTOOLS_HOME}/lib/libprofiler.a)
 
 add_library(tcmalloc STATIC IMPORTED)
 set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
-        ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
+    ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
 
 add_library(protobuf STATIC IMPORTED GLOBAL)
 set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
@@ -394,27 +394,27 @@ endif()
 
 # cachelib
 set(CACHELIB_DEPENDENCIES
-        cachelib_common
-        cachelib_allocator
-        cachelib_datatype
-        cachelib_navy
-        cachelib_shm
-        folly
-        fmtd
-        thriftcpp2
-        thrift-core
-        thriftmetadata
-        thriftfrozen2
-        thriftprotocol
-        thrifttype
-        transport
-        rpcmetadata
-        thriftanyrep
-        thrifttyperep
-        thriftannotation
-        concurrency
-        async
-        wangle
+    cachelib_common
+    cachelib_allocator
+    cachelib_datatype
+    cachelib_navy
+    cachelib_shm
+    folly
+    fmtd
+    thriftcpp2
+    thrift-core
+    thriftmetadata
+    thriftfrozen2
+    thriftprotocol
+    thrifttype
+    transport
+    rpcmetadata
+    thriftanyrep
+    thrifttyperep
+    thriftannotation
+    concurrency
+    async
+    wangle
 )
 
 if (${WITH_CACHELIB} STREQUAL "ON")
@@ -520,63 +520,63 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(starlet ALIAS starlet::starlet)
 
     set(STARROCKS_DEPENDENCIES
-            ${STARROCKS_DEPENDENCIES}
-            starlet
-            starlet_fslib_all
-            starcache
-            ${AZURE_SDK_LIB}
-    )
+       ${STARROCKS_DEPENDENCIES}
+       starlet
+       starlet_fslib_all
+       starcache
+       ${AZURE_SDK_LIB}
+       )
 endif()
 
 # LLVM
 # TODO(yueyang): Adjust libraries during the implementation of JIT.
 set (LLVM_LIBRARIES
-        LLVMRuntimeDyld
-        LLVMBitstreamReader
-        LLVMOption
-        LLVMAsmPrinter
-        LLVMProfileData
-        LLVMAsmParser
-        LLVMOrcTargetProcess
-        LLVMExecutionEngine
-        LLVMBinaryFormat
-        LLVMDebugInfoDWARF
-        LLVMObjCARCOpts
-        LLVMPasses
-        LLVMCodeGen
-        LLVMFrontendOpenMP
-        LLVMMCDisassembler
-        LLVMJITLink
-        LLVMCFGuard
-        LLVMInstrumentation
-        LLVMInstCombine
-        LLVMipo
-        LLVMVectorize
-        LLVMIRReader
-        LLVMCore
-        LLVMTarget
-        LLVMMC
-        LLVMAnalysis
-        LLVMGlobalISel
-        LLVMScalarOpts
-        LLVMLinker
-        LLVMCoroutines
-        LLVMTargetParser
-        LLVMDemangle
-        LLVMRemarks
-        LLVMDebugInfoCodeView
-        LLVMAggressiveInstCombine
-        LLVMIRPrinter
-        LLVMOrcShared
-        LLVMOrcJIT
-        LLVMTextAPI
-        LLVMBitWriter
-        LLVMBitReader
-        LLVMObject
-        LLVMTransformUtils
-        LLVMSelectionDAG
-        LLVMMCParser
-        LLVMSupport
+    LLVMRuntimeDyld
+    LLVMBitstreamReader
+    LLVMOption
+    LLVMAsmPrinter
+    LLVMProfileData
+    LLVMAsmParser
+    LLVMOrcTargetProcess
+    LLVMExecutionEngine
+    LLVMBinaryFormat
+    LLVMDebugInfoDWARF
+    LLVMObjCARCOpts
+    LLVMPasses
+    LLVMCodeGen
+    LLVMFrontendOpenMP
+    LLVMMCDisassembler
+    LLVMJITLink
+    LLVMCFGuard
+    LLVMInstrumentation
+    LLVMInstCombine
+    LLVMipo
+    LLVMVectorize
+    LLVMIRReader
+    LLVMCore
+    LLVMTarget
+    LLVMMC
+    LLVMAnalysis
+    LLVMGlobalISel
+    LLVMScalarOpts
+    LLVMLinker
+    LLVMCoroutines
+    LLVMTargetParser
+    LLVMDemangle
+    LLVMRemarks
+    LLVMDebugInfoCodeView
+    LLVMAggressiveInstCombine
+    LLVMIRPrinter
+    LLVMOrcShared
+    LLVMOrcJIT
+    LLVMTextAPI
+    LLVMBitWriter
+    LLVMBitReader
+    LLVMObject
+    LLVMTransformUtils
+    LLVMSelectionDAG
+    LLVMMCParser
+    LLVMSupport
 )
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
@@ -779,19 +779,19 @@ add_definitions(-DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H)
 
 # Set include dirs
 include_directories(
-        BEFORE
-        ${SRC_DIR}/formats/orc/apache-orc/c++/include/
+    BEFORE
+    ${SRC_DIR}/formats/orc/apache-orc/c++/include/
 )
 include_directories(
-        ${SRC_DIR}/
-        ${TEST_DIR}/
-        ${GENSRC_DIR}/
-        SYSTEM ${THIRDPARTY_DIR}/include
-        SYSTEM ${GPERFTOOLS_HOME}/include
-        SYSTEM ${JEMALLOC_HOME}/include
-        SYSTEM ${THIRDPARTY_DIR}/include/thrift/
-        SYSTEM ${THIRDPARTY_DIR}/include/event/
-        SYSTEM ${THIRDPARTY_DIR}/llvm/include/
+    ${SRC_DIR}/
+    ${TEST_DIR}/
+    ${GENSRC_DIR}/
+    SYSTEM ${THIRDPARTY_DIR}/include
+    SYSTEM ${GPERFTOOLS_HOME}/include
+    SYSTEM ${JEMALLOC_HOME}/include
+    SYSTEM ${THIRDPARTY_DIR}/include/thrift/
+    SYSTEM ${THIRDPARTY_DIR}/include/event/
+    SYSTEM ${THIRDPARTY_DIR}/llvm/include/
 )
 
 
@@ -804,44 +804,44 @@ set(WL_END_GROUP "-Wl,--end-group")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-        ${WL_START_GROUP}
-        Agent
-        Common
-        Column
-        Connector
-        Exec
-        Exprs
-        FileSystem
-        Formats
-        Gutil
-        IO
-        Serde
-        Storage
-        Rowset
-        Runtime
-        Service
-        ServiceBE
-        Types
-        Udf
-        Util
-        Script
-        StarRocksGen
-        Webserver
-        TestUtil
-        Tools
-        Geo
-        BlockCache
-        ${WL_END_GROUP}
+    ${WL_START_GROUP}
+    Agent
+    Common
+    Column
+    Connector
+    Exec
+    Exprs
+    FileSystem
+    Formats
+    Gutil
+    IO
+    Serde
+    Storage
+    Rowset
+    Runtime
+    Service
+    ServiceBE
+    Types
+    Udf
+    Util
+    Script
+    StarRocksGen
+    Webserver
+    TestUtil
+    Tools
+    Geo
+    BlockCache
+    ${WL_END_GROUP}
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        mysql
+    mysql
 )
 
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        hdfs
-        jvm
+    hdfs
+    jvm
 )
 set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
 add_library(jvm SHARED IMPORTED)
@@ -851,114 +851,114 @@ include_directories(${JAVA_HOME}/include)
 include_directories(${JAVA_HOME}/include/linux)
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        ${AWSSDK_LINK_LIBRARIES}
+    ${AWSSDK_LINK_LIBRARIES}
 )
 set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::aws-crt-cpp)
 
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
-        ${STARROCKS_DEPENDENCIES}
-        ${WL_START_GROUP}
-        clucene-core
-        clucene-shared
-        clucene-contribs-lib
-        build_version
-        rocksdb
-        libs2
-        snappy
-        ${Boost_LIBRARIES}
-        thrift
-        thriftnb
-        glog
-        re2
-        pprof
-        # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
-        # Otherwise, he will use the lz4 Library in librdkafka
-        lz4
-        libevent
-        curl
-        ${LIBZ}
-        ${LIBBZ2}
-        gflags
-        brpc
-        protobuf
-        openssl
-        crypto
-        leveldb
-        bitshuffle
-        roaring
-        brotlicommon
-        brotlidec
-        brotlienc
-        zstd
-        streamvbyte
-        arrow
-        jemalloc # required by arrow
-        parquet
-        orc
-        cctz
-        fmt
-        ryu
-        hyperscan
-        simdjson
-        sasl
-        gssapi_krb5
-        krb5
-        krb5support
-        k5crypto
-        com_err
-        librdkafka_cpp
-        librdkafka
-        libpulsar
-        velocypack
-        opentelemetry_trace
-        http_client_curl
-        opentelemetry_resources
-        opentelemetry_common
-        opentelemetry_exporter_jaeger_trace
-        jansson
-        avro
-        serdes
-        fiu
-        ${LLVM_LIBRARIES}
-        ${WL_END_GROUP}
+    ${STARROCKS_DEPENDENCIES}
+    ${WL_START_GROUP}
+    clucene-core
+    clucene-shared
+    clucene-contribs-lib
+    build_version
+    rocksdb
+    libs2
+    snappy
+    ${Boost_LIBRARIES}
+    thrift
+    thriftnb
+    glog
+    re2
+    pprof
+    # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
+    # Otherwise, he will use the lz4 Library in librdkafka
+    lz4
+    libevent
+    curl
+    ${LIBZ}
+    ${LIBBZ2}
+    gflags
+    brpc
+    protobuf
+    openssl
+    crypto
+    leveldb
+    bitshuffle
+    roaring
+    brotlicommon
+    brotlidec
+    brotlienc
+    zstd
+    streamvbyte
+    arrow
+    jemalloc # required by arrow
+    parquet
+    orc
+    cctz
+    fmt
+    ryu
+    hyperscan
+    simdjson
+    sasl
+    gssapi_krb5
+    krb5
+    krb5support
+    k5crypto
+    com_err
+    librdkafka_cpp
+    librdkafka
+    libpulsar
+    velocypack
+    opentelemetry_trace
+    http_client_curl
+    opentelemetry_resources
+    opentelemetry_common
+    opentelemetry_exporter_jaeger_trace
+    jansson
+    avro
+    serdes
+    fiu
+    ${LLVM_LIBRARIES}
+    ${WL_END_GROUP}
 )
 
 if (${WITH_CACHELIB} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
-            ${STARROCKS_DEPENDENCIES}
-            ${WL_START_GROUP}
-            ${Boost_LIBRARIES}
-            ${CACHELIB_DEPENDENCIES}
-            ${WL_END_GROUP}
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        ${Boost_LIBRARIES}
+        ${CACHELIB_DEPENDENCIES}
+        ${WL_END_GROUP}
     )
 endif()
 
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
-            ${STARROCKS_DEPENDENCIES}
-            ${WL_START_GROUP}
-            brpc
-            starcache
-            ${WL_END_GROUP}
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        brpc
+        starcache
+        ${WL_END_GROUP}
     )
 endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     set(STARROCKS_DEPENDENCIES
-            ${STARROCKS_DEPENDENCIES}
-            breakpad
-            libdeflate
+        ${STARROCKS_DEPENDENCIES}
+        breakpad
+        libdeflate
     )
 endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
 # static link gcc's lib
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-        ${STARROCKS_DEPENDENCIES}
-        -static-libstdc++
-        -static-libgcc
-        -lresolv
+    ${STARROCKS_DEPENDENCIES}
+    -static-libstdc++
+    -static-libgcc
+    -lresolv
 )
 
 # Add sanitize static link flags or jemalloc
@@ -983,7 +983,7 @@ else()
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-        -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
 )
 
 # link gcov if WITH_GCOV is on
@@ -993,10 +993,10 @@ endif()
 
 # Set libraries for test
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
-        ${WL_START_GROUP}
-        gmock
-        gtest
-        ${WL_END_GROUP}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
 )
 
 # Only build static libs
@@ -1084,7 +1084,7 @@ add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
 
 if (WITH_BENCH STREQUAL "ON")
-    message(STATUS "Build binary with bench")
+     message(STATUS "Build binary with bench")
     add_subdirectory(${SRC_DIR}/bench)
 endif()
 
@@ -1099,36 +1099,36 @@ install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib)
 
 install(FILES
-        ${BASE_DIR}/../bin/common.sh
-        ${BASE_DIR}/../bin/start_backend.sh
-        ${BASE_DIR}/../bin/start_be.sh
-        ${BASE_DIR}/../bin/start_cn.sh
-        ${BASE_DIR}/../bin/stop_be.sh
-        ${BASE_DIR}/../bin/stop_cn.sh
-        ${BASE_DIR}/../bin/show_be_version.sh
-        ${BASE_DIR}/../bin/meta_tool.sh
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_WRITE GROUP_EXECUTE
-        WORLD_READ WORLD_EXECUTE
-        DESTINATION ${OUTPUT_DIR}/bin)
+    ${BASE_DIR}/../bin/common.sh
+    ${BASE_DIR}/../bin/start_backend.sh
+    ${BASE_DIR}/../bin/start_be.sh
+    ${BASE_DIR}/../bin/start_cn.sh
+    ${BASE_DIR}/../bin/stop_be.sh
+    ${BASE_DIR}/../bin/stop_cn.sh
+    ${BASE_DIR}/../bin/show_be_version.sh
+    ${BASE_DIR}/../bin/meta_tool.sh
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+    GROUP_READ GROUP_WRITE GROUP_EXECUTE
+    WORLD_READ WORLD_EXECUTE
+    DESTINATION ${OUTPUT_DIR}/bin)
 
 install(FILES
-        ${BASE_DIR}/../conf/be.conf
-        ${BASE_DIR}/../conf/be_test.conf
-        ${BASE_DIR}/../conf/cn.conf
-        ${BASE_DIR}/../conf/hadoop_env.sh
-        ${BASE_DIR}/../conf/log4j2.properties
-        ${BASE_DIR}/../conf/udf_security.policy
-        ${BASE_DIR}/../conf/core-site.xml
-        DESTINATION ${OUTPUT_DIR}/conf)
+    ${BASE_DIR}/../conf/be.conf
+    ${BASE_DIR}/../conf/be_test.conf
+    ${BASE_DIR}/../conf/cn.conf
+    ${BASE_DIR}/../conf/hadoop_env.sh
+    ${BASE_DIR}/../conf/log4j2.properties
+    ${BASE_DIR}/../conf/udf_security.policy
+    ${BASE_DIR}/../conf/core-site.xml
+    DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
-    install(FILES
-            ${BASE_DIR}/../conf/asan_suppressions.conf
-            DESTINATION ${OUTPUT_DIR}/conf)
+install(FILES
+    ${BASE_DIR}/../conf/asan_suppressions.conf
+    DESTINATION ${OUTPUT_DIR}/conf)
 endif()
 
 install(DIRECTORY
-        ${BASE_DIR}/../webroot/be/
-        DESTINATION ${OUTPUT_DIR}/www)
+    ${BASE_DIR}/../webroot/be/
+    DESTINATION ${OUTPUT_DIR}/www)
 
