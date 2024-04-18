@@ -190,7 +190,7 @@ Currently, StarRocks can adaptively adjust the number of concurrent I/O tasks wh
 
 Specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files().
 
-Valid values: `gzip`, `brotli`, `zstd`, and `lz4`.
+Valid values: `uncompressed`, `snappy`, `lz4`, `zstd`, and `gzip`.
 
 ### count_distinct_column_buckets (2.5 and later)
 

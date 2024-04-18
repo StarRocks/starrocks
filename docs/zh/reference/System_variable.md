@@ -186,7 +186,7 @@ StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）
 
 用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。
 
-有效值：`gzip`、`brotli`、`zstd` 和 `lz4`。
+有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。
 
 ### count_distinct_column_buckets（2.5 及以后）
 
