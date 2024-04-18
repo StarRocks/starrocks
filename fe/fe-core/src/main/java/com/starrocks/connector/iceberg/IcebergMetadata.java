@@ -642,7 +642,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             // Ignored
         }
 
-        Optional<ScanReport> metrics = metricsReporter.getReporter(catalogName, dbName, tableName, snapshotId, icebergPredicate);
+        Optional<ScanReport> metrics = metricsReporter.getReporter(
+                catalogName, dbName, tableName, snapshotId, icebergPredicate, nativeTbl);
 
         if (metrics.isPresent()) {
             Tracers.Module module = Tracers.Module.EXTERNAL;
