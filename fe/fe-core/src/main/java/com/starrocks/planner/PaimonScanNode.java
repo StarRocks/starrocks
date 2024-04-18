@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
@@ -209,7 +210,8 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    private void splitRawFileScanRangeLocations(RawFile rawFile) {
+    @VisibleForTesting
+    public void splitRawFileScanRangeLocations(RawFile rawFile) {
         SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
         long splitSize = sv.getConnectorMaxSplitSize();
 
@@ -223,7 +225,8 @@ public class PaimonScanNode extends ScanNode {
         }
     }
 
-    private void splitScanRangeLocations(RawFile rawFile, long offset, long length, long splitSize) {
+    @VisibleForTesting
+    public void splitScanRangeLocations(RawFile rawFile, long offset, long length, long splitSize) {
         long remainingBytes = length;
         do {
             if (remainingBytes < 2 * splitSize) {
@@ -236,7 +239,8 @@ public class PaimonScanNode extends ScanNode {
         } while (remainingBytes > 0);
     }
 
-    private void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
+    @VisibleForTesting
+    public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
