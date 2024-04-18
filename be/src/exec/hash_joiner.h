@@ -422,8 +422,8 @@ private:
     // in-filter constructed from string-typed key columns reference the memory of this column, and the in-filter's
     // lifetime can last beyond HashJoiner.
     Columns _string_key_columns;
-    size_t _probe_column_count = 0;
-    size_t _build_column_count = 0;
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
 
     // hash table doesn't have reserved data
     // bool _ht_has_remain = false;
