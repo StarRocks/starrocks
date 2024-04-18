@@ -777,6 +777,10 @@ None
 alter table tab1 add column v6 bigint default "1";
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 select * from tab1;
 -- result:
 100	k2_100	100	100	100	v4_100	v5_100	1
