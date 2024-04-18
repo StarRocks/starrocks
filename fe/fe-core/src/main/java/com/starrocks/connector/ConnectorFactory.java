@@ -17,6 +17,7 @@ package com.starrocks.connector;
 import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -54,7 +55,8 @@ public class ConnectorFactory {
 
             InformationSchemaConnector informationSchemaConnector =
                     new InformationSchemaConnector(context.getCatalogName());
-            return new CatalogConnector(connector, informationSchemaConnector);
+            TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName());
+            return new CatalogConnector(connector, informationSchemaConnector, tableMetaConnector);
         } catch (InvocationTargetException e) {
             LOG.error("can't create connector for type: " + context.getType(), e);
             Throwable rootCause = ExceptionUtils.getCause(e);
