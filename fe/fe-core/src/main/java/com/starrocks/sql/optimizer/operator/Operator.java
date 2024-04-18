@@ -53,6 +53,7 @@ public abstract class Operator {
     // or self reference of groups
     protected long salt = 0;
 
+    protected int opRuleMask = 0;
     // Like LogicalJoinOperator#transformMask, add a mask to avoid one operator's dead-loop in one transform rule.
     // eg: MV's UNION-ALL RULE:
     //                 UNION                         UNION
@@ -60,9 +61,11 @@ public abstract class Operator {
     //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
     //                                       /      \
     //                                  EXTRA-OP    MV-SCAN
+    // Operator's rule mask: operator that has been union rewrite and no needs to rewrite again.
     public static final int OP_UNION_ALL_BIT = 1 << 0;
+    // Operator's rule mask: operator that has been push down rewrite and no needs to rewrite again.
+    public static final int OP_PUSH_DOWN_BIT = 1 << 1;
     public static final int OP_TRANSPARENT_MV_BIT = 1 << 2;
-    protected int opRuleMask = 0;
 
     // an operator logically equivalent to 'this' operator
     // used by view based mv rewrite
