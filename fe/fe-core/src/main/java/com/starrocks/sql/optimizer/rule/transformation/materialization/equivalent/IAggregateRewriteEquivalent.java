@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
-public abstract class  IAggregateRewriteEquivalent implements IRewriteEquivalent {
+public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent {
     public RewriteEquivalentType getRewriteEquivalentType() {
         return RewriteEquivalentType.AGGREGATE;
     }
