@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -73,7 +74,7 @@ public class KuduMetadataTest {
 
     @Test
     public void testGetTable(@Mocked org.apache.kudu.client.KuduTable mockedTable) throws KuduException {
-        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, KUDU_MASTER, true,
+        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
                 SCHEMA_EMULATION_PREFIX, Optional.empty());
         new Expectations() {
             {
@@ -103,8 +104,8 @@ public class KuduMetadataTest {
 
     @Test
     public void testListTableNames() throws KuduException {
-        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, KUDU_MASTER, true,
-                SCHEMA_EMULATION_PREFIX, Optional.empty());
+        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER,
+                true, SCHEMA_EMULATION_PREFIX, Optional.empty());
         List<String> tableNames = Lists.newArrayList("impala::db1.tbl1", "db1.tbl1");
         new Expectations() {
             {
@@ -119,7 +120,7 @@ public class KuduMetadataTest {
 
     @Test
     public void testGetRemoteFileInfos(@Mocked org.apache.kudu.client.KuduTable mockedTable) throws KuduException {
-        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, KUDU_MASTER, true,
+        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
                 SCHEMA_EMULATION_PREFIX, Optional.empty());
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
         new Expectations() {

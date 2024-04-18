@@ -26,11 +26,13 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -61,6 +63,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 public class KuduMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(KuduMetadata.class);
     private final String catalogName;
+    private final HdfsEnvironment hdfsEnvironment;
     private final String masterAddresses;
     private final KuduClient kuduClient;
     private final Optional<IHiveMetastore> metastore;
@@ -73,10 +76,11 @@ public class KuduMetadata implements ConnectorMetadata {
     private final Map<String, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
 
-    public KuduMetadata(String catalogName, String master, boolean schemaEmulationEnabled,
+    public KuduMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, String master, boolean schemaEmulationEnabled,
                         String schemaEmulationPrefix, Optional<IHiveMetastore> hiveMetastore) {
         this.masterAddresses = master;
         this.catalogName = catalogName;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.metastore = hiveMetastore;
         this.kuduClient = KUDU_CLIENTS.computeIfAbsent(master, m -> new KuduClient.KuduClientBuilder(m).build());
         this.schemaEmulationEnabled = schemaEmulationEnabled;
@@ -283,6 +287,11 @@ public class KuduMetadata implements ConnectorMetadata {
                 }
             }
         }
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
     }
 
     @Override

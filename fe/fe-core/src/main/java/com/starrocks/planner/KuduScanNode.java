@@ -15,14 +15,18 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.*;
 import org.apache.kudu.client.KuduScanToken;
@@ -41,11 +45,31 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class KuduScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(KuduScanNode.class);
     private final KuduTable kuduTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
+    private CloudConfiguration cloudConfiguration = null;
 
     public KuduScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         this.kuduTable = (KuduTable) desc.getTable();
+        setupCloudCredential();
+    }
+
+    public HDFSScanNodePredicates getScanNodePredicates() {
+        return scanNodePredicates;
+    }
+
+    private void setupCloudCredential() {
+        String catalog = kuduTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalog));
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
     @Override
@@ -122,8 +146,41 @@ public class KuduScanNode extends ScanNode {
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
+        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("PARTITION PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+        }
+
+        // TODO: support it in verbose
+        if (detailLevel != VERBOSE) {
+            output.append(prefix).append(String.format("cardinality=%s", cardinality));
+            output.append("\n");
+        }
+
         output.append("\n");
         output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+                Type type = slotDescriptor.getOriginType();
+                if (type.isComplexType()) {
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                }
+            }
+        }
 
         return output.toString();
     }
@@ -134,9 +191,17 @@ public class KuduScanNode extends ScanNode {
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        String sqlPredicates = getExplainString(conjuncts);
+        msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
+
         if (kuduTable != null) {
             msg.hdfs_scan_node.setTable_name(kuduTable.getName());
         }
+
+        HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
+        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 
     @Override

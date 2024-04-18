@@ -277,7 +277,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(kudu,
                 MOCK_KUDU_CATALOG_NAME, StringUtils.EMPTY, properties);
 
-        KuduMetadata kuduMetadata = new KuduMetadata(MOCK_KUDU_CATALOG_NAME, master, false, StringUtils.EMPTY, Optional.empty());
+        KuduMetadata kuduMetadata = new KuduMetadata(MOCK_KUDU_CATALOG_NAME, new HdfsEnvironment(),
+                master, false, StringUtils.EMPTY, Optional.empty());
         metadataMgr.registerMockedMetadata(MOCK_KUDU_CATALOG_NAME, kuduMetadata);
     }
 

@@ -98,6 +98,7 @@ public class KuduConnector implements Connector {
             hiveMetastore = Optional.of(new HiveMetastore(metaClient, catalogName, MetastoreType.HMS));
             // TODO caching hiveMetastore support
         }
-        return new KuduMetadata(catalogName, kuduMaster, schemaEmulationEnabled, schemaEmulationPrefix, hiveMetastore);
+        return new KuduMetadata(catalogName, hdfsEnvironment, kuduMaster, schemaEmulationEnabled, schemaEmulationPrefix,
+                hiveMetastore);
     }
 }
