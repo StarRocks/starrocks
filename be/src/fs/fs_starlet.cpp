@@ -533,7 +533,7 @@ public:
         return to_status((*fs_st)->drop_cache(pair.first));
     }
 
-    Status delete_files(const std::vector<std::string>& paths) override {
+    Status delete_files(std::span<const std::string> paths) override {
         if (paths.empty()) {
             return Status::OK();
         }

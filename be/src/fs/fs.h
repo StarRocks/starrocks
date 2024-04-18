@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -289,7 +290,7 @@ public:
     // Batch delete the given files.
     // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message
     // possibly stop at the first error if is simulating batch deletes.
-    virtual Status delete_files(const std::vector<std::string>& paths) {
+    virtual Status delete_files(std::span<const std::string> paths) {
         for (auto&& path : paths) {
             auto st = delete_file(path);
             if (!st.ok() && !st.is_not_found()) {
