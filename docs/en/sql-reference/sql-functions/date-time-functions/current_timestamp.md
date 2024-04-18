@@ -27,6 +27,17 @@ MySQL > select current_timestamp();
 +---------------------+
 ```
 
+```
+mysql> CREATE TABLE IF NOT EXISTS sr_member (
+    ->     sr_id            INT,
+    ->     name             STRING,
+    ->     city_code        INT,
+    ->     reg_date         DATETIME DEFAULT current_timestamp,
+    ->     verified         BOOLEAN
+    -> );
+Query OK, 0 rows affected (0.01 sec)
+```
+
 ## keyword
 
 CURRENT_TIMESTAMP,CURRENT,TIMESTAMP
