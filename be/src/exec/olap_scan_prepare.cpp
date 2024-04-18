@@ -26,6 +26,7 @@
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "types/date_value.hpp"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -649,18 +650,27 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
     return Status::OK();
 }
 
-Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
-                                                       std::vector<std::unique_ptr<ColumnPredicate>>* preds) {
+StatusOr<PredicateTree> OlapScanConjunctsManager::get_predicate_tree(PredicateParser* parser,
+                                                                     ColumnPredicatePtrs& col_preds_owner) {
+    RETURN_IF_ERROR(get_column_predicates(parser, col_preds_owner));
+    PredicateAndNode and_node;
+    for (const auto& col_pred : col_preds_owner) {
+        and_node.add_child(PredicateColumnNode{col_pred.get()});
+    }
+    return PredicateTree::create(std::move(and_node));
+}
+
+Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner) {
     for (auto& f : olap_filters) {
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         RETURN_IF(!p, Status::RuntimeError("invalid filter"));
         p->set_index_filter_only(f.is_index_filter_only);
-        preds->emplace_back(std::move(p));
+        col_preds_owner.emplace_back(std::move(p));
     }
     for (auto& f : is_null_vector) {
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         RETURN_IF(!p, Status::RuntimeError("invalid filter"));
-        preds->emplace_back(std::move(p));
+        col_preds_owner.emplace_back(std::move(p));
     }
 
     const auto& slots = tuple_desc->decoded_slots();
@@ -680,7 +690,7 @@ Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
                 LOG(WARNING) << ss.str();
                 return Status::RuntimeError("invalid filter");
             } else {
-                preds->emplace_back(std::move(p));
+                col_preds_owner.emplace_back(std::move(p));
             }
         }
     }

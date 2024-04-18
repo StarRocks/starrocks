@@ -34,6 +34,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "storage/predicate_tree_params.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -151,6 +152,9 @@ public:
     bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
+    const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
+    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = std::move(params); }
+
     size_t next_driver_id() { return _next_driver_id++; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -224,6 +228,8 @@ private:
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
+
+    PredicateTreeParams _pred_tree_params;
 
     size_t _expired_log_count = 0;
 
