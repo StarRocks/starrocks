@@ -467,6 +467,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT =
             "materialized_view_subuqery_text_match_max_count";
 
+    public static final String ENABLE_LIST_MV_SRC_FILES = "enable_list_mv_src_files";
+
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
@@ -1456,6 +1458,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_LIST_MV_SRC_FILES)
+    private boolean enableListMvSrcFiles = false;
 
     /**
      * Whether enable materialized-view rewrite for INSERT statement
@@ -2891,6 +2896,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewRewrite(boolean enableMaterializedViewRewrite) {
         this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
+    }
+
+    public boolean isEnableListMvSrcFiles() {
+        return enableListMvSrcFiles;
+    }
+
+    public void setEnableListMvSrcFiles(boolean enableListMvSrcFiles) {
+        this.enableListMvSrcFiles = enableListMvSrcFiles;
     }
 
     public boolean isEnableMaterializedViewRewriteForInsert() {

@@ -26,6 +26,8 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -38,6 +40,7 @@ import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveConnectorInternalMgr {
+    private static final Logger LOG = LogManager.getLogger(HiveConnectorInternalMgr.class);
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
@@ -70,6 +73,7 @@ public class HiveConnectorInternalMgr {
         this.hmsConf = new CachingHiveMetastoreConf(properties, "hive");
 
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
+        LOG.info("catalog: {}, enableRemoteFileCache: {}", catalogName, enableRemoteFileCache);
         this.remoteFileConf = new CachingRemoteFileConf(properties);
 
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "true"));
