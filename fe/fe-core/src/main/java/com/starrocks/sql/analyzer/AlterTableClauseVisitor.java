@@ -260,8 +260,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
                     }
                 }
                 if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasGIN) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                                        "Can not modify replicated storage as TRUE when the table has GIN");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED);
                 }
             }
             clause.setNeedTableStable(false);

@@ -1132,7 +1132,7 @@ PROPERTIES (
 -- !result
 ALTER TABLE t_alter_replicated_storage SET ("replicated_storage" = "true");
 -- result:
-E: (5064, 'Getting analyzing error. Detail message: Can not modify replicated storage as TRUE when the table has GIN.')
+E: (5507, 'Getting analyzing error. Detail message: Can not use replicated storage as TRUE when the table has GIN.')
 -- !result
 SHOW CREATE TABLE t_alter_replicated_storage;
 -- result:
