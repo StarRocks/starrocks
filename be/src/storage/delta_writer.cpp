@@ -123,7 +123,8 @@ bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMo
                                                            size_t num_key_columns) {
     if (partial_update_mode == PartialUpdateMode::ROW_MODE ||
         partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
-        // Update columns by row mode need sort key to decide their order when segment is generated.
+        // Using Row Mode partial update, then the column to be updated must contain the sort key column,
+        // because they need sort key to decide their order when segment is generated.
         // Column mode with upsert will insert new rows, which also need sort key to decide their order.
         if (!contains_all_of(referenced_column_ids, sort_key_idxes)) {
             return true;
@@ -131,8 +132,9 @@ bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMo
     }
     if (partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
         partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
-        // Update columns by column mode won't change row's order in original segment,
-        // so we can't support partial update columns that contains sort key.
+        // Using Column Mode with UPDATE command, then the column to be updated cannot contain
+        // a sort key column that is not a primary key column. That is because we won't change row's
+        // order in original segment, so we can't support partial update columns that contains sort key.
         if (contains_any_of(referenced_column_ids, sort_key_idxes, num_key_columns)) {
             return true;
         }
@@ -282,8 +284,8 @@ Status DeltaWriter::_init() {
         }
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
-        if (is_partial_update_with_sort_key_conflict(writer_context.referenced_column_ids, sort_key_idxes,
-                                                     _tablet_schema->num_key_columns())) {
+        if (is_partial_update_with_sort_key_conflict(_opt.partial_update_mode, writer_context.referenced_column_ids,
+                                                     sort_key_idxes, _tablet_schema->num_key_columns())) {
             _partial_schema_with_sort_key_conflict = true;
         }
         if (!_opt.merge_condition.empty()) {
