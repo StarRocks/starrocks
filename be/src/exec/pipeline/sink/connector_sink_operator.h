@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "connector_sink/connector_chunk_sink.h"
+#include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "fs/fs.h"

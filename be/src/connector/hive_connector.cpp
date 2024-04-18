@@ -16,7 +16,6 @@
 
 #include <filesystem>
 
-#include "connector_sink/hive_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -24,6 +23,7 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
+#include "hive_chunk_sink.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
