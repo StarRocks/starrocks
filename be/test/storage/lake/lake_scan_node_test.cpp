@@ -226,7 +226,7 @@ TEST_F(LakeScanNodeTest, test_issue_44386) {
 
     int pipeline_dop = 3;
     config::tablet_internal_parallel_min_scan_dop = 4;
-    auto tablet_metas = std::vector<TabletMetadata*>{ new_tablet_metadata.get(), _tablet_metadata.get() };
+    auto tablet_metas = std::vector<TabletMetadata*>{new_tablet_metadata.get(), _tablet_metadata.get()};
     auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
     config::tablet_internal_parallel_min_scan_dop = 4;
     ASSIGN_OR_ABORT(auto morsel_queue_factory,
