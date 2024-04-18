@@ -48,6 +48,7 @@ message ImmutableIndexShardMetaPB {
     uint64 nbucket = 6;
     uint64 data_size = 7;
     uint64 uncompressed_size = 8; // if uncompressed_size is 0, which means no compression
+    uint64 page_size = 9; // if page size is 0, which means no compression, should initialize to 4096
 }
 
 message ShardInfoPB {
