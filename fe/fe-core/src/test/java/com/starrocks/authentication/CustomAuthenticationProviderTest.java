@@ -54,6 +54,7 @@ public class CustomAuthenticationProviderTest {
         } catch (AuthenticationException ex) {
             Assert.assertTrue(ex.getMessage().contains("Login error"));
         }
+        
 
     }
 
