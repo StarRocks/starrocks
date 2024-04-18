@@ -541,9 +541,9 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
      * 2. partition prune
      * 3. bucket prune
      */
-    public OptExpression doPostAfterRewrite(OptimizerContext optimizerContext,
-                                            MvRewriteContext mvRewriteContext,
-                                            OptExpression candidate) {
+    public OptExpression postRewrite(OptimizerContext optimizerContext,
+                                     MvRewriteContext mvRewriteContext,
+                                     OptExpression candidate) {
         if (candidate == null) {
             return null;
         }
