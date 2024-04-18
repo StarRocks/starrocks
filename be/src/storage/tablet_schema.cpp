@@ -375,6 +375,17 @@ std::unique_ptr<TabletSchema> TabletSchema::copy(const std::shared_ptr<const Tab
     return t_ptr;
 }
 
+TabletSchemaCSPtr TabletSchema::copy(const TabletSchemaCSPtr& src_schema, const std::vector<TColumn>& cols) {
+    auto dst_schema = std::make_unique<TabletSchema>();
+    dst_schema->copy_from(src_schema);
+    dst_schema->clear_columns();
+    for (const auto& col : cols) {
+        dst_schema->append_column(TabletColumn(col));
+    }
+    dst_schema->generate_sort_key_idxes();
+    return dst_schema;
+}
+
 void TabletSchema::_fill_index_map(const TabletIndex& index) {
     const auto idx_type = index.index_type();
     if (_index_map_col_unique_id.count(idx_type) <= 0) {

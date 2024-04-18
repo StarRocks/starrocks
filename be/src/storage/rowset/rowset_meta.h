@@ -245,11 +245,6 @@ public:
         }
     }
 
-    void get_tablet_schema_pb(TabletSchemaPB* tablet_schema_pb) {
-        DCHECK(_schema != nullptr);
-        _schema->to_schema_pb(tablet_schema_pb);
-    }
-
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
         _rowset_meta_pb->clear_tablet_schema();
         TabletSchemaPB ts_pb;
@@ -257,6 +252,8 @@ public:
         if (ts_pb.has_id() && ts_pb.id() != TabletSchema::invalid_id()) {
             _schema = GlobalTabletSchemaMap::Instance()->emplace(ts_pb).first;
         } else {
+            // Only for compatible, in very old versions, there is no schema id.
+            // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
             _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
         }
         _has_tablet_schema_pb = true;
