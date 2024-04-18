@@ -18,6 +18,7 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
@@ -26,6 +27,8 @@ import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.connector.metadata.MetadataTableName;
+import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -51,6 +54,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.metadata.MetadataTableType.LOGICAL_ICEBERG_METADATA;
 
 public class MetadataMgrTest {
     @BeforeClass
@@ -259,6 +263,7 @@ public class MetadataMgrTest {
 
         createTableStmt.setIfNotExists();
         Assert.assertFalse(metadataMgr.createTable(createTableStmt));
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 
     @Test
@@ -417,5 +422,38 @@ public class MetadataMgrTest {
     public void testGetPrunedPartition() {
         MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1);
+    }
+
+    @Test
+    public void testGetMetadataTable() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        com.starrocks.catalog.Table table = metadataMgr.getTable("iceberg_catalog", "iceberg_db", "t1$logical_iceberg_metadata");
+        Assert.assertTrue(table instanceof LogicalIcebergMetadataTable);
+        LogicalIcebergMetadataTable metadataTable = (LogicalIcebergMetadataTable) table;
+        Assert.assertEquals("iceberg_db", metadataTable.getOriginDb());
+        Assert.assertEquals("t1", metadataTable.getOriginTable());
+        Assert.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTable.getMetadataTableType());
+        Assert.assertTrue(metadataTable.isSupported());
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
+    public void testMetadataTableName() {
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid metadata table name",
+                () -> MetadataTableName.from("aaabbb&aaa"));
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid metadata table name",
+                () -> MetadataTableName.from("table$unknown_type"));
+
+        MetadataTableName metadataTableName = MetadataTableName.from("iceberg_table$logical_iceberg_metadata");
+        Assert.assertEquals("iceberg_table", metadataTableName.getTableName());
+        Assert.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTableName.getTableType());
+        Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.getTableNameWithType());
+        Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.toString());
     }
 }

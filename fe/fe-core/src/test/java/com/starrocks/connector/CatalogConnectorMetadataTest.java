@@ -21,6 +21,7 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import mockit.Expectations;
@@ -38,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class CatalogConnectorMetadataTest {
 
     private final InformationSchemaMetadata informationSchemaMetadata = new InformationSchemaMetadata("test_catalog");
+    private final TableMetaMetadata metaMetadata = new TableMetaMetadata("test_catalog");
 
     @Test
     void testListDbNames(@Mocked ConnectorMetadata connectorMetadata) {
@@ -51,7 +53,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         List<String> dbNames = catalogConnectorMetadata.listDbNames();
@@ -71,7 +74,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         List<String> tblNames = catalogConnectorMetadata.listTableNames(InfoSchemaDb.DATABASE_NAME);
@@ -99,7 +103,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         Database db = catalogConnectorMetadata.getDb("test_db");
@@ -119,7 +124,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         assertTrue(catalogConnectorMetadata.dbExists("test_db"));
@@ -144,7 +150,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         Table table = catalogConnectorMetadata.getTable("test_db", "test_tbl");
@@ -193,7 +200,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         catalogConnectorMetadata.clear();

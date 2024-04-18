@@ -43,6 +43,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.server.CatalogMgr;
@@ -178,8 +179,8 @@ public class MockedBase {
         when(globalStateMgr.getCatalogMgr()).thenReturn(catalogMgr);
         when(globalStateMgr.getConnectorMgr()).thenReturn(connectorMgr);
         when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
-        when(connectorMgr.getConnector(anyString())).thenReturn(
-                new CatalogConnector(odpsConnector, new InformationSchemaConnector("catalog")));
+        when(connectorMgr.getConnector(anyString())).thenReturn(new CatalogConnector(
+                odpsConnector, new InformationSchemaConnector("catalog"), new TableMetaConnector("catalog")));
         when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
 
         RemoteFileInfo fileInfo = new RemoteFileInfo();
