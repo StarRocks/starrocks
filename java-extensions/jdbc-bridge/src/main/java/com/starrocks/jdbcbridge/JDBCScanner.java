@@ -29,14 +29,16 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
-
 
 public class JDBCScanner {
     private String driverLocation;
@@ -51,7 +53,6 @@ public class JDBCScanner {
     private int resultNumRows = 0;
     ClassLoader classLoader;
 
-
     public JDBCScanner(String driverLocation, JDBCScanContext scanContext) {
         this.driverLocation = driverLocation;
         this.scanContext = scanContext;
@@ -61,9 +62,7 @@ public class JDBCScanner {
         String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
         URL driverURL = new File(driverLocation).toURI().toURL();
         DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(key, () -> {
-            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {
-                    driverURL,
-            });
+            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
             Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
@@ -84,7 +83,8 @@ public class JDBCScanner {
 
         connection = dataSource.getConnection();
         connection.setAutoCommit(false);
-        statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+        statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY,
+                ResultSet.CONCUR_READ_ONLY);
         if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {
             statement.setFetchSize(Integer.MIN_VALUE);
         } else {
@@ -100,30 +100,34 @@ public class JDBCScanner {
             Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
             if (isGeneralJDBCClassType(clazz)) {
                 resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
+            } else if (null != mapEngineSpecificClassType(clazz)) {
+                Class targetClass = mapEngineSpecificClassType(clazz);
+                resultChunk.add((Object[]) Array.newInstance(targetClass, scanContext.getStatementFetchSize()));
             } else {
                 resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
             }
         }
     }
 
-    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET =  new HashSet<>(Arrays.asList(
-            Boolean.class,
-            Short.class,
-            Integer.class,
-            Long.class,
-            Float.class,
-            Double.class,
-            BigInteger.class,
-            BigDecimal.class,
-            java.sql.Date.class,
-            Timestamp.class,
-            LocalDateTime.class,
-            Time.class,
-            String.class
-    ));
+    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
+            Arrays.asList(Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class,
+                    BigInteger.class, BigDecimal.class, java.sql.Date.class, Timestamp.class, LocalDate.class,
+                    LocalDateTime.class, Time.class, String.class));
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
+    }
+
+    private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
+            put("com.clickhouse.data.value.UnsignedByte", Short.class);
+            put("com.clickhouse.data.value.UnsignedShort", Integer.class);
+            put("com.clickhouse.data.value.UnsignedInteger", Long.class);
+            put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
+        }};
+
+    private Class mapEngineSpecificClassType(Class<?> clazz) {
+        String className = clazz.getName();
+        return ENGINE_SPECIFIC_CLASS_MAPPING.get(className);
     }
 
     // used for cpp interface
@@ -165,8 +169,12 @@ public class JDBCScanner {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
                 } else if (!(dataColumn instanceof String[])) {
-                    // for other general class type, assign value directly
-                    dataColumn[resultNumRows] = resultObject;
+                    if (dataColumn instanceof BigInteger[] && resultObject instanceof Number) {
+                        dataColumn[resultNumRows] = new BigInteger(resultObject.toString());
+                    } else {
+                        // for other general class type, assign value directly
+                        dataColumn[resultNumRows] = resultObject;
+                    }
                 } else {
                     // for non-general class type, use string representation
                     dataColumn[resultNumRows] = resultSet.getString(i + 1);
@@ -180,7 +188,6 @@ public class JDBCScanner {
     public int getResultNumRows() {
         return resultNumRows;
     }
-
 
     public void close() throws Exception {
         if (resultSet != null) {
