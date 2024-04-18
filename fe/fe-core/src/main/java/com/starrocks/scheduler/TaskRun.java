@@ -268,20 +268,17 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
+        long created = createTime == null ? System.currentTimeMillis() : createTime;
         status.setQueryId(queryId);
         status.setTaskId(task.getId());
         status.setTaskName(task.getName());
         status.setSource(task.getSource());
-        if (createTime == null) {
-            status.setCreateTime(System.currentTimeMillis());
-        } else {
-            status.setCreateTime(createTime);
-        }
+        status.setCreateTime(created);
         status.setUser(task.getCreateUser());
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         status.setPostRun(task.getPostRun());
-        status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
+        status.setExpireTime(created + Config.task_runs_ttl_second * 1000L);
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
         this.status = status;
