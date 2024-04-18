@@ -4,6 +4,7 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+<!--
 ## 3.2.6
 
 Release date: April 16, 2024
@@ -14,7 +15,11 @@ Fixed the following issue:
 
 - The privileges of external tables cannot be found due to incompatibility issues. [#44030](https://github.com/StarRocks/starrocks/pull/44030)
 
+-->
+
 ## 3.2.5 (Deprecated)
+
+Release date: April 12, 2024
 
 :::tip
 
@@ -27,8 +32,6 @@ This version has been taken offline due to privilege issues in querying external
 - **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.1.11, users can run `REVOKE` to remove one of the privilege entries.
 
 :::
-
-Release date: April 12, 2024
 
 ### New Features
 
@@ -60,9 +63,21 @@ Fixed the following issues:
 - CNs crash when the Cross-cluster Data Migration Tool is used to migrate Primary Key tables to a shared-data cluster. [#42260](https://github.com/StarRocks/starrocks/pull/42260)
 - The partition ranges of the external catalog-based asynchronous materialized views are not consecutive. [#41957](https://github.com/StarRocks/starrocks/pull/41957)
 
-## 3.2.4
+## 3.2.4 (Deprecated)
 
 Release date: March 12, 2024
+
+:::tip
+
+This version has been taken offline due to privilege issues in querying external tables in external catalogs such as Hive and Iceberg.
+
+- **Problem**: When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege.
+
+- **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
+
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.1.11, users can run `REVOKE` to remove one of the privilege entries.
+
+:::
 
 ### New Features
 
