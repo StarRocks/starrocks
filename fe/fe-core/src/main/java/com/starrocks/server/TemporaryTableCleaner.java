@@ -66,8 +66,9 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
                 TListSessionsResponse response = FrontendServiceProxy.call(
                         thriftAddress, Config.thrift_rpc_timeout_ms, Config.thrift_rpc_retry_times,
                         client -> client.listSessions(request));
-                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
-                    throw new Exception("response status is not ok: " + response.getStatus().getStatus_code());
+                if (response.getStatus() == null || response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    throw new Exception("response status is not ok: " +
+                            (response.getStatus() == null ? "NULL" : response.getStatus().getStatus_code()));
                 }
                 if (response.getSessions() != null) {
                     List<TSessionInfo> sessions = response.getSessions();

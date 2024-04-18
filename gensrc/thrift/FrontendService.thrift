@@ -1740,7 +1740,7 @@ struct TListSessionsOptions {
 }
 
 struct TListSessionsRequest {
-    1: required TListSessionsOptions options;
+    1: optional TListSessionsOptions options;
 }
 
 struct TSessionInfo {
@@ -1748,7 +1748,7 @@ struct TSessionInfo {
 }
 
 struct TListSessionsResponse {
-    1: required Status.TStatus status;
+    1: optional Status.TStatus status;
     2: optional list<TSessionInfo> sessions;
 }
 
