@@ -22,6 +22,16 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
 Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](../loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
+## 准备工作
+
+### 查看权限
+
+导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
+### 查看网络配置
+
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/Configuration.md) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/Configuration.md) 端口（默认 `8040`）。
+
 ## 使用 Stream Load 从本地导入
 
 Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
