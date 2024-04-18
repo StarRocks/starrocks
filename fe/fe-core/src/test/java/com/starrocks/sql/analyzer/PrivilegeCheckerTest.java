@@ -2945,6 +2945,47 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testRoleCaseSensitive() throws Exception {
+        String sql = "create role Root";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "create user testRoot";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "create user testRoot2";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        String grantSql = "grant user_admin to testRoot";
+        stmt = UtFrameUtils.parseStmtWithNewParser(grantSql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("testRoot", "%"));
+        starRocksAssert.getCtx().setCurrentRoleIds(starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr()
+                .getRoleIdsByUser(new UserIdentity("testRoot", "%")));
+        starRocksAssert.getCtx().setQualifiedUser("testRoot");
+
+        Authorizer.check(UtFrameUtils.parseStmtWithNewParser(
+                "grant Root to testRoot2", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        Authorizer.check(UtFrameUtils.parseStmtWithNewParser(
+                "revoke Root from testRoot2", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        sql = "drop role Root";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "drop user testRoot";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "drop user testRoot2";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+    }
+
+    @Test
     public void testSetDefaultRole() throws Exception {
         String sql = "create role r1, r2";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
