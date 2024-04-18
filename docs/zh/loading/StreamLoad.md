@@ -5,8 +5,6 @@ keywords: ['Stream Load']
 
 # 从本地文件系统导入
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
-
 StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
 - 使用 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 进行同步导入。
@@ -28,7 +26,7 @@ Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及�
 
 ### 查看权限
 
-<InsertPrivNote />
+导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ### 查看网络配置
 
