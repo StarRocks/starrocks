@@ -28,15 +28,15 @@ elseif (DEFINED ENV{STARROCKS_GCC_HOME})
 elseif (DEFINED ENV{STARROCKS_LLVM_HOME})
     set(CMAKE_C_COMPILER "$ENV{STARROCKS_LLVM_HOME}/bin/clang")
     set(CMAKE_CXX_COMPILER "$ENV{STARROCKS_LLVM_HOME}/bin/clang++")
-else ()
+else()
     message(FATAL_ERROR "STARROCKS_GCC_HOME environment variable is not set")
-endif ()
+endif()
 
 # disable pkgconfig searching libraries, all libraries are static imported
 set(CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON)
 # Workaround error of `Unknown CMake command "pkg_check_modules".'`
 # refer to: https://gitlab.kitware.com/cmake/cmake/-/issues/17043
-macro(pkg_check_modules)
+macro( pkg_check_modules )
 endmacro()
 
 project(starrocks CXX C)
@@ -44,7 +44,7 @@ project(starrocks CXX C)
 # set CMAKE_BUILD_TYPE
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RELEASE)
-endif ()
+endif()
 
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE)
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
@@ -71,9 +71,9 @@ set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
 if (APPLE)
     set(MAKE_TEST "ON")
-else ()
+else()
     option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
-endif ()
+endif()
 message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
@@ -98,21 +98,21 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
         message(FATAL_ERROR "Need GCC version at least 4.8.2")
-    endif ()
+    endif()
 
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "10.3.0")
         message(STATUS "GCC version ${CMAKE_CXX_COMPILER_VERSION} is greater than 10.3.0, disable -Werror. Be careful with compile warnings.")
-    else ()
+    else()
         #   -Werror: compile warnings should be errors when using the toolchain compiler.
         set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
-    endif ()
+    endif()
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 elseif (NOT APPLE)
     message(FATAL_ERROR "Compiler should be GNU")
-endif ()
+endif()
 
 set(PIC_LIB_PATH "${THIRDPARTY_DIR}")
-if (PIC_LIB_PATH)
+if(PIC_LIB_PATH)
     message(STATUS "defined PIC_LIB_PATH")
     set(CMAKE_SKIP_RPATH TRUE)
     set(Boost_USE_STATIC_LIBS ON)
@@ -120,23 +120,23 @@ if (PIC_LIB_PATH)
     set(LIBBZ2 ${PIC_LIB_PATH}/lib/libbz2.a)
     set(LIBZ ${PIC_LIB_PATH}/lib/libz.a)
     set(LIBEVENT ${PIC_LIB_PATH}/lib/libevent.a)
-else ()
+else()
     message(STATUS "undefined PIC_LIB_PATH")
     set(Boost_USE_STATIC_LIBS ON)
     set(Boost_USE_STATIC_RUNTIME ON)
     set(LIBBZ2 -lbz2)
     set(LIBZ -lz)
     set(LIBEVENT event)
-endif ()
+endif()
 
 
 # Compile generated source if necessary
 message(STATUS "build gensrc if necessary")
 execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
         RESULT_VARIABLE MAKE_GENSRC_RESULT)
-if (NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
+if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
     message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
-endif ()
+endif()
 
 #
 set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
@@ -160,9 +160,9 @@ set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
     find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
-else ()
+else()
     find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context)
-endif ()
+endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 
@@ -171,7 +171,7 @@ set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
 
 if (${JEMALLOC_DEBUG})
     set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc-debug")
-endif ()
+endif()
 
 # Set all libraries
 
@@ -248,10 +248,10 @@ set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(AWS::crypto ALIAS crypto)
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
 set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
-foreach (lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
+foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
-endforeach ()
+endforeach()
 find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
 
@@ -349,7 +349,7 @@ set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/l
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(breakpad STATIC IMPORTED)
     set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
-endif ()
+endif()
 
 add_library(hyperscan STATIC IMPORTED)
 set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
@@ -390,7 +390,7 @@ set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LO
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(libdeflate STATIC IMPORTED GLOBAL)
     set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
-endif ()
+endif()
 
 # cachelib
 set(CACHELIB_DEPENDENCIES
@@ -420,40 +420,40 @@ set(CACHELIB_DEPENDENCIES
 if (${WITH_CACHELIB} STREQUAL "ON")
     LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/libunwind.so)
     LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/liblzma.so)
-    foreach (dep ${CACHELIB_DEPENDENCIES})
+    foreach(dep ${CACHELIB_DEPENDENCIES})
         add_library(${dep} STATIC IMPORTED)
         set(location "${THIRDPARTY_DIR}/cachelib/lib/lib${dep}.a")
-        if (NOT EXISTS ${location})
+        if(NOT EXISTS ${location})
             set(location "${THIRDPARTY_DIR}/cachelib/lib64/lib${dep}.a")
-        endif ()
+        endif()
         set_target_properties(${dep} PROPERTIES IMPORTED_LOCATION "${location}")
         message(STATUS "add cachelib dependency: ${location}")
-    endforeach ()
-endif ()
+    endforeach()
+endif()
 
 if (${WITH_STARCACHE} STREQUAL "ON")
     add_library(starcache STATIC IMPORTED GLOBAL)
     if ("${USE_STAROS}" STREQUAL "ON")
         set(STARCACHE_DIR "${STARLET_INSTALL_DIR}/starlet_install")
-    else ()
+    else()
         set(STARCACHE_DIR "${THIRDPARTY_DIR}/starcache")
-    endif ()
+    endif()
     set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${STARCACHE_DIR}/lib/libstarcache.a)
     include_directories(SYSTEM ${STARCACHE_DIR}/include)
     message(STATUS "link the starcache in directory: ${STARCACHE_DIR}")
-endif ()
+endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
     if (DEFINED ENV{STARLET_INSTALL_DIR})
         set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
-    else ()
+    else()
         set(STARLET_INSTALL_DIR "${THIRDPARTY_DIR}/starlet")
-    endif ()
+    endif()
     if (NOT EXISTS ${STARLET_INSTALL_DIR})
         message(FATAL_ERROR "Starlet thirdparty directory ${STARLET_INSTALL_DIR} not exist!")
-    else ()
+    else()
         message(STATUS "Searching starlet related libraries from ${STARLET_INSTALL_DIR} ...")
-    endif ()
+    endif()
 
     # explicitly import ZLIB::ZLIB which is required by starlet thirdparty
     add_library(ZLIB::ZLIB STATIC IMPORTED)
@@ -491,7 +491,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
     set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
-    find_package(prometheus-cpp CONFIG REQUIRED)
+    find_package (prometheus-cpp CONFIG REQUIRED)
     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
     message(STATUS "Using prometheus-cpp")
     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
@@ -526,11 +526,11 @@ if ("${USE_STAROS}" STREQUAL "ON")
             starcache
             ${AZURE_SDK_LIB}
     )
-endif ()
+endif()
 
 # LLVM
 # TODO(yueyang): Adjust libraries during the implementation of JIT.
-set(LLVM_LIBRARIES
+set (LLVM_LIBRARIES
         LLVMRuntimeDyld
         LLVMBitstreamReader
         LLVMOption
@@ -583,12 +583,12 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info LLVMX86AsmParser LLVMX86Disassembler)
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     list(APPEND LLVM_LIBRARIES LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info LLVMAArch64Utils LLVMAArch64AsmParser LLVMAArch64Disassembler)
-endif ()
+endif()
 
-foreach (lib IN ITEMS ${LLVM_LIBRARIES})
+foreach(lib IN ITEMS ${LLVM_LIBRARIES})
     add_library(${lib} STATIC IMPORTED GLOBAL)
     set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
-endforeach ()
+endforeach()
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
@@ -631,7 +631,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # there are too many warnings reported by clang in be/test and it will take some time to fix.
         # temporarily disable Werror in the unit test so that clang can compile.
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror")
-    endif ()
+    endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
@@ -639,12 +639,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=delete-non-virtual-dtor")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
-    endif ()
+    endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-documentation-unknown-command -Wno-old-style-cast")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++20-designator -Wno-mismatched-tags")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical -Wno-inconsistent-missing-override -Wno-ambiguous-reversed-operator")
-    endif ()
+    endif()
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
@@ -653,51 +653,51 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     endif ()
 else ()
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
-endif ()
+endif()
 
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_SYSTEM_NO_DEPRECATED -DBOOST_UUID_RANDOM_PROVIDER_FORCE_POSIX")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
 if (${USE_STAROS} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
-endif ()
+endif()
 if (${WITH_CACHELIB} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_CACHELIB")
-endif ()
+endif()
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_STARCACHE")
-endif ()
+endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (DEFINED ENV{STARROCKS_GCC_HOME})
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} --gcc-toolchain=$ENV{STARROCKS_GCC_HOME}")
-    else ()
+    else()
         message(WARNING "STARROCKS_GCC_HOME evnironment variable is not set, ")
-    endif ()
-endif ()
+    endif()
+endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     if (${USE_SSE4_2})
         # the compiler will define __SSE4_2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2")
-    endif ()
+    endif()
     if (${USE_AVX2})
         # the compiler will define __AVX2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
-    endif ()
+    endif()
     if (${USE_AVX512})
         # the compiler will define __AVX512F__ __AVX512BW__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
-    endif ()
+    endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
-endif ()
+endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
-endif ()
+endif()
 
 # For any gcc builds:
 #   -g: Enable symbols for profiler tools
@@ -707,22 +707,22 @@ set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -g -Wno-unused-local-typedefs")
 if (WITH_GCOV)
     # To generate flags to code coverage
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
-endif ()
+endif()
 
 if (WITH_COMPRESS)
     # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
-endif ()
+endif()
 
 if (ENABLE_QUERY_DEBUG_TRACE)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
     message(STATUS "enable query debug trace")
-endif ()
+endif()
 
 if (ENABLE_FAULT_INJECTION)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
     message(STATUS "enable fault injection")
-endif ()
+endif()
 
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
@@ -765,9 +765,9 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     SET(CMAKE_CXX_FLAGS "${CXX_FLAGS_UBSAN}")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     SET(CMAKE_CXX_FLAGS "${CXX_FLAGS_TSAN}")
-else ()
+else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
-endif ()
+endif()
 
 # Add flags that are common across build types
 SET(CMAKE_CXX_FLAGS "${CXX_COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
@@ -797,7 +797,7 @@ include_directories(
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     include_directories(${THIRDPARTY_DIR}/include/breakpad/)
-endif ()
+endif()
 
 set(WL_START_GROUP "-Wl,--start-group")
 set(WL_END_GROUP "-Wl,--end-group")
@@ -932,7 +932,7 @@ if (${WITH_CACHELIB} STREQUAL "ON")
             ${CACHELIB_DEPENDENCIES}
             ${WL_END_GROUP}
     )
-endif ()
+endif()
 
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
@@ -942,7 +942,7 @@ if (${WITH_STARCACHE} STREQUAL "ON")
             starcache
             ${WL_END_GROUP}
     )
-endif ()
+endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     set(STARROCKS_DEPENDENCIES
@@ -950,7 +950,7 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
             breakpad
             libdeflate
     )
-endif ()
+endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
 # static link gcc's lib
@@ -968,9 +968,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
-    else ()
+    else()
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
-    endif ()
+    endif()
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
@@ -978,9 +978,9 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
-else ()
+else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
-endif ()
+endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
         -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
@@ -989,10 +989,10 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
 # link gcov if WITH_GCOV is on
 if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -lgcov)
-endif ()
+endif()
 
 # Set libraries for test
-set(TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
         ${WL_START_GROUP}
         gmock
         gtest
@@ -1010,7 +1010,7 @@ if (${MAKE_TEST} STREQUAL "ON")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")
     add_definitions(-DBE_TEST)
     add_definitions(-DFIU_ENABLE)
-else ()
+else()
     # output *.a, *.so, *.dylib to output/tmp
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
@@ -1031,7 +1031,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
-    endif ()
+    endif()
     ADD_TEST(${TEST_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_NAME}")
 ENDFUNCTION()
 
@@ -1053,7 +1053,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_OUTPUT_DIR_NAME}")
-    endif ()
+    endif()
     ADD_TEST(${BENCH_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_NAME}")
 ENDFUNCTION()
 
@@ -1086,7 +1086,7 @@ add_subdirectory(${SRC_DIR}/script)
 if (WITH_BENCH STREQUAL "ON")
     message(STATUS "Build binary with bench")
     add_subdirectory(${SRC_DIR}/bench)
-endif ()
+endif()
 
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
@@ -1126,7 +1126,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSA
     install(FILES
             ${BASE_DIR}/../conf/asan_suppressions.conf
             DESTINATION ${OUTPUT_DIR}/conf)
-endif ()
+endif()
 
 install(DIRECTORY
         ${BASE_DIR}/../webroot/be/
