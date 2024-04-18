@@ -62,12 +62,10 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -1329,7 +1327,7 @@ public class MaterializedViewRewriter {
                 if (optimizerContext.getSessionVariable().getQueryDebugOptions().isEnableNormalizePredicateAfterMVRewrite()) {
                     normalizedPredicate = MvUtils.canonizePredicateForRewrite(queryMaterializationContext, normalizedPredicate);
                 }
-                mvScanOptExpression = addExtraPredicate(mvScanOptExpression, normalizedPredicate);
+                mvScanOptExpression = MvUtils.addExtraPredicate(mvScanOptExpression, normalizedPredicate);
 
                 mvScanOptExpression.setLogicalProperty(null);
                 deriveLogicalProperty(mvScanOptExpression);
@@ -2194,32 +2192,11 @@ public class MaterializedViewRewriter {
 
         // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            result = addExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
+            result = MvUtils.addExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
 
         deriveLogicalProperty(result);
         return result;
-    }
-
-    protected OptExpression addExtraPredicate(OptExpression result,
-                                              ScalarOperator extraPredicate) {
-        Operator op = result.getOp();
-        if (op instanceof LogicalSetOperator) {
-            LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
-            // use PUSH_DOWN_PREDICATE rule to push down filter after union all set after mv rewrite rule.
-            return OptExpression.create(filter, result);
-        } else {
-            // If op is aggregate operator, use setPredicate directly.
-            ScalarOperator origPredicate = op.getPredicate();
-            if (op.getProjection() != null) {
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
-                ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
-                op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
-            } else {
-                op.setPredicate(Utils.compoundAnd(origPredicate, extraPredicate));
-            }
-            return result;
-        }
     }
 
     protected EquationRewriter buildEquationRewriter(
