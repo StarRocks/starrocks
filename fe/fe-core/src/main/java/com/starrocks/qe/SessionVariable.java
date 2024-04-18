@@ -710,8 +710,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String CONNECTOR_MAX_SPLIT_SIZE = "connector_max_split_size";
 
-    public static final String CONNECTOR_SHUFFLE_SEED = "connector_shuffle_seed";
-
     /**
      * BE can split file of some specific formats, so FE don't need to split at all.
      * But if a file is very huge, we still want FE to split them to more BEs.
@@ -1837,9 +1835,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CONNECTOR_MAX_SPLIT_SIZE)
     private long connectorMaxSplitSize = 64L * 1024L * 1024L;
-
-    @VarAttr(name = CONNECTOR_SHUFFLE_SEED)
-    public long connectorShuffleSeed = 42;
 
     @VarAttr(name = CONNECTOR_HUGE_FILE_SIZE)
     private long connectorHugeFileSize = 1024L * 1024L * 1024L;

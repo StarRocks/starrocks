@@ -56,7 +56,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Random;
 
 public class RemoteScanRangeLocations {
     private static final Logger LOG = LogManager.getLogger(RemoteScanRangeLocations.class);
@@ -409,14 +408,7 @@ public class RemoteScanRangeLocations {
         // encounter very bad cases (scan ranges that meet the predicate conditions are in the later partitions),
         // making BE have to scan more data to find rows that meet the conditions.
         // So shuffle scan ranges can naturally disrupt the scan ranges' order to avoid very bad cases.
-        long seed = 42;
-        ConnectContext ctx = ConnectContext.get();
-        if (ctx != null) {
-            seed = ctx.getSessionVariable().connectorShuffleSeed;
-        }
-        LOG.info("[xxx] table name = " + table.getName() + ", running with seed = " + seed);
-        Random rnd = new Random(seed);
-        Collections.shuffle(result, rnd);
+        Collections.shuffle(result);
 
         LOG.debug("Get {} scan range locations cost: {} ms",
                 getScanRangeLocationsSize(), (System.currentTimeMillis() - start));
