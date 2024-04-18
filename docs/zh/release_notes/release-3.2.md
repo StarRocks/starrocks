@@ -4,6 +4,7 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+<!--
 ## 3.2.6
 
 发布日期：2024 年 4 月 16 日
@@ -14,7 +15,11 @@ displayed_sidebar: "Chinese"
 
 - 外表权限丢失。[#44030](https://github.com/StarRocks/starrocks/pull/44030)
 
+-->
+
 ## 3.2.5 (已下线)
+
+发布日期：2024 年 4 月 12 日
 
 :::tip
 
@@ -25,8 +30,6 @@ displayed_sidebar: "Chinese"
 - 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.1.11 后，通过 `REVOKE` 操作删除其中一条即可。
 
 :::
-
-发布日期：2024 年 4 月 12 日
 
 ### 新增特性
 
@@ -58,9 +61,19 @@ displayed_sidebar: "Chinese"
 - 跨集群同步工具在迁移主键表到存算分离集群时 CN Crash。[#42260](https://github.com/StarRocks/starrocks/pull/42260)
 - 外表物化视图范围分区不连续。[#41957](https://github.com/StarRocks/starrocks/pull/41957)
 
-## 3.2.4
+## 3.2.4 (已下线)
 
 发布日期：2024 年 3 月 12 日
+
+:::tip
+
+此版本因存在 Hive/Iceberg catalog 等外表权限相关问题已经下线。
+
+- 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
+- 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.1.11 后，通过 `REVOKE` 操作删除其中一条即可。
+
+:::
 
 ### 新增特性
 
