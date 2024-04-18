@@ -27,7 +27,7 @@ displayed_sidebar: "Chinese"
 
 - 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
 - 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
-- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.1.11 后，通过 `REVOKE` 操作删除其中一条即可。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。<!--但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.1.11 后，通过 `REVOKE` 操作删除其中一条即可。-->
 
 :::
 
@@ -71,7 +71,7 @@ displayed_sidebar: "Chinese"
 
 - 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
 - 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
-- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.1.11 后，通过 `REVOKE` 操作删除其中一条即可。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。<!--但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.1.11 后，通过 `REVOKE` 操作删除其中一条即可。-->
 
 :::
 
