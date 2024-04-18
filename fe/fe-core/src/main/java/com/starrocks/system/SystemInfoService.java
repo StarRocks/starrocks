@@ -956,7 +956,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
-                    LOG.info("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
                 } else {
                     LOG.warn("failed to update backend report version, db {} does not exist", dbId);
                 }
