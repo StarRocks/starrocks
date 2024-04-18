@@ -556,11 +556,6 @@ private:
                     // DCHECK_EQ(column->is_nullable(), to_nullable);
                     (*chunk)->append_column(std::move(column), slot->id());
                 }
-            } else {
-                ColumnPtr default_column =
-                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
-                default_column->append_default(_probe_state->count);
-                (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
     }
@@ -582,11 +577,6 @@ private:
                 ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
                 dest_column->append_nulls(_probe_state->count);
                 (*chunk)->append_column(std::move(dest_column), slot->id());
-            } else {
-                ColumnPtr default_column =
-                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
-                default_column->append_default(_probe_state->count);
-                (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
     }
