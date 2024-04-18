@@ -81,10 +81,10 @@
 /thirdparty/  @StarRocks/thirdparty-maintainer
 /docker/dockerfiles/dev-env/dev-env.Dockerfile   @StarRocks/thirdparty-maintainer
 
-# cloud-native
-/be/src/storage/lake/ @StarRocks/cloud-native
-/be/src/runtime/lake_tablets_channel.h @StarRocks/cloud-native
-/be/src/runtime/lake_tablets_channel.cpp @StarRocks/cloud-native
+# cloud native
+/be/src/storage/lake/ @StarRocks/cloud-native-maintainer
+/be/src/runtime/lake_tablets_channel.h @StarRocks/cloud-native-maintainer
+/be/src/runtime/lake_tablets_channel.cpp @StarRocks/cloud-native-maintainer
 
 # error message
 /fe/fe-core/src/main/java/com/starrocks/common/ErrorCode.java  @StarRocks/msg-reviewer
