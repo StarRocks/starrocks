@@ -350,7 +350,7 @@ public class NativeAccessController implements AccessController {
                 throw new AccessDeniedException();
             }
         } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on {} {}, message: {}",
+            LOG.debug("Object not found when checking any action on {} {}, message: {}",
                     objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on {} {}",
