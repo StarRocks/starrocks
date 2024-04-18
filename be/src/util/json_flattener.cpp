@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -315,7 +316,7 @@ void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* r
     }
 
     // output
-    std::vector<int> flat_hit(_flat_paths.size(), -1);
+    DCHECK_LE(_flat_paths.size(), std::numeric_limits<int>::max());
     for (size_t row = 0; row < json_column->size(); row++) {
         if (json_column->is_null(row)) {
             for (size_t k = 0; k < result->size(); k++) {
@@ -333,9 +334,8 @@ void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* r
             continue;
         }
 
-        size_t hit = _flat_paths.size();
+        uint32_t flat_hit = (1 << _flat_paths.size()) - 1;
         vpack::ObjectIterator iter(vslice);
-
         for (const auto& it : iter) {
             std::string_view path = it.key.stringView();
             auto iter = _flat_index.find(std::string(path));
@@ -344,26 +344,32 @@ void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* r
                 uint8_t type = _flat_types[index];
                 auto func = JSON_BITS_FUNC.at(type);
                 func(&it.value, flat_jsons[index]);
-                flat_hit[index]++;
-                hit--;
+                flat_hit ^= (1 << index);
             }
 
-            if (hit == 0) {
+            if (flat_hit == 0) {
                 break;
             }
         }
 
-        if (UNLIKELY(hit > 0)) {
-            for (size_t k = 0; k < flat_hit.size() && hit > 0; k++) {
-                if (flat_hit[k] != row) {
+        if (UNLIKELY(flat_hit > 0)) {
+            for (size_t k = 0; k < _flat_paths.size() && flat_hit > 0; k++) {
+                if (flat_hit & (1 << k)) {
                     flat_jsons[k]->append_nulls(1);
-                    flat_hit[k]++;
-                    hit--;
-                    DCHECK_EQ(flat_hit[k], row);
+                    flat_hit ^= (1 << k);
                 }
             }
         }
+
+        for (auto col : flat_jsons) {
+            DCHECK_EQ(col->size(), row + 1);
+        }
     }
+
+    for (auto col : flat_jsons) {
+        DCHECK_EQ(col->size(), json_column->size());
+    }
+
     for (auto& col : *result) {
         down_cast<NullableColumn*>(col.get())->update_has_null();
     }

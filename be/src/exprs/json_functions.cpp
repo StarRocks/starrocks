@@ -438,7 +438,7 @@ Status JsonFunctions::native_json_path_prepare(FunctionContext* context, Functio
 
 Status JsonFunctions::native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<NativeJsonState*>(context->get_function_state(scope));
         delete state;
     }
     return Status::OK();
