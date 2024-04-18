@@ -49,17 +49,12 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
 
-    auto tablet_schema_ptr = _tablet->tablet_schema();
-    _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
-
     // if column_desc come from fe, reset tablet schema
     if (_parent->_olap_scan_node.__isset.columns_desc && !_parent->_olap_scan_node.columns_desc.empty() &&
         _parent->_olap_scan_node.columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema->clear_columns();
-        for (const auto& column_desc : _parent->_olap_scan_node.columns_desc) {
-            _tablet_schema->append_column(TabletColumn(column_desc));
-        }
-        _tablet_schema->generate_sort_key_idxes();
+        _tablet_schema = TabletSchema::copy(_tablet->tablet_schema(), _parent->_olap_scan_node.columns_desc);
+    } else {
+        _tablet_schema = _tablet->tablet_schema();
     }
 
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));

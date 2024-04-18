@@ -412,18 +412,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
-    auto tablet_schema_ptr = _tablet->tablet_schema();
-    _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
-
     // if column_desc come from fe, reset tablet schema
     if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
         !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
         _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema->clear_columns();
-        for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
-            _tablet_schema->append_column(TabletColumn(column_desc));
-        }
-        _tablet_schema->generate_sort_key_idxes();
+        _tablet_schema = TabletSchema::copy(_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+    } else {
+        _tablet_schema = _tablet->tablet_schema();
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
