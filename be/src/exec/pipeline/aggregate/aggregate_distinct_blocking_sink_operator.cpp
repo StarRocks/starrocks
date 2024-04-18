@@ -15,6 +15,7 @@
 #include "aggregate_distinct_blocking_sink_operator.h"
 
 #include "runtime/current_thread.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
@@ -33,8 +34,12 @@ void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
 
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
-
-    _is_finished = true;
+    ONCE_DETECT(_set_finishing_once);
+    auto defer = DeferOp([this]() {
+        COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
+        _aggregator->sink_complete();
+        _is_finished = true;
+    });
 
     // skip processing if cancelled
     if (state->is_cancelled()) {
@@ -51,9 +56,6 @@ Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state)
     _aggregator->hash_set_variant().visit(
             [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
 
-    COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-
-    _aggregator->sink_complete();
     return Status::OK();
 }
 
@@ -85,6 +87,7 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
 Status AggregateDistinctBlockingSinkOperator::reset_state(RuntimeState* state,
                                                           const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 } // namespace starrocks::pipeline
