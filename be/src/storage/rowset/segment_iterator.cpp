@@ -1946,7 +1946,7 @@ Status SegmentIterator::_apply_inverted_index() {
             if (!new_cid_to_predicates.contains(cid)) {
                 // predicate for pred->column_id() has been total erased by
                 // inverted index filtering.These columns may can be pruned.
-                _prune_cols_candidate_by_inverted_index.insert(pred->column_id());
+                _prune_cols_candidate_by_inverted_index.insert(cid);
             }
         }
         _cid_to_predicates = std::move(new_cid_to_predicates);
