@@ -198,7 +198,8 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     ASSERT_TRUE(data_source_provider->could_split_physically());
 }
 
-TEST_F(LakeScanNodeTest, test_pr) {
+// test issue https://github.com/StarRocks/starrocks/pull/44386
+TEST_F(LakeScanNodeTest, test_issue_44386) {
     auto new_tablet_metadata = std::make_unique<TabletMetadata>(*_tablet_metadata);
     new_tablet_metadata->set_id(next_id());
 
