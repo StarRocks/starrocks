@@ -116,7 +116,9 @@ struct JoinHashTableItems {
     uint32_t bucket_size = 0;
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
+    size_t output_build_column_count = 0;
     size_t probe_column_count = 0;
+    size_t output_probe_column_count = 0;
     bool with_other_conjunct = false;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
@@ -759,7 +761,9 @@ public:
     Columns& get_key_columns() { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
+    size_t get_output_probe_column_count() const { return _table_items->output_probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
+    size_t get_output_build_column_count() const { return _table_items->output_build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     float get_keys_per_bucket() const;
     void remove_duplicate_index(Filter* filter);

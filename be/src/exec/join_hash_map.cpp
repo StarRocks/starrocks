@@ -346,6 +346,7 @@ void JoinHashTable::create(const HashTableParam& param) {
                 std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
                         param.predicate_slots.end()) {
                 hash_table_slot.need_output = true;
+                _table_items->output_probe_column_count++;
             } else {
                 hash_table_slot.need_output = false;
             }
@@ -366,6 +367,7 @@ void JoinHashTable::create(const HashTableParam& param) {
                                            std::find(param.predicate_slots.begin(), param.predicate_slots.end(),
                                                      slot->id()) != param.predicate_slots.end())) {
                 hash_table_slot.need_output = true;
+                _table_items->output_build_column_count++;
             } else {
                 hash_table_slot.need_output = false;
             }
