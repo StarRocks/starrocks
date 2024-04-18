@@ -27,7 +27,7 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 
 ## 返回值说明
 
-返回值的数据类型 Boolean。
+返回值的数据类型为 Boolean。
 
 ## 示例
 
