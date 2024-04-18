@@ -280,4 +280,31 @@ TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {
     exprContext.close(nullptr);
 }
 
+TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
+    TFunction func;
+    func.__set_fid(60010); // like
+    func.__set_binary_type(TFunctionBinaryType::BUILTIN);
+
+    TExprNode expr_node;
+    expr_node.__set_fn(func);
+    expr_node.__set_opcode(TExprOpcode::ADD);
+    expr_node.__set_child_type(TPrimitiveType::INT);
+    expr_node.__set_node_type(TExprNodeType::BINARY_PRED);
+    expr_node.__set_num_children(2);
+    expr_node.__set_type(gen_type_desc(TPrimitiveType::BOOLEAN));
+
+    VectorizedFunctionCallExpr expr(expr_node);
+    ColumnRef col1(TypeDescriptor::create_varbinary_type(10), 1);
+    ColumnRef col2(TypeDescriptor::create_varbinary_type(10), 2);
+    expr.add_child(&col1);
+    expr.add_child(&col2);
+
+    ExprContext expr_context(&expr);
+    Status st = expr_context.prepare(&_runtime_state);
+    ASSERT_TRUE(st.ok());
+    st = expr_context.open(&_runtime_state);
+    ASSERT_TRUE(st.ok());
+    expr_context.close(&_runtime_state);
+}
+
 } // namespace starrocks
