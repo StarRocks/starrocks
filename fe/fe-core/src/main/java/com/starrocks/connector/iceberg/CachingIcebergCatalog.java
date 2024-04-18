@@ -23,6 +23,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
@@ -36,6 +37,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 
 public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
@@ -218,6 +220,14 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public void invalidateCache(IcebergTableName icebergTableName) {
         tables.invalidate(icebergTableName);
         partitionNames.invalidate(icebergTableName);
+    }
+
+    @Override
+    public StarRocksIcebergTableScan getTableScan(Table table) {
+        return new StarRocksIcebergTableScan(
+                table,
+                table.schema(),
+                newTableScanContext(table));
     }
 
     private CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long maximumSize) {
