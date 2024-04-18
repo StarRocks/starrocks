@@ -1755,6 +1755,21 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
     return Status::OK();
 }
 
+static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
+                                             const std::unordered_set<const ColumnPredicate*>& erased_preds) {
+    PredicateAndNode new_root;
+    PredicateAndNode useless_root;
+    pred_tree.release_root().partition_move(
+            [&](const auto& node_var) {
+                return node_var.visit(overloaded{
+                        [&](const PredicateColumnNode& node) { return !erased_preds.contains(node.col_pred()); },
+                        [&](const auto&) { return true; },
+                });
+            },
+            &new_root, &useless_root);
+    pred_tree = PredicateTree::create(std::move(new_root));
+}
+
 // filter rows by evaluating column predicates using bitmap indexes.
 // upon return, predicates that have been evaluated by bitmap indexes will be removed.
 Status SegmentIterator::_apply_bitmap_index() {
@@ -1844,17 +1859,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     // ---------------------------------------------------------
     // Erase predicates that hit bitmap index.
     // ---------------------------------------------------------
-    PredicateAndNode new_root;
-    PredicateAndNode useless_root;
-    _opts.pred_tree.release_root().partition_move(
-            [&](const auto& node_var) {
-                return node_var.visit(overloaded{
-                        [&](const PredicateColumnNode& node) { return !erased_preds.contains(node.col_pred()); },
-                        [&](const auto&) { return true; },
-                });
-            },
-            &new_root, &useless_root);
-    _opts.pred_tree = PredicateTree::create(std::move(new_root));
+    erase_column_pred_from_pred_tree(_opts.pred_tree, erased_preds);
     _cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
 
     _opts.stats->rows_bitmap_index_filtered += (input_rows - _scan_range.span_size());
@@ -1934,17 +1939,7 @@ Status SegmentIterator::_apply_inverted_index() {
     // Erase predicates that hit inverted index.
     // ---------------------------------------------------------
     if (!erased_preds.empty()) {
-        PredicateAndNode new_root;
-        PredicateAndNode useless_root;
-        _opts.pred_tree.release_root().partition_move(
-                [&](const auto& node_var) {
-                    return node_var.visit(overloaded{
-                            [&](const PredicateColumnNode& node) { return !erased_preds.contains(node.col_pred()); },
-                            [&](const auto&) { return true; },
-                    });
-                },
-                &new_root, &useless_root);
-        _opts.pred_tree = PredicateTree::create(std::move(new_root));
+        erase_column_pred_from_pred_tree(_opts.pred_tree, erased_preds);
 
         auto new_cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
         for (const auto& [cid, _] : _cid_to_predicates) {
