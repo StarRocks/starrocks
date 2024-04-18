@@ -77,10 +77,12 @@ public class CompactionHandler extends AlterHandler {
         if (RunMode.isSharedDataMode()) {
             List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
             for (Partition partition : allPartitions) {
-                PartitionIdentifier partitionIdentifier =
-                        new PartitionIdentifier(database.getId(), olapTable.getId(), partition.getId());
-                CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
-                compactionManager.triggerManualCompaction(partitionIdentifier);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    PartitionIdentifier partitionIdentifier =
+                            new PartitionIdentifier(database.getId(), olapTable.getId(), physicalPartition.getId());
+                    CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
+                    compactionManager.triggerManualCompaction(partitionIdentifier);
+                }
             }
         } else {
             ArrayListMultimap<Long, Long> backendToTablets = ArrayListMultimap.create();

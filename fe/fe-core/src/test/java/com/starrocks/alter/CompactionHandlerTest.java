@@ -18,8 +18,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.compaction.CompactionMgr;
-import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -27,8 +25,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -47,9 +44,6 @@ public class CompactionHandlerTest {
     protected static StarRocksAssert starRocksAssert;
 
     private CompactionHandler compactionHandler = new CompactionHandler();
-
-    @Mocked
-    private CompactionMgr compactionMgr;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -79,68 +73,44 @@ public class CompactionHandlerTest {
         olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
     }
 
-    @Test
-    public void testProcessCompactionClauseWithOnePartitionForLakeTable() {
-        List<String> partitionNames = Arrays.asList("p1");
+    @After
+    public void tearDown() {
+        GlobalStateMgr.getCurrentState().getCompactionMgr().clearPartitions();
+        db.dropTable(olapTable.getName());
+    }
+
+    private void processAlterClauses(List<String> partitionNames, int expectedValue) {
         CompactionClause compactionClause = new CompactionClause(partitionNames, true, null);
         List<AlterClause> alterList = Collections.singletonList(compactionClause);
         try {
-            new Expectations() {
-                {
-                    compactionMgr.triggerManualCompaction((PartitionIdentifier) any);
-                    times = 1;
-                }
-            };
             compactionHandler.process(alterList, db, olapTable);
+            Assert.assertEquals(expectedValue, GlobalStateMgr.getCurrentState().getCompactionMgr().getPartitionStatsCount());
         } catch (UserException e) {
             e.printStackTrace();
             Assert.fail("process should not throw exceptions here");
         }
+    }
+
+    @Test
+    public void testProcessCompactionClauseWithOnePartitionForLakeTable() {
+        processAlterClauses(Collections.singletonList("p1"), 1);
     }
 
     @Test
     public void testProcessCompactionClauseWithTwoPartitionForLakeTable() {
-        List<String> partitionNames = Arrays.asList("p1", "p2");
-        CompactionClause compactionClause = new CompactionClause(partitionNames, true, null);
-        List<AlterClause> alterList = Collections.singletonList(compactionClause);
-        try {
-            new Expectations() {
-                {
-                    compactionMgr.triggerManualCompaction((PartitionIdentifier) any);
-                    times = 2;
-                }
-            };
-            compactionHandler.process(alterList, db, olapTable);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail("process should not throw exceptions here");
-        }
+        processAlterClauses(Arrays.asList("p1", "p2"), 2);
     }
-
 
     @Test
     public void testProcessCompactionClauseWithNoPartitionsForLakeTable() {
-        List<String> partitionNames = Collections.emptyList();
-        CompactionClause compactionClause = new CompactionClause(partitionNames, true, null);
-        List<AlterClause> alterList = Collections.singletonList(compactionClause);
-        try {
-            new Expectations() {
-                {
-                    compactionMgr.triggerManualCompaction((PartitionIdentifier) any);
-                    minTimes = 2;
-                }
-            };
-            compactionHandler.process(alterList, db, olapTable);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail("process should not throw exceptions here");
-        }
+        // compaction should trigger on all partitions
+        processAlterClauses(Collections.emptyList(), 2);
     }
 
     @Test(expected = IllegalStateException.class)
     public void testProcessNonCompactionClause() {
         AlterClause nonCompactionClause = mock(AlterClause.class);
-        List<AlterClause> alterList = Collections.singletonList(nonCompactionClause);
+        List<AlterClause> alterList = Collections.singletonList((nonCompactionClause));
         try {
             compactionHandler.process(alterList, db, olapTable);
         } catch (UserException e) {

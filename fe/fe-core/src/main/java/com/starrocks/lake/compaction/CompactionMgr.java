@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -163,6 +164,11 @@ public class CompactionMgr {
 
     void removePartition(PartitionIdentifier partition) {
         partitionStatisticsHashMap.remove(partition);
+    }
+
+    @VisibleForTesting
+    public void clearPartitions() {
+        partitionStatisticsHashMap.clear();
     }
 
     public long saveCompactionManager(DataOutput out, long checksum) throws IOException {
