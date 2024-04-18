@@ -14,7 +14,6 @@
 
 #include "connector/file_connector.h"
 
-#include "connector_sink/file_chunk_sink.h"
 #include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
@@ -22,6 +21,7 @@
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
 #include "exprs/expr.h"
+#include "file_chunk_sink.h"
 
 namespace starrocks::connector {
 

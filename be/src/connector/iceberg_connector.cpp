@@ -14,7 +14,7 @@
 
 #include "iceberg_connector.h"
 
-#include "connector_sink/iceberg_chunk_sink.h"
+#include "iceberg_chunk_sink.h"
 
 namespace starrocks::connector {
 

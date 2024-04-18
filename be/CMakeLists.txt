@@ -809,7 +809,6 @@ set(STARROCKS_LINK_LIBS
     Common
     Column
     Connector
-    ConnectorSink
     Exec
     Exprs
     FileSystem
@@ -1045,7 +1044,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     get_filename_component(BENCH_DIR_NAME ${BENCH_NAME} PATH)
     set(BENCH_OUTPUT_DIR_NAME "output")
     get_filename_component(BENCH_FILE_NAME ${BENCH_NAME} NAME)
-    
+
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
@@ -1061,7 +1060,6 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
-add_subdirectory(${SRC_DIR}/connector_sink)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)

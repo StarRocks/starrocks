@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector_sink/iceberg_chunk_sink.h"
+#include "connector/iceberg_chunk_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -21,7 +21,7 @@
 #include <future>
 #include <thread>
 
-#include "connector_sink/connector_chunk_sink.h"
+#include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
