@@ -162,13 +162,6 @@ public class LoadLoadingTask extends LoadTask {
         executeOnce();
     }
 
-<<<<<<< HEAD
-    public RuntimeProfile buildTopLevelProfile() {
-=======
-    private Coordinator.Factory getCoordinatorFactory() {
-        return new DefaultCoordinator.Factory();
-    }
-
     public RuntimeProfile buildFinishedTopLevelProfile() {
         return buildTopLevelProfile(true);
     }
@@ -178,7 +171,6 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     public RuntimeProfile buildTopLevelProfile(boolean isFinished) {
->>>>>>> df457b39f7 ([BugFix] Fix load profile not finished (#44277))
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(getLoadId()));
