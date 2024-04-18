@@ -21,6 +21,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StarRocksIcebergTableScan;
@@ -34,10 +36,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 
 public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
@@ -51,21 +53,29 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final ExecutorService backgroundExecutor;
 
     private final IcebergCatalogProperties icebergProperties;
+    private final Cache<String, Set<DataFile>> dataFileCache;
+    private final Cache<String, Set<DeleteFile>> deleteFileCache;
 
     public CachingIcebergCatalog(String catalogName, IcebergCatalog delegate, IcebergCatalogProperties icebergProperties,
                                  ExecutorService executorService) {
         this.catalogName = catalogName;
         this.delegate = delegate;
         this.icebergProperties = icebergProperties;
+        boolean enableCache = icebergProperties.isEnableIcebergMetadataCache();
         this.databases = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
-                icebergProperties.enableIcebergMetadataCache() ? DEFAULT_CACHE_NUM : NEVER_CACHE)
-                .build();
-        this.tables = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
-                icebergProperties.enableIcebergMetadataCache() ? DEFAULT_CACHE_NUM : NEVER_CACHE)
-                .build();
+                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+        this.tables = newCacheBuilder(icebergProperties.getIcebergTableCacheTtlSec(),
+                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.partitionNames = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
-                icebergProperties.enableIcebergMetadataCache() ? DEFAULT_CACHE_NUM : NEVER_CACHE)
-                .build();
+                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+        this.dataFileCache = enableCache ?
+                newCacheBuilder(
+                        icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
+                : null;
+        this.deleteFileCache = enableCache ?
+                newCacheBuilder(
+                        icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
+                : null;
         this.backgroundExecutor = executorService;
     }
 
@@ -223,12 +233,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public StarRocksIcebergTableScan getTableScan(Table table) {
-        return new StarRocksIcebergTableScan(
-                table,
-                table.schema(),
-                newTableScanContext(table));
+    public StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
+        StarRocksIcebergTableScan scan = delegate.getTableScan(table, scanContext);
+
+        return scan
+                .dataFileCache(dataFileCache)
+                .deleteFileCache(deleteFileCache)
+                .dataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
     }
+
 
     private CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
