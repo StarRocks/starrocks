@@ -198,22 +198,15 @@ From v3.2 onwards, FILES() supports defining writable files in remote storage fo
 -- Supported from v3.2 onwards.
 unload_data_param::=
     "compression" = "<compression_method>",
-    "max_file_size" = "<file_size>",
-    "partition_by" = "<column_name> [, ...]" 
+    "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } 
 ```
 
-
 | **Key**          | **Required** | **Description**                                              |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`brotli`: Use the Brotli compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
-| max_file_size    | No           | The maximum size of each data file when data is unloaded into multiple files. Default value: `1GB`. Unit: B, KB, MB, GB, TB, and PB. |
+| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
 | partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 5. |
-| single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if `max_file_size` is reached.</li></ul>                  |
-
-> **CAUTION**
->
-> You cannot specify both `max_file_size` and `single`.
+| single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
 
 ## Usage notes
 
