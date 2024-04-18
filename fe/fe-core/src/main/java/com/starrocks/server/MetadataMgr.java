@@ -452,6 +452,8 @@ public class MetadataMgr {
         for (Long databaseId : allTables.rowKeySet()) {
             Database database = localMetastore.getDb(databaseId);
             if (database == null) {
+                // database maybe dropped by force, we should clean temporary tables on it.
+                temporaryTableMgr.dropTemporaryTables(sessionId, databaseId);
                 continue;
             }
             Map<String, Long> tables = allTables.row(databaseId);

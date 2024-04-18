@@ -2844,7 +2844,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 sessionInfos.add(sessionInfo);
             }
             response.setStatus(new TStatus(TStatusCode.OK));
-            response.setStatus(new TStatus(TStatusCode.INVALID_ARGUMENT));
             response.setSessions(sessionInfos);
         } else {
             TStatus status = new TStatus(NOT_IMPLEMENTED_ERROR);

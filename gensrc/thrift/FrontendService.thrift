@@ -1740,7 +1740,7 @@ struct TListSessionsOptions {
 }
 
 struct TListSessionsRequest {
-    1: optional TListSessionsOptions options;
+    1: required TListSessionsOptions options;
 }
 
 struct TSessionInfo {

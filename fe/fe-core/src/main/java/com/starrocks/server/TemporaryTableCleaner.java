@@ -90,7 +90,7 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
         Set<UUID> recordSessions = temporaryTableMgr.listSessions();
         for (UUID sessionId : recordSessions) {
             if (!aliveSessions.contains(sessionId)) {
-                LOG.debug("cannot find alive session {}, should clean all temporary tables on it", sessionId);
+                LOG.info("cannot find alive session {}, should clean all temporary tables on it", sessionId);
                 metadataMgr.cleanTemporaryTables(sessionId);
             }
         }
