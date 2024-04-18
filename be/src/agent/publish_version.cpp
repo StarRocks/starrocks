@@ -152,9 +152,9 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         std::string_view msg = task.st.message();
                         tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
                     } else {
-                        LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
-                                  << " tablet_max_version:" << tablet->max_continuous_version()
-                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
+                        VLOG(1) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
+                                << " tablet_max_version:" << tablet->max_continuous_version()
+                                << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
                     }
                 } else {
                     task.st = StorageEngine::instance()->txn_manager()->publish_txn(
@@ -166,10 +166,10 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         std::string_view msg = task.st.message();
                         tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
                     } else {
-                        LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
-                                  << " tablet_max_version:" << tablet->max_continuous_version()
-                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
-                                  << " rowset:" << task.rowset->rowset_id();
+                        VLOG(1) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
+                                << " tablet_max_version:" << tablet->max_continuous_version()
+                                << " partition:" << task.partition_id << " txn_id: " << task.txn_id
+                                << " rowset:" << task.rowset->rowset_id();
                     }
                 }
             });
