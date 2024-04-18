@@ -356,7 +356,7 @@ public class NativeAccessControl implements AccessController {
                     objectType, objectTokens, GlobalStateMgr.getCurrentState());
             return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
         } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on {} {}, message: {}",
+            LOG.debug("Object not found when checking any action on {} {}, message: {}",
                     objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
