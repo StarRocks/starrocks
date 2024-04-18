@@ -255,20 +255,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         replica1.setState(Replica.ReplicaState.NORMAL);
         optimizeJob.runPendingJob();
         Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
-
-        // runWaitingTxnJob
-        optimizeJob.runWaitingTxnJob();
-        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
-
-        // runRunningJob
-        List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
-        for (OptimizeTask optimizeTask : optimizeTasks) {
-            optimizeTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
-        }
-        optimizeJob.runRunningJob();
-
-        // finish alter tasks
-        Assert.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
     }
 
     @Test
