@@ -86,7 +86,9 @@ public class MvRefreshArbiter {
             mvBaseTableUpdateInfo.getToRefreshPartitionNames().addAll(baseTableUpdatedPartitionNames);
         } else {
             Set<String> updatePartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
-
+            if (updatePartitionNames == null) {
+                return null;
+            }
             Map<Table, Column> partitionTableAndColumns = mv.getRelatedPartitionTableAndColumn();
             if (!partitionTableAndColumns.containsKey(baseTable)) {
                 // ATTENTION: This partition value is not formatted to mv partition type.

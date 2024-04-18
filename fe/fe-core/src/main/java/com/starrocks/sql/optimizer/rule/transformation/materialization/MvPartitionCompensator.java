@@ -105,6 +105,21 @@ public class MvPartitionCompensator {
                     .build();
 
     /**
+     * Whether the table is supported to compensate extra partition predicates.
+     * @param t: input table
+     * @return: true if the table is supported to compensate extra partition predicates, otherwise false.
+     */
+    public static boolean isTableSupportedPartitionCompensate(Table t) {
+        if (t == null) {
+            return false;
+        }
+        if (t.isNativeTableOrMaterializedView() || t.isIcebergTable() || t.isHiveTable()) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Determine whether to compensate extra partition predicates to query plan for the mv,
      * - if it needs compensate, use `selectedPartitionIds` to compensate complete partition ranges
      *  with lower and upper bound.
