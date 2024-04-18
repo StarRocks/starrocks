@@ -20,7 +20,7 @@
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 /* GCC-compatible compiler, targeting x86/x86-64 */
 #include <x86intrin.h>
-#elif defined(__GNUC__) && defined(__ARM_NEON__)
+#elif defined(__GNUC__) && defined(__ARM_NEON)
 /* GCC-compatible compiler, targeting ARM with NEON */
 #include <arm_neon.h>
 #elif defined(__GNUC__) && defined(__IWMMXT__)
