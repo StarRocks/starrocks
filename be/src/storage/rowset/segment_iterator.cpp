@@ -2090,6 +2090,8 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
         if (name == kBytesReadLocalDisk) {
             _opts.stats->compressed_bytes_read_local_disk += value;
             _opts.stats->compressed_bytes_read += value;
+        } else if (name == kBytesWriteLocalDisk) {
+            _opts.stats->compressed_bytes_write_local_disk += value;
         } else if (name == kBytesReadRemote) {
             _opts.stats->compressed_bytes_read_remote += value;
             _opts.stats->compressed_bytes_read += value;
@@ -2099,8 +2101,10 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
         } else if (name == kIOCountRemote) {
             _opts.stats->io_count_remote += value;
             _opts.stats->io_count += value;
-        } else if (name == kIONsLocalDisk) {
-            _opts.stats->io_ns_local_disk += value;
+        } else if (name == kIONsReadLocalDisk) {
+            _opts.stats->io_ns_read_local_disk += value;
+        } else if (name == kIONsWriteLocalDisk) {
+            _opts.stats->io_ns_write_local_disk += value;
         } else if (name == kIONsRemote) {
             _opts.stats->io_ns_remote += value;
         } else if (name == kPrefetchHitCount) {
