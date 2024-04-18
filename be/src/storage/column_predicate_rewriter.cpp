@@ -126,7 +126,7 @@ struct RewritePredicateTreeVisitor {
         for (auto& child_var : unchanged_children) {
             child_var.visit([&new_node](auto& child) { new_node.add_child(std::move(child)); });
         }
-        parent.add_child(new_node);
+        parent.add_child(std::move(new_node));
         return RewriteStatus::CHANGED;
     }
 
