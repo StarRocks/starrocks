@@ -714,9 +714,9 @@ public class AnalyzerUtils {
     }
 
     public static boolean hasTemporaryTables(StatementBase statementBase) {
-        Set<OlapTable> tables = new HashSet<>();
-        new AnalyzerUtils.OlapTableCollector(tables).visit(statementBase);
-        return tables.stream().anyMatch(t -> t.isTemporaryTable());
+        Map<TableName, Table> tables = new HashMap<>();
+        new AnalyzerUtils.TableCollector(tables).visit(statementBase);
+        return tables.values().stream().anyMatch(t -> t.isTemporaryTable());
     }
 
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
