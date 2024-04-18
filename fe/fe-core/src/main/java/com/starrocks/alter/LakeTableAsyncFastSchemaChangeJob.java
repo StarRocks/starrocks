@@ -31,8 +31,10 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 
 import java.io.DataOutput;
@@ -194,6 +196,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             info.add(errMsg);
             info.add(progress);
             info.add(timeoutMs / 1000);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+            if (warehouse == null) {
+                info.add("null");
+            } else {
+                info.add(warehouse.getName());
+            }
             infos.add(info);
         }
     }
