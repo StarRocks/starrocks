@@ -690,15 +690,9 @@ Status ImmutableIndexWriter::finish() {
     if (write_pindex_bf) {
         RETURN_IF_ERROR(write_bf());
     }
-<<<<<<< HEAD
-    LOG(INFO) << strings::Substitute(
+    VLOG(2) << strings::Substitute(
             "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) kv_bytes:$5 usage:$6 compression_type:$7 "
             "bf_bytes:$8",
-=======
-    VLOG(2) << strings::Substitute(
-            "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) kv_bytes:$5 usage:$6 bf_bytes:$7 "
-            "compression_type:$8",
->>>>>>> f493d1758e ([Refactor] reduce info log count in pk table (#44241))
             _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0,
             _total_kv_bytes, _total_kv_size * 1000 / std::max(_total_kv_bytes, 1UL) / 1000.0, _meta.compression_type(),
             _total_bf_bytes);
@@ -3631,12 +3625,6 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         stat->reload_meta_cost += watch.elapsed_time();
     }
     _calc_memory_usage();
-<<<<<<< HEAD
-=======
-
-    VLOG(2) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
-                                   _version.minor_number());
->>>>>>> f493d1758e ([Refactor] reduce info log count in pk table (#44241))
     return Status::OK();
 }
 
@@ -4679,13 +4667,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         const std::string l2_file_path =
                 strings::Substitute("$0/index.l2.$1.$2", _path, _l1_version.major(), _l1_version.minor());
         const std::string old_l1_file_path =
-<<<<<<< HEAD
                 strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
-        LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
-=======
-                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
         VLOG(2) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
->>>>>>> f493d1758e ([Refactor] reduce info log count in pk table (#44241))
         // Make new file doesn't exist
         (void)FileSystem::Default()->delete_file(l2_file_path);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
@@ -4737,12 +4720,7 @@ Status PersistentIndex::_merge_compaction_advance() {
     RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
     int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
     int merge_l1_end_idx = _l1_vec.size();
-<<<<<<< HEAD
-    LOG(INFO) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
-=======
-    VLOG(2) << strings::Substitute("merge compaction advance, path: $0, start_idx: $1, end_idx: $2", _path,
-                                   merge_l1_start_idx, merge_l1_end_idx);
->>>>>>> f493d1758e ([Refactor] reduce info log count in pk table (#44241))
+    VLOG(2) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
     // keep delete flag when older l1 or l2 exist
     bool keep_delete = (merge_l1_start_idx != 0) || !_l2_vec.empty();
 
