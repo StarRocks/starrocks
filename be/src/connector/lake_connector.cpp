@@ -633,7 +633,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
 
     int64_t num_table_rows = 0;
     for (const auto& tablet_scan_range : scan_ranges) {
-        int64_t version = std::stoll(scan_ranges[0].scan_range.internal_scan_range.version);
+        int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
 #ifdef BE_TEST
         ASSIGN_OR_RETURN(auto tablet_num_rows,
                          _tablet_manager->get_tablet_num_rows(
