@@ -558,7 +558,7 @@ select get_json_string(j1, "e"), json_query(j1, "e")   from js1 order by v2;
 asdf	"asdf"
 123123	123123
 zxcvzvxc	"zxcvzvxc"
-null	null
+None	null
 {"e1": 4, "e2": 5}	{"e1": 4, "e2": 5}
 0.000	"0.000"
 true	true
@@ -866,7 +866,7 @@ select json_exists(j1, "e"), get_json_string(j1, "e") from js1 order by v2;
 1	asdf
 1	123123
 1	zxcvzvxc
-1	null
+1	None
 1	{"e1": 4, "e2": 5}
 1	0.000
 1	true
@@ -1006,7 +1006,7 @@ select json_length(j1, "e"), get_json_string(j1, "e") from js1 order by v2;
 1	asdf
 1	123123
 1	zxcvzvxc
-1	null
+1	None
 2	{"e1": 4, "e2": 5}
 1	0.000
 1	true
@@ -1573,7 +1573,7 @@ select get_json_string(j1, "e"), json_query(j1, "e")   from js2 order by v2;
 asdf	"asdf"
 123123	123123
 zxcvzvxc	"zxcvzvxc"
-null	null
+None	null
 {"e1": 4, "e2": 5}	{"e1": 4, "e2": 5}
 [1, 2, 3, 4]	[1, 2, 3, 4]
 [1, 2, 3, 4]	[1, 2, 3, 4]
@@ -1881,7 +1881,7 @@ select json_exists(j1, "e"), get_json_string(j1, "e") from js2 order by v2;
 1	asdf
 1	123123
 1	zxcvzvxc
-1	null
+1	None
 1	{"e1": 4, "e2": 5}
 1	[1, 2, 3, 4]
 1	[1, 2, 3, 4]
@@ -2021,7 +2021,7 @@ select json_length(j1, "e"), get_json_string(j1, "e") from js2 order by v2;
 1	asdf
 1	123123
 1	zxcvzvxc
-1	null
+1	None
 2	{"e1": 4, "e2": 5}
 4	[1, 2, 3, 4]
 4	[1, 2, 3, 4]
@@ -2063,9 +2063,9 @@ null
 -- !result
 select get_json_string(j1, "e"), json_query(j1, "e")   from js3 order by v2;
 -- result:
-null	null
-null	null
-null	null
+None	null
+None	null
+None	null
 -- !result
 select get_json_int(j1, "e"), get_json_double(j1, "e") from js3 order by v2;
 -- result:
@@ -2099,9 +2099,9 @@ select json_exists(j1, "e"), json_query(j1, "e") from js3 order by v2;
 -- !result
 select json_exists(j1, "e"), get_json_string(j1, "e") from js3 order by v2;
 -- result:
-1	null
-1	null
-1	null
+1	None
+1	None
+1	None
 -- !result
 select json_length(j1, "e"), json_query(j1, "e") from js3 order by v2;
 -- result:
@@ -2111,9 +2111,9 @@ select json_length(j1, "e"), json_query(j1, "e") from js3 order by v2;
 -- !result
 select json_length(j1, "e"), get_json_string(j1, "e") from js3 order by v2;
 -- result:
-1	null
-1	null
-1	null
+1	None
+1	None
+1	None
 -- !result
 select j1->'d' from js3 order by v2;
 -- result:
@@ -2183,7 +2183,7 @@ null
 -- !result
 select get_json_string(j1, "a"), json_query(j1, "a")   from js3 order by v2;
 -- result:
-null	null
+None	null
 123	123
 234	234
 -- !result
@@ -2219,7 +2219,7 @@ select json_exists(j1, "a"), json_query(j1, "a") from js3 order by v2;
 -- !result
 select json_exists(j1, "a"), get_json_string(j1, "a") from js3 order by v2;
 -- result:
-1	null
+1	None
 1	123
 1	234
 -- !result
@@ -2231,7 +2231,7 @@ select json_length(j1, "a"), json_query(j1, "a") from js3 order by v2;
 -- !result
 select json_length(j1, "a"), get_json_string(j1, "a") from js3 order by v2;
 -- result:
-1	null
+1	None
 1	123
 1	234
 -- !result
@@ -2243,7 +2243,7 @@ null
 -- !result
 select get_json_string(j1, "b"), json_query(j1, "b")   from js3 order by v2;
 -- result:
-null	null
+None	null
 avx	"avx"
 sse	"sse"
 -- !result
@@ -2279,7 +2279,7 @@ select json_exists(j1, "b"), json_query(j1, "b") from js3 order by v2;
 -- !result
 select json_exists(j1, "b"), get_json_string(j1, "b") from js3 order by v2;
 -- result:
-1	null
+1	None
 1	avx
 1	sse
 -- !result
@@ -2291,7 +2291,7 @@ select json_length(j1, "b"), json_query(j1, "b") from js3 order by v2;
 -- !result
 select json_length(j1, "b"), get_json_string(j1, "b") from js3 order by v2;
 -- result:
-1	null
+1	None
 1	avx
 1	sse
 -- !result
@@ -2303,7 +2303,7 @@ false
 -- !result
 select get_json_string(j1, "c"), json_query(j1, "c")   from js3 order by v2;
 -- result:
-null	null
+None	null
 true	true
 false	false
 -- !result
@@ -2339,7 +2339,7 @@ select json_exists(j1, "c"), json_query(j1, "c") from js3 order by v2;
 -- !result
 select json_exists(j1, "c"), get_json_string(j1, "c") from js3 order by v2;
 -- result:
-1	null
+1	None
 1	true
 1	false
 -- !result
@@ -2351,7 +2351,7 @@ select json_length(j1, "c"), json_query(j1, "c") from js3 order by v2;
 -- !result
 select json_length(j1, "c"), get_json_string(j1, "c") from js3 order by v2;
 -- result:
-1	null
+1	None
 1	true
 1	false
 -- !result

@@ -307,7 +307,7 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        init_flat_columns(other_json->_flat_column_paths);
+        init_flat_columns(other_json->_flat_column_paths, other_json->_flat_column_types);
     }
 
     if (is_flat_json()) {
@@ -317,6 +317,7 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
 
         for (size_t i = 0; i < _flat_columns.size(); i++) {
             DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
+            DCHECK_EQ(_flat_column_types[i], other_json->flat_column_types()[i]);
             _flat_columns[i]->append(*other_json->get_flat_field(i), offset, count);
         }
     } else {

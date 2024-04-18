@@ -651,8 +651,12 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_exists(FunctionContext* context, c
 
         JsonPath stored_path;
         for (int row = 0; row < rows; row++) {
-            if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+            if (columns[0]->is_null(row)) {
                 result.append_null();
+                continue;
+            }
+            if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+                result.append(0);
                 continue;
             }
             JsonValue* json_value = json_viewer.value(row);

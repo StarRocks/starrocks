@@ -140,12 +140,6 @@ public class SubfieldAccessPathNormalizer {
             return first;
         }
 
-        // now json function support read type: BOOLEAN/JSON/STRING/BIGINT/DOUBLE
-        // only bigint & double is compatible, other combinations need
-        if ((first.isBigint() && second.isDouble()) || (first.isDouble() && second.isBigint())) {
-            return Type.DOUBLE;
-        }
-
         // the compatible type of two types use JSON,
         // the be can't promise cast(cast(xx as IntermediateType) as TargetType) is same as cast(xx as TargetType)
         // e.g: cast(cast("1.1" as double) as int) is different with cast("1.1" as int)
