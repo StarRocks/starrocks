@@ -59,34 +59,38 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
 }
 
+template <>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+                                 ClientConnection<FrontendServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::protocol::TProtocolException& e) {
+        if (e.getType() == apache::thrift::protocol::TProtocolException::TProtocolExceptionType::INVALID_DATA) {
+            ss << "FE RPC response parsing failure, address=" << address << ".The FE may be busy, please retry later";
+        } else {
+            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
+        }
+    } catch (apache::thrift::TException& e) {
+        ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
 template <typename T>
 Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
     try {
         callback(client);
-    } catch (apache::thrift::protocol::TProtocolException& e) {
-        if (e.getType() == apache::thrift::protocol::TProtocolException::TProtocolExceptionType::INVALID_DATA) {
-            ss << "FE RPC response parsing failure, address=" << address
-               << ". The FE may be busy, please retry later or increase BE config thrift_rpc_timeout_ms";
-        } else {
-            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
-        }
-    } catch (apache::thrift::transport::TTransportException& e) {
-        if (e.getType() == apache::thrift::transport::TTransportException::TTransportExceptionType::TIMED_OUT) {
-            ss << "FE RPC timeout, address=" << address << ", reason=" << e.what()
-               << ". The FE may be busy, please retry later or increase BE config thrift_rpc_timeout_ms";
-        } else {
-            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
-        }
-    } catch (std::exception& e) {
-        ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "RPC failure, address=" << address << ", reason=" << e.what();
     }
-
-    if (!ss.str().empty()) {
-        return Status::ThriftRpcError(ss.str());
-    }
-    return Status::OK();
+    return Status::ThriftRpcError(ss.str());
 }
 
 template <typename T>
@@ -126,9 +130,5 @@ template Status ThriftRpcHelper::rpc<BackendServiceClient>(
 template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
         const std::string& ip, const int32_t port,
         std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback, int timeout_ms);
-
-template Status ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
-        std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
-        ClientConnection<FrontendServiceClient>& client, const TNetworkAddress& address) noexcept;
 
 } // namespace starrocks

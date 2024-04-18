@@ -41,9 +41,8 @@ TEST_F(ThriftRpcHelperTest, rpc_impl) {
                 client, addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
         EXPECT_EQ(
-                "Rpc error: FE RPC response parsing failure, address=TNetworkAddress(hostname=127.0.0.1, port=8030). "
-                "The "
-                "FE may be busy, please retry later or increase BE config thrift_rpc_timeout_ms",
+                "Rpc error: FE RPC response parsing failure, address=TNetworkAddress(hostname=127.0.0.1, "
+                "port=8030).The FE may be busy, please retry later",
                 st.to_string());
     }
     {
@@ -72,10 +71,8 @@ TEST_F(ThriftRpcHelperTest, rpc_impl) {
                 },
                 client, addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
-        EXPECT_EQ(
-                "Rpc error: FE RPC timeout, address=TNetworkAddress(hostname=127.0.0.1, port=8030), reason=timeout. "
-                "The FE may be busy, please retry later or increase BE config thrift_rpc_timeout_ms",
-                st.to_string());
+        EXPECT_EQ("Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8030), reason=timeout",
+                  st.to_string());
     }
 
     {
@@ -98,11 +95,12 @@ TEST_F(ThriftRpcHelperTest, rpc_impl) {
         auto addr = make_network_address("127.0.0.1", 8030);
         FrontendServiceConnection client;
         auto st = ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
-                [](FrontendServiceConnection& client) { throw std::exception(); }, client, addr);
+                [](FrontendServiceConnection& client) { throw apache::thrift::TException("some error"); }, client,
+                addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
         EXPECT_EQ(
                 "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8030), "
-                "reason=std::exception",
+                "reason=some error",
                 st.to_string());
     }
 }
