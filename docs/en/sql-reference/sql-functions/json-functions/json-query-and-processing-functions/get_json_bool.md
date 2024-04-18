@@ -6,9 +6,9 @@ displayed_sidebar: "English"
 
 ## Description
 
-Analyzes and gets the boolean value from a JSON string based on the specified JSON path.
+Parses and gets the boolean value from a specified JSON path in a JSON string.
 
-If the format of `json_string` or `json_path` is invalid, or if no matching content can be found, this function will return NULL.
+If the format of `json_str` or `json_path` is invalid, or if no matching content can be found, this function will return NULL.
 
 This function is supported from v3.3.
 
@@ -28,7 +28,7 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 
 ## Examples
 
-1. Get the value whose key is "k1".
+1. Get the value whose key is "k1". The value is `true` and `1` is returned.
 
     ```Plain Text
    MySQL > SELECT get_json_bool('{"k1":true, "k2":"false"}', "$.k1");
@@ -39,7 +39,7 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
    +----------------------------------------------------+
     ```
 
-2. Get the second element in the array whose key is "my.key".
+2. Get the second element in the array whose key is "my.key". The second element is `false` and `0` is returned.
 
     ```Plain Text
    SELECT get_json_bool('{"k1":"v1", "my.key":[true, false, 3]}', '$."my.key"[1]');
@@ -50,7 +50,7 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
    +--------------------------------------------------------------------------+
     ```
 
-3. Get the first element in the array whose path is `k1.key -> k2`.
+3. Get the first element in the array whose path is `k1.key -> k2`. The first element is `false` and `0` is returned.
 
     ```Plain Text
    MYSQL > SELECT get_json_bool('{"k1.key":{"k2":[false, true]}}', '$."k1.key".k2[0]');
