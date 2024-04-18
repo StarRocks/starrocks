@@ -98,7 +98,7 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(rewriteContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         } else if (aggFuncName.equals(HLL_UNION_AGG)) {
             ScalarOperator eqArg = aggFunc.getChild(0);
             if (eqArg instanceof CallOperator) {
@@ -122,7 +122,7 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(rewriteContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         }
         return null;
     }
