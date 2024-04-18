@@ -5,8 +5,6 @@ keywords: ['Stream Load']
 
 # 使用 Stream Load 事务接口导入
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
-
 为了支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 自 2.4 版本起提供 Stream Load 事务接口。
 
 本文介绍 Stream Load 事务接口、以及如何使用该事务接口把数据导入到 StarRocks 中。
@@ -88,7 +86,7 @@ Stream Load 事务接口具有如下优势：
 
 ### 查看权限
 
-<InsertPrivNote />
+导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ### 查看网络配置
 
