@@ -123,7 +123,7 @@ public class PaimonScanNodeTest {
     }
 
     @Test
-    public void testSplitRawFileScanRangeLocations(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
+    public void testSplitRawFileScanRange(@Mocked PaimonTable table, @Mocked RawFile rawFile) {
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
         writer.writeInt(0, 2000);
