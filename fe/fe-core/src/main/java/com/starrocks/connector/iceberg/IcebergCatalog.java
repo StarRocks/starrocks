@@ -117,4 +117,8 @@ public interface IcebergCatalog {
 
     default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
     }
+
+    default TableScan getTableScan(Table table) {
+        return table.newScan();
+    }
 }
