@@ -18,7 +18,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include "fs/fs_starlet.h"
+#include "fs/fs_util.h"
 #include "service/staros_worker.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/starlet_location_provider.h"
@@ -48,7 +48,7 @@ public:
 
 TEST_F(StarletLocationProviderTest, test_location) {
     auto location = _provider->root_location(12345);
-    EXPECT_EQ(build_starlet_uri(12345, "/"), location);
+    EXPECT_EQ(starrocks::fs::build_starlet_uri(12345, "/"), location);
 }
 
 } // namespace starrocks::lake

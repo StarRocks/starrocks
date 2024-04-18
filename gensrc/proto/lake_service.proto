@@ -118,6 +118,8 @@ message TabletStatRequest {
     message TabletInfo {
         optional int64 tablet_id = 1;
         optional int64 version = 2;
+        // used to collect cache stat
+        optional bool enable_cache = 3;
     }
 
     repeated TabletInfo tablet_infos = 1;
@@ -129,6 +131,7 @@ message TabletStatResponse {
         optional int64 tablet_id = 1;
         optional int64 num_rows = 2;
         optional int64 data_size = 3;
+        optional int64 data_cache_size = 4;
     }
 
     repeated TabletStat tablet_stats = 1;

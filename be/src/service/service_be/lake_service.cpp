@@ -22,6 +22,7 @@
 #include "agent/agent_server.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
@@ -641,6 +642,50 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             tablet_stat->set_tablet_id(tablet_id);
             tablet_stat->set_num_rows(num_rows);
             tablet_stat->set_data_size(data_size);
+#ifdef USE_STAROS
+            if (config::starlet_use_star_cache && config::experimental_lake_enable_collect_cache_stat &&
+                tablet_info.enable_cache()) {
+                auto start = std::chrono::steady_clock::now();
+                std::unordered_map<std::string, int64_t> file_size_map;
+                for (const auto& rowset : (*tablet_metadata)->rowsets()) {
+                    int index = 0;
+                    const auto& seg_file_meta = rowset.segment_size();
+                    for (const auto& segment : rowset.segments()) {
+                        auto file_name = _tablet_mgr->segment_location(tablet_id, segment);
+                        auto file_size = seg_file_meta.Get(index);
+                        file_size_map.emplace(file_name, file_size);
+                        index++;
+                    }
+                }
+
+                int64_t total_size = 0;
+                if (!file_size_map.empty()) {
+                    for (const auto& pair : file_size_map) {
+                        auto file_path = pair.first;
+                        auto fs_or = FileSystem::CreateSharedFromString(file_path);
+                        if (!fs_or.ok()) {
+                            LOG(WARNING) << "Can not retrieve right file system from path: " << file_path;
+                            continue;
+                        }
+                        auto fs = std::move(fs_or).value();
+                        auto file_size = pair.second;
+                        auto size_st = fs->collect_cache_size(file_path, file_size);
+                        if (size_st.ok()) {
+                            total_size += size_st.value();
+                        } else {
+                            LOG(INFO) << "Cache stat size collect failed, tablet_id: " << tablet_id
+                                      << ", file: " << file_path;
+                        }
+                    }
+                    tablet_stat->set_data_cache_size(total_size);
+                }
+                auto end = std::chrono::steady_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+                LOG(WARNING) << "Total cache stat size collected, size: " << total_size
+                             << ", file count: " << file_size_map.size() << ", tablet_id: " << tablet_id
+                             << ", time cost: " << duration.count() << " milliseconds";
+            }
+#endif
         };
         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
         if (auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline); !st.ok()) {

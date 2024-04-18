@@ -1430,6 +1430,7 @@ struct TPartitionMetaInfo {
     23: optional double p50_cs
     24: optional double max_cs
     25: optional string storage_path
+    26: optional string data_cache_size
 }
 
 struct TGetTablesInfoRequest {

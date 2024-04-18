@@ -76,6 +76,8 @@ public interface PhysicalPartition {
     public long storageDataSize();
     // partition row count reported by be, but may be not accurate
     public long storageRowCount();
+    // partition local data cache size, used only for cloud-native table
+    public long dataCacheSize();
     // partition replica count, it's accurate 
     public long storageReplicaCount();
     // has data judge by fe version, it's accurate

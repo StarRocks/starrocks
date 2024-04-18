@@ -15,19 +15,14 @@
 #ifdef USE_STAROS
 #include "storage/lake/starlet_location_provider.h"
 
-#include <fmt/format.h>
+#include <string>
 
-#include <unordered_map>
-
-#include "common/logging.h"
-#include "fs/fs_starlet.h"
-#include "gutil/strings/util.h"
-#include "service/staros_worker.h"
+#include "fs/fs_util.h"
 
 namespace starrocks::lake {
 
 std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
-    return build_starlet_uri(tablet_id, "");
+    return starrocks::fs::build_starlet_uri(tablet_id, "");
 }
 
 } // namespace starrocks::lake

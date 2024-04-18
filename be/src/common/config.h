@@ -985,6 +985,8 @@ CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "5");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 
+CONF_mBool(experimental_lake_enable_collect_cache_stat, "false");
+
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
 // A comma-separated list of debug contexts to enable.

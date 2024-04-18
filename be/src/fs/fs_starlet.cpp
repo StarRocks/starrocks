@@ -28,8 +28,8 @@
 #include <worker.h>
 
 #include "common/config.h"
+#include "fs/fs_util.h"
 #include "fs/output_stream_adapter.h"
-#include "gutil/strings/util.h"
 #include "io/input_stream.h"
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
@@ -37,7 +37,6 @@
 #include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/olap_common.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -61,37 +60,7 @@ using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
 using EntryStat = staros::starlet::fslib::EntryStat;
 
-bool is_starlet_uri(std::string_view uri) {
-    return HasPrefixString(uri, "staros://");
-}
-
-std::string build_starlet_uri(int64_t shard_id, std::string_view path) {
-    while (!path.empty() && path.front() == '/') {
-        path.remove_prefix(1);
-    }
-    return path.empty() ? fmt::format("staros://{}", shard_id) : fmt::format("staros://{}/{}", shard_id, path);
-}
-
-// Expected format of uri: staros://ShardID/path/to/file
-StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri) {
-    std::string_view path = uri;
-    if (!HasPrefixString(path, "staros://")) {
-        return Status::InvalidArgument(fmt::format("Invalid starlet URI: {}", uri));
-    }
-    path.remove_prefix(sizeof("staros://") - 1);
-    auto end_shard_id = path.find('/');
-    if (end_shard_id == std::string::npos) {
-        end_shard_id = path.size();
-    }
-
-    StringParser::ParseResult result;
-    auto shard_id = StringParser::string_to_int<int64_t>(path.data(), end_shard_id, &result);
-    if (result != StringParser::PARSE_SUCCESS) {
-        return Status::InvalidArgument(fmt::format("Invalid starlet URI: {}", uri));
-    }
-    path.remove_prefix(std::min<size_t>(path.size(), end_shard_id + 1));
-    return std::make_pair(std::string(path), shard_id);
-};
+using starrocks::fs::parse_starlet_uri;
 
 class StarletInputStream : public starrocks::io::SeekableInputStream {
 public:
@@ -531,6 +500,19 @@ public:
             return to_status(fs_st.status());
         }
         return to_status((*fs_st)->drop_cache(pair.first));
+    }
+
+    StatusOr<int64_t> collect_cache_size(const std::string& path, int64_t file_size) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto cache_size_st = (*fs_st)->cache_size(pair.first, file_size);
+        if (!cache_size_st.ok()) {
+            return to_status(cache_size_st.status());
+        }
+        return cache_size_st.value();
     }
 
     Status delete_files(const std::vector<std::string>& paths) override {
