@@ -517,8 +517,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chunk,
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
-        auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
         if (hash_table_slot.need_output) {
+            auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
             if (!column->is_nullable()) {
                 _copy_probe_column(&column, chunk, slot, to_nullable);
             } else {
@@ -547,8 +547,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
-        ColumnPtr& column = _table_items->build_chunk->columns()[i];
         if (hash_table_slot.need_output) {
+            ColumnPtr& column = _table_items->build_chunk->columns()[i];
             if (!column->is_nullable()) {
                 _copy_build_column(column, chunk, slot, to_nullable);
             } else {

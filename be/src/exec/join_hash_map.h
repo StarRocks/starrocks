@@ -102,7 +102,6 @@ struct JoinHashTableItems {
     Columns key_columns;
     Buffer<HashTableSlotDescriptor> build_slots;
     Buffer<HashTableSlotDescriptor> probe_slots;
-    const RowDescriptor* row_desc;
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
     // buckets of the hash map, and it holds the index of the first key value saved in each bucket,
     // while other keys can be found by following the indices saved in
@@ -570,7 +569,6 @@ private:
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
-            ColumnPtr& column = _table_items->build_chunk->columns()[i];
             if (hash_table_slot.need_output) {
                 // always output nulls.
                 DCHECK(to_nullable);
