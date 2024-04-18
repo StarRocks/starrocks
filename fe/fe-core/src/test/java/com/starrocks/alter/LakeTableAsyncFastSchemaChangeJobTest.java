@@ -19,6 +19,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
@@ -251,6 +253,40 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assert.assertTrue(indexMeta.getSchemaId() > oldSchemaId);
             Assert.assertEquals(Arrays.asList(1), indexMeta.getSortKeyIdxes());
             Assert.assertEquals(Arrays.asList(2), indexMeta.getSortKeyUniqueIds());
+        }
+    }
+
+    @Test
+    public void testModifyColumnType() throws Exception {
+        LakeTable table = createTable(connectContext, "CREATE TABLE t_modify_type" +
+                "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
+                "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
+                "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
+        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        {
+            mustAlterTable(table, "ALTER TABLE t_modify_type MODIFY COLUMN c1 BIGINT, MODIFY COLUMN c2 VARCHAR(10)," +
+                    "MODIFY COLUMN c3 DATETIME");
+            List<Column> columns = table.getBaseSchema();
+            Assert.assertEquals(4, columns.size());
+
+            Assert.assertEquals("c0", columns.get(0).getName());
+            Assert.assertEquals(0, columns.get(0).getUniqueId());
+            Assert.assertEquals(ScalarType.INT, columns.get(0).getType());
+
+            Assert.assertEquals("c1", columns.get(1).getName());
+            Assert.assertEquals(1, columns.get(1).getUniqueId());
+            Assert.assertEquals(ScalarType.BIGINT, columns.get(1).getType());
+
+            Assert.assertEquals("c2", columns.get(2).getName());
+            Assert.assertEquals(2, columns.get(2).getUniqueId());
+            Assert.assertEquals(PrimitiveType.VARCHAR, columns.get(2).getType().getPrimitiveType());
+            Assert.assertEquals(10, ((ScalarType) columns.get(2).getType()).getLength());
+
+            Assert.assertEquals("c3", columns.get(3).getName());
+            Assert.assertEquals(3, columns.get(3).getUniqueId());
+            Assert.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
+
+            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
             Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
