@@ -63,7 +63,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
