@@ -348,8 +348,8 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
         }
 
-        if (olapTable.isCloudNativeTableOrMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in cloud native is not supported");
+        if (olapTable.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize materialized view is not supported");
         }
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();
