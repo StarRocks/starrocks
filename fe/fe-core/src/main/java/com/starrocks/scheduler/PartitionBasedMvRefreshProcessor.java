@@ -66,6 +66,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
@@ -303,12 +304,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return RefreshJobStatus.FAILED;
             }
             LOG.info("partition name size: {}, partition column name: {}", partitionNameSet.size(), partitionColumn.getName());
-            /*List<String> hivePartitionNames = Lists.newArrayList();
-            for (String partitionName : partitionNameSet) {
-                String hivePartitionName = String.join("=", Lists.newArrayList(partitionColumn.getName(), partitionName));
-                hivePartitionNames.add(hivePartitionName);
-                LOG.info("add partition name: {}", hivePartitionName);
-            }*/
             List<PartitionKey> partitionKeys = Lists.newArrayList();
             for (String partitionName : partitionNameSet) {
                 partitionKeys.add(mvContext.getRefBaseTableRangePartitionMap().get(partitionName).lowerEndpoint());
@@ -318,13 +313,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     .getRemoteFileInfos(hiveTable.getCatalogName(), hiveTable, partitionKeys);
             int fileInfoCount = 0;
             int fileCount = 0;
+            List<Long> modifiedTimes = Lists.newArrayList();
             for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
                 fileInfoCount++;
-                fileInfoCount += remoteFileInfo.getFiles().size();
+                long maxModifiedTime = 0;
+                fileCount += remoteFileInfo.getFiles().size();
+                for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
+                    maxModifiedTime = Math.max(maxModifiedTime, fileDesc.getModificationTime());
+                }
+                modifiedTimes.add(maxModifiedTime);
             }
             sw.stop();
-            LOG.info("partition size: {}, fileInfoCount: {}, fileCount: {}, timecost: {}",
-                    partitionNameSet.size(), fileInfoCount, fileCount, sw.elapsed());
+            LOG.info("partition size: {}, fileInfoCount: {}, fileCount: {}, timecost: {}, modifiedTimes: {}",
+                    partitionNameSet.size(), fileInfoCount, fileCount, sw.elapsed(TimeUnit.MILLISECONDS), modifiedTimes);
         } else {
             // refresh materialized view
             doRefreshMaterializedViewWithRetry(mvToRefreshedPartitions, refTablePartitionNames);
