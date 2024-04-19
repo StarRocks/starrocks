@@ -202,6 +202,8 @@ public class KuduScanNode extends ScanNode {
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
     }
 
     @Override
