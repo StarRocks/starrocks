@@ -18,65 +18,6 @@ StarRocks does not directly cache final query results. From v2.5 onwards, StarRo
 
 In standard SQL, every calculation that includes an operand with a `NULL` value returns a `NULL`.
 
-## Why is the query result incorrect after I enclose quotation marks around a value of the BIGINT data type for an equivalence query?
-
-### Problem description
-
-See the following examples:
-
-```plaintext
-select cust_id,idno 
-
-from llyt_dev.dwd_mbr_custinfo_dd 
-
-where Pt= ‘2021-06-30’ 
-
-and cust_id = ‘20210129005809043707’ 
-
-limit 10 offset 0;
-+---------------------+-----------------------------------------+
-
-|   cust_id           |      idno                               |
-
-+---------------------+-----------------------------------------+
-
-|  20210129005809436  | yjdgjwsnfmdhjw294F93kmHCNMX39dw=        |
-
-|  20210129005809436  | sdhnswjwijeifme3kmHCNMX39gfgrdw=        |
-
-|  20210129005809436  | Tjoedk3js82nswndrf43X39hbggggbw=        |
-
-|  20210129005809436  | denuwjaxh73e39592jwshbnjdi22ogw=        |
-
-|  20210129005809436  | ckxwmsd2mei3nrunjrihj93dm3ijin2=        |
-
-|  20210129005809436  | djm2emdi3mfi3mfu4jro2ji2ndimi3n=        |
-
-+---------------------+-----------------------------------------+
-select cust_id,idno 
-
-from llyt_dev.dwd_mbr_custinfo_dd 
-
-where Pt= ‘2021-06-30’ 
-
-and cust_id = 20210129005809043707 
-
-limit 10 offset 0;
-+---------------------+-----------------------------------------+
-
-|   cust_id           |      idno                               |
-
-+---------------------+-----------------------------------------+
-
-|  20210189979989976  | xuywehuhfuhruehfurhghcfCNMX39dw=        |
-
-+---------------------+-----------------------------------------+
-```
-
-### Solution
-
-When you compare the STRING data type and the INTEGER data type, the fields of these two types are cast to the DOUBLE data type. Therefore, quotation marks cannot be added. Otherwise, the condition defined in the WHERE clause cannot be indexed.
-
 ## Does StarRocks support the DECODE function?
 
 StarRocks does not support the DECODE function of the Oracle database. StarRocks is compatible with MySQL, so you can use the CASE WHEN statement.

@@ -19,53 +19,6 @@ StarRocks 不直接缓存最终查询结果。从 2.5 版本开始，StarRocks �
 
 标准 SQL 中 null 和其他表达式计算结果都是null。
 
-## [BIGINT 等值查询中加引号] 出现多余数据
-
-```sql
-select cust_id,idno 
-from llyt_dev.dwd_mbr_custinfo_dd 
-where Pt= ‘2021-06-30’ 
-and cust_id = ‘20210129005809043707’ 
-limit 10 offset 0;
-```
-
-```plain text
-+---------------------+-----------------------------------------+
-|   cust_id           |      idno                               |
-+---------------------+-----------------------------------------+
-|  20210129005809436  | yjdgjwsnfmdhjw294F93kmHCNMX39dw=        |
-|  20210129005809436  | sdhnswjwijeifme3kmHCNMX39gfgrdw=        |
-|  20210129005809436  | Tjoedk3js82nswndrf43X39hbggggbw=        |
-|  20210129005809436  | denuwjaxh73e39592jwshbnjdi22ogw=        |
-|  20210129005809436  | ckxwmsd2mei3nrunjrihj93dm3ijin2=        |
-|  20210129005809436  | djm2emdi3mfi3mfu4jro2ji2ndimi3n=        |
-+---------------------+-----------------------------------------+
-```
-
-```sql
-select cust_id,idno 
-from llyt_dev.dwd_mbr_custinfo_dd 
-where Pt= ‘2021-06-30’ 
-and cust_id = 20210129005809043707 
-limit 10 offset 0;
-```
-
-```plain text
-+---------------------+-----------------------------------------+
-|   cust_id           |      idno                               |
-+---------------------+-----------------------------------------+
-|  20210189979989976  | xuywehuhfuhruehfurhghcfCNMX39dw=        |
-+---------------------+-----------------------------------------+
-```
-
-**问题描述**
-
-WHERE 里使用 BIGINT 类型，查询加单引号，查出很多无关数据。
-
-**解决方案**
-
-字符串和 INT 比较，相当于 CAST 成 DOUBLE。INT 比较时，不要加引号。加了引号，还会导致无法命中索引。
-
 ## StarRocks有decode函数吗？
 
 StarRocks 不支持 Oracle 中的 decode 函数，StarRocks 语法兼容 MySQL，可以使用case when。
@@ -76,7 +29,7 @@ StarRocks 的后台合并参考 Google 的 MESA 模型，有两层 compaction，
 
 ## StarRocks 存储 utf8mb4 的字符，会不会被截断或者乱码？
 
-MySQL的“utf8mb4”是标准的“UTF-8”，StarRocks 可以完全兼容。
+MySQL的 utf8mb4 是标准的 UTF-8，StarRocks 可以完全兼容。
 
 ## [Schema change] alter table 时显示：table's state is not normal
 
