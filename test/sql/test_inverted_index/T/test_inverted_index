@@ -624,3 +624,22 @@ SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
 SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
 
 DROP TABLE t_upper_case_column_name;
+
+-- name: test_alter_replicated_storage
+CREATE TABLE `t_alter_replicated_storage` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `text` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+ALTER TABLE t_alter_replicated_storage SET ("replicated_storage" = "true");
+SHOW CREATE TABLE t_alter_replicated_storage;
+DROP TABLE t_alter_replicated_storage;
