@@ -232,14 +232,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-<<<<<<< HEAD
-                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
-=======
-                                long createTimestamp, long estimateScanRows,
-                                int estimateFileNum, long estimateFileSize,
-                                TLoadJobType type, long timeout, Coordinator coordinator)
->>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
-            throws UserException {
+            long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
+            Coordinator coordinator) throws UserException {
 
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -249,14 +243,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         LoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-<<<<<<< HEAD
-            loadJob =
-                    new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
-=======
-            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout, coordinator);
-            loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
-            loadJob.setEstimateScanRow(estimateScanRows);
->>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout,
+                    coordinator);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }

@@ -85,14 +85,9 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
     }
 
-<<<<<<< HEAD
     public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
-                         long estimateScanRow, TLoadJobType type, long timeout)
+                         long estimateScanRow, TLoadJobType type, long timeout, Coordinator coordinator)
             throws MetaNotFoundException {
-=======
-    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, TLoadJobType type, long timeout,
-            Coordinator coordinator) throws MetaNotFoundException {
->>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
