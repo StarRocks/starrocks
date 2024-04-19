@@ -127,6 +127,7 @@ Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
 }
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
+    RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
     // spill all data
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->hash_map_variant().visit(

@@ -49,6 +49,7 @@ bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (_aggregator->spiller()->has_output_data()) {
         return true;
     }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_aggregator->spiller());
     // has eos chunk
     if (_aggregator->is_spilled_eos() && _has_last_chunk) {
         return true;
@@ -86,6 +87,7 @@ Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* stat
 }
 
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->spiller()->task_status());
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::pull_chunk(state);
     }
