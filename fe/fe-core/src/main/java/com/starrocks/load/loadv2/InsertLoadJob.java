@@ -51,7 +51,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
-import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TLoadJobType;
