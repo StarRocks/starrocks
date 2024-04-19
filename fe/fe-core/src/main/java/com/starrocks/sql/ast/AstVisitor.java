@@ -173,6 +173,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
