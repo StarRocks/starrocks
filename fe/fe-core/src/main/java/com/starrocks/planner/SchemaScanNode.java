@@ -43,8 +43,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TFrontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
@@ -57,7 +59,9 @@ import com.starrocks.thrift.TUserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Full scan of an SCHEMA table.
@@ -314,7 +318,12 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeBeScanRanges() {
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        Set<ComputeNode> computeNodes = new HashSet<>(systemInfoService.getIdToBackend().values());
+        if (RunMode.isSharedDataMode()) {
+            computeNodes.addAll(systemInfoService.getIdComputeNode().values());
+        }
+        for (ComputeNode be : computeNodes) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
             if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
