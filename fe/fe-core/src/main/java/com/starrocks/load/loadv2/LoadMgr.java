@@ -63,6 +63,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
@@ -231,8 +232,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
-            throws UserException {
+            long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
+            Coordinator coordinator) throws UserException {
 
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -242,8 +243,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         LoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob =
-                    new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout,
+                    coordinator);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
