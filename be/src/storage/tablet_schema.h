@@ -335,7 +335,7 @@ private:
     void _generate_sort_key_idxes();
     void _clear_columns();
     Status _build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
-                                       const TabletSchema& ori_tablet_schema);
+                                        const TabletSchema& ori_tablet_schema);
 
     void _init_from_pb(const TabletSchemaPB& schema);
 
