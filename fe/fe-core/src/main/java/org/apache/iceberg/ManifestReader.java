@@ -25,6 +25,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import com.google.common.cache.Cache;
 import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.exceptions.RuntimeIOException;
@@ -93,6 +95,9 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     // lazily initialized
     private Evaluator lazyEvaluator = null;
     private InclusiveMetricsEvaluator lazyMetricsEvaluator = null;
+    private boolean dataFileCacheWithMetrics = false;
+    private Cache<String, Set<DataFile>> dataFileCache;
+    private Cache<String, Set<DeleteFile>> deleteFileCache;
 
     protected ManifestReader(
             InputFile file,
@@ -198,6 +203,21 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         return this;
     }
 
+    ManifestReader<F> cacheWithMetrics(boolean cacheWithMetrics) {
+        this.dataFileCacheWithMetrics = cacheWithMetrics;
+        return this;
+    }
+
+    ManifestReader<F> dataFileCache(Cache<String, Set<DataFile>> fileCache) {
+        this.dataFileCache = fileCache;
+        return this;
+    }
+
+    ManifestReader<F> deleteFileCache(Cache<String, Set<DeleteFile>> fileCache) {
+        this.deleteFileCache = fileCache;
+        return this;
+    }
+
     CloseableIterable<ManifestEntry<F>> entries() {
         return entries(false /* all entries */);
     }
@@ -213,7 +233,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                     requireStatsProjection ? withStatsColumns(columns) : columns;
             CloseableIterable<ManifestEntry<F>> entries =
                     open(projection(fileSchema, fileProjection, projectColumns, caseSensitive));
-
+            entries = fillCacheIfNeeded(entries);
             return CloseableIterable.filter(
                     content == FileType.DATA_FILES
                             ? scanMetrics.skippedDataFiles()
@@ -227,8 +247,36 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         } else {
             CloseableIterable<ManifestEntry<F>> entries =
                     open(projection(fileSchema, fileProjection, columns, caseSensitive));
+            entries = fillCacheIfNeeded(entries);
             return onlyLive ? filterLiveEntries(entries) : entries;
         }
+    }
+
+    private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(CloseableIterable<ManifestEntry<F>> entries) {
+        if (dataFileCache != null && content == FileType.DATA_FILES) {
+            entries = CloseableIterable.transform(entries,
+                    entry -> {
+                        Set<DataFile> dataFiles = dataFileCache.getIfPresent(file.location());
+                        if (dataFiles != null) {
+                            DataFile dataFile = (DataFile) entry.file();
+                            dataFiles.add(dataFileCacheWithMetrics ? dataFile : dataFile.copyWithoutStats());
+                        }
+                        return entry;
+                    });
+        }
+
+        if (content == FileType.DELETE_FILES && deleteFileCache != null) {
+            entries = CloseableIterable.transform(entries,
+                    entry -> {
+                        Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(file.location());
+                        if (deleteFiles != null) {
+                            deleteFiles.add((DeleteFile) entry.file().copy());
+                        }
+                        return entry;
+                    });
+        }
+
+        return entries;
     }
 
     private boolean hasRowFilter() {

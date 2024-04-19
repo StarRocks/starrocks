@@ -22,6 +22,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -32,6 +33,8 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
+
+import com.google.common.cache.Cache;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -325,6 +328,8 @@ class DeleteFileIndex {
         private boolean caseSensitive = true;
         private ExecutorService executorService = null;
         private ScanMetrics scanMetrics = ScanMetrics.noop();
+        private Cache<String, Set<DeleteFile>> deleteFileCache;
+        private Iterable<DeleteFile> cachedDeleteFiles = new ArrayList<>();
 
         Builder(FileIO io, Set<ManifestFile> deleteManifests) {
             this.io = io;
@@ -384,6 +389,16 @@ class DeleteFileIndex {
             return this;
         }
 
+        Builder cachedDeleteFiles(Set<DeleteFile> deleteFiles) {
+            this.cachedDeleteFiles = deleteFiles;
+            return this;
+        }
+
+        Builder deleteFileCache(Cache<String, Set<DeleteFile>> cache) {
+            this.deleteFileCache = cache;
+            return this;
+        }
+
         private Iterable<DeleteFile> filterDeleteFiles() {
             return Iterables.filter(deleteFiles, file -> file.dataSequenceNumber() > minSequenceNumber);
         }
@@ -414,6 +429,7 @@ class DeleteFileIndex {
 
         DeleteFileIndex build() {
             Iterable<DeleteFile> files = deleteFiles != null ? filterDeleteFiles() : loadDeleteFiles();
+            files = Iterables.concat(files, cachedDeleteFiles);
 
             EqualityDeletes globalDeletes = new EqualityDeletes();
             PartitionMap<EqualityDeletes> eqDeletesByPartition = PartitionMap.create(specsById);
@@ -517,6 +533,7 @@ class DeleteFileIndex {
                                     .filterPartitions(partitionSet)
                                     .caseSensitive(caseSensitive)
                                     .scanMetrics(scanMetrics)
+                                    .deleteFileCache(deleteFileCache)
                                     .liveEntries());
         }
     }
