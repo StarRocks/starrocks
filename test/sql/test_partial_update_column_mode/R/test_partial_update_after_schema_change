@@ -42,9 +42,9 @@ insert into tab1 values (300, "k3_300", 300, 300, 300, "v4_300", "v5_300");
 -- !result
 select * from tab1;
 -- result:
-200	k2_200	200	200	200	v4_200	v5_200
 300	k3_300	300	300	300	v4_300	v5_300
 100	k2_100	100	100	100	v4_100	v5_100
+200	k2_200	200	200	200	v4_200	v5_200
 -- !result
 insert into tab2 values (100, 100, 100, 100);
 -- result:
@@ -58,8 +58,8 @@ insert into tab2 values (300, 300, 300, 300);
 select * from tab2;
 -- result:
 100	100	100	100
-200	200	200	200
 300	300	300	300
+200	200	200	200
 -- !result
 alter table tab1 add column (v6 INTEGER DEFAULT "100");
 -- result:
@@ -79,7 +79,7 @@ update tab1 set v6 = (select sum(tab2.v1) from tab2);
 -- !result
 select * from tab1;
 -- result:
+300	k3_300	300	300	300	v4_300	v5_300	600
 100	k2_100	100	100	100	v4_100	v5_100	600
 200	k2_200	200	200	200	v4_200	v5_200	600
-300	k3_300	300	300	300	v4_300	v5_300	600
 -- !result

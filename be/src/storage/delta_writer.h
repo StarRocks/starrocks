@@ -162,6 +162,11 @@ public:
 
     int64_t write_buffer_size() const { return _write_buffer_size; }
 
+    static bool is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
+                                                         const std::vector<int32_t>& referenced_column_ids,
+                                                         const std::vector<ColumnId>& sort_key_idxes,
+                                                         size_t num_key_columns);
+
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
@@ -208,7 +213,7 @@ private:
     bool _with_rollback_log;
     // initial value is max value
     size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
-    bool _partial_schema_with_sort_key = false;
+    bool _partial_schema_with_sort_key_conflict = false;
     std::atomic<bool> _is_immutable = false;
 
     int64_t _last_write_ts = 0;
