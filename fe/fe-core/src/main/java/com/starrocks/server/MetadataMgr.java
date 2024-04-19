@@ -54,6 +54,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -340,6 +341,81 @@ public class MetadataMgr {
         });
     }
 
+<<<<<<< HEAD
+=======
+    public void dropTemporaryTable(DropTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        String catalogName = stmt.getCatalogName();
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new StarRocksConnectorException("temporary table must be under internal catalog");
+        }
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            String dbName = stmt.getDbName();
+            Database db = getDb(catalogName, dbName);
+            if (db == null) {
+                throw new StarRocksConnectorException(
+                        "Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            String tableName = stmt.getTableName();
+            UUID sessionId = stmt.getSessionId();
+
+            Long tableId = temporaryTableMgr.getTable(sessionId, db.getId(), tableName);
+            if (tableId == null) {
+                if (stmt.isSetIfExists()) {
+                    LOG.info("drop temporary table[{}.{}] which doesn't exist in session[{}]",
+                            dbName, tableName, sessionId);
+                } else {
+                    throw new StarRocksConnectorException("Temporary table '" + tableName + "' doesn't exist");
+                }
+            }
+            try {
+                metadata.dropTemporaryTable(dbName, tableId, tableName, stmt.isSetIfExists(), stmt.isForceDrop());
+                temporaryTableMgr.dropTemporaryTable(sessionId, db.getId(), tableName);
+            } catch (DdlException e) {
+                LOG.error("Failed to drop temporary table {}.{}.{} in session {}, {}",
+                        catalogName, dbName, tableName, sessionId, e);
+                throw new StarRocksConnectorException("Failed to drop temporary table %s.%s.%s. msg: %s",
+                        catalogName, dbName, tableName, e.getMessage());
+            }
+        });
+    }
+
+    public void cleanTemporaryTables(CleanTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        cleanTemporaryTables(stmt.getSessionId());
+    }
+
+    public void cleanTemporaryTables(UUID sessionId) {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        com.google.common.collect.Table<Long, String, Long> allTables = temporaryTableMgr.getTemporaryTables(sessionId);
+
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database database = localMetastore.getDb(databaseId);
+            if (database == null) {
+                // database maybe dropped by force, we should clean temporary tables on it.
+                temporaryTableMgr.dropTemporaryTables(sessionId, databaseId);
+                continue;
+            }
+            Map<String, Long> tables = allTables.row(databaseId);
+            tables.forEach((tableName, tableId) -> {
+                try {
+                    database.dropTemporaryTable(tableId, tableName, true, true);
+                    temporaryTableMgr.dropTemporaryTable(sessionId, database.getId(), tableName);
+                } catch (DdlException e) {
+                    LOG.error("Failed to drop temporary table {}.{} in session {}",
+                            database.getFullName(), tableName, sessionId, e);
+                }
+            });
+        }
+        temporaryTableMgr.removeTemporaryTables(sessionId);
+    }
+
+>>>>>>> 420d78f2bc ([Feature] temporary table(part-2): support automatic deletion of temporary tables (#44139))
     public Optional<Table> getTable(TableName tableName) {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }

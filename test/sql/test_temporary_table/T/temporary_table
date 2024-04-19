@@ -1,0 +1,117 @@
+-- name: test_create_temporary_table
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+create temporary table if not exists `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+
+show create table `t0`;
+desc `t0`;
+show tables;
+show temporary tables;
+insert into `t0` values (1,1),(2,2),(3,3);
+select * from `t0` order by `c1`,`c2`;
+
+update `t0` set `c2`=`c2`+1 where `c1`=1;
+select * from `t0` order by `c1`,`c2`;
+
+delete from `t0` where `c1` = 1;
+select * from `t0` order by `c1`, `c2`;
+
+drop temporary table `t0`;
+
+-- name: test_create_temporary_table_like
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
+insert into `t0` values (1,1),(2,2),(3,3);
+
+create temporary table `t1` like `t0`;
+create temporary table `t1` like `t0`;
+create temporary table if not exists `t1` like `t0`;
+show create table `t1`;
+show tables;
+show temporary tables;
+select * from `t1`;
+
+insert into `t1` values (1,1),(2,2);
+select * from `t1` order by `c1`,`c2`;
+
+
+-- name: test_create_table_as_select
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
+insert into `t0` values (1,1),(2,2),(3,3);
+
+create temporary table `t1` as select * from `t0`;
+create temporary table `t1` as select * from `t0`;
+create temporary table if not exists `t1` as select * from `t0`;
+show create table `t1`;
+show tables;
+show temporary tables;
+select * from `t1` order by `c1`,`c2`;
+
+insert into `t1` values (4,4),(5,5);
+select * from `t1` order by `c1`,`c2`;
+
+-- name: test_name_conflict
+create table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+insert into `t` values (1,1),(2,2),(3,3);
+
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+select * from `t`;
+insert into `t` values (1,1,1),(2,2,2);
+select * from `t` order by `c1`,`c2`,`c3`;
+drop temporary table `t`;
+select * from `t` order by `c1`,`c2`;
+
+-- name: test_select_out_file
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+select * from `t` into outfile "oss://${oss_bucket}/test_temporary_table/${uuid0}/" properties("aws.s3.access_key"="${oss_ak}","aws.s3.secret_key"="${oss_sk}","aws.s3.endpoint"="${oss_endpoint}");
+
+-- name: test_abnormal_drop
+drop temporary table `a`.`b`.`c`;
+drop temporary table `b`.`c`;
+drop temporary table `c`;
+
+-- name: test_drop_rename_db
+create database temp_table_test_${uuid0};
+use temp_table_test_${uuid0};
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+insert into `t` values (1,1,1),(2,2,2);
+select * from `t` order by 1,2,3;
+alter database temp_table_test_${uuid0} rename temp_table_test_${uuid0}_new;
+
+select * from temp_table_test_${uuid0}.t order by 1,2,3;
+select * from temp_table_test_${uuid0}_new.t order by 1,2,3;
+drop database temp_table_test_${uuid0}_new;
+drop database temp_table_test_${uuid0}_new force;

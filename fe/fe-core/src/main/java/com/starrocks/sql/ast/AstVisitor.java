@@ -156,6 +156,17 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+<<<<<<< HEAD
+=======
+    default R visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+>>>>>>> 420d78f2bc ([Feature] temporary table(part-2): support automatic deletion of temporary tables (#44139))
     default R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }

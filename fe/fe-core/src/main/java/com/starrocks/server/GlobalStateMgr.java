@@ -466,6 +466,11 @@ public class GlobalStateMgr {
     private MemoryUsageTracker memoryUsageTracker;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+<<<<<<< HEAD
+=======
+    private TemporaryTableMgr temporaryTableMgr;
+    private TemporaryTableCleaner temporaryTableCleaner;
+>>>>>>> 420d78f2bc ([Feature] temporary table(part-2): support automatic deletion of temporary tables (#44139))
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -747,6 +752,7 @@ public class GlobalStateMgr {
         this.authorizer = new Authorizer(accessControlProvider);
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
     }
 
     public static void destroyCheckpoint() {
@@ -1327,6 +1333,11 @@ public class GlobalStateMgr {
             LOG.info("run system in recovery mode");
             metaRecoveryDaemon.start();
         }
+<<<<<<< HEAD
+=======
+        temporaryTableCleaner.start();
+
+>>>>>>> 420d78f2bc ([Feature] temporary table(part-2): support automatic deletion of temporary tables (#44139))
     }
 
     // start threads that should run on all FE

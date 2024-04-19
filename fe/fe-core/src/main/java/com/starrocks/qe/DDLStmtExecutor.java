@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -288,6 +289,25 @@ public class DDLStmtExecutor {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public ShowResultSet visitDropTemporaryTableStatement(DropTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCleanTemporaryTableStatement(CleanTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().cleanTemporaryTables(stmt);
+            });
+            return null;
+        }
+
+        @Override
+>>>>>>> 420d78f2bc ([Feature] temporary table(part-2): support automatic deletion of temporary tables (#44139))
         public ShowResultSet visitCreateMaterializedViewStmt(CreateMaterializedViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);

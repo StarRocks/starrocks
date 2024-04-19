@@ -1,0 +1,295 @@
+-- name: test_create_temporary_table
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create temporary table if not exists `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+E: (1050, "Getting analyzing error. Detail message: Table 't0' already exists.")
+-- !result
+show create table `t0`;
+-- result:
+t0	CREATE TEMPORARY TABLE `t0` (
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+desc `t0`;
+-- result:
+c1	int	NO	true	None	
+c2	int	YES	false	None	
+-- !result
+show tables;
+-- result:
+-- !result
+show temporary tables;
+-- result:
+t0
+-- !result
+insert into `t0` values (1,1),(2,2),(3,3);
+-- result:
+-- !result
+select * from `t0` order by `c1`,`c2`;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+update `t0` set `c2`=`c2`+1 where `c1`=1;
+-- result:
+-- !result
+select * from `t0` order by `c1`,`c2`;
+-- result:
+1	2
+2	2
+3	3
+-- !result
+delete from `t0` where `c1` = 1;
+-- result:
+-- !result
+select * from `t0` order by `c1`, `c2`;
+-- result:
+2	2
+3	3
+-- !result
+drop temporary table `t0`;
+-- result:
+-- !result
+-- name: test_create_temporary_table_like
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
+-- result:
+-- !result
+insert into `t0` values (1,1),(2,2),(3,3);
+-- result:
+-- !result
+create temporary table `t1` like `t0`;
+-- result:
+-- !result
+create temporary table `t1` like `t0`;
+-- result:
+E: (1050, "Getting analyzing error. Detail message: Table 't1' already exists.")
+-- !result
+create temporary table if not exists `t1` like `t0`;
+-- result:
+-- !result
+show create table `t1`;
+-- result:
+t1	CREATE TEMPORARY TABLE `t1` (
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+show tables;
+-- result:
+t0
+-- !result
+show temporary tables;
+-- result:
+t1
+-- !result
+select * from `t1`;
+-- result:
+-- !result
+insert into `t1` values (1,1),(2,2);
+-- result:
+-- !result
+select * from `t1` order by `c1`,`c2`;
+-- result:
+1	1
+2	2
+-- !result
+-- name: test_create_table_as_select
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
+-- result:
+-- !result
+insert into `t0` values (1,1),(2,2),(3,3);
+-- result:
+-- !result
+create temporary table `t1` as select * from `t0`;
+-- result:
+-- !result
+create temporary table `t1` as select * from `t0`;
+-- result:
+E: (1050, "Getting analyzing error. Detail message: Table 't1' already exists.")
+-- !result
+create temporary table if not exists `t1` as select * from `t0`;
+-- result:
+-- !result
+show create table `t1`;
+-- result:
+t1	CREATE TEMPORARY TABLE `t1` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c1`, `c2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+show tables;
+-- result:
+t0
+-- !result
+show temporary tables;
+-- result:
+t1
+-- !result
+select * from `t1` order by `c1`,`c2`;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+insert into `t1` values (4,4),(5,5);
+-- result:
+-- !result
+select * from `t1` order by `c1`,`c2`;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+-- name: test_name_conflict
+create table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into `t` values (1,1),(2,2),(3,3);
+-- result:
+-- !result
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+select * from `t`;
+-- result:
+-- !result
+insert into `t` values (1,1,1),(2,2,2);
+-- result:
+-- !result
+select * from `t` order by `c1`,`c2`,`c3`;
+-- result:
+1	1	1
+2	2	2
+-- !result
+drop temporary table `t`;
+-- result:
+-- !result
+select * from `t` order by `c1`,`c2`;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+-- name: test_select_out_file
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+select * from `t` into outfile "oss://${oss_bucket}/test_temporary_table/${uuid0}/" properties("aws.s3.access_key"="${oss_ak}","aws.s3.secret_key"="${oss_sk}","aws.s3.endpoint"="${oss_endpoint}");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: temporary table doesn't support select outfile statement.")
+-- !result
+-- name: test_abnormal_drop
+drop temporary table `a`.`b`.`c`;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: drop temporary table can only be execute under default catalog.')
+-- !result
+drop temporary table `b`.`c`;
+-- result:
+E: (5501, "Getting analyzing error. Detail message: Unknown database 'b'.")
+-- !result
+drop temporary table `c`;
+-- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'c'.")
+-- !result
+-- name: test_drop_rename_db
+create database temp_table_test_${uuid0};
+-- result:
+-- !result
+use temp_table_test_${uuid0};
+-- result:
+-- !result
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into `t` values (1,1,1),(2,2,2);
+-- result:
+-- !result
+select * from `t` order by 1,2,3;
+-- result:
+1	1	1
+2	2	2
+-- !result
+alter database temp_table_test_${uuid0} rename temp_table_test_${uuid0}_new;
+-- result:
+-- !result
+select * from temp_table_test_${uuid0}.t order by 1,2,3;
+-- result:
+[REGEX].*Unknown database*
+-- !result
+select * from temp_table_test_${uuid0}_new.t order by 1,2,3;
+-- result:
+1	1	1
+2	2	2
+-- !result
+drop database temp_table_test_${uuid0}_new;
+-- result:
+[REGEX].*cannot be dropped because there are still some temporary tables*
+-- !result
+drop database temp_table_test_${uuid0}_new force;
+-- result:
+-- !result
