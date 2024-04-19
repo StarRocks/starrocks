@@ -35,6 +35,11 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_JOB_PLANNING_THREAD_NUM = "iceberg_job_planning_thread_num";
     public static final String REFRESH_OTHER_FE_ICEBERG_CACHE_THREAD_NUM = "refresh_other_fe_iceberg_cache_thread_num";
     public static final String BACKGROUND_ICEBERG_JOB_PLANNING_THREAD_NUM = "background_iceberg_job_planning_thread_num";
+    public static final String ICEBERG_MANIFEST_CACHE_WITH_METRICS = "iceberg_manifest_cache_with_column_statistics";
+    public static final String ICEBERG_MANIFEST_CACHE_MAX_NUM = "iceberg_manifest_cache_max_num";
+
+    // internal config
+    public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
 
     private final Map<String, String> properties;
     private IcebergCatalogType catalogType;
@@ -43,6 +48,9 @@ public class IcebergCatalogProperties {
     private int icebergJobPlanningThreadNum;
     private int backgroundIcebergJobPlanningThreadNum;
     private int refreshOtherFeIcebergCacheThreadNum;
+    private boolean icebergManifestCacheWithColumnStatistics;
+    private long icebergTableCacheTtlSec;
+    private long icebergManifestCacheMaxNum;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -68,13 +76,13 @@ public class IcebergCatalogProperties {
     }
 
     private void initIcebergMetadataCache() {
-        if (properties.containsKey(ENABLE_ICEBERG_METADATA_CACHE)) {
-            enableIcebergMetadataCache = Boolean.parseBoolean(properties.get(ENABLE_ICEBERG_METADATA_CACHE));
-        } else {
-            enableIcebergMetadataCache = catalogType == IcebergCatalogType.GLUE_CATALOG;
-        }
+        this.enableIcebergMetadataCache = PropertyUtil.propertyAsBoolean(properties, ENABLE_ICEBERG_METADATA_CACHE, true);
 
-        this.icebergMetaCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_META_CACHE_TTL, 1800);
+        this.icebergMetaCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_META_CACHE_TTL, 48 * 60 * 60);
+        this.icebergTableCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_TABLE_CACHE_TTL, 1800L);
+        this.icebergManifestCacheMaxNum = PropertyUtil.propertyAsLong(properties, ICEBERG_MANIFEST_CACHE_MAX_NUM, 100000);
+        this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
+                properties, ICEBERG_MANIFEST_CACHE_WITH_METRICS, false);
     }
 
     private void initThreadPoolNum() {
@@ -110,5 +118,21 @@ public class IcebergCatalogProperties {
 
     public int getBackgroundIcebergJobPlanningThreadNum() {
         return backgroundIcebergJobPlanningThreadNum;
+    }
+
+    public boolean isIcebergManifestCacheWithColumnStatistics() {
+        return icebergManifestCacheWithColumnStatistics;
+    }
+
+    public long getIcebergTableCacheTtlSec() {
+        return icebergTableCacheTtlSec;
+    }
+
+    public boolean isEnableIcebergMetadataCache() {
+        return enableIcebergMetadataCache;
+    }
+
+    public long getIcebergManifestCacheMaxNum() {
+        return icebergManifestCacheMaxNum;
     }
 }
