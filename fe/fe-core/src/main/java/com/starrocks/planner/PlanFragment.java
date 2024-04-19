@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -557,7 +558,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         str.append(outputBuilder);
         str.append("\n");
-        if (!colocateExecGroups.isEmpty()) {
+        if (!colocateExecGroups.isEmpty() && Config.show_execution_groups) {
             str.append("  colocate exec groups: ");
             for (ExecGroup group : colocateExecGroups) {
                 str.append(group);
@@ -580,19 +581,19 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (FeConstants.showFragmentCost) {
             str.append("  Fragment Cost: ").append(fragmentCost).append("\n");
         }
-        if (CollectionUtils.isNotEmpty(outputExprs)) {
-            str.append("  Output Exprs:");
-            str.append(outputExprs.stream().map(Expr::toSql)
-                    .collect(Collectors.joining(" | ")));
-        }
-        str.append("\n");
-        if (!colocateExecGroups.isEmpty()) {
+        if (!colocateExecGroups.isEmpty() && Config.show_execution_groups) {
             str.append("  colocate exec groups: ");
             for (ExecGroup group : colocateExecGroups) {
                 str.append(group);
             }
             str.append("\n");
         }
+        if (CollectionUtils.isNotEmpty(outputExprs)) {
+            str.append("  Output Exprs:");
+            str.append(outputExprs.stream().map(Expr::toSql)
+                    .collect(Collectors.joining(" | ")));
+        }
+        str.append("\n");
         str.append("  Input Partition: ").append(dataPartition.getExplainString(TExplainLevel.NORMAL));
         if (sink != null) {
             str.append(sink.getVerboseExplain("  ")).append("\n");
