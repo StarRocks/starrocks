@@ -3152,7 +3152,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### lake_enable_batch_publish_version 
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是

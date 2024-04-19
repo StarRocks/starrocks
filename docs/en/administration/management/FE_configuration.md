@@ -3146,7 +3146,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### lake_enable_batch_publish_version 
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
