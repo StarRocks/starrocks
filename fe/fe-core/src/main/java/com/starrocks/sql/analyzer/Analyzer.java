@@ -331,6 +331,7 @@ public class Analyzer {
                 taskStmt = insertStmt;
             } else if (statement.getDataCacheSelectStmt() != null) {
                 DataCacheStmtAnalyzer.analyze(statement.getDataCacheSelectStmt(), context);
+                taskStmt = statement.getDataCacheSelectStmt();
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }

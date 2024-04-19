@@ -340,6 +340,7 @@ drop database temp_table_test_${uuid0}_new;
 -- !result
 drop database temp_table_test_${uuid0}_new force;
 -- result:
+-- !result
 -- name: test_create_view
 create temporary table `t` (
     `c1` int,
