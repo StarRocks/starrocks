@@ -49,9 +49,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimerTask;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -152,6 +155,7 @@ public class ConnectScheduler {
             if (conns != null) {
                 conns.decrementAndGet();
             }
+            ctx.cleanTemporaryTable();
             LOG.info("Connection closed. remote={}, connectionId={}",
                     ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId());
         }
@@ -190,6 +194,14 @@ public class ConnectScheduler {
 
     public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String user) {
         return getAllConnThreadInfoByUser(context, user);
+    }
+
+    public Set<UUID> listAllSessionsId() {
+        Set<UUID> sessionIds = new HashSet<>();
+        connectionMap.values().forEach(ctx -> {
+            sessionIds.add(ctx.getSessionId());
+        });
+        return sessionIds;
     }
 
     private class LoopHandler implements Runnable {

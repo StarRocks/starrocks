@@ -468,6 +468,7 @@ public class GlobalStateMgr {
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
     private TemporaryTableMgr temporaryTableMgr;
+    private TemporaryTableCleaner temporaryTableCleaner;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -754,6 +755,7 @@ public class GlobalStateMgr {
         this.authorizer = new Authorizer(accessControlProvider);
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
     }
 
     public static void destroyCheckpoint() {
@@ -1334,6 +1336,7 @@ public class GlobalStateMgr {
             LOG.info("run system in recovery mode");
             metaRecoveryDaemon.start();
         }
+        temporaryTableCleaner.start();
 
     }
 
