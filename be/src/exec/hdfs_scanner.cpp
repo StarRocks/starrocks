@@ -190,19 +190,12 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-<<<<<<< HEAD
 void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
-=======
-void HdfsScanner::close() noexcept {
-    if (!_runtime_state) {
-        return;
-    }
     VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
               << "], rows = " << _app_stats.rows_read;
 
->>>>>>> 5ac845ebef ([BugFix] fix scan operator early quit when some splitted morsels not handled (#44388))
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
