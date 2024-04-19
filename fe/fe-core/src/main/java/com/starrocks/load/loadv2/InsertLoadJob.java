@@ -47,11 +47,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TLoadJobType;
@@ -79,6 +79,7 @@ public class InsertLoadJob extends LoadJob {
     private long tableId;
     private long estimateScanRow;
     private TLoadJobType loadType;
+    private Coordinator coordinator;
 
     @SerializedName("wh")
     private String warehouse;
@@ -94,9 +95,14 @@ public class InsertLoadJob extends LoadJob {
         this.isStatisticsJob = false;
     }
 
+<<<<<<< HEAD
     public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
                          long estimateScanRow, TLoadJobType type, long timeout, String warehouse,
                          boolean isStatisticsJob) {
+=======
+    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, TLoadJobType type, long timeout,
+            Coordinator coordinator) throws MetaNotFoundException {
+>>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -106,6 +112,7 @@ public class InsertLoadJob extends LoadJob {
         this.estimateScanRow = estimateScanRow;
         this.loadType = type;
         this.timeoutSecond = timeout;
+<<<<<<< HEAD
         this.warehouse = warehouse;
         this.isStatisticsJob = isStatisticsJob;
     }
@@ -113,6 +120,14 @@ public class InsertLoadJob extends LoadJob {
     @VisibleForTesting
     InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, String failMsg,
                   String trackingUrl) throws MetaNotFoundException {
+=======
+        this.coordinator = coordinator;
+    }
+
+    // only used for test
+    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, String failMsg,
+                         String trackingUrl, Coordinator coordinator) throws MetaNotFoundException {
+>>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -131,6 +146,7 @@ public class InsertLoadJob extends LoadJob {
         this.authorizationInfo = gatherAuthInfo();
         this.loadingStatus.setTrackingUrl(trackingUrl);
         this.loadType = TLoadJobType.INSERT_QUERY;
+<<<<<<< HEAD
         this.warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         this.isStatisticsJob = false;
     }
@@ -143,6 +159,9 @@ public class InsertLoadJob extends LoadJob {
     @Override
     public boolean isInternalJob() {
         return isStatisticsJob;
+=======
+        this.coordinator = coordinator;
+>>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
     }
 
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) throws UserException {
@@ -159,6 +178,7 @@ public class InsertLoadJob extends LoadJob {
             }
             this.authorizationInfo = gatherAuthInfo();
             this.loadingStatus.setTrackingUrl(trackingUrl);
+            this.coordinator = null;
         } finally {
             writeUnlock();
         }
@@ -255,12 +275,12 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     protected List<TabletCommitInfo> getTabletCommitInfos() {
-        throw new RuntimeException(new NotImplementedException("Not implemented"));
+        return Coordinator.getCommitInfos(coordinator);
     }
 
     @Override
     protected List<TabletFailInfo> getTabletFailInfos() {
-        throw new RuntimeException(new NotImplementedException("Not implemented"));
+        return Coordinator.getFailInfos(coordinator);
     }
 
     @Override
