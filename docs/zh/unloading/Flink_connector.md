@@ -85,19 +85,23 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ## 准备工作
 
+### 部署 Flink Connector
+
 通过如下步骤完成 Flink Connector 的部署：
 
-1. 根据 Flink 的版本，选择和下载对应版本的 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR 包。
+1. 根据 Flink 的版本，选择和下载对应版本的 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR 包。如需调试代码，可选择对应分支代码自行编译。
 
    > **注意**
    >
    > 推荐您下载 Flink Connector 版本在 1.2.x 及以上、并且配套的 Flink 版本与您的业务环境中安装的 Flink 版本前两位一致的 JAR 包。例如，如果您的业务环境中安装的 Flink 版本为 1.14.x，可以下载 `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`。
 
-2. 如需调试代码，可选择对应分支代码自行编译。
+2. 将下载或者编译的 JAR 包放在 Flink 的 `lib` 目录中。
 
-3. 将下载或者编译的 JAR 包放在 Flink 的 `lib` 目录中。
+3. 重启 Flink。
 
-4. 重启 Flink。
+### 网络设置
+
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
 
 ## 参数说明
 
@@ -110,7 +114,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | connector                   | 是       | STRING   | 固定设置为 `starrocks`。                                     |
 | scan-url                    | 是       | STRING   | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 格式如下：`<fe_host>:<fe_http_port>`。默认端口号为 `8030`。多个地址之间用逗号 (,) 分隔。例如 `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
 | jdbc-url                    | 是       | STRING   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。格式如下：`jdbc:mysql://<fe_host>:<fe_query_port>`。默认端口号为 `9030`。 |
-| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/privilege_overview.md)。 |
+| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/user_privs/privilege_overview.md)。 |
 | password                    | 是       | STRING   | 用于访问 StarRocks 集群的用户密码。                          |
 | database-name               | 是       | STRING   | 待读取数据的 StarRocks 数据库的名称。                        |
 | table-name                  | 是       | STRING   | 待读取数据的 StarRocks 表的名称。                            |

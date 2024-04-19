@@ -22,6 +22,7 @@
 #include "match_operator.h"
 #include "storage/inverted/index_descriptor.hpp"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 #include "util/faststring.h"
 
 namespace starrocks {
@@ -36,7 +37,7 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
                                      LogicalType field_type, std::unique_ptr<InvertedReader>* res) {
     if (is_string_type(field_type)) {
         InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(
-                get_parser_string_from_properties(tablet_index->common_properties()));
+                get_parser_string_from_properties(tablet_index->index_properties()));
         // Only support full text search for now
         *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index->index_id(), parser_type);
         return Status::OK();
@@ -64,6 +65,9 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     std::unique_ptr<MatchOperator> match_operator;
 
     auto* directory = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
+    // defer must define before IndexSearcher. Because the destory order is matter.
+    // Make sure IndexSearcher destory first and decrement __cl_refcount first.
+    DeferOp defer([&]() { CLOSE_DIR(directory) });
     lucene::search::IndexSearcher index_searcher(directory);
 
     switch (query_type) {
@@ -93,15 +97,13 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
         match_operator = std::make_unique<MatchGreatThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
                                                                   search_wstr, true);
         break;
-    case InvertedIndexQueryType::MATCH_ANY_QUERY:
+    case InvertedIndexQueryType::MATCH_WILDCARD_QUERY:
         match_operator =
                 std::make_unique<MatchWildcardOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
         break;
     default:
         return Status::InvalidArgument("Unknown query type");
     }
-
-    _CLDECDELETE(directory)
 
     roaring::Roaring result;
     try {
@@ -142,13 +144,13 @@ Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, co
 
         bit_map->swap(*null_bitmap);
 
-        CLOSE_INPUT(dir)
+        CLOSE_DIR(dir)
     } catch (CLuceneError& e) {
         if (null_bitmap_in) {
             FINALLY_CLOSE_INPUT(null_bitmap_in)
         }
         if (dir) {
-            FINALLY_CLOSE_INPUT(dir)
+            FINALLY_CLOSE_DIR(dir)
         }
         LOG(WARNING) << "Inverted index read null bitmap error occurred: " << e.what();
         return Status::NotFound(fmt::format("Inverted index read null bitmap error occurred: ", e.what()));

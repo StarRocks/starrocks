@@ -24,6 +24,7 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
@@ -45,21 +46,25 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
@@ -71,6 +76,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -100,6 +106,7 @@ public class MetadataMgr {
     }
 
     private final LocalMetastore localMetastore;
+    private final TemporaryTableMgr temporaryTableMgr;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
 
@@ -128,10 +135,12 @@ public class MetadataMgr {
                         }
                     });
 
-    public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
+    public MetadataMgr(LocalMetastore localMetastore, TemporaryTableMgr temporaryTableMgr, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
         Preconditions.checkNotNull(localMetastore, "localMetastore is null");
+        Preconditions.checkNotNull(temporaryTableMgr, "temporaryTableMgr is null");
         this.localMetastore = localMetastore;
+        this.temporaryTableMgr = temporaryTableMgr;
         this.connectorMgr = connectorMgr;
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
@@ -246,6 +255,23 @@ public class MetadataMgr {
         return ImmutableList.copyOf(tableNames.build());
     }
 
+    public List<String> listTemporaryTableNames(UUID sessionId, String catalogName, String dbName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+            Preconditions.checkArgument(connectorMetadata.isPresent(), "internal catalog doesn't exist");
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                Database database = connectorMetadata.get().getDb(dbName);
+                if (database != null) {
+                    return temporaryTableMgr.listTemporaryTables(sessionId, database.getId());
+                }
+            } catch (Exception e) {
+                throw e;
+            }
+        }
+        return Lists.newArrayList();
+    }
+
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -294,6 +320,40 @@ public class MetadataMgr {
         }
     }
 
+    public boolean createTemporaryTable(CreateTemporaryTableStmt stmt) throws DdlException {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in CreateTemporaryTableStmt");
+        String catalogName = stmt.getCatalogName();
+
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (!connectorMetadata.isPresent()) {
+            throw new DdlException("Invalid catalog " + catalogName + ", ConnectorMetadata doesn't exist");
+        } else if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new DdlException("temporary table must be created under internal catalog");
+        } else {
+            String dbName = stmt.getDbName();
+            Database db = getDb(catalogName, dbName);
+            if (db == null) {
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            String tableName = stmt.getTableName();
+            UUID sessionId = stmt.getSessionId();
+
+            if (temporaryTableMgr.tableExists(sessionId, db.getId(), tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create temporary table[{}.{}] which already exists in session[{}]",
+                            dbName, tableName, sessionId);
+                    return false;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            }
+            return connectorMetadata.get().createTable(stmt);
+        }
+    }
+
     public void alterTable(AlterTableStmt stmt) throws UserException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -338,6 +398,78 @@ public class MetadataMgr {
         });
     }
 
+    public void dropTemporaryTable(DropTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        String catalogName = stmt.getCatalogName();
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new StarRocksConnectorException("temporary table must be under internal catalog");
+        }
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            String dbName = stmt.getDbName();
+            Database db = getDb(catalogName, dbName);
+            if (db == null) {
+                throw new StarRocksConnectorException(
+                        "Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            String tableName = stmt.getTableName();
+            UUID sessionId = stmt.getSessionId();
+
+            Long tableId = temporaryTableMgr.getTable(sessionId, db.getId(), tableName);
+            if (tableId == null) {
+                if (stmt.isSetIfExists()) {
+                    LOG.info("drop temporary table[{}.{}] which doesn't exist in session[{}]",
+                            dbName, tableName, sessionId);
+                } else {
+                    throw new StarRocksConnectorException("Temporary table '" + tableName + "' doesn't exist");
+                }
+            }
+            try {
+                metadata.dropTemporaryTable(dbName, tableId, tableName, stmt.isSetIfExists(), stmt.isForceDrop());
+                temporaryTableMgr.dropTemporaryTable(sessionId, db.getId(), tableName);
+            } catch (DdlException e) {
+                LOG.error("Failed to drop temporary table {}.{}.{} in session {}, {}",
+                        catalogName, dbName, tableName, sessionId, e);
+                throw new StarRocksConnectorException("Failed to drop temporary table %s.%s.%s. msg: %s",
+                        catalogName, dbName, tableName, e.getMessage());
+            }
+        });
+    }
+
+    public void cleanTemporaryTables(CleanTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        cleanTemporaryTables(stmt.getSessionId());
+    }
+
+    public void cleanTemporaryTables(UUID sessionId) {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        com.google.common.collect.Table<Long, String, Long> allTables = temporaryTableMgr.getTemporaryTables(sessionId);
+
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database database = localMetastore.getDb(databaseId);
+            if (database == null) {
+                // database maybe dropped by force, we should clean temporary tables on it.
+                temporaryTableMgr.dropTemporaryTables(sessionId, databaseId);
+                continue;
+            }
+            Map<String, Long> tables = allTables.row(databaseId);
+            tables.forEach((tableName, tableId) -> {
+                try {
+                    database.dropTemporaryTable(tableId, tableName, true, true);
+                    temporaryTableMgr.dropTemporaryTable(sessionId, database.getId(), tableName);
+                } catch (DdlException e) {
+                    LOG.error("Failed to drop temporary table {}.{} in session {}",
+                            database.getFullName(), tableName, sessionId, e);
+                }
+            });
+        }
+        temporaryTableMgr.removeTemporaryTables(sessionId);
+    }
+
     public Optional<Table> getTable(TableName tableName) {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
@@ -353,6 +485,21 @@ public class MetadataMgr {
     }
 
     public Table getTable(Long databaseId, Long tableId) {
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
+    }
+
+    public Table getTemporaryTable(UUID sessionId, String catalogName, Long databaseId, String tblName) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            return null;
+        }
+        Long tableId = temporaryTableMgr.getTable(sessionId, databaseId, tblName);
+        if (tableId == null) {
+            return null;
+        }
         Database database = localMetastore.getDb(databaseId);
         if (database == null) {
             return null;
@@ -448,10 +595,23 @@ public class MetadataMgr {
         List<ConnectorTableColumnStats> columnStatisticList =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
 
+        Map<String, Histogram> histogramStatistics =
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
+
         Statistics.Builder statistics = Statistics.builder();
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnRefOperator columnRef = requiredColumnRefs.get(i);
-            ConnectorTableColumnStats connectorTableColumnStats = columnStatisticList.get(i);
+            ConnectorTableColumnStats connectorTableColumnStats;
+            if (histogramStatistics.containsKey(columnRef.getName())) {
+                // add histogram to column statistic
+                Histogram histogram = histogramStatistics.get(columnRef.getName());
+                connectorTableColumnStats = new ConnectorTableColumnStats(
+                        ColumnStatistic.buildFrom(columnStatisticList.get(i).getColumnStatistic()).
+                                setHistogram(histogram).build(),
+                        columnStatisticList.get(i).getRowCount());
+            } else {
+                connectorTableColumnStats = columnStatisticList.get(i);
+            }
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
                 if (!connectorTableColumnStats.isUnknown()) {
@@ -472,7 +632,7 @@ public class MetadataMgr {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         Statistics statistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
             session.setObtainedFromInternalStatistics(false);
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata -> metadata.getTableStatistics(

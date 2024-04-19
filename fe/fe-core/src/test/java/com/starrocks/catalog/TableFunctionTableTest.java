@@ -14,12 +14,17 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TBrokerFileStatus;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -159,5 +164,23 @@ public class TableFunctionTableTest {
             properties.put("auto_detect_sample_files", "not_a_number");
             new TableFunctionTable(properties);
         });
+    }
+
+    @Test
+    public void testNoFilesFound() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            }
+        };
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2");
+        properties.put("format", "parquet");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "No files were found matching the pattern(s) or path(s): " +
+                        "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
+                () -> new TableFunctionTable(properties));
     }
 }

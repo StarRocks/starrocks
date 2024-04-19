@@ -17,6 +17,7 @@ package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
@@ -47,8 +48,8 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected TabletMetadataUpdateAgentTask createTask(long backend, Set<Long> tablets) {
-        return TabletMetadataUpdateAgentTaskFactory.createGenericBooleanPropertyUpdateTask(backend, tablets,
+    protected TabletMetadataUpdateAgentTask createTask(MaterializedIndex index, long nodeId, Set<Long> tablets) {
+        return TabletMetadataUpdateAgentTaskFactory.createGenericBooleanPropertyUpdateTask(nodeId, tablets,
                 metaValue, metaType);
     }
 
@@ -57,8 +58,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             Map<String, String> tempProperties = new HashMap<>();
             tempProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, String.valueOf(metaValue));
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .modifyTableMeta(db, table, tempProperties, metaType);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, table, tempProperties, metaType);
         }
     }
 

@@ -43,15 +43,16 @@ private:
     bool _is_closed = false;
 };
 
-class ORCWriterOptions : public FileWriterOptions {};
+struct ORCWriterOptions : public FileWriterOptions {};
 
 class ORCFileWriter final : public FileWriter {
 public:
     ORCFileWriter(const std::string& location, std::unique_ptr<OrcOutputStream> output_stream,
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                  const std::shared_ptr<ORCWriterOptions>& writer_options, const std::function<void()> rollback_action,
-                  PriorityThreadPool* executors);
+                  TCompressionType::type compression_type, const std::shared_ptr<ORCWriterOptions>& writer_options,
+                  const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                  RuntimeState* runtime_state);
 
     ~ORCFileWriter() override = default;
 
@@ -64,10 +65,14 @@ public:
     std::future<CommitResult> commit() override;
 
 private:
+    static StatusOr<orc::CompressionKind> _convert_compression_type(TCompressionType::type type);
+
     static StatusOr<std::unique_ptr<orc::Type>> _make_schema(const std::vector<std::string>& column_names,
                                                              const std::vector<TypeDescriptor>& type_descs);
 
     static StatusOr<std::unique_ptr<orc::Type>> _make_schema_node(const TypeDescriptor& type_desc);
+
+    static void _populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column, size_t column_size);
 
     StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(ChunkPtr chunk);
 
@@ -77,8 +82,6 @@ private:
     void _write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
     void _write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
-
-    void _write_decimal(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale);
 
     template <LogicalType DecimalType, typename VectorBatchType, typename T>
     void _write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale);
@@ -93,6 +96,8 @@ private:
 
     void _write_map_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type);
 
+    inline static const std::string STARROCKS_ORC_WRITER_VERSION_KEY = "starrocks.writer.version";
+
     const std::string _location;
     std::shared_ptr<OrcOutputStream> _output_stream;
     const std::vector<std::string> _column_names;
@@ -101,33 +106,38 @@ private:
 
     std::unique_ptr<orc::Type> _schema;
     std::shared_ptr<orc::Writer> _writer;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ORCWriterOptions> _writer_options;
     int64_t _row_counter{0};
 
     std::function<void()> _rollback_action;
     // If provided, submit task to executors and return future to the caller. Otherwise execute synchronously.
-    PriorityThreadPool* _executors;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 class ORCFileWriterFactory : public FileWriterFactory {
 public:
-    ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::map<std::string, std::string>& options,
+    ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
+                         const std::map<std::string, std::string>& options,
                          const std::vector<std::string>& column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                         PriorityThreadPool* executors = nullptr);
+                         PriorityThreadPool* executors, RuntimeState* runtime_state);
 
     Status init() override;
 
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override;
+    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override;
 
 private:
     std::shared_ptr<FileSystem> _fs;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::map<std::string, std::string> _options;
     std::shared_ptr<ORCWriterOptions> _parsed_options;
 
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
-    PriorityThreadPool* _executors;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::formats

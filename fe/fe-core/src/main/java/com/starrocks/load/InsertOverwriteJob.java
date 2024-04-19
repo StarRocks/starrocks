@@ -39,15 +39,21 @@ public class InsertOverwriteJob {
     @SerializedName(value = "targetTableId")
     private long targetTableId;
 
+    @SerializedName(value = "warehouseId")
+    private long warehouseId;
+
+
     private transient InsertStmt insertStmt;
 
-    public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId, long targetTableId) {
+    public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId,
+                              long targetTableId, long warehouseId) {
         this.jobId = jobId;
         this.insertStmt = insertStmt;
         this.sourcePartitionIds = insertStmt.getTargetPartitionIds();
         this.jobState = InsertOverwriteJobState.OVERWRITE_PENDING;
         this.targetDbId = targetDbId;
         this.targetTableId = targetTableId;
+        this.warehouseId = warehouseId;
     }
 
     // used to replay InsertOverwriteJob
@@ -106,5 +112,9 @@ public class InsertOverwriteJob {
 
     public InsertStmt getInsertStmt() {
         return insertStmt;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 }

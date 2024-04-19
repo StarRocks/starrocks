@@ -20,6 +20,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/types.pb.h"
+#include "storage/base_tablet.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -45,21 +46,15 @@ using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 class UpdateManager;
 enum WriterType : int;
 
-class Tablet {
+class Tablet : public BaseTablet {
 public:
     explicit Tablet(TabletManager* mgr, int64_t id) : _mgr(mgr), _id(id) {}
 
-    ~Tablet() = default;
-
-    // Default copy and assign
-    Tablet(const Tablet&) = default;
-    Tablet& operator=(const Tablet&) = default;
-
-    // Default move copy and move assign
-    Tablet(Tablet&&) = default;
-    Tablet& operator=(Tablet&&) = default;
+    ~Tablet() override = default;
 
     [[nodiscard]] int64_t id() const { return _id; }
+
+    [[nodiscard]] int64_t tablet_id() const override { return _id; }
 
     [[nodiscard]] std::string root_location() const;
 
@@ -77,6 +72,8 @@ public:
 
     [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
@@ -89,10 +86,12 @@ public:
                                                        uint32_t max_rows_per_segment = 0,
                                                        ThreadPool* flush_pool = nullptr);
 
+    const std::shared_ptr<const TabletSchema> tablet_schema() const override;
+
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
-    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_index_id(int64_t index_id);
+    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_id(int64_t schema_id);
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
@@ -114,6 +113,8 @@ public:
 
     [[nodiscard]] std::string delvec_location(std::string_view delvec_name) const;
 
+    [[nodiscard]] std::string sst_location(std::string_view sst_name) const;
+
     [[nodiscard]] Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
@@ -133,6 +134,8 @@ public:
     void set_version_hint(int64_t version_hint) { _version_hint = version_hint; }
 
     int64_t data_size();
+
+    size_t num_rows() const override;
 
 private:
     TabletManager* _mgr;

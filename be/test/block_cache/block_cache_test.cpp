@@ -67,30 +67,30 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
 
 TEST_F(BlockCacheTest, parse_cache_space_size_str) {
     uint64_t mem_size = 10;
-    ASSERT_EQ(parse_mem_size("10"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10K"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10K", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10M"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10M", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10G"), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10G", 0), mem_size);
     mem_size *= 1024;
-    ASSERT_EQ(parse_mem_size("10T"), mem_size);
-    ASSERT_EQ(parse_mem_size("10%", 10 * 1024), 1024);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10T", 0), mem_size);
+    ASSERT_EQ(parse_conf_datacache_mem_size("10%", 10 * 1024), 1024);
 
     std::string disk_path = "./block_disk_cache";
     uint64_t disk_size = 10;
-    ASSERT_EQ(parse_disk_size(disk_path, "10"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10K"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10K", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10M"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10M", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10G"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10G", 0), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10T"), disk_size);
+    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10T", 0), disk_size);
 
-    disk_size = parse_disk_size(disk_path, "10%");
+    disk_size = parse_conf_datacache_disk_size(disk_path, "10%", 0);
     std::error_code ec;
     auto space_info = std::filesystem::space(disk_path, ec);
     ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
@@ -100,22 +100,22 @@ TEST_F(BlockCacheTest, parse_cache_space_paths) {
     const std::string cwd = std::filesystem::current_path().string();
     const std::string s_normal_path = fmt::format("{}/block_disk_cache/cache1;{}/block_disk_cache/cache2", cwd, cwd);
     std::vector<std::string> paths;
-    ASSERT_TRUE(parse_conf_datacache_paths(s_normal_path, &paths).ok());
+    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_normal_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
     const std::string s_space_path = fmt::format(" {}/block_disk_cache/cache3 ; {}/block_disk_cache/cache4 ", cwd, cwd);
-    ASSERT_TRUE(parse_conf_datacache_paths(s_space_path, &paths).ok());
+    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_space_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
     const std::string s_empty_path = fmt::format("//;{}/block_disk_cache/cache4 ", cwd, cwd);
-    ASSERT_FALSE(parse_conf_datacache_paths(s_empty_path, &paths).ok());
+    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_empty_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 1);
 
     paths.clear();
     const std::string s_invalid_path = fmt::format(" /block_disk_cache/cache5;{}/+/cache6", cwd, cwd);
-    ASSERT_FALSE(parse_conf_datacache_paths(s_invalid_path, &paths).ok());
+    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_invalid_path, &paths, true).ok());
     ASSERT_EQ(paths.size(), 0);
 }
 
@@ -130,6 +130,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -179,6 +180,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     options.mem_space_size = 20 * 1024 * 1024;
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -192,6 +194,10 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
 
     WriteCacheOptions write_options;
     std::string value2(cache_size, 'b');
+    st = cache->write_buffer(cache_key, 0, cache_size, value2.c_str(), &write_options);
+    ASSERT_TRUE(st.is_already_exist());
+
+    write_options.overwrite = true;
     st = cache->write_buffer(cache_key, 0, cache_size, value2.c_str(), &write_options);
     ASSERT_TRUE(st.ok());
 
@@ -219,8 +225,8 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "starcache";
-    options.enable_cache_adaptor = true;
     options.skip_read_factor = 1;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -251,6 +257,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
         ReadCacheOptions opts;
+        opts.use_adaptor = true;
         auto res = cache->read_buffer(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().is_resource_busy());
     }
@@ -267,6 +274,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
         ReadCacheOptions opts;
+        opts.use_adaptor = true;
         auto res = cache->read_buffer(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().ok());
     }
@@ -285,6 +293,7 @@ TEST_F(BlockCacheTest, custom_lru_insertion_point) {
     options.mem_space_size = 20 * 1024 * 1024;
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.max_flying_memory_mb = 100;
     options.engine = "cachelib";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());

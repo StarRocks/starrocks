@@ -20,16 +20,21 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "runtime/global_dict/config.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
+#include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
-std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min", "count"};
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"flat_json_meta", "dict_merge", "max", "min",
+                                                                         "count"};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -126,6 +131,14 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             ColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
+        } else if (field == "flat_json_meta") {
+            TypeDescriptor item_desc;
+            item_desc.type = TYPE_VARCHAR;
+            TypeDescriptor desc;
+            desc.type = TYPE_ARRAY;
+            desc.children.emplace_back(item_desc);
+            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            chunk->append_column(std::move(column), slot->id());
         } else {
             ColumnPtr column = ColumnHelper::create_column(slot->type(), _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
@@ -214,8 +227,38 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_min(cid, column, type);
     } else if (name == "count") {
         return _collect_count(column, type);
+    } else if (name == "flat_json_meta") {
+        return _collect_flat_json(cid, column);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
+}
+
+Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
+    if (cid >= _segment->num_columns()) {
+        return Status::NotFound("error column id");
+    }
+
+    const ColumnReader* col_reader = _segment->column(cid);
+    if (col_reader == nullptr) {
+        return Status::NotFound("don't found column");
+    }
+    if (col_reader->column_type() != TYPE_JSON) {
+        return Status::InternalError("column type mismatch");
+    }
+
+    if (col_reader->sub_readers() == nullptr || col_reader->sub_readers()->size() < 1) {
+        column->append_datum(DatumArray());
+        return Status::OK();
+    }
+
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(column);
+    size_t size = array_column->offsets_column()->get_data().back();
+    for (const auto& sub_reader : *col_reader->sub_readers()) {
+        std::string str = fmt::format("{}({})", sub_reader->name(), type_to_string(sub_reader->column_type()));
+        array_column->elements_column()->append_datum(Slice(str));
+    }
+    array_column->offsets_column()->append(size + col_reader->sub_readers()->size());
+    return Status::OK();
 }
 
 // collect dict

@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -62,6 +63,7 @@ public class SelectStmtTest {
     @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        Config.show_execution_groups = false;
         FeConstants.showFragmentCost = false;
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
@@ -374,7 +376,12 @@ public class SelectStmtTest {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  3:AGGREGATE (update finalize)\n" +
+                "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(4: count)\n" +
+                "  |  group by: 3: expr\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(2: split)\n" +
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +

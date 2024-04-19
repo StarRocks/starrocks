@@ -98,6 +98,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
+    _write_txn_log = table_sink.write_txn_log;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
@@ -168,6 +169,16 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
     }
 
+    // Query context is only available for pipeline engine
+    auto query_ctx = state->query_ctx();
+    if (query_ctx) {
+        _load_channel_profile_config.set_enable_profile(query_ctx->get_enable_profile_flag());
+        _load_channel_profile_config.set_big_query_profile_threshold_ns(
+                query_ctx->get_big_query_profile_threshold_ns());
+        _load_channel_profile_config.set_runtime_profile_report_interval_ns(
+                query_ctx->get_runtime_profile_report_interval_ns());
+    }
+
     return Status::OK();
 }
 
@@ -189,6 +200,9 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
+    if (UNLIKELY(_write_txn_log && _num_senders > 1)) {
+        return Status::NotSupported("This data loading task has multiple senders and does not support merge txn logs");
+    }
 
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
@@ -817,7 +831,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     if (_tablet_sink_sender == nullptr) {
         return close_status;
     }
-    Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile);
+    Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile, _write_txn_log);
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }

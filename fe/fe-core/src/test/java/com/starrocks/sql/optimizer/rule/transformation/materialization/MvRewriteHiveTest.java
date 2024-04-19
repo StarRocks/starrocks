@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -270,6 +271,78 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                     "     rollup: hive_partition_prune_mv1");
         }
         starRocksAssert.dropMaterializedView("hive_partition_prune_mv1");
+    }
+
+    @Test
+    public void testPartitionedHiveMVWithLooseMode() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_partitioned_mv`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"query_rewrite_consistency\" = \"loose\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+
+        refreshMaterializedViewWithPartition("test", "hive_partitioned_mv",
+                "1998-01-02", "1998-01-04");
+
+        MaterializedView mv1 = getMv("test", "hive_partitioned_mv");
+        Set<String> toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
+        Assert.assertEquals(4, toRefreshPartitions.size());
+        Assert.assertTrue(toRefreshPartitions.contains("p19980101"));
+        Assert.assertTrue(toRefreshPartitions.contains("p19980104"));
+        Assert.assertTrue(toRefreshPartitions.contains("p19980105"));
+
+        String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "hive_partitioned_mv", "UNION");
+        dropMv("test", "hive_partitioned_mv");
+    }
+
+    @Test
+    public void testUnPartitionedHiveMVWithLooseMode() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_unpartitioned_mv`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"query_rewrite_consistency\" = \"loose\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+        MaterializedView mv1 = getMv("test", "hive_unpartitioned_mv");
+        MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
+        Set<String> toRefreshPartitions = mvUpdateInfo.getMvToRefreshPartitionNames();
+        Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+        Assert.assertTrue(!mvUpdateInfo.isValidRewrite());
+        Assert.assertEquals(0, toRefreshPartitions.size());
+
+        toRefreshPartitions.clear();
+        refreshMaterializedView("test", "hive_unpartitioned_mv");
+        toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
+        Assert.assertEquals(0, toRefreshPartitions.size());
+
+        String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "hive_unpartitioned_mv");
+        dropMv("test", "hive_unpartitioned_mv");
     }
 
     @Test

@@ -23,6 +23,10 @@
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
 
+namespace starrocks {
+class TxnLogPB;
+}
+
 namespace starrocks::lake {
 
 class Rowset;
@@ -38,6 +42,8 @@ public:
     virtual ~CompactionTask() = default;
 
     virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
+
+    Status execute_index_major_compaction(TxnLogPB* txn_log);
 
     inline static const CancelFunc kNoCancelFn = []() { return false; };
     inline static const CancelFunc kCancelledFn = []() { return true; };

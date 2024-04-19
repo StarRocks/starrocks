@@ -29,6 +29,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
@@ -80,6 +81,12 @@ public class JobSpec {
     private TQueryOptions queryOptions;
     private TWorkGroup resourceGroup;
 
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     private String planProtocol;
 
     private boolean enableQueue = false;
@@ -116,6 +123,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+                    .warehouseId(context.getCurrentWarehouseId())
                     .setPlanProtocol(context.getSessionVariable().getThriftPlanProtocol())
                     .build();
         }
@@ -157,7 +165,7 @@ public class JobSpec {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
 
-            return new JobSpec.Builder()
+            return new Builder()
                     .loadJobId(loadPlanner.getLoadJobId())
                     .queryId(loadPlanner.getLoadId())
                     .fragments(loadPlanner.getFragments())
@@ -169,6 +177,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+                    .warehouseId(loadPlanner.getWarehouseId())
                     .build();
         }
 
@@ -203,6 +212,7 @@ public class JobSpec {
                     .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
+                    .warehouseId(context.getCurrentWarehouseId())
                     .commonProperties(context)
                     .build();
         }
@@ -238,7 +248,8 @@ public class JobSpec {
                                                                String timezone,
                                                                long startTime,
                                                                Map<String, String> sessionVariables,
-                                                               long execMemLimit) {
+                                                               long execMemLimit,
+                                                               long warehouseId) {
             TQueryOptions queryOptions = new TQueryOptions();
             setSessionVariablesToLoadQueryOptions(queryOptions, sessionVariables);
             queryOptions.setQuery_type(TQueryType.LOAD);
@@ -254,7 +265,7 @@ public class JobSpec {
 
             TQueryGlobals queryGlobals = genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
 
-            return new JobSpec.Builder()
+            return new Builder()
                     .loadJobId(loadJobId)
                     .queryId(queryId)
                     .fragments(fragments)
@@ -266,6 +277,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+                    .warehouseId(warehouseId)
                     .build();
         }
 
@@ -285,6 +297,7 @@ public class JobSpec {
                     .queryOptions(null)
                     .enablePipeline(false)
                     .resourceGroup(null)
+                    .warehouseId(planner.getWarehouseId())
                     .build();
         }
 
@@ -367,6 +380,7 @@ public class JobSpec {
                 ", enableStreamPipeline=" + enableStreamPipeline +
                 ", isBlockQuery=" + isBlockQuery +
                 ", resourceGroup=" + resourceGroup +
+                ", warehouseId=" + warehouseId +
                 '}';
     }
 
@@ -481,7 +495,14 @@ public class JobSpec {
             return GlobalStateMgr.getCurrentState().getGlobalSlotProvider();
         }
     }
-
+    public boolean hasOlapTableSink() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment.hasOlapTableSink()) {
+                return true;
+            }
+        }
+        return false;
+    }
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 
@@ -559,6 +580,11 @@ public class JobSpec {
 
         private Builder resourceGroup(TWorkGroup resourceGroup) {
             instance.resourceGroup = resourceGroup;
+            return this;
+        }
+
+        private Builder warehouseId(long warehouseId) {
+            instance.warehouseId = warehouseId;
             return this;
         }
 

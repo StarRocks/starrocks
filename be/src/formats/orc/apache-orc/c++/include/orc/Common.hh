@@ -18,13 +18,18 @@
 
 #pragma once
 
+#include <glog/logging.h>
+
 #include <string>
 
 #include "orc/Exceptions.hh"
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
+#include "runtime/integer_overflow_arithmetics.h"
 
 namespace orc {
+
+using int128_t = __int128;
 
 class FileVersion {
 private:
@@ -216,40 +221,39 @@ inline bool compare(T val1, T val2) {
 // Specialization for Decimal
 template <>
 inline bool compare(Decimal val1, Decimal val2) {
-    // compare integral parts
-    Int128 integral1 = scaleDownInt128ByPowerOfTen(val1.value, val1.scale);
-    Int128 integral2 = scaleDownInt128ByPowerOfTen(val2.value, val2.scale);
-
-    if (integral1 < integral2) {
-        return true;
-    } else if (integral1 > integral2) {
-        return false;
+    if (val1.scale == val2.scale) {
+        return val1.value < val2.value;
     }
 
-    // integral parts are equal, continue comparing fractional parts
-    // unnecessary to check overflow here because the scaled number will not
-    // exceed original ones
-    bool overflow = false, positive = val1.value >= 0;
-    val1.value -= scaleUpInt128ByPowerOfTen(integral1, val1.scale, overflow);
-    val2.value -= scaleUpInt128ByPowerOfTen(integral2, val2.scale, overflow);
-
-    int32_t diff = val1.scale - val2.scale;
-    if (diff > 0) {
-        val2.value = scaleUpInt128ByPowerOfTen(val2.value, diff, overflow);
+    // three-way comparison
+    // requires val1.scale < val2.scale
+    // returns negative iff x < y
+    // returns zero iff x = y
+    // returns positive iff x > y
+    auto cmp = [](Decimal& val1, Decimal& val2) -> int128_t {
+        DCHECK(val1.scale < val2.scale);
+        int128_t value1 = (static_cast<int128_t>(val1.value.getHighBits()) << 64) + val1.value.getLowBits();
+        int128_t value2 = (static_cast<int128_t>(val2.value.getHighBits()) << 64) + val2.value.getLowBits();
+        int32_t delta = val2.scale - val1.scale;
+        int128_t scaled_value1;
+        bool overflow;
+        overflow = starrocks::mul_overflow(value1, starrocks::exp10_int128(delta), &scaled_value1);
         if (overflow) {
-            return positive ? true : false;
+            return value1;
         }
+        int128_t diff;
+        overflow = starrocks::sub_overflow(scaled_value1, value2, &diff);
+        if (overflow) {
+            return value1;
+        }
+        return diff;
+    };
+
+    if (val1.scale < val2.scale) {
+        return cmp(val1, val2) < 0;
     } else {
-        val1.value = scaleUpInt128ByPowerOfTen(val1.value, -diff, overflow);
-        if (overflow) {
-            return positive ? false : true;
-        }
+        return cmp(val2, val1) > 0;
     }
-
-    if (val1.value < val2.value) {
-        return true;
-    }
-    return false;
 }
 
 enum BloomFilterVersion {

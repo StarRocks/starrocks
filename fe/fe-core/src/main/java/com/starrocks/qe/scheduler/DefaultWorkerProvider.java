@@ -21,9 +21,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections4.MapUtils;
@@ -41,6 +43,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 
+/**
+ * DefaultWorkerProvider handles ComputeNode/Backend selection in SHARED_NOTHING mode.
+ * NOTE: remember to update DefaultSharedDataWorkerProvider if the change applies to both run modes.
+ */
 public class DefaultWorkerProvider implements WorkerProvider {
     private static final Logger LOG = LogManager.getLogger(DefaultWorkerProvider.class);
     private static final AtomicInteger NEXT_COMPUTE_NODE_INDEX = new AtomicInteger(0);
@@ -85,16 +91,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
-                                                             int numUsedComputeNodes) {
+                                                             int numUsedComputeNodes,
+                                                             long warehouseId) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes);
-            ImmutableMap<Long, ComputeNode> idToBackend;
-            if (RunMode.isSharedDataMode()) {
-                idToBackend = idToComputeNode;
-            } else {
-                idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
-            }
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseId);
+
+            ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToBackend size={}", idToBackend.size());
@@ -128,8 +131,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
 
         this.hasComputeNode = MapUtils.isNotEmpty(availableID2ComputeNode);
-        // Backends and compute nodes are identical in the SHARED_DATA mode.
-        this.usedComputeNode = hasComputeNode && (preferComputeNode || RunMode.isSharedDataMode());
+        this.usedComputeNode = hasComputeNode && preferComputeNode;
         this.preferComputeNode = preferComputeNode;
     }
 
@@ -152,7 +154,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public void selectWorker(Long workerId) throws NonRecoverableException {
+    public void selectWorker(long workerId) throws NonRecoverableException {
         if (getWorkerById(workerId) == null) {
             reportWorkerNotFoundException();
         }
@@ -183,7 +185,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public ComputeNode getWorkerById(Long workerId) {
+    public ComputeNode getWorkerById(long workerId) {
         ComputeNode worker = availableID2Backend.get(workerId);
         if (worker != null) {
             return worker;
@@ -192,7 +194,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public boolean isDataNodeAvailable(Long dataNodeId) {
+    public boolean isDataNodeAvailable(long dataNodeId) {
         return getBackend(dataNodeId) != null;
     }
 
@@ -207,7 +209,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public boolean isWorkerSelected(Long workerId) {
+    public boolean isWorkerSelected(long workerId) {
         return selectedWorkerIds.contains(workerId);
     }
 
@@ -220,6 +222,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
      * if usedComputeNode turns on or no backend, we add all compute nodes to the result.
      * if perferComputeNode turns on, we just return computeNode set
      * else add backend set and return
+     *
      * @return
      */
     @Override
@@ -242,7 +245,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public void selectWorkerUnchecked(Long workerId) {
+    public void selectWorkerUnchecked(long workerId) {
         selectedWorkerIds.add(workerId);
     }
 
@@ -256,11 +259,15 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return availableID2Backend.get(backendID);
     }
 
+    @Override
+    public long selectBackupWorker(long workerId) {
+        // not allowed to have backup node
+        return -1;
+    }
+
     private String toString(boolean chooseComputeNode) {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
-
-
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
@@ -285,6 +292,14 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @VisibleForTesting
     static int getNextComputeNodeIndex() {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            long currentWh = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            if (ConnectContext.get() != null) {
+                currentWh = ConnectContext.get().getCurrentWarehouseId();
+            }
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().
+                    getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
+        }
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
@@ -294,11 +309,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
-                                                                        int numUsedComputeNodes) {
-        if (RunMode.isSharedDataMode()) {
-            return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodesFromWarehouse();
-        }
-
+                                                                        int numUsedComputeNodes,
+                                                                        long warehouseId) {
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
         if (numUsedComputeNodes <= 0 || numUsedComputeNodes >= idToComputeNode.size()) {

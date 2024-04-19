@@ -22,9 +22,13 @@
 #include <chrono>
 #include <thread>
 
+#include "agent/master_info.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "gen_cpp/FrontendService.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "gutil/stl_util.h"
+#include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/lake_service.h"
 #include "storage/lake/compaction_task.h"
@@ -33,13 +37,14 @@
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/threadpool.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::lake {
 
 CompactionTaskCallback::~CompactionTaskCallback() = default;
 
-CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
-                                               lake::CompactResponse* response, ::google::protobuf::Closure* done)
+CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
+                                               CompactResponse* response, ::google::protobuf::Closure* done)
         : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
@@ -82,6 +87,8 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
         l.unlock();
         _scheduler->remove_states(tmp);
+        tmp.clear();
+        TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:finish_task");
     }
 }
 
@@ -116,13 +123,16 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     // tasks from busy threads to execute.
     auto idx = choose_task_queue_by_txn_id(request->txn_id());
     auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
+    bool is_checker = true; // make the first tablet as checker
     for (auto tablet_id : request->tablet_ids()) {
-        auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
+        auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
+                                                               is_checker, cb);
         {
             std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
         }
         _task_queues.put(idx, context);
+        is_checker = false;
     }
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
 }
@@ -223,21 +233,72 @@ void CompactionScheduler::thread_task(int id) {
     }
 }
 
+bool compaction_should_cancel(CompactionTaskContext* context) {
+    if (context->callback->has_error() || context->callback->timeout_exceeded()) {
+        return true;
+    }
+
+    int64_t check_interval_seconds = 60LL * config::lake_compaction_check_valid_interval_minutes;
+    if (!context->is_checker || check_interval_seconds <= 0) {
+        return false;
+    }
+
+    int64_t now = time(nullptr);
+    if (now > context->last_check_time && (now - context->last_check_time) >= check_interval_seconds) {
+        // ask FE whether this compaction transaction is still valid
+#ifndef BE_TEST
+        TNetworkAddress master_addr = get_master_address();
+        if (master_addr.hostname.size() > 0 && master_addr.port > 0) {
+            TReportLakeCompactionRequest request;
+            request.__set_txn_id(context->txn_id);
+            TReportLakeCompactionResponse result;
+            auto status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    master_addr.hostname, master_addr.port,
+                    [&request, &result](FrontendServiceConnection& client) {
+                        client->reportLakeCompaction(result, request);
+                    },
+                    3000 /* timeout 3 seconds */);
+            if (status.ok()) {
+                if (!result.valid) {
+                    // notify all tablets in this compaction request
+                    LOG(WARNING) << "validate compaction transaction " << context->txn_id << " for tablet "
+                                 << context->tablet_id << ", abort invalid compaction";
+                    context->callback->update_status(Status::Aborted("compaction validation failed"));
+                    return true; // should cancel compaction
+                } else {
+                    // everything is fine
+                }
+            } else {
+                LOG(WARNING) << "fail to validate compaction transaction " << context->txn_id << " for tablet "
+                             << context->tablet_id << ", error: " << status;
+            }
+        } else {
+            LOG(WARNING) << "fail to validate compaction transaction " << context->txn_id << " for tablet "
+                         << context->tablet_id << ", error: leader FE address not found";
+        }
+#endif
+        // update check time, if check rpc failed, wait next round
+        context->last_check_time = now;
+    }
+    return false;
+}
+
 Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
     const auto start_time = ::time(nullptr);
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
-    if (context->start_time.load(std::memory_order_relaxed) == 0) {
-        context->start_time.store(start_time, std::memory_order_relaxed);
-    }
+    context->start_time.store(start_time, std::memory_order_relaxed);
     context->runs.fetch_add(1, std::memory_order_relaxed);
+    if (context->is_checker) {
+        context->last_check_time = start_time;
+    }
 
     auto status = Status::OK();
     auto task_or = _tablet_mgr->compact(context.get());
     if (task_or.ok()) {
-        auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
+        auto should_cancel = [&]() { return compaction_should_cancel(context.get()); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
         ThreadPool* flush_pool = nullptr;
         if (config::lake_enable_compaction_async_write) {
@@ -300,8 +361,12 @@ Status CompactionScheduler::abort(int64_t txn_id) {
          node = node->next()) {
         CompactionTaskContext* context = node->value();
         if (context->txn_id == txn_id) {
+            auto cb = context->callback;
             l.unlock();
-            context->callback->update_status(Status::Aborted("aborted on demand"));
+            // Do NOT touch |context| since here, it may have been destroyed.
+            TEST_SYNC_POINT("lake::CompactionScheduler::abort:unlock:1");
+            TEST_SYNC_POINT("lake::CompactionScheduler::abort:unlock:2");
+            cb->update_status(Status::Aborted("aborted on demand"));
             return Status::OK();
         }
     }

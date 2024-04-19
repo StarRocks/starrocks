@@ -61,6 +61,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -170,7 +171,10 @@ public class DatabaseTransactionMgr {
      */
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
                                  TransactionState.TxnCoordinator coordinator,
-                                 TransactionState.LoadJobSourceType sourceType, long listenerId, long timeoutSecond)
+                                 TransactionState.LoadJobSourceType sourceType,
+                                 long listenerId,
+                                 long timeoutSecond,
+                                 long warehouseId)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
         Preconditions.checkNotNull(coordinator);
@@ -178,12 +182,14 @@ public class DatabaseTransactionMgr {
         FeNameFormat.checkLabel(label);
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+        boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, listenerId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
                 coordinator, listenerId, timeoutSecond * 1000);
         transactionState.setPrepareTime(System.currentTimeMillis());
-
+        transactionState.setWarehouseId(warehouseId);
+        transactionState.setUseCombinedTxnLog(combinedTxnLog);
         transactionState.writeLock();
         try {
             writeLock();
@@ -765,6 +771,31 @@ public class DatabaseTransactionMgr {
         } finally {
             readUnlock();
         }
+    }
+
+    // Check whether there is committed txns on partitionId.
+    public boolean hasCommittedTxnOnPartition(long tableId, long partitionId) {
+        readLock();
+        try {
+            for (TransactionState state : idToRunningTransactionState.values()) {
+                if (state.getTransactionStatus() != TransactionStatus.COMMITTED) {
+                    continue;
+                }
+
+                TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+                if (tableCommitInfo == null) {
+                    continue;
+                }
+
+                if (tableCommitInfo.getPartitionCommitInfo(partitionId) != null) {
+                    return true;
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+
+        return false;
     }
 
     public List<TransactionState> getReadyToPublishTxnList() {

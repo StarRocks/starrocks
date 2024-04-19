@@ -15,9 +15,11 @@
 package com.starrocks.lake.compaction;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -37,13 +39,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class CompactionMgr {
+public class CompactionMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CompactionMgr.class);
 
     @SerializedName(value = "partitionStatisticsHashMap")
@@ -70,6 +73,10 @@ public class CompactionMgr {
 
         Class<?> sorterClazz = Class.forName(packageName + "." + Config.lake_compaction_sorter);
         sorter = (Sorter) sorterClazz.getConstructor().newInstance();
+    }
+
+    public void setCompactionScheduler(CompactionScheduler compactionScheduler) {
+        this.compactionScheduler = compactionScheduler;
     }
 
     public void start() {
@@ -191,6 +198,10 @@ public class CompactionMgr {
         compactionScheduler.cancelCompaction(txnId);
     }
 
+    public boolean existCompaction(long txnId) {
+        return compactionScheduler.existCompaction(txnId);
+    }
+
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
         String json = Text.readString(in);
         CompactionMgr compactionManager = GsonUtils.GSON.fromJson(json, CompactionMgr.class);
@@ -227,5 +238,10 @@ public class CompactionMgr {
         });
         LOG.info("Trigger manual compaction, {}", statistics);
         return statistics;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("PartitionStats", (long) partitionStatisticsHashMap.size());
     }
 }

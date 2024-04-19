@@ -22,6 +22,8 @@
 #include "column/struct_column.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
+#include "runtime/current_thread.h"
+#include "util/debug_util.h"
 
 namespace starrocks::formats {
 
@@ -72,21 +74,29 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOut
                              const std::vector<std::string>& column_names,
                              const std::vector<TypeDescriptor>& type_descs,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             TCompressionType::type compression_type,
                              const std::shared_ptr<ORCWriterOptions>& writer_options,
-                             const std::function<void()> rollback_action, PriorityThreadPool* executors)
+                             const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                             RuntimeState* runtime_state)
         : _location(location),
           _output_stream(std::move(output_stream)),
           _column_names(column_names),
           _type_descs(type_descs),
           _column_evaluators(std::move(column_evaluators)),
+          _compression_type(compression_type),
           _writer_options(writer_options),
           _rollback_action(rollback_action),
-          _executors(executors) {}
+          _executors(executors),
+          _runtime_state(runtime_state) {}
 
 Status ORCFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     ASSIGN_OR_RETURN(_schema, _make_schema(_column_names, _type_descs));
-    _writer = orc::createWriter(*_schema, _output_stream.get(), orc::WriterOptions());
+    auto options = orc::WriterOptions();
+    ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
+    options.setCompression(compression);
+    _writer = orc::createWriter(*_schema, _output_stream.get(), options);
+    _writer->addUserMetadata(STARROCKS_ORC_WRITER_VERSION_KEY, get_short_version());
     return Status::OK();
 }
 
@@ -112,7 +122,12 @@ std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
     std::future<FileWriter::CommitResult> future = promise->get_future();
 
     auto task = [writer = _writer, output_stream = _output_stream, p = promise, rollback = _rollback_action,
-                 row_counter = _row_counter, location = _location] {
+                 row_counter = _row_counter, location = _location, state = _runtime_state] {
+#ifndef BE_TEST
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+        CurrentThread::current().set_query_id(state->query_id());
+        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
+#endif
         FileWriter::CommitResult result{
                 .io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
         try {
@@ -188,9 +203,11 @@ void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     }
     case TYPE_FLOAT: {
         _write_number<TYPE_FLOAT, orc::DoubleVectorBatch>(orc_column, column);
+        break;
     }
     case TYPE_DOUBLE: {
         _write_number<TYPE_DOUBLE, orc::DoubleVectorBatch>(orc_column, column);
+        break;
     }
     case TYPE_CHAR:
         [[fallthrough]];
@@ -264,13 +281,7 @@ void ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<Type>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         number_orc_column.data[i] = data_col[i];
@@ -286,13 +297,7 @@ void ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     auto* null_col = get_raw_null_column(column);
     auto* data_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(ColumnHelper::get_data_column(column.get()));
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         auto slice = data_col->get_slice(i);
@@ -316,13 +321,7 @@ void ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<DecimalType>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         T value;
@@ -347,13 +346,7 @@ void ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& c
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<TYPE_DATE>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         date_orc_column.data[i] = OrcDateHelper::native_date_to_orc_date(data_col[i]);
@@ -370,13 +363,7 @@ void ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPt
     auto* null_col = get_raw_null_column(column);
     auto* data_col = get_raw_data_column<TYPE_DATETIME>(column);
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size; ++i) {
         OrcTimestampHelper::native_ts_to_orc_ts(data_col[i], timestamp_orc_column.data[i],
@@ -396,13 +383,7 @@ void ORCFileWriter::_write_array_column(orc::ColumnVectorBatch& orc_column, Colu
     auto* null_col = get_raw_null_column(column);
     auto* array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column.get()));
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     auto* offsets = array_col->offsets_column().get()->get_data().data();
     for (size_t i = 0; i < column_size + 1; ++i) {
@@ -422,17 +403,11 @@ void ORCFileWriter::_write_struct_column(orc::ColumnVectorBatch& orc_column, Col
 
     auto* null_col = get_raw_null_column(column);
     auto* data_col = ColumnHelper::get_data_column(column.get());
+
+    _populate_orc_notnull(orc_column, null_col, column_size);
+
     auto* struct_col = down_cast<StructColumn*>(data_col);
     Columns& field_columns = struct_col->fields_column();
-
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
-
     for (size_t i = 0; i < type.children.size(); ++i) {
         _write_column(*struct_orc_column.fields[i], field_columns[i], type.children[i]);
     }
@@ -455,13 +430,7 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
     auto& values = map_col->values_column();
     auto& offsets = map_col->offsets_column()->get_data();
 
-    if (null_col != nullptr) {
-        orc_column.hasNulls = true;
-        orc_column.notNull.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            orc_column.notNull[i] = 1 - null_col[i];
-        }
-    }
+    _populate_orc_notnull(orc_column, null_col, column_size);
 
     for (size_t i = 0; i < column_size + 1; ++i) {
         map_orc_column.offsets[i] = offsets[i];
@@ -469,6 +438,37 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
 
     _write_column(keys_orc_column, keys, type.children[0]);
     _write_column(values_orc_column, values, type.children[1]);
+}
+
+StatusOr<orc::CompressionKind> ORCFileWriter::_convert_compression_type(TCompressionType::type type) {
+    orc::CompressionKind converted_type;
+    switch (type) {
+    case TCompressionType::NO_COMPRESSION: {
+        converted_type = orc::CompressionKind_NONE;
+        break;
+    }
+    case TCompressionType::SNAPPY: {
+        converted_type = orc::CompressionKind_SNAPPY;
+        break;
+    }
+    case TCompressionType::GZIP: {
+        converted_type = orc::CompressionKind_ZLIB;
+        break;
+    }
+    case TCompressionType::ZSTD: {
+        converted_type = orc::CompressionKind_ZSTD;
+        break;
+    }
+    case TCompressionType::LZ4: {
+        converted_type = orc::CompressionKind_LZ4;
+        break;
+    }
+    default: {
+        return Status::NotSupported(fmt::format("not supported compression type {}", type));
+    }
+    }
+
+    return converted_type;
 }
 
 StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema(const std::vector<std::string>& column_names,
@@ -553,16 +553,32 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
 }
 
-ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs,
+void ORCFileWriter::_populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column,
+                                          size_t column_size) {
+    if (null_column != nullptr) {
+        orc_column.hasNulls = true;
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_column[i];
+        }
+    } else {
+        orc_column.hasNulls = false;
+        memset(orc_column.notNull.data(), 1, column_size * sizeof(char));
+    }
+}
+
+ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
                                            const std::map<std::string, std::string>& options,
                                            const std::vector<std::string>& column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                                           PriorityThreadPool* executors)
+                                           PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
+          _compression_type(compression_type),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
-          _executors(executors) {}
+          _executors(executors),
+          _runtime_state(runtime_state) {}
 
 Status ORCFileWriterFactory::init() {
     for (auto& e : _column_evaluators) {
@@ -572,7 +588,7 @@ Status ORCFileWriterFactory::init() {
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) {
+StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) const {
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
@@ -581,7 +597,8 @@ StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::st
     auto types = ColumnEvaluator::types(_column_evaluators);
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(file));
     return std::make_shared<ORCFileWriter>(path, std::move(output_stream), _column_names, types,
-                                           std::move(column_evaluators), _parsed_options, rollback_action, _executors);
+                                           std::move(column_evaluators), _compression_type, _parsed_options,
+                                           rollback_action, _executors, _runtime_state);
 }
 
 } // namespace starrocks::formats

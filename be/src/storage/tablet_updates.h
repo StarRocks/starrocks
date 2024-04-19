@@ -333,7 +333,7 @@ public:
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
-    double get_pk_index_write_amp_score();
+    double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
     Status pk_index_major_compaction();
 
@@ -476,7 +476,7 @@ private:
 
     void check_for_apply() { _check_for_apply(); }
 
-    std::timed_mutex* get_index_lock() { return &_index_lock; }
+    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
@@ -501,7 +501,7 @@ private:
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
-    mutable std::timed_mutex _index_lock;
+    mutable std::shared_timed_mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 
@@ -535,6 +535,8 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
+
+    std::atomic<double> _pk_index_write_amp_score{0.0};
 };
 
 } // namespace starrocks

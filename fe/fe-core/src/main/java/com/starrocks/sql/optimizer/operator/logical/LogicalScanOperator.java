@@ -36,6 +36,8 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -126,6 +128,16 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()
                 .collect(Collectors.toMap(Function.identity(), Function.identity())));
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (predicate == null) {
+            return new DomainProperty(Map.of());
+        }
+
+        DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+        return deriver.derive(predicate);
     }
 
     public void buildColumnFilters(ScalarOperator predicate) {

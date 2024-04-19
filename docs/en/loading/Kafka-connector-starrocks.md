@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data using Kafka connector
 
-StarRocks provides a self-developed connector named Apache Kafka® connector (StarRocks Connector for Apache Kafka®) that continuously consumes messages from Kafka and loads them into StarRocks. The Kafka connector guarantees at-least-once semantics.
+StarRocks provides a self-developed connector named Apache Kafka® connector (StarRocks Connector for Apache Kafka®, Kafka connector for short), as a sink connector, that continuously consumes messages from Kafka and loads them into StarRocks. The Kafka connector guarantees at-least-once semantics.
 
 The Kafka connector can seamlessly integrate with Kafka Connect, which allows StarRocks better integrated with the Kafka ecosystem. It is a wise choice if you want to load real-time data into StarRocks. Compared with Routine Load, it is recommended to use the Kafka connector in the following scenarios:
 
@@ -34,6 +34,10 @@ Submit the Kafka connector into Kafka Connect:
 - Confluent Cloud:
 
   Currently, the Kafka connector is not uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a ZIP file and upload the ZIP file to Confluent Cloud.
+
+### Network configuration
+
+Ensure that the machine where Kafka is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
 
 ## Usage
 
@@ -65,6 +69,13 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and descriptions, see [Parameters](#Parameters).
 
+    :::info
+
+    - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
+    - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in the configuration file **connect-StarRocks-sink.properties** for the Kafka connector provided by StarRocks, to synchronize the source data changes to the Primary Key table.
+
+    :::
+
     ```yaml
     name=starrocks-kafka-connector
     connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
@@ -85,10 +96,6 @@ CREATE TABLE test_tbl (id INT, city STRING);
     sink.properties.strip_outer_array=true
     ```
 
-    > **NOTICE**
-    >
-    > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
-
 2. Configure and run the Kafka Connect.
 
    1. Configure the Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
@@ -103,7 +110,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # The absolute path of the starrocks-kafka-connector after extraction. For example:
+        # The absolute path of the Kafka connector after extraction. For example:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
@@ -129,7 +136,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # The absolute path of the starrocks-kafka-connector after extraction. For example:
+        # The absolute path of the Kafka connector after extraction. For example:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
@@ -140,6 +147,13 @@ CREATE TABLE test_tbl (id INT, city STRING);
         ```
 
 2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka connector through the REST API. For parameters and descriptions, see [Parameters](#Parameters).
+
+    :::info
+
+    - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
+    - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in the configuration file **connect-StarRocks-sink.properties** for the Kafka connector provided by StarRocks, to synchronize the source data changes to the Primary Key table.
+
+    :::
 
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
@@ -160,10 +174,6 @@ CREATE TABLE test_tbl (id INT, city STRING);
         }
       }'
       ```
-
-      > **NOTICE**
-      >
-      > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
 #### Query StarRocks table
 
@@ -200,15 +210,15 @@ The data is successfully loaded when the above result is returned.
 
 ### topics
 
-**Required**: YES<br/>
+**Required**:<br/>
 **Default value**:<br/>
-**Description**: One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both.However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name.
+**Description**: One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both. However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name.
 
 ### topics.regex
 
 **Required**:<br/>
-**Default value**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in  `topics.regex`or `topics` (above), but not both. <br/>
-**Description**:
+**Default value**:
+**Description**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in `topics.regex` or `topics` (above), but not both. <br/>
 
 ### starrocks.topic2table.map
 
@@ -276,25 +286,25 @@ The data is successfully loaded when the above result is returned.
 **Default value**: 94371840(90M)<br/>
 **Description**: The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Keep in mind that the Stream Load SDK buffer may create multiple Stream Load jobs to buffer data. Therefore, the threshold mentioned here refers to the total data size.
 
-### bufferflush.intervalms              
+### bufferflush.intervalms
 
 **Required**: NO<br/>
 **Default value**: 300000<br/>
 **Description**: Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000].
 
-### connect.timeoutms                   
+### connect.timeoutms
 
 **Required**: NO<br/>
 **Default value**: 1000<br/>
 **Description**: Timeout for connecting to the HTTP URL. Range: [100, 60000].
 
-### sink.properties.*                   
+### sink.properties.*
 
 **Required**:<br/>
 **Default value**:<br/>
-**Description**:  Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM LOAD.md).
+**Description**: Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM LOAD.md).
 
-### sink.properties.format              
+### sink.properties.format
 
 **Required**: NO<br/>
 **Default value**: json<br/>
@@ -303,13 +313,19 @@ The data is successfully loaded when the above result is returned.
 ## Limits
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.
-- The Kafka connector's sink guarantees at-least-once semantics.
+- The sink of the Kafka connector provided by StarRocks guarantees at-least-once semantics.
 
 ## Best practices
 
 ### Load Debezium-formatted CDC data
 
-If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary Key table, you also need to configure the `transforms` parameter and other related parameters.
+If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary Key table, you also need to configure the `transforms` parameter and other related parameters in the configuration file **connect-StarRocks-sink.properties** for the Kafka connector provided by StarRocks.
+
+:::info
+
+In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
+
+:::
 
 ```Properties
 transforms=addfield,unwrap
@@ -321,5 +337,8 @@ transforms.unwrap.delete.handling.mode
 
 In the above configurations, we specify `transforms=addfield,unwrap`.
 
-- The addfield transform is used to add the __op field to each record of Debezium CDC-formatted data to support the StarRocks Primary Key table. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord. It is included in the Kafka connector JAR file, so you do not need to manually install it.
+- The `op` field of the Debezium-formatted CDC data records the SQL operation on each data row from the upstream database. The values `c`, `u`, and `d` represent create, update, and delete, respectively. If the StarRocks table is a Primary Key table, you need to specify the addfield transform. The addfield transform adds a `__op` field for each data row to mark the SQL operation on each data row. To form a complete data row, the addfield transform also retrieves the values of other columns from the `before` or `after` fields based on the value of the `op` field in the Debezium-formatted CDC data. Finally, the data will be converted into JSON or CSV format and written into StarRocks. The addfield transform class is `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`. It is included in the Kafka connector JAR file, so you do not need to manually install it.
+
+    If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform.
+
 - The unwrap transform is provided by Debezium and is used to unwrap Debezium's complex data structure based on the operation type. For more information, see [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html).

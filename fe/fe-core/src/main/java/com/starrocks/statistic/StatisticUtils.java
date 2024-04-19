@@ -14,10 +14,14 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -32,9 +36,14 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -177,8 +186,8 @@ public class StatisticUtils {
 
                         statisticExecutor.collectStatistics(statsConnectCtx,
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        new ArrayList<>(collectPartitionIds), null, analyzeType,
-                                        StatsConstants.ScheduleType.ONCE,
+                                        new ArrayList<>(collectPartitionIds), null, null,
+                                        analyzeType, StatsConstants.ScheduleType.ONCE,
                                         analyzeStatus.getProperties()), analyzeStatus, false);
                     });
         } catch (Throwable e) {
@@ -478,7 +487,12 @@ public class StatisticUtils {
     }
 
     public static String quoting(String identifier) {
-        return "`" + identifier + "`";
+        String[] splits = identifier.split("\\.");
+        StringBuilder sb = new StringBuilder();
+        for (String split : splits) {
+            sb.append("`").append(split).append("`.");
+        }
+        return sb.substring(0, sb.length() - 1);
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
@@ -504,5 +518,39 @@ public class StatisticUtils {
 
         List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
         GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+    }
+
+    // only support collect statistics for slotRef and subfield expr
+    public static String getColumnName(Table table, Expr column) {
+        String colName;
+        if (column instanceof SlotRef) {
+            colName = table.getColumn(((SlotRef) column).getColumnName()).getName();
+        } else {
+            colName = ((SubfieldExpr) column).getPath();
+        }
+        return colName;
+    }
+
+    public static Type getQueryStatisticsColumnType(Table table, String column) throws AnalysisException {
+        String[] parts = column.split("\\.");
+        Preconditions.checkState(parts.length >= 1);
+        Column base = table.getColumn(parts[0]);
+        if (base == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
+        }
+
+        Type baseColumnType = base.getType();
+        for (int i = 1; i < parts.length; i++) {
+            if (baseColumnType.isStructType()) {
+                StructType baseStructType = (StructType) baseColumnType;
+                StructField field = baseStructType.getField(parts[i]);
+                if (field.getType().isStructType()) {
+                    baseColumnType = field.getType();
+                } else {
+                    return field.getType();
+                }
+            }
+        }
+        return baseColumnType;
     }
 }

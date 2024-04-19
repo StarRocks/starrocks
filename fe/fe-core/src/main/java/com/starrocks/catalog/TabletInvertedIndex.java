@@ -878,7 +878,9 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size());
+        return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size(),
+                               "TabletCount", getTabletCount(),
+                               "ReplicateCount", getReplicaCount());
     }
 }
 

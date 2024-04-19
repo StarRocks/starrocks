@@ -131,7 +131,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond);
+                        timeoutSecond, warehouseId);
     }
 
     @Override
@@ -279,6 +279,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                context.setExecutionId(loadId);
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)

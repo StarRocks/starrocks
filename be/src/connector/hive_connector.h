@@ -18,6 +18,7 @@
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
+#include "hive_chunk_sink.h"
 
 namespace starrocks::connector {
 
@@ -27,6 +28,8 @@ public:
 
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
+
+    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
 };
@@ -82,7 +85,7 @@ public:
 
 private:
     const HiveDataSourceProvider* _provider;
-    const THdfsScanRange _scan_range;
+    THdfsScanRange _scan_range;
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
@@ -107,6 +110,8 @@ private:
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
+    bool _enable_datacache_aync_populate_mode = false;
+    bool _enable_datacache_io_adaptor = false;
     bool _enable_dynamic_prune_scan_range = true;
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;

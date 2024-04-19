@@ -115,9 +115,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
         pk_columns.push_back((uint32_t)i);
     }
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get());
 
     // search pks in pk index to get rowids
@@ -162,7 +160,11 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
 StatusOr<ChunkIteratorPtr> LocalTabletReader::scan(const std::vector<std::string>& value_columns,
                                                    const std::vector<const ColumnPredicate*>& predicates) {
     TabletReaderParams tablet_reader_params;
-    tablet_reader_params.predicates = predicates;
+    PredicateAndNode and_node;
+    for (const auto* pred : predicates) {
+        and_node.add_child(PredicateColumnNode{pred});
+    }
+    tablet_reader_params.pred_tree = PredicateTree::create(std::move(and_node));
     auto& full_schema = *_tablet->tablet_schema()->schema();
     vector<ColumnId> column_ids;
     for (auto& cname : value_columns) {

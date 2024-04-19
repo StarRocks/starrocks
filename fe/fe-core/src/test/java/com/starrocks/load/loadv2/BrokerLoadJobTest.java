@@ -347,7 +347,7 @@ public class BrokerLoadJobTest {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
-                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong);
                 leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;

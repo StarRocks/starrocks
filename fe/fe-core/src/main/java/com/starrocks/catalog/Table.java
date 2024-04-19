@@ -121,7 +121,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("ODPS")
         ODPS,
         @SerializedName("BLACKHOLE")
-        BLACKHOLE;
+        BLACKHOLE,
+
+        @SerializedName("METADATA")
+        METADATA;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -201,14 +204,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     // foreign key constraint for mv rewrite
     protected List<ForeignKeyConstraint> foreignKeyConstraints;
 
-    protected Map<PartitionKey, Long> partitionKeyToId;
-
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
-        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -231,7 +231,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         }
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
-        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public void setTypeRead(boolean isTypeRead) {
@@ -388,6 +387,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                 return partitionInfo instanceof ExpressionRangePartitionInfoV2;
             }
         }
+        return false;
+    }
+
+    public boolean isTemporaryTable() {
         return false;
     }
 
@@ -829,21 +832,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean hasForeignKeyConstraints() {
         return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
-    }
-
-    public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {
-        long size = partitionKeyToId.size();
-        List<Long> ret = new ArrayList<>();
-        for (PartitionKey key : keys) {
-            Long v = partitionKeyToId.get(key);
-            if (v == null) {
-                partitionKeyToId.put(key, size);
-                v = size;
-                size += 1;
-            }
-            ret.add(v);
-        }
-        return ret;
     }
 
     public boolean isTable() {

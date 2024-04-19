@@ -237,11 +237,12 @@ Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr&
     return Status::OK();
 }
 
-int64_t Rowset::total_segment_data_size() {
+StatusOr<int64_t> Rowset::total_segment_data_size() {
     int64_t res = 0;
     for (auto& seg : _segments) {
         if (seg != nullptr) {
-            res += seg->get_data_size();
+            ASSIGN_OR_RETURN(auto sz, seg->get_data_size());
+            res += sz;
         }
     }
     return res;
@@ -658,7 +659,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
-    seg_options.predicates = options.predicates;
+    seg_options.pred_tree = options.pred_tree;
     seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
@@ -689,6 +690,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.

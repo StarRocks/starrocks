@@ -127,7 +127,7 @@ public class SetPassVarTest {
         starRocksAssert.getCtx().setRemoteIP("localhost");
         authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
-        createUsers();
+        testUser = createUser("CREATE USER 'test' IDENTIFIED BY ''");
     }
 
     private static void ctxToTestUser() {
@@ -140,14 +140,13 @@ public class SetPassVarTest {
         starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getUser());
     }
 
-    private static void createUsers() throws Exception {
-        String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
+    private static UserIdentity createUser(String createUserSql) throws Exception {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdentity();
+        return createUserStmt.getUserIdentity();
     }
     @Test
     public void testSetPasswordInNewPrivilege() throws Exception {
@@ -165,5 +164,4 @@ public class SetPassVarTest {
         Assert.assertTrue(userAuthenticationInfo.getPassword().length > 0);
 
     }
-
 }

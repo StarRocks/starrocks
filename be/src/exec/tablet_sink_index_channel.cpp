@@ -15,23 +15,20 @@
 #include "exec/tablet_sink_index_channel.h"
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
-#include "config.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/thrift_rpc_helper.h"
+#include "util/thrift_util.h"
 
 namespace starrocks::stream_load {
 
@@ -169,6 +166,11 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_txn_trace_parent(_parent->_txn_trace_parent);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
     request.set_is_lake_tablet(_parent->_is_lake_table);
+    if (_parent->_is_lake_table) {
+        // If the OlapTableSink node is responsible for writing the txn log, then the tablet writer
+        // does not need to write the txn log again.
+        request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
+    }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
@@ -192,6 +194,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // we need use is_vectorized to make other BE open vectorized delta writer
     request.set_is_vectorized(true);
     request.set_timeout_ms(_rpc_timeout_ms);
+    request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
@@ -750,12 +753,28 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             tablet_ids.emplace_back(commit_info.tabletId);
         }
     }
+    for (auto& log : *(closure->result.mutable_lake_tablet_data()->mutable_txn_logs())) {
+        _txn_logs.emplace_back(std::move(log));
+    }
 
     if (!tablet_ids.empty()) {
         string commit_tablet_id_list_str;
         JoinInts(tablet_ids, ",", &commit_tablet_id_list_str);
         LOG(INFO) << "OlapTableSink txn_id: " << _parent->_txn_id << " load_id: " << print_id(_parent->_load_id)
                   << " commit " << _tablet_commit_infos.size() << " tablets: " << commit_tablet_id_list_str;
+    }
+
+    if (closure->result.has_load_channel_profile()) {
+        const auto* buf = (const uint8_t*)(closure->result.load_channel_profile().data());
+        uint32_t len = closure->result.load_channel_profile().size();
+        TRuntimeProfileTree thrift_profile;
+        auto profile_st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &thrift_profile);
+        if (!profile_st.ok()) {
+            LOG(ERROR) << "Failed to deserialize LoadChannel profile, NodeChannel[" << _load_info << "] from ["
+                       << _node_info->host << ":" << _node_info->brpc_port << "], status: " << profile_st;
+        } else {
+            _runtime_state->load_channel_profile()->update(thrift_profile);
+        }
     }
 
     return Status::OK();

@@ -142,8 +142,33 @@ public class MetaUtils {
         }
         Table table = session.getGlobalStateMgr().getMetadataMgr().getTable(tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
+
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+        return table;
+    }
+
+    // get table by tableName, unlike getTable, this interface is session aware,
+    // which means if there is a temporary table with the same name,
+    // use temporary table first, otherwise, treat it as a permanent table
+    public static Table getSessionAwareTable(ConnectContext session, Database database, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(session.getCurrentCatalog());
+        }
+        if (database == null) {
+            database = getDatabase(session, tableName);
+        }
+
+        Table table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
+                session.getSessionId(), tableName.getCatalog(), database.getId(), tableName.getTbl());
+        if (table != null) {
+            return table;
+        }
+        table = session.getGlobalStateMgr().getMetadataMgr().getTable(
+                tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName.getTbl());
         }
         return table;
     }
@@ -234,4 +259,6 @@ public class MetaUtils {
         new TableMetaSyncer().syncTable(copiedTable);
         return copiedTable;
     }
+
+
 }

@@ -43,12 +43,15 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,7 +73,7 @@ public abstract class RoutineLoadTaskInfo {
 
     protected UUID id;
     protected long txnId = -1L;
-    protected long jobId;
+    protected RoutineLoadJob job;
 
     private final long createTimeMs;
     // The time when the task is actually executed
@@ -102,19 +105,21 @@ public abstract class RoutineLoadTaskInfo {
 
     protected StreamLoadTask streamLoadTask = null;
 
-    public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    public RoutineLoadTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs,
                                long timeToExecuteMs, long taskTimeoutMs) {
         this.id = id;
-        this.jobId = jobId;
+        this.job = job;
         this.createTimeMs = System.currentTimeMillis();
         this.taskScheduleIntervalMs = taskScheduleIntervalMs;
         this.timeoutMs = taskTimeoutMs;
         this.timeToExecuteMs = timeToExecuteMs;
     }
 
-    public RoutineLoadTaskInfo(UUID id, long jobId, long taskSchedulerIntervalMs,
+    public RoutineLoadTaskInfo(UUID id, RoutineLoadJob job, long taskSchedulerIntervalMs,
                                long timeToExecuteMs, long previousBeId, long taskTimeoutMs) {
-        this(id, jobId, taskSchedulerIntervalMs, timeToExecuteMs, taskTimeoutMs);
+        this(id, job, taskSchedulerIntervalMs, timeToExecuteMs, taskTimeoutMs);
         this.previousBeId = previousBeId;
     }
 
@@ -122,8 +127,12 @@ public abstract class RoutineLoadTaskInfo {
         return id;
     }
 
+    public RoutineLoadJob getJob() {
+        return job;
+    }
+
     public long getJobId() {
-        return jobId;
+        return job.getId();
     }
 
     public void setExecuteStartTimeMs(long executeStartTimeMs) {
@@ -182,8 +191,19 @@ public abstract class RoutineLoadTaskInfo {
         return timeToExecuteMs;
     }
 
-    public void setMsg(String msg) {
+    public void setMsg(String msg, boolean isError) {
         this.msg = msg;
+        if (isError) {
+            job.setOtherMsg(String.format("[task id: %s] [txn id: %s] %s", DebugUtil.printId(id), txnId, msg));
+        }
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public boolean isRunningTimeout() {
@@ -210,16 +230,16 @@ public abstract class RoutineLoadTaskInfo {
     // throw exception if unrecoverable errors happen.
     public void beginTxn() throws Exception {
         // begin a txn for task
-        RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
         //  label = job_name+job_id+task_id
-        label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
+        label = Joiner.on("-").join(job.getName(), job.getId(), DebugUtil.printId(id));
+
         txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
-                routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
+                job.getDbId(), Lists.newArrayList(job.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),
-                timeoutMs / 1000);
+                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
+                timeoutMs / 1000, warehouseId);
     }
 
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
@@ -252,7 +272,7 @@ public abstract class RoutineLoadTaskInfo {
         row.add(DebugUtil.printId(id));
         row.add(String.valueOf(txnId));
         row.add(txnStatus.name());
-        row.add(String.valueOf(jobId));
+        row.add(String.valueOf(job.getId()));
         row.add(TimeUtils.longToTimeString(createTimeMs));
         if (lastScheduledTime != -1L) {
             row.add(TimeUtils.longToTimeString(lastScheduledTime));
@@ -272,10 +292,23 @@ public abstract class RoutineLoadTaskInfo {
         } else {
             row.add(msg);
         }
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            // add warehouse in task info
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse == null) {
+                row.add("NULL");
+            } else {
+                row.add(warehouse.getName());
+            }
+        }
+
         return row;
     }
 
     abstract String getTaskDataSourceProperties();
+
+    abstract String dataSourceType();
 
     @Override
     public int hashCode() {

@@ -136,24 +136,37 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, clang-format ]
     name: Thirdparty Update
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        linux: [ centos7, ubuntu ]
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-    outputs:
-      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Update Image
+      - name: Update Image (${{ matrix.linux }})
         id: update-image
         if: needs.be-checker.outputs.thirdparty_filter == 'true'
+        env:
+          linux_distro: ${{ matrix.linux }}
         run: |
           cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-pr-update-image.sh
+
+      - name: Upload Thirdparty Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: THIRDPARTY-RESULT-${{ matrix.linux }}
+          path: image_cache.info
+          retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always() && needs.be-checker.outputs.thirdparty_filter == 'true'
@@ -162,9 +175,40 @@ jobs:
           ./bin/elastic-cluster.sh --delete
           rm -rf ${{ github.workspace }}/*
 
+  thirdparty-info:
+    runs-on: [self-hosted, normal]
+    needs:
+      - thirdparty-update
+    name: Thirdparty Info
+    outputs:
+      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
+    steps:
+      - name: Check Result
+        run: |
+          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
+            echo "::error:: Thirdparty Update Error!"
+            exit 1
+          fi
+
+      - name: Download Thirdparty Artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: THIRDPARTY-RESULT-*
+          path: outputs
+
+      - name: Read Info
+        id: info
+        if: needs.thirdparty-update.result == 'success'
+        run: |
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-update ]
+    needs: thirdparty-info
     timeout-minutes: 90
     name: BE UT
     env:
@@ -177,8 +221,8 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
-              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+          if [[ "${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}" != '' ]]; then
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --with-gcov
@@ -208,7 +252,7 @@ jobs:
 
   clang-tidy:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-update ]
+    needs: [ be-checker, thirdparty-info ]
     if: success() && needs.be-checker.outputs.src_filter == 'true'
     timeout-minutes: 90
     name: Clang-Tidy
@@ -234,7 +278,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
-              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --be --clang-tidy
@@ -383,10 +427,16 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven
 
-      - name: Setup thrift
-        uses: dodopizza/setup-thrift@v1
-        with:
-          version: 0.13.0
+      - name: Install Apache Thrift 0.13
+        run: |
+          mkdir -p ./.setup-thrift/oras
+          mkdir -p ./.setup-thrift/thrift
+          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
+          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
+          ln -sf $(pwd)/oras /usr/local/bin/oras
+          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
+          tar zxf ./thrift.v0.13.0.tar.gz -C .
+          ln -sf $(pwd)/thrift /usr/local/bin/thrift
 
       - name: Analyze FE
         env:
@@ -477,7 +527,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [be-checker, fe-checker, test-checker, clang-tidy, fe-ut, thirdparty-update]
+    needs: [be-checker, fe-checker, test-checker, clang-tidy, fe-ut, thirdparty-info]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -486,7 +536,7 @@ jobs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
-    if: > 
+    if: >
       always() && 
       (needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || 
       (needs.be-checker.outputs.src_filter != 'true' && needs.fe-checker.outputs.src_filter == 'true' && needs.fe-ut.result == 'success') || 
@@ -513,7 +563,7 @@ jobs:
         run: |
           echo "package=${package}" >> "$GITHUB_ENV"
           if [[ "${be_change}" != "true" && "${fe_change}" != "true" ]]; then
-            oss_path=oss://${bucket_prefix}-ci-release/daily/commit/${BRANCH}/${build_type}
+            oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/${build_type}/inspection/pr/StarRocks-
             package=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "tar.gz" | sort -n -r | head -n 1 | awk '{print $NF}')
             echo "package=${package}" >> $GITHUB_ENV
           fi
@@ -527,7 +577,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
-            export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+            export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
             export image_tag=$BRANCH-$PR_NUMBER
           fi
           
@@ -703,9 +753,12 @@ jobs:
         if: always()
         with:
           name: SQL-Tester Log
-          path: test/log/
+          path: |
+            test/log/
+            test/crash_logs/
           retention-days: 1
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Clean ENV
         if: always()

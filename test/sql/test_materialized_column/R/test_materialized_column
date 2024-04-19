@@ -7,7 +7,7 @@ USE test_create_table;
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc INT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE NOT NULL AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
@@ -54,12 +54,11 @@ t	CREATE TABLE `t` (
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 DROP TABLE t;
@@ -305,7 +304,7 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 INT AS (array_avg(array_data));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
@@ -348,7 +347,7 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 INT AS (array_avg(array_data));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
@@ -444,12 +443,11 @@ t	CREATE TABLE `t` (
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 ALTER TABLE t DROP COLUMN mc;
@@ -515,12 +513,10 @@ t	CREATE TABLE `t` (
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 ALTER TABLE t ADD COLUMN (newcol3 BIGINT DEFAULT "0", newcol4 BIGINT DEFAULT "0");
@@ -548,12 +544,10 @@ t	CREATE TABLE `t` (
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 1000);
@@ -947,12 +941,10 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 alter table t0 add column testcol3 BIGINT after v1, add column testcol4 BIGINT after v1;
@@ -976,12 +968,10 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 alter table t0 add column testcol5 BIGINT, add column testcol6 BIGINT as v1 * 10;
@@ -1007,12 +997,10 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 DROP DATABASE test_schema_change_for_after;
@@ -1033,11 +1021,9 @@ CREATE TABLE `t` (
 PRIMARY KEY(`c1`)
 DISTRIBUTED BY HASH(`c1`) BUCKETS 1
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"compression" = "LZ4",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"replication_num" = "1"
 );
 -- result:
 -- !result

@@ -372,7 +372,7 @@ public:
 
     Status delete_file(const std::string& path) override;
 
-    Status delete_files(const std::vector<std::string>& paths) override;
+    Status delete_files(std::span<const std::string> paths) override;
 
     Status create_dir(const std::string& dirname) override;
 
@@ -742,7 +742,7 @@ Status S3FileSystem::delete_file(const std::string& path) {
     }
 }
 
-Status S3FileSystem::delete_files(const std::vector<std::string>& paths) {
+Status S3FileSystem::delete_files(std::span<const std::string> paths) {
     if (paths.empty()) {
         return Status::OK();
     }

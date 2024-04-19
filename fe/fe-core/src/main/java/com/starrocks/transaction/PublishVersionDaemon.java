@@ -53,14 +53,18 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.PartitionPublishVersionData;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -78,9 +82,11 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends FrontendDaemon {
@@ -100,7 +106,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     @VisibleForTesting
     protected Set<Long> publishingLakeTransactionsBatchTableId;
-
 
     public PublishVersionDaemon() {
         super("PUBLISH_VERSION", Config.publish_version_interval_ms);
@@ -498,15 +503,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
         });
     }
 
-
-    public boolean publishPartitionBatch(Database db, long tableId, long partitionId, List<Long> txnIds,
-                                         List<Long> versions, List<TransactionState> transactionStates,
+    public boolean publishPartitionBatch(Database db, long tableId, PartitionPublishVersionData publishVersionData,
                                          TransactionStateBatch stateBatch) {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        // version -> shadowTablets
+        final Long partitionId = publishVersionData.getPartitionId();
+        final List<TransactionState> transactionStates = publishVersionData.getTransactionStates();
+        final List<Long> versions = publishVersionData.getCommitVersions();
+        final List<TxnInfoPB> txnInfos = publishVersionData.getTxnInfos();
+
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
         Set<Tablet> normalTablets = null;
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+        // version -> shadowTablets
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
@@ -514,19 +524,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return true;
             }
 
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(publishVersionData.getPartitionId());
             if (partition == null) {
                 LOG.info("partition is null in publish partition batch");
                 return true;
             }
             if (partition.getVisibleVersion() + 1 != versions.get(0)) {
-                LOG.info("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
+                LOG.error("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
                         + partition.getId() + " " + partition.getVisibleVersion() + " " + versions.get(0));
                 return false;
             }
 
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
+                warehouseId = txnState.getWarehouseId();
                 List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
                 for (MaterializedIndex index : indexes) {
                     if (!index.visibleForTransaction(txnState.getTransactionId())) {
@@ -541,17 +552,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             Set<Tablet> tabletsNew = new HashSet<>(index.getTablets());
                             shadowTabletsMap.put(versions.get(i), tabletsNew);
                         }
-
                     } else {
                         normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
                         normalTablets.addAll(index.getTablets());
                     }
                 }
-
             }
-
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -560,22 +568,22 @@ public class PublishVersionDaemon extends FrontendDaemon {
         try {
             for (Map.Entry<Long, Set<Tablet>> item : shadowTabletsMap.entrySet()) {
                 int index = versions.indexOf(item.getKey());
-                List<Tablet> publishShdowTablets = new ArrayList<>(item.getValue());
-                Utils.publishLogVersionBatch(publishShdowTablets, txnIds.subList(index, txnIds.size()),
-                        versions.subList(index, versions.size()));
+                List<Tablet> publishShadowTablets = new ArrayList<>(item.getValue());
+                Utils.publishLogVersionBatch(publishShadowTablets,
+                        txnInfos.subList(index, txnInfos.size()),
+                        versions.subList(index, versions.size()),
+                        warehouseId);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 List<Tablet> publishTablets = new ArrayList<>();
                 publishTablets.addAll(normalTablets);
 
-                // commit time of last transactionState as commitTime
-                long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
-
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
-                Utils.publishVersionBatch(publishTablets, txnIds,
-                        startVersion - 1, endVersion, commitTime, compactionScores, nodeToTablets);
+                Utils.publishVersionBatch(publishTablets, txnInfos,
+                        startVersion - 1, endVersion, compactionScores, nodeToTablets,
+                        warehouseId);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -583,20 +591,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
         } catch (Exception e) {
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
-                    txnIds, e);
+                    txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
             return false;
         }
 
         return true;
     }
 
-    private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch, Map<Long, List<Long>> dirtyPartitions) {
+    private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch) {
         try {
+            // TODO: do not send abortTxn() requests for transactions with combined txn log.
+            List<Long> txnIds = txnStateBatch.getTxnIds();
             // submit may throw RejectedExecutionException if the task cannot be scheduled for execution
             getDeleteTxnLogExecutor().submit(() -> {
                 txnStateBatch.getPartitionToTablets().entrySet().stream().forEach(entry -> {
                     long partitionId = entry.getKey();
-                    List<Long> txnIds = dirtyPartitions.get(partitionId);
                     Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
 
                     for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
@@ -637,48 +646,28 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long dbId = txnStateBatch.getDbId();
         long tableId = txnStateBatch.getTableId();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
-        // partitionId -> txnIdList
-        Map<Long, List<Long>> dirtyPartitions = new HashMap<>();
-        // partitionId -> versionList
-        Map<Long, List<Long>> partitionVersions = new HashMap<>();
-        // partitionId -> transactionState
-        Map<Long, List<TransactionState>> partitionStates = new HashMap<>();
-
+        Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
         for (TransactionState state : states) {
-            Map<Long, PartitionCommitInfo> partitionCommitInfoMap = state.getTableCommitInfo(tableId)
-                    .getIdToPartitionCommitInfo();
-            for (Map.Entry<Long, PartitionCommitInfo> item : partitionCommitInfoMap.entrySet()) {
-
-                if (!dirtyPartitions.containsKey(item.getKey())) {
-                    dirtyPartitions.put(item.getKey(), new ArrayList<>());
+            TableCommitInfo tableCommitInfo = Objects.requireNonNull(state.getTableCommitInfo(tableId));
+            Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
+            for (Long partitionId : partitionCommitInfoMap.keySet()) {
+                if (!publishVersionDataMap.containsKey(partitionId)) {
+                    publishVersionDataMap.put(partitionId, new PartitionPublishVersionData(tableId, partitionId));
                 }
-                List<Long> partitionCommitInfo = dirtyPartitions.get(item.getKey());
-                partitionCommitInfo.add(state.getTransactionId());
-
-                if (!partitionVersions.containsKey(item.getKey())) {
-                    partitionVersions.put(item.getKey(), new ArrayList<>());
-                }
-                List<Long> versions = partitionVersions.get(item.getKey());
-                versions.add(item.getValue().getVersion());
-
-                if (!partitionStates.containsKey(item.getKey())) {
-                    partitionStates.put(item.getKey(), new ArrayList<>());
-                }
-                List<TransactionState> partitionState = partitionStates.get(item.getKey());
-                partitionState.add(state);
+                PartitionPublishVersionData publishVersionData = publishVersionDataMap.get(partitionId);
+                publishVersionData.addTransaction(state);
             }
         }
 
-        // TODO
-        // make sure the txnIdList is correspond to versions
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
 
         if (db == null) {
             LOG.info("the database of transaction batch {} has been deleted", txnStateBatch);
             try {
                 for (TransactionState state : txnStateBatch.getTransactionStates()) {
-                    globalTransactionMgr.finishTransaction(state.getDbId(), state.getTransactionId(), Sets.newHashSet());
+                    globalTransactionMgr.finishTransaction(state.getDbId(), state.getTransactionId(),
+                            Sets.newHashSet());
                 }
             } catch (UserException ex) {
                 LOG.warn("Fail to finish txn Batch " + txnStateBatch, ex);
@@ -688,20 +677,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
 
-        for (Map.Entry<Long, List<Long>> item : dirtyPartitions.entrySet()) {
-            Long partitionId = item.getKey();
-
+        for (PartitionPublishVersionData publishVersionData : publishVersionDataMap.values()) {
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
-                boolean success = publishPartitionBatch(db, tableId, partitionId, item.getValue(),
-                        partitionVersions.get(partitionId), partitionStates.get(partitionId), txnStateBatch);
-                partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(tableId).
-                        getIdToPartitionCommitInfo().get(partitionId).setVersionTime(
-                                success ? System.currentTimeMillis() : -System.currentTimeMillis()));
+                boolean success = publishPartitionBatch(db, tableId, publishVersionData, txnStateBatch);
+                long versionTime = success ? System.currentTimeMillis() : -System.currentTimeMillis();
+                for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
+                    commitInfo.setVersionTime(versionTime);
+                }
                 return success;
             }, getLakeTaskExecutor()).exceptionally(ex -> {
-                LOG.error("Fail to publish txn batch ");
-                partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(tableId).
-                        getIdToPartitionCommitInfo().get(partitionId).setVersionTime(-System.currentTimeMillis()));
+                LOG.error("Fail to publish txn batch", ex);
+                long versionTime = -System.currentTimeMillis();
+                for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
+                    commitInfo.setVersionTime(versionTime);
+                }
                 return false;
             });
             futureList.add(future);
@@ -715,13 +704,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
-                    //
                     for (TransactionState state : txnStateBatch.getTransactionStates()) {
                         refreshMvIfNecessary(state);
                     }
 
                     // here create the job to drop txnLog, for the visibleVersion has been updated
-                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
+                    submitDeleteTxnLogJob(txnStateBatch);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -782,6 +770,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
+        long warehouseId = txnState.getWarehouseId();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
@@ -823,14 +812,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
             locker.unLockDatabase(db, LockType.READ);
         }
 
+        TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
-                Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
+                Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, warehouseId);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
-                        compactionScores);
+                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                        warehouseId);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
@@ -856,14 +846,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         for (long tableId : transactionState.getTableIdList()) {
-            Table table;
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                table = db.getTable(tableId);
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
+            Table table = db.getTable(tableId);
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
@@ -873,14 +856,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
             while (mvIdIterator.hasNext()) {
                 MvId mvId = mvIdIterator.next();
                 Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                locker.lockDatabase(mvDb, LockType.READ);
+                MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+                if (materializedView == null) {
+                    LOG.warn("materialized view {} does not exists.", mvId.getId());
+                    mvIdIterator.remove();
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
                 try {
-                    MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
-                    if (materializedView == null) {
-                        LOG.warn("materialized view {} does not exists.", mvId.getId());
-                        mvIdIterator.remove();
-                        continue;
-                    }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
                                 "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
@@ -889,10 +873,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
-                    locker.unLockDatabase(mvDb, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
                 }
             }
         }
-
     }
 }

@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -100,6 +101,14 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     }
 
     @Override
+    public String visitLogicalViewScan(LogicalViewScanOperator node, Void context) {
+        return "LogicalViewScanOperator" + " {" +
+                "table='" + node.getTable().getName() + '\'' +
+                ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
+                '}';
+    }
+
+    @Override
     public String visitLogicalSchemaScan(LogicalSchemaScanOperator node, Void context) {
         return super.visitLogicalSchemaScan(node, context);
     }
@@ -110,6 +119,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
                 "}";
     }
@@ -328,6 +338,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + node.getOutputColumns() +
                 ", projection=" + node.getProjection() +
                 ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
                 "}";
     }

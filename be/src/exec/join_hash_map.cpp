@@ -319,7 +319,6 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
-    _table_items->row_desc = param.row_desc;
     _table_items->mor_reader_mode = param.mor_reader_mode;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
@@ -347,6 +346,7 @@ void JoinHashTable::create(const HashTableParam& param) {
                 std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
                         param.predicate_slots.end()) {
                 hash_table_slot.need_output = true;
+                _table_items->output_probe_column_count++;
             } else {
                 hash_table_slot.need_output = false;
             }
@@ -367,6 +367,7 @@ void JoinHashTable::create(const HashTableParam& param) {
                                            std::find(param.predicate_slots.begin(), param.predicate_slots.end(),
                                                      slot->id()) != param.predicate_slots.end())) {
                 hash_table_slot.need_output = true;
+                _table_items->output_build_column_count++;
             } else {
                 hash_table_slot.need_output = false;
             }

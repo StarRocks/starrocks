@@ -1,0 +1,37 @@
+-- name: test_insert_partial_update
+create table test (pk bigint NOT NULL, v0 string not null default 'defaultv0', v1 int not null default '100001')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+
+-- fill default value
+insert into test values(1, 'v0', 1), (2, 'v2', 2);
+insert into test values(2, 'v2_2', default);
+select * from test order by pk;
+
+-- partial update
+insert into test values(1, 'v0', 1), (2, 'v2', 2);
+insert into test (pk, v1) values(1, 11);
+select * from test order by pk;
+
+-- v0 is not null but does not have default value
+create table test2 (pk bigint NOT NULL, v0 string not null, v1 int not null default '100001')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+
+-- partial update
+insert into test2 values(1, 'v0', 1), (2, 'v2', 2);
+insert into test2 (pk, v1) values(1, 11), (3, 3);
+select * from test2 order by pk;
+
+-- update with generated column
+create table test3 (pk bigint NOT NULL, v0 string not null, v1 int not null default '100001', v2 int as cast(v1 + 1 as int))
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+
+insert into test3 values(1, 'v0', 1), (2, 'v2', 2);
+insert into test3 (pk, v1) values(1, 11), (3, 3);
+select * from test3 order by pk;
+
+-- update without order by column
+create table test4 (pk bigint NOT NULL, v0 string not null, v1 int not null default '0')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 order by (v1) PROPERTIES("replication_num" = "1");
+
+insert into test4 values(1, 'v0', 1), (2, 'v2', 2);
+insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');

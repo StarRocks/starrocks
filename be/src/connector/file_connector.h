@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "connector_chunk_sink.h"
 #include "exec/file_scanner.h"
 
 namespace starrocks::connector {
@@ -26,6 +27,8 @@ public:
 
     DataSourceProviderPtr create_data_source_provider(starrocks::ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
+
+    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::FILE; }
 };
@@ -85,6 +88,7 @@ private:
     RuntimeProfile::Counter* _scanner_materialize_timer = nullptr;
     RuntimeProfile::Counter* _scanner_init_chunk_timer = nullptr;
     RuntimeProfile::Counter* _scanner_file_reader_timer = nullptr;
+    RuntimeProfile::Counter* _scanner_file_read_count = nullptr;
 
     // =========================
     Status _create_scanner();

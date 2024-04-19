@@ -69,14 +69,14 @@ public class StatisticAutoCollector extends FrontendDaemon {
         if (Config.enable_collect_full_statistic) {
             LOG.info("auto collect full statistic on all databases start");
             List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                    new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
+                    new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null, null,
                             AnalyzeType.FULL, ScheduleType.SCHEDULE,
                             Maps.newHashMap(),
                             ScheduleStatus.PENDING,
                             LocalDateTime.MIN));
             for (StatisticsCollectJob statsJob : allJobs) {
                 AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                        statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumns(),
+                        statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
                         statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
@@ -127,8 +127,8 @@ public class StatisticAutoCollector extends FrontendDaemon {
         }
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
-                Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(),
-                ScheduleStatus.PENDING, LocalDateTime.MIN);
+                Collections.emptyList(), Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE,
+                Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(nativeAnalyzeJob);
     }
 

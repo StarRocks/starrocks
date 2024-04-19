@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
@@ -22,19 +23,24 @@ import static java.util.Objects.requireNonNull;
 public class CatalogConnector implements Connector {
     private final Connector normalConnector;
     private final Connector informationSchemaConnector;
+    private final Connector tableMetaConnector;
 
-    public CatalogConnector(Connector normalConnector, InformationSchemaConnector informationSchemaConnector) {
+    public CatalogConnector(Connector normalConnector, InformationSchemaConnector informationSchemaConnector,
+                            TableMetaConnector tableMetaConnector) {
         requireNonNull(normalConnector, "normalConnector is null");
         requireNonNull(informationSchemaConnector, "informationSchemaConnector is null");
         checkArgument(!(normalConnector instanceof InformationSchemaConnector), "normalConnector is InformationSchemaConnector");
+        checkArgument(!(normalConnector instanceof TableMetaConnector), "tableMetaConnector is InformationSchemaConnector");
         this.normalConnector = normalConnector;
         this.informationSchemaConnector = informationSchemaConnector;
+        this.tableMetaConnector = tableMetaConnector;
     }
 
     public ConnectorMetadata getMetadata() {
         return new CatalogConnectorMetadata(
                 normalConnector.getMetadata(),
-                informationSchemaConnector.getMetadata()
+                informationSchemaConnector.getMetadata(),
+                tableMetaConnector.getMetadata()
         );
     }
 

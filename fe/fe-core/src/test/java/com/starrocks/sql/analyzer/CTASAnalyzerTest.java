@@ -330,7 +330,8 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
         createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
-        createTableStmt.createTable(ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt.getCreateTableStmt(), ctx);
+
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 =
@@ -428,7 +429,7 @@ public class CTASAnalyzerTest {
     }
 
     @Test
-    public void testCtasWithNullale() throws Exception {
+    public void testCtasWithNullable() throws Exception {
         {
             String createSql = "create table emps (\n" +
                     "    empid int null,\n" +

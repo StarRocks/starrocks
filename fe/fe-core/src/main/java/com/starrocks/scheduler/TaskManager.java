@@ -28,8 +28,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -462,7 +462,7 @@ public class TaskManager implements MemoryTrackable {
             if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskLock.getOwner();
                 if (owner != null) {
-                    LOG.warn("task lock is held by: {}", Util.dumpThread(owner, 50));
+                    LOG.warn("task lock is held by: {}", LogUtil.dumpThread(owner, 50));
                 } else {
                     LOG.warn("task lock owner is null");
                 }
@@ -600,8 +600,6 @@ public class TaskManager implements MemoryTrackable {
             taskRunManager.getTaskRunHistory().forceGC();
             data.runStatus = showTaskRunStatus(null);
             String s = GsonUtils.GSON.toJson(data);
-            LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
             Text.writeString(dos, s);
         } else {
             String s = GsonUtils.GSON.toJson(data);
@@ -613,6 +611,7 @@ public class TaskManager implements MemoryTrackable {
     public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         taskRunManager.getTaskRunHistory().forceGC();
         List<TaskRunStatus> runStatusList = showTaskRunStatus(null);
+        LOG.info("saveTasksV2, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
                 2 + nameToTaskMap.size() + runStatusList.size());
         writer.writeJson(nameToTaskMap.size());
@@ -734,7 +733,9 @@ public class TaskManager implements MemoryTrackable {
 
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                taskRunManager.arrangeTaskRun(taskRun);
+                if (!taskRunManager.arrangeTaskRun(taskRun)) {
+                    LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
+                }
                 break;
             // this will happen in build image
             case RUNNING:
@@ -771,6 +772,7 @@ public class TaskManager implements MemoryTrackable {
             List<TaskRun> tempQueue = Lists.newArrayList();
             while (!taskRunQueue.isEmpty()) {
                 TaskRun taskRun = taskRunQueue.poll();
+                // use queryId to find the taskRun
                 if (taskRun.getStatus().getQueryId().equals(statusChange.getQueryId())) {
                     pendingTaskRun = taskRun;
                     break;
@@ -797,6 +799,16 @@ public class TaskManager implements MemoryTrackable {
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
                 status.setState(Constants.TaskRunState.FAILED);
+                taskRunManager.getTaskRunHistory().addHistory(status);
+            } else if (toStatus == Constants.TaskRunState.SUCCESS) {
+                // This only happened when the task run is merged by others and no run ever.
+                LOG.info("Replay update pendingTaskRun which is merged by others, query_id:{}, taskId:{}",
+                        statusChange.getQueryId(), taskId);
+                status.setErrorMessage(statusChange.getErrorMessage());
+                status.setErrorCode(statusChange.getErrorCode());
+                status.setState(Constants.TaskRunState.SUCCESS);
+                status.setProgress(100);
+                status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
             }
             if (taskRunQueue.size() == 0) {
@@ -912,6 +924,9 @@ public class TaskManager implements MemoryTrackable {
                     iterator.remove();
                 }
             }
+
+            // trigger to force gc to avoid too many history task runs.
+            taskRunManager.getTaskRunHistory().forceGC();
         } finally {
             taskRunManager.taskRunUnlock();
         }

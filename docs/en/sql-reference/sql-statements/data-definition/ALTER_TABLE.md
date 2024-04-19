@@ -32,8 +32,8 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
-- rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- comment: modifies the table comment (supported from **v3.1 onwards**). Currently, column comments cannot be modified.
+- rename: renames a table, rollup index, or partition.
+- comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
 - column: adds, drops, or reorders columns, or modifies column type.
@@ -42,13 +42,14 @@ alter_clause1[, alter_clause2, ...]
 - swap: atomic exchange of two tables.
 - compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
-:::note
+## Limits and usage notes
 
-- Operations on partition, column and rollup index cannot be performed in one ALTER TABLE statement.
+- Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
+- Column names cannot be modified.
+- Column comments cannot be modified.
+- One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
 - Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](../data-definition/CANCEL_ALTER_TABLE.md) command to cancel the operation.
 - Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
-
-:::
 
 ### Rename
 
@@ -111,7 +112,7 @@ Note:
 2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
 3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
 4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
+5. The user can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
 
 #### Drop a partition
 
@@ -129,8 +130,8 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 Note:
 
 1. Keep at least one partition for partitioned tables.
-2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./RECOVER.md) command within a specified period (1 day by default).
-3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally this operation is not recommended.
+2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
+3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally, this operation is not recommended.
 
 #### Add a temporary partition
 
@@ -143,7 +144,7 @@ partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
 ```
 
-#### Use a temporary partition to replace current partition
+#### Use a temporary partition to replace the current partition
 
 Syntax:
 
@@ -249,7 +250,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY RANDOM;
   ```
 
-- The keys for hash bucketing is modified to `user_id, event_time` from `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
+- The keys for hash bucketing are modified to `user_id, event_time` from `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
@@ -297,7 +298,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 
 ### Modify columns (add/delete columns, change the order of columns)
 
-#### Add a column to specified location of specified index
+#### Add a column to the specified location of the specified index
 
 Syntax:
 

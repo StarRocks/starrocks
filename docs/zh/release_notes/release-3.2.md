@@ -4,9 +4,74 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
-## 3.2.4
+## 3.2.6
+
+发布日期：2024 年 4 月 18 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 外表权限丢失。[#44030](https://github.com/StarRocks/starrocks/pull/44030)
+
+
+## 3.2.5 (已下线)
+
+发布日期：2024 年 4 月 12 日
+
+:::tip
+
+此版本因存在 Hive/Iceberg catalog 等外表权限相关问题已经下线。
+
+- 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
+- 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.2.6 后，通过 `REVOKE` 操作删除其中一条即可。
+
+:::
+
+### 新增特性
+
+- 支持 [dict_mapping](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/dict-functions/dict_mapping/) 列属性，能够极大地方便构建全局字典中的数据导入过程，用以加速计算精确去重等。
+
+### 行为变更
+
+- JSON 中的 null 值通过 `IS NULL` 等方式判断时，修改为按照 SQL 的 NULL 值计算。即，`SELECT parse_json('{"a": null}') -> 'a' IS NULL` 会返回 `true`（原来是返回 `false` ）。 [#42765](https://github.com/StarRocks/starrocks/pull/42765)
+
+### 功能优化
+
+- 优化 FILES 表函数自动探测文件 Schema 时的列类型合并规则。当不同文件中存在同名但类型不同的列时，FILES 会尽可能将更大粒度的类型作为最终的探测类型，比如分别为 FLOAT 和 INT 类型的同名列，最终返回 DOUBLE 类型。[#40959](https://github.com/StarRocks/starrocks/pull/40959)
+- 主键表支持 Size-tiered Compaction 以减少 I/O 放大问题。[#41130](https://github.com/StarRocks/starrocks/pull/41130)
+- 通过 Broker Load 导入 ORC 格式的数据，在 TIMESTAMP 类型的数据转化为 StarRocks 中的 DATETIME 类型的数据时，新增支持保留微秒信息。[#42179](https://github.com/StarRocks/starrocks/pull/42179)
+- 优化 Routine Load 报错信息。[#41306](https://github.com/StarRocks/starrocks/pull/41306)
+- 优化 FILES 表函数转换数据类型失败时的报错信息。[#42717](https://github.com/StarRocks/starrocks/pull/42717)
+
+### 问题修复
+
+修复了如下问题：
+
+- 删除系统视图后 FE 启动失败。修复后禁止删除系统视图。[#43552](https://github.com/StarRocks/starrocks/pull/43552)
+- 主键表 Sort Key 存在重复列情况下 BE Crash。修复后禁止 Sort Key 存在重复列。[#43206](https://github.com/StarRocks/starrocks/pull/43206)
+- 当 JSON 对象为 NULL 时，to_json 函数返回错误。修复后，当 JSON 对象为 NULL 时，该函数返回 NULL 。[#42171](https://github.com/StarRocks/starrocks/pull/42171)
+- 对于存算分离中的主键表，本地持久化索引的垃圾回收 (Garbage Collection) 和淘汰线程对 CN 节点没有生效，导致无用数据没有被删除。[#41955](https://github.com/StarRocks/starrocks/pull/41955)
+- 存算分离模式下，修改主键表 `enable_persistent_index` 属性报错。[#42890](https://github.com/StarRocks/starrocks/pull/42890)
+- 存算分离模式下，主键表部分列更新时未更新列的值被修改为 NULL。[#42355](https://github.com/StarRocks/starrocks/pull/42355)
+- 物化视图在基表为逻辑视图情况下改写失败。[#42173](https://github.com/StarRocks/starrocks/pull/42173)
+- 跨集群同步工具在迁移主键表到存算分离集群时 CN Crash。[#42260](https://github.com/StarRocks/starrocks/pull/42260)
+- 外表物化视图范围分区不连续。[#41957](https://github.com/StarRocks/starrocks/pull/41957)
+
+## 3.2.4 (已下线)
 
 发布日期：2024 年 3 月 12 日
+
+:::tip
+
+此版本因存在 Hive/Iceberg catalog 等外表权限相关问题已经下线。
+
+- 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
+- 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.2.6 后，通过 `REVOKE` 操作删除其中一条即可。
+
+:::
 
 ### 新增特性
 

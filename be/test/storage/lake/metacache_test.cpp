@@ -342,4 +342,23 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
     }
 }
 
+TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    metacache->cache_combined_txn_log("combined1", log);
+
+    auto log2 = metacache->lookup_combined_txn_log("combined1");
+    EXPECT_EQ(log.get(), log2.get());
+
+    auto log3 = metacache->lookup_combined_txn_log("combined2");
+    ASSERT_TRUE(log3 == nullptr);
+
+    auto meta = std::make_shared<TabletMetadataPB>();
+    metacache->cache_tablet_metadata("meta1", meta);
+
+    auto log4 = metacache->lookup_combined_txn_log("meta1");
+    ASSERT_TRUE(log4 == nullptr);
+}
+
 } // namespace starrocks::lake

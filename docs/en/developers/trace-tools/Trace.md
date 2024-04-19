@@ -19,7 +19,7 @@ displayed_sidebar: "English"
 
 Steps to enable tracing in SR:
 
-1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.31/getting-started)
+1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.31/getting-started/)
     The guide above uses docker. For simplicity, you can also just download [binary package](https://github.com/jaegertracing/jaeger/releases) and run locally.
 
 ```
@@ -61,6 +61,6 @@ Steps to enable tracing in SR:
 
 ### Adding traces
 
-*   To add trace, first get familiar with basic concepts like tracer, span, trace propagation read the [observability primer](https://opentelemetry.io/docs/concepts/observability-primer).
+*   To add trace, first get familiar with basic concepts like tracer, span, trace propagation read the [observability primer](https://opentelemetry.io/docs/concepts/observability-primer/)
 *   Read utility class and it's usages in SR: TraceManager.java(java) `common/tracer.h/cpp (cpp)`, it's current usage(like write txn(load\/insert\/update\/delete) trace, and its propagation to BE).
 *   Add your own trace

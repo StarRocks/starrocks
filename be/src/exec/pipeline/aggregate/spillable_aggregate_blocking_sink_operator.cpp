@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 
+#include <glog/logging.h>
+
 #include <memory>
 
 #include "column/vectorized_fwd.h"
@@ -25,6 +27,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
@@ -39,6 +42,10 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) {
+        return Status::OK();
+    }
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing_if_not_reuseable();
         _is_finished = true;
@@ -127,6 +134,7 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
 Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
                                                            const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::reset_state(state, refill_chunks));
     return Status::OK();
@@ -233,6 +241,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 }
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
+    RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
     if (should_spill_hash_table) {
         _aggregator->hash_map_variant().visit(
                 [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
@@ -303,8 +312,8 @@ OperatorPtr SpillableAggregateBlockingSinkOperatorFactory::create(int32_t degree
                                                                   int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
 
-    auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
-                                                                       driver_sequence);
+    auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(
+            aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());
     // create spiller
     auto spiller = _spill_factory->create(*_spill_options);
     // create spill process channel

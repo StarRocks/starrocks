@@ -237,15 +237,16 @@ class TabletIndex;
 class TabletSchema {
 public:
     using SchemaId = int64_t;
+    using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
     using TabletSchemaCSPtr = std::shared_ptr<const TabletSchema>;
 
-    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb);
-    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
-    static std::shared_ptr<TabletSchema> create(const TabletSchemaCSPtr& tablet_schema,
-                                                const std::vector<int32_t>& column_indexes);
-    static std::shared_ptr<TabletSchema> create_with_uid(const TabletSchemaCSPtr& tablet_schema,
-                                                         const std::vector<uint32_t>& unique_column_ids);
-    static std::unique_ptr<TabletSchema> copy(const std::shared_ptr<const TabletSchema>& tablet_schema);
+    static TabletSchemaSPtr create(const TabletSchemaPB& schema_pb);
+    static TabletSchemaSPtr create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
+    static TabletSchemaSPtr create(const TabletSchemaCSPtr& tablet_schema, const std::vector<int32_t>& column_indexes);
+    static TabletSchemaSPtr create_with_uid(const TabletSchemaCSPtr& tablet_schema,
+                                            const std::vector<uint32_t>& unique_column_ids);
+    static std::unique_ptr<TabletSchema> copy(const TabletSchemaCSPtr& tablet_schema);
+    static TabletSchemaCSPtr copy(const TabletSchemaCSPtr& src_schema, const std::vector<TColumn>& cols);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java

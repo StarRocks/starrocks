@@ -85,19 +85,23 @@ You can also deploy Flink by following the instructions provided in [Flink docum
 
 ## Before you begin
 
+### Deploy the Flink connector
+
 Follow these steps to deploy the Flink connector:
 
-1. Select and download the [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR package matching the Flink version that you are using.
+1. Select and download the [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR package matching the Flink version that you are using. If code debugging is needed, compile the Flink connector package to suit your business requirements.
 
    > **NOTICE**
    >
    > We recommend that you download the Flink connector package whose version is 1.2.x or later and whose matching Flink version has the same first two digits as the Flink version that you are using. For example, if you use Flink v1.14.x, you can download `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`.
 
-2. If code debugging is needed, compile the Flink connector package to suit your business requirements.
+2. Place the Flink connector package you downloaded or compiled into the `lib` directory of Flink.
 
-3. Place the Flink connector package you downloaded or compiled into the `lib` directory of Flink.
+3. Restart your Flink cluster.
 
-4. Restart your Flink cluster.
+### Network configuration
+
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
 
 ## Parameters
 
@@ -110,7 +114,7 @@ The following parameters apply to both the Flink SQL and Flink DataStream readin
 | connector                   | Yes      | STRING    | The type of connector that you want to use to read data. Set the value to `starrocks`.                                |
 | scan-url                    | Yes      | STRING    | The address that is used to connect the FE from the web server. Format: `<fe_host>:<fe_http_port>`. The default port is `8030`. You can specify multiple addresses, which must be separated with a comma (,). Example: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`. |
 | jdbc-url                    | Yes      | STRING    | The address that is used to connect the MySQL client of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`. The default port number is `9030`. |
-| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/User_privilege.md). |
+| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/user_privs/User_privilege.md). |
 | password                    | Yes      | STRING    | The password of your StarRocks cluster account.              |
 | database-name               | Yes      | STRING    | The name of the StarRocks database to which the StarRocks table you want to read belongs. |
 | table-name                  | Yes      | STRING    | The name of the StarRocks table you want to read.            |

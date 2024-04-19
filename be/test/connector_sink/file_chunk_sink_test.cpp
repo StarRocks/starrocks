@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector_sink/file_chunk_sink.h"
+#include "connector/file_chunk_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -21,7 +21,7 @@
 #include <future>
 #include <thread>
 
-#include "connector_sink/connector_chunk_sink.h"
+#include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
@@ -49,7 +49,7 @@ protected:
 class MockFileWriterFactory : public formats::FileWriterFactory {
 public:
     MOCK_METHOD(Status, init, (), (override));
-    MOCK_METHOD(StatusOr<std::shared_ptr<formats::FileWriter>>, create, (const std::string&), (override));
+    MOCK_METHOD(StatusOr<std::shared_ptr<formats::FileWriter>>, create, (const std::string&), (const override));
 };
 
 class MockFileWriter : public formats::FileWriter {
@@ -72,7 +72,6 @@ TEST_F(FileChunkSinkTest, test_unpartitioned_sink) {
         std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = {};
         auto mock_file_writer = std::make_shared<MockFileWriter>();
         EXPECT_CALL(*mock_file_writer, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer, get_written_bytes()).WillOnce(Return(0));
         EXPECT_CALL(*mock_file_writer, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
         auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
         EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
@@ -96,7 +95,7 @@ TEST_F(FileChunkSinkTest, test_unpartitioned_sink) {
         std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators = {};
         auto mock_file_writer1 = std::make_shared<MockFileWriter>();
         EXPECT_CALL(*mock_file_writer1, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer1, get_written_bytes()).WillOnce(Return(0)).WillOnce(Return(100));
+        EXPECT_CALL(*mock_file_writer1, get_written_bytes()).WillOnce(Return(100));
         EXPECT_CALL(*mock_file_writer1, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
         EXPECT_CALL(*mock_file_writer1, commit())
                 .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
@@ -147,7 +146,6 @@ TEST_F(FileChunkSinkTest, test_partitioned_sink) {
                 ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
         auto mock_file_writer = std::make_shared<MockFileWriter>();
         EXPECT_CALL(*mock_file_writer, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer, get_written_bytes()).WillOnce(Return(0));
         EXPECT_CALL(*mock_file_writer, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
         auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
         EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
@@ -177,13 +175,11 @@ TEST_F(FileChunkSinkTest, test_partitioned_sink) {
                 ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
         auto mock_file_writer1 = std::make_shared<MockFileWriter>();
         EXPECT_CALL(*mock_file_writer1, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer1, get_written_bytes()).WillOnce(Return(0));
         EXPECT_CALL(*mock_file_writer1, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
         EXPECT_CALL(*mock_file_writer1, commit())
                 .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
         auto mock_file_writer2 = std::make_shared<MockFileWriter>();
         EXPECT_CALL(*mock_file_writer2, init()).WillOnce(Return(Status::OK()));
-        EXPECT_CALL(*mock_file_writer2, get_written_bytes()).WillOnce(Return(0));
         EXPECT_CALL(*mock_file_writer2, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
         EXPECT_CALL(*mock_file_writer2, commit())
                 .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
@@ -268,7 +264,8 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->partition_column_indices = {0};
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET; // iceberg sink only supports parquet
-        sink_ctx->options = {};              // default for now
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
+        sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
@@ -284,6 +281,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->partition_column_indices = {0};
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET;
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {};
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
@@ -300,6 +298,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->partition_column_indices = {0};
         sink_ctx->executor = nullptr;
         sink_ctx->format = "unknown";
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(

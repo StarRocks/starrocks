@@ -100,11 +100,18 @@ public class SysObjectDependencies {
                     item.setCatalog(catalog);
                     item.setObject_type(mv.getType().toString());
 
+                    Optional<Table> refTable = refObj.mayGetTable();
                     item.setRef_object_id(refObj.getTableId());
-                    item.setRef_object_name(refObj.getTableName());
                     item.setRef_database(refObj.getDbName());
                     item.setRef_catalog(refObj.getCatalogName());
                     item.setRef_object_type(getRefObjectType(refObj, mv.getName()));
+                    // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
+                    // BaseTableInfo, so we use the source-of-truth information
+                    if (refTable.isEmpty()) {
+                        item.setRef_object_name(refObj.getTableName());
+                    } else {
+                        item.setRef_object_name(refTable.get().getName());
+                    }
 
                     response.addToItems(item);
                 }

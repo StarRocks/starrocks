@@ -9,7 +9,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "fast_schema_evolution" = "true",
@@ -41,8 +40,8 @@ None	None	None
 -- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j1, "$.key2.key3") from js1 order by v1 limit 2;
 -- result:
-0	0
-0	0
+0	None
+0	None
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.key4") from js1 order by v1 limit 2;
 -- result:
@@ -51,7 +50,7 @@ select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.
 -- !result
 select json_object('"1"')->"1", json_object('"1"')->"1" is null;
 -- result:
-null	0
+null	1
 -- !result
 select j1, j1->"1", j1->"1" is null from js1 order by v1, v2;
 -- result:
@@ -64,7 +63,7 @@ select j1, j1->"1", j1->"1" is null from js1 order by v1, v2;
 None	None	1
 "1"	None	1
 {"k1": null, "k2": 2}	None	1
-{"1": null}	null	0
+{"1": null}	null	1
 {"a": null}	None	1
 None	None	1
 {}	None	1

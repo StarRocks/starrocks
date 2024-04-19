@@ -14,6 +14,8 @@
 
 #include "storage/lake/rowset.h"
 
+#include <future>
+
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/tablet.h"
@@ -23,6 +25,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
 
@@ -53,15 +56,13 @@ Rowset::~Rowset() {
     }
 }
 
-// TODO: support
-//  1. rowid range and short key range
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
-    seg_options.predicates = options.predicates;
+    seg_options.pred_tree = options.pred_tree;
     seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
@@ -81,6 +82,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
+    }
+
+    if (options.short_key_ranges_option != nullptr) { // logical split.
+        seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
 
     std::unique_ptr<Schema> segment_schema_guard;
@@ -113,6 +118,20 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     for (auto& seg_ptr : segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
+        }
+
+        if (options.rowid_range_option != nullptr) { // physical split.
+            auto [rowid_range, is_first_split_of_segment] =
+                    options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+            if (rowid_range == nullptr) {
+                continue;
+            }
+            seg_options.rowid_range_option = std::move(rowid_range);
+            seg_options.is_first_split_of_segment = is_first_split_of_segment;
+        } else if (options.short_key_ranges_option != nullptr) { // logical split.
+            seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
+        } else {
+            seg_options.is_first_split_of_segment = true;
         }
 
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
@@ -209,6 +228,25 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     return seg_iterators;
 }
 
+RowsetId Rowset::rowset_id() const {
+    RowsetId rowset_id;
+    rowset_id.init(id());
+    return rowset_id;
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    if (!_segments.empty()) {
+        return _segments;
+    }
+
+    auto segments_or = segments(true);
+    if (!segments_or.ok()) {
+        return {};
+    }
+    _segments = std::move(segments_or.value());
+    return _segments;
+}
+
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
     LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache};
     return segments(lake_io_opts, fill_cache);
@@ -248,6 +286,18 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
     const auto& files_to_size = metadata().segment_size();
     int index = 0;
 
+    std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
+    auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name) -> Status {
+        if (segment_or.ok()) {
+            segments->emplace_back(std::move(segment_or.value()));
+        } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
+            LOG(WARNING) << "Ignored lost segment " << seg_name;
+        } else {
+            return segment_or.status();
+        }
+        return Status::OK();
+    };
+
     for (const auto& seg_name : metadata().segments()) {
         auto segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
         auto segment_info = FileInfo{.path = segment_path};
@@ -256,15 +306,41 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
         }
         index++;
 
-        auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
-                                                    fill_metadata_cache, _tablet_schema);
-        if (segment_or.ok()) {
-            segments->emplace_back(std::move(segment_or.value()));
-        } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
-            LOG(WARNING) << "Ignored lost segment " << seg_name;
-            continue;
+        if (config::enable_load_segment_parallel) {
+            auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+                auto result = _tablet_mgr->load_segment(segment_info, seg_id, lake_io_opts, fill_metadata_cache,
+                                                        _tablet_schema);
+                return std::make_pair(std::move(result), seg_name);
+            });
+
+            auto packaged_func = [task]() { (*task)(); };
+            if (auto st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+                !st.ok()) {
+                // try load segment serially
+                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                             << ", try to load segment serially, seg_id: " << seg_id;
+                auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id, &footer_size_hint, lake_io_opts,
+                                                            fill_metadata_cache, _tablet_schema);
+                if (auto status = check_status(segment_or, seg_name); !status.ok()) {
+                    return status;
+                }
+            }
+            seg_id++;
+            segment_futures.push_back(task->get_future());
         } else {
-            return segment_or.status();
+            auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
+                                                        fill_metadata_cache, _tablet_schema);
+            if (auto status = check_status(segment_or, seg_name); !status.ok()) {
+                return status;
+            }
+        }
+    }
+
+    for (auto& fut : segment_futures) {
+        auto result_pair = fut.get();
+        auto segment_or = result_pair.first;
+        if (auto status = check_status(segment_or, result_pair.second); !status.ok()) {
+            return status;
         }
     }
     return Status::OK();

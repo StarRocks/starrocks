@@ -22,6 +22,7 @@ import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -43,8 +44,12 @@ import java.util.stream.Collectors;
 
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
-
     private static final String EOF = "<EOF>";
+    private final AstBuilder.AstBuilderFactory astBuilderFactory;
+
+    public SqlParser(AstBuilder.AstBuilderFactory astBuilderFactory) {
+        this.astBuilderFactory = astBuilderFactory;
+    }
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
         if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
@@ -58,12 +63,18 @@ public class SqlParser {
         List<StatementBase> statements = Lists.newArrayList();
         try {
             StatementSplitter splitter = new StatementSplitter(sql);
-            for (StatementSplitter.Statement statement : splitter.getCompleteStatements()) {
-                statements.add(TrinoParserUtils.toStatement(statement.statement(), sessionVariable.getSqlMode()));
+            for (int idx = 0; idx < splitter.getCompleteStatements().size(); ++idx) {
+                StatementSplitter.Statement statement = splitter.getCompleteStatements().get(idx);
+                StatementBase statementBase = TrinoParserUtils.toStatement(statement.statement(),
+                        sessionVariable.getSqlMode());
+                statementBase.setOrigStmt(new OriginStatement(sql, idx));
+                statements.add(statementBase);
             }
             if (!splitter.getPartialStatement().isEmpty()) {
-                statements.add(TrinoParserUtils.toStatement(splitter.getPartialStatement(),
-                        sessionVariable.getSqlMode()));
+                StatementBase statement = TrinoParserUtils.toStatement(splitter.getPartialStatement(),
+                        sessionVariable.getSqlMode());
+                statement.setOrigStmt(new OriginStatement(sql, splitter.getCompleteStatements().size()));
+                statements.add(statement);
             }
             if (ConnectContext.get() != null) {
                 ConnectContext.get().setRelationAliasCaseInSensitive(true);
@@ -93,8 +104,8 @@ public class SqlParser {
             // collect hint info
             HintCollector collector = new HintCollector((CommonTokenStream) pair.second.getTokenStream(), sessionVariable);
             collector.collect(singleStatementContexts.get(idx));
-
-            AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
+            AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                    .create(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
             StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
             if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
                     && !(statement instanceof PrepareStmt)) {
@@ -151,13 +162,15 @@ public class SqlParser {
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
                 StarRocksParser::expressionSingleton).first;
-        return (Expr) new AstBuilder(sqlMode).visit(expressionContext);
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode).visit(expressionContext);
     }
 
     public static List<Expr> parseSqlToExprs(String expressions, SessionVariable sessionVariable) {
         StarRocksParser.ExpressionListContext expressionListContext = (StarRocksParser.ExpressionListContext)
                 invokeParser(expressions, sessionVariable, StarRocksParser::expressionList).first;
-        AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode());
+        AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode());
         return expressionListContext.expression().stream()
                 .map(e -> (Expr) astBuilder.visit(e))
                 .collect(Collectors.toList());
@@ -168,9 +181,9 @@ public class SqlParser {
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext importColumnsContext = invokeParser(expressionSql, sessionVariable,
                 StarRocksParser::importColumns).first;
-        return (ImportColumnsStmt) new AstBuilder(sqlMode).visit(importColumnsContext);
+        return (ImportColumnsStmt) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode).visit(importColumnsContext);
     }
-
 
     private static Pair<ParserRuleContext, StarRocksParser> invokeParser(
             String sql, SessionVariable sessionVariable,

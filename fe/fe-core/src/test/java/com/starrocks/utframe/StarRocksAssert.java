@@ -89,6 +89,8 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DdlStmt;
@@ -97,6 +99,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -238,7 +241,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRoutineLoad(String sql) throws Exception {
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
-        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getNodeTasksNum();
         beTasksNum.put(1L, 100);
         routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
         return this;
@@ -311,6 +314,30 @@ public class StarRocksAssert {
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTable(MTable mTable) throws Exception {
+        String sql = mTable.getCreateTableSql();
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTemporaryTable(String sql) throws Exception {
+        CreateTemporaryTableStmt createTableStmt =
+                (CreateTemporaryTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        createTableStmt.setSessionId(ctx.getSessionId());
+        utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTemporaryTableLike(String dstTable, String srcTable) throws Exception {
+        String sql = "create temporary table " + dstTable + " like " + srcTable;
+        CreateTemporaryTableLikeStmt createTemporaryTableLikeStmt =
+                (CreateTemporaryTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        createTemporaryTableLikeStmt.setSessionId(ctx.getSessionId());
+        utCreateTableWithRetry(createTemporaryTableLikeStmt.getCreateTableStmt(), ctx);
         return this;
     }
 
@@ -584,6 +611,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        return this;
+    }
+
     public StarRocksAssert dropTables(List<String> tableNames) throws Exception {
         for (String tableName : tableNames) {
             dropTable(tableName);
@@ -595,6 +629,13 @@ public class StarRocksAssert {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropTemporaryTable(String tableName) throws Exception {
+        DropTemporaryTableStmt dropTemporaryTableStmt = (DropTemporaryTableStmt)
+                UtFrameUtils.parseStmtWithNewParser("drop temporary table " + tableName + ";", ctx);
+        GlobalStateMgr.getCurrentState().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
         return this;
     }
 
@@ -878,8 +919,7 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(stmt, ctx);
 
-        ShowExecutor showExecutor = new ShowExecutor();
-        ShowResultSet res =  showExecutor.execute((ShowStmt) stmt, ctx);
+        ShowResultSet res =  ShowExecutor.execute((ShowStmt) stmt, ctx);
         String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
         String body = res.getResultRows().stream()
                 .map(row -> String.join("|", row))
@@ -891,8 +931,7 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof ShowStmt);
         Analyzer.analyze(stmt, ctx);
-        ShowExecutor showExecutor = new ShowExecutor();
-        return showExecutor.execute((ShowStmt) stmt, ctx).getResultRows();
+        return ShowExecutor.execute((ShowStmt) stmt, ctx).getResultRows();
     }
 
     public String showCreateTable(String sql) throws Exception {
@@ -1012,7 +1051,6 @@ public class StarRocksAssert {
     public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
         TableName tableName = new TableName(db, table);
         ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1, NodePosition.ZERO);
-        ShowExecutor showExecutor = new ShowExecutor();
-        return showExecutor.execute(showTabletStmt, getCtx());
+        return ShowExecutor.execute(showTabletStmt, getCtx());
     }
 }

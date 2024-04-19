@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -51,6 +52,7 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TGlobalDict;
+import com.starrocks.thrift.TGroupExecutionParam;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
@@ -174,6 +176,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private boolean useRuntimeAdaptiveDop = false;
 
     private boolean isShortCircuit = false;
+
+    // Controls whether group execution is used for plan fragment execution.
+    private List<ExecGroup> colocateExecGroups = Lists.newArrayList();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -340,6 +345,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.withLocalShuffle |= withLocalShuffle;
     }
 
+    public boolean isUseGroupExecution() {
+        return !colocateExecGroups.isEmpty();
+    }
+
     public boolean isAssignScanRangesPerDriverSeq() {
         return assignScanRangesPerDriverSeq;
     }
@@ -373,6 +382,27 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 computeLocalRfWaitingSet(child, clearGlobalRuntimeFilter);
             }
         }
+    }
+
+    public void assignColocateExecGroups(PlanNode root, List<ExecGroup> groups) {
+        for (ExecGroup group : groups) {
+            if (group.contains(root)) {
+                colocateExecGroups.add(group);
+                groups.remove(group);
+                break;
+            }
+        }
+        if (!groups.isEmpty()) {
+            for (PlanNode child : root.getChildren()) {
+                if (child.getFragment() == this) {
+                    assignColocateExecGroups(child, groups);
+                }
+            }
+        }
+    }
+
+    public boolean isColocateGroupFragment() {
+        return colocateExecGroups.size() > 0;
     }
 
     public boolean isDopEstimated() {
@@ -447,6 +477,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             result.setCache_param(cacheParam);
         }
+
+        if (!colocateExecGroups.isEmpty()) {
+            TGroupExecutionParam tGroupExecutionParam = new TGroupExecutionParam();
+            tGroupExecutionParam.setEnable_group_execution(true);
+            for (ExecGroup colocateExecGroup : colocateExecGroups) {
+                tGroupExecutionParam.addToExec_groups(colocateExecGroup.toThrift());
+            }
+            result.setGroup_execution_param(tGroupExecutionParam);
+        }
         return result;
     }
 
@@ -517,9 +556,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                     .collect(Collectors.joining(" | ")));
 
         }
-
         str.append(outputBuilder);
         str.append("\n");
+        if (!colocateExecGroups.isEmpty() && Config.show_execution_groups) {
+            str.append("  colocate exec groups: ");
+            for (ExecGroup group : colocateExecGroups) {
+                str.append(group);
+            }
+            str.append("\n");
+        }
         str.append("  PARTITION: ").append(dataPartition.getExplainString(explainLevel)).append("\n");
         if (sink != null) {
             str.append(sink.getExplainString("  ", explainLevel)).append("\n");
@@ -535,6 +580,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         Preconditions.checkState(dataPartition != null);
         if (FeConstants.showFragmentCost) {
             str.append("  Fragment Cost: ").append(fragmentCost).append("\n");
+        }
+        if (!colocateExecGroups.isEmpty() && Config.show_execution_groups) {
+            str.append("  colocate exec groups: ");
+            for (ExecGroup group : colocateExecGroups) {
+                str.append(group);
+            }
+            str.append("\n");
         }
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
@@ -833,6 +885,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void disablePhysicalPropertyOptimize() {
+        colocateExecGroups.clear();
         forEachNode(planRoot, PlanNode::disablePhysicalPropertyOptimize);
     }
 

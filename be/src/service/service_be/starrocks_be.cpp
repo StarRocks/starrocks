@@ -26,6 +26,7 @@
 #include "common/daemon.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -50,7 +51,7 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 namespace starrocks {
 
-Status init_datacache(GlobalEnv* global_env) {
+Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& storage_paths) {
     if (!config::datacache_enable && config::block_cache_enable) {
         config::datacache_enable = true;
         config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
@@ -80,18 +81,19 @@ Status init_datacache(GlobalEnv* global_env) {
         if (global_env->process_mem_tracker()->has_limit()) {
             mem_limit = global_env->process_mem_tracker()->limit();
         }
-        cache_options.mem_space_size = parse_mem_size(config::datacache_mem_size, mem_limit);
-
-        std::vector<std::string> paths;
-        RETURN_IF_ERROR(parse_conf_datacache_paths(config::datacache_disk_path, &paths));
-        for (auto& p : paths) {
-            int64_t disk_size = parse_disk_size(p, config::datacache_disk_size);
-            if (disk_size < 0) {
-                LOG(ERROR) << "invalid disk size for datacache: " << disk_size;
-                return Status::InvalidArgument("invalid disk size for datacache");
-            }
-            cache_options.disk_spaces.push_back({.path = p, .size = static_cast<size_t>(disk_size)});
+        cache_options.mem_space_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
+        if (config::datacache_disk_path.value().empty()) {
+            // If the disk cache does not be configured for datacache, set default path according storage path.
+            std::vector<std::string> datacache_paths;
+            std::for_each(storage_paths.begin(), storage_paths.end(), [&](const StorePath& root_path) {
+                std::filesystem::path sp(root_path.path);
+                auto dp = sp.parent_path() / "datacache";
+                datacache_paths.push_back(dp.string());
+            });
+            config::datacache_disk_path = JoinStrings(datacache_paths, ";");
         }
+        RETURN_IF_ERROR(parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
+                                                         config::ignore_broken_disk, &cache_options.disk_spaces));
 
         // Adjust the default engine based on build switches.
         if (config::datacache_engine == "") {
@@ -107,8 +109,9 @@ Status init_datacache(GlobalEnv* global_env) {
         cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
         cache_options.enable_checksum = config::datacache_checksum_enable;
         cache_options.enable_direct_io = config::datacache_direct_io_enable;
-        cache_options.enable_cache_adaptor = starrocks::config::datacache_adaptor_enable;
+        cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
         cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
+        cache_options.scheduler_threads_per_cpu = starrocks::config::datacache_scheduler_threads_per_cpu;
         cache_options.engine = config::datacache_engine;
         return cache->init(cache_options);
     }
@@ -170,10 +173,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #ifdef USE_STAROS
     init_staros_worker();
-    LOG(INFO) << process_name << " start step" << start_step++ << ": staros worker init successfully";
+    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
 
-    if (!init_datacache(global_env).ok()) {
+    if (!init_datacache(global_env, paths).ok()) {
         LOG(ERROR) << "Fail to init datacache";
         exit(1);
     }
@@ -212,7 +215,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         options.num_threads = config::brpc_num_threads;
     }
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
-    const auto service_name = "starrocks.lake.LakeService";
+    const auto service_name = "starrocks.LakeService";
     const auto methods = {
             "abort_txn",     "abort_compaction", "compact",         "drop_table",          "delete_data",
             "delete_tablet", "get_tablet_stats", "publish_version", "publish_log_version", "publish_log_version_batch",
@@ -220,8 +223,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
-
-    if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
+    int brpc_port = config::brpc_port;
+    butil::EndPoint point;
+    if (butil::str2endpoint(BackendOptions::get_service_bind_address(), brpc_port, &point) < 0) {
+        LOG(ERROR) << "Fail to convert address. Please check your backend config.";
+        shutdown_logging();
+        exit(1);
+    }
+    LOG(INFO) << "BRPC server bind to host: " << BackendOptions::get_service_bind_address() << ", port: " << brpc_port;
+    if (auto ret = brpc_server->Start(point, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();
         exit(1);

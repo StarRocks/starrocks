@@ -332,7 +332,7 @@ The following example checks the execution status of the materialized view that 
 2. Check the execution status in the table `task_runs` using the `TASK_NAME` you have found.
 
     ```Plain
-    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
+    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME\G
     *************************** 1. row ***************************
         QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
         TASK_NAME: mv-59299

@@ -4,6 +4,43 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.10 (Deprecated)
+
+:::tip
+
+This version has been taken offline due to privilege issues in querying external tables in external catalogs such as Hive and Iceberg.
+
+- **Problem**: When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege.
+
+- **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
+
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.1.11, users can run `REVOKE` to remove one of the privilege entries.
+
+:::
+
+Release date: March 29, 2024
+
+### New Features
+
+- Primary Key tables support Size-tiered Compaction. [#42474](https://github.com/StarRocks/starrocks/pull/42474)
+
+### Behavior Changes
+
+- When null values in JSON data are evaluated based on the `IS NULL` operator, they are considered NULL values following SQL language. For example, `true` is returned for `SELECT parse_json('{"a": null}') -> 'a' IS NULL` (before this behavior change, `false` is returned). [#42815](https://github.com/StarRocks/starrocks/pull/42815)
+
+### Improvements
+
+- When Broker Load is used to load data from ORC files that contain TIMESTAMP-type data, StarRocks supports retaining microseconds in the timestamps when converting the timestamps to match its own DATETIME data type. [#42348](https://github.com/StarRocks/starrocks/pull/42348)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- In shared-data mode, the garbage collection and thread eviction mechanisms for handling persistent indexes created on Primary Key tables cannot take effect on CN nodes. As a result, obsolete data cannot be deleted. [#42241](https://github.com/StarRocks/starrocks/pull/42241)
+- When users query ORC files by using Hive catalogs, the query results may be incorrect because StarRocks used to read ORC files from Hive based on mapping by position. To resolve this issue, users can set the session variable `orc_use_column_names` to `true`, which specifies to read ORC files from Hive based on mapping by column name. [#42905](https://github.com/StarRocks/starrocks/pull/42905)
+- When LDAP authentication for the AD system is adopted, logins without passwords are allowed. [#42476](https://github.com/StarRocks/starrocks/pull/42476)
+- When disk device names end with digits, the values of monitoring metrics remain 0s because the disk device names may be invalid after such digits are removed. [#42741](https://github.com/StarRocks/starrocks/pull/42741)
+
 ## 3.1.9
 
 Release date: March 8, 2024
@@ -298,7 +335,7 @@ Executing SQL commands with invalid comments now returns results consistent with
 
 Fixed the following issues:
 
-- If the [BITMAP](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/HLL/) data type is specified in the WHERE clause of a [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE/) statement to be executed, the statement cannot be properly executed. [#28592](https://github.com/StarRocks/starrocks/pull/28592)
+- If the [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) data type is specified in the WHERE clause of a [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE/) statement to be executed, the statement cannot be properly executed. [#28592](https://github.com/StarRocks/starrocks/pull/28592)
 - After a follower FE is restarted, CpuCores statistics are not up-to-date, resulting in query performance degradation. [#28472](https://github.com/StarRocks/starrocks/pull/28472) [#30434](https://github.com/StarRocks/starrocks/pull/30434)
 - The execution cost of the [to_bitmap()](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/to_bitmap/) function is incorrectly calculated. As a result, an inappropriate execution plan is selected for the function after materialized views are rewritten. [#29961](https://github.com/StarRocks/starrocks/pull/29961)
 - In certain use cases of the shared-data architecture, after a follower FE is restarted, queries submitted to the follower FE return an error that reads "Backend node not found. Check if any backend node is down". [#28615](https://github.com/StarRocks/starrocks/pull/28615)
@@ -330,7 +367,7 @@ Fixed the following issues:
 - If a user specifies which database is to be connected by default and the user only has permissions on tables in the database but does not have permissions on the database, an error stating that the user does not have permissions on the database is thrown. [#29767](https://github.com/StarRocks/starrocks/pull/29767)
 - The values returned by the RESTful API action `show_data` for cloud-native tables are incorrect. [#29473](https://github.com/StarRocks/starrocks/pull/29473)
 - BEs crash if queries are canceled while the [array_agg()](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_agg/) function is being run. [#29400](https://github.com/StarRocks/starrocks/issues/29400)
-- The `Default` field values returned by the [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) statement for columns of the [BITMAP](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/HLL/) data type are incorrect. [#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- The `Default` field values returned by the [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) statement for columns of the [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) data type are incorrect. [#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - If the [array_map()](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_map/) function in queries involves multiple tables, the queries fail due to pushdown strategy issues. [#29504](https://github.com/StarRocks/starrocks/pull/29504)
 - Queries against ORC-formatted files fail because the bugfix ORC-1304 ([apache/orc#1299](https://github.com/apache/orc/pull/1299)) from Apache ORC is not merged. [#29804](https://github.com/StarRocks/starrocks/pull/29804)
 
@@ -395,7 +432,7 @@ Release date: August 7, 2023
 - Supports using the table function FILES() in [INSERT INTO](https://docs.starrocks.io/docs/loading/InsertInto/) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3. The FILES() function can automatically infer the table schema, which relieves the need to create external catalogs or file external tables before data loading and therefore greatly simplifies the data loading process.
 - Supports [generated columns](https://docs.starrocks.io/docs/sql-reference/sql-statements/generated_columns/). With the generated column feature, StarRocks can automatically generate and store the values of column expressions and automatically rewrite queries to improve query performance.
 - Supports loading data from Spark to StarRocks by using [Spark connector](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/). Compared to [Spark Load](https://docs.starrocks.io/docs/loading/SparkLoad/), the Spark connector provides more comprehensive capabilities. Users can define a Spark job to perform ETL operations on the data, and the Spark connector serves as the sink in the Spark job.
-- Supports loading data into columns of the [MAP](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/Map/) and [STRUCT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/STRUCT/) data types, and supports nesting Fast Decimal values in ARRAY, MAP, and STRUCT.
+- Supports loading data into columns of the [MAP](https://docs.starrocks.io/docs/sql-reference/data-types/semi_structured/Map/) and [STRUCT](https://docs.starrocks.io/docs/sql-reference/data-types/semi_structured/STRUCT/) data types, and supports nesting Fast Decimal values in ARRAY, MAP, and STRUCT.
 
 #### SQL reference
 

@@ -51,6 +51,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -143,7 +144,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.service.InformationSchemaDataSource;
+import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -258,6 +261,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -269,22 +273,24 @@ import static com.starrocks.catalog.Table.TableType.JDBC;
 public class ShowExecutor {
     private static final Logger LOG = LogManager.getLogger(ShowExecutor.class);
     private static final List<List<String>> EMPTY_SET = Lists.newArrayList();
+    private final ShowExecutorVisitor showExecutorVisitor;
 
-    public ShowExecutor() {
+    public ShowExecutor(ShowExecutorVisitor showExecutorVisitor) {
+        this.showExecutorVisitor = showExecutorVisitor;
     }
 
-    public ShowResultSet execute(ShowStmt statement, ConnectContext context) {
-        return statement.accept(ShowExecutorVisitor.getInstance(), context);
+    public static ShowResultSet execute(ShowStmt statement, ConnectContext context) {
+        return GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
     }
 
-    protected static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
-
+    public static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(ShowExecutor.ShowExecutorVisitor.class);
-
         private static final ShowExecutor.ShowExecutorVisitor INSTANCE = new ShowExecutor.ShowExecutorVisitor();
-
         public static ShowExecutor.ShowExecutorVisitor getInstance() {
             return INSTANCE;
+        }
+
+        protected ShowExecutorVisitor() {
         }
 
         @Override
@@ -472,7 +478,8 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tableName)) {
                         continue;
                     }
-                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+                    BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                            catalogName, dbName, tableName);
                     if (table == null) {
                         LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                         continue;
@@ -508,6 +515,51 @@ public class ShowExecutor {
                 }
             }
             return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, ConnectContext context) {
+            statement.setSessionId(context.getSessionId());
+
+            ShowTemporaryTableStmt showTemporaryTableStmt = statement;
+            List<List<String>> rows = Lists.newArrayList();
+            String catalogName = showTemporaryTableStmt.getCatalogName();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+
+            String dbName = showTemporaryTableStmt.getDb();
+            UUID sessionId = showTemporaryTableStmt.getSessionId();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
+            PatternMatcher matcher = null;
+            if (showTemporaryTableStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showTemporaryTableStmt.getPattern(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+            }
+
+            Map<String, String> tableMap = Maps.newTreeMap();
+            MetaUtils.checkDbNullAndReport(db, showTemporaryTableStmt.getDb());
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                List<String> tableNames = temporaryTableMgr.listTemporaryTables(sessionId, db.getId());
+                for (String tableName : tableNames) {
+                    if (matcher != null && !matcher.match(tableName)) {
+                        continue;
+                    }
+                    rows.add(Lists.newArrayList(tableName));
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+
+            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
+                rows.add(Lists.newArrayList(entry.getKey()));
+            }
+            return new ShowResultSet(showTemporaryTableStmt.getMetaData(), rows);
         }
 
         @Override
@@ -633,20 +685,20 @@ public class ShowExecutor {
                 catalogName = context.getCurrentCatalog();
             }
             if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return showCreateInternalCatalogTable(statement);
+                return showCreateInternalCatalogTable(statement, context);
             } else {
                 return showCreateExternalCatalogTable(statement, tbl, catalogName);
             }
         }
 
-        private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) {
+        private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt, ConnectContext connectContext) {
             Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(showStmt.getTable());
+                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
                 if (table == null) {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
@@ -1636,7 +1688,8 @@ public class ShowExecutor {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    Table table = db.getTable(statement.getTableName());
+                    Table table = MetaUtils.getSessionAwareTable(
+                            context, db, new TableName(statement.getDbName(), statement.getTableName()));
                     if (table == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
                     }
@@ -1761,8 +1814,9 @@ public class ShowExecutor {
 
             for (Database db : dbs) {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (!(jobI instanceof BackupJob)) {
-                    return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+                if (jobI == null || !(jobI instanceof BackupJob)) {
+                    // show next db
+                    continue;
                 }
 
                 BackupJob backupJob = (BackupJob) jobI;
@@ -1806,8 +1860,9 @@ public class ShowExecutor {
 
             for (Database db : dbs) {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (!(jobI instanceof RestoreJob)) {
-                    return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+                if (jobI == null || !(jobI instanceof RestoreJob)) {
+                    // show next db
+                    continue;
                 }
 
                 RestoreJob restoreJob = (RestoreJob) jobI;
@@ -2136,7 +2191,7 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(statement.getTableName().getTbl());
+                Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
                 if (table == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
                             db.getOriginName() + "." + statement.getTableName().toString());

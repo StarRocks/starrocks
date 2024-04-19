@@ -182,6 +182,10 @@ DISTRIBUTED BY HASH(`id`)
 
 示例基于 Spark 3.2.4，使用 `spark-shell`，`pyspark` 和 `spark-sql` 进行演示，运行前请将 connector jar放置在 `$SPARK_HOME/jars` 目录下。
 
+#### 网络配置
+
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+
 ### 使用 Spark DataFrame 写入数据
 
 下面分别介绍在 Batch 和 Structured Streaming 下如何写入数据。

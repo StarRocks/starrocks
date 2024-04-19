@@ -200,6 +200,7 @@ public class TaskRun implements Comparable<TaskRun> {
             runCtx.setParentConnectContext(parentRunCtx);
         }
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        runCtx.setCurrentCatalog(task.getCatalogName());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
         runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
@@ -301,19 +302,17 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
+        long created = createTime == null ? System.currentTimeMillis() : createTime;
         status.setQueryId(queryId);
         status.setTaskId(task.getId());
         status.setTaskName(task.getName());
         status.setSource(task.getSource());
-        if (createTime == null) {
-            status.setCreateTime(System.currentTimeMillis());
-        } else {
-            status.setCreateTime(createTime);
-        }
+        status.setCreateTime(created);
         status.setUser(task.getCreateUser());
+        status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
-        status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
+        status.setExpireTime(created + Config.task_runs_ttl_second * 1000L);
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
@@ -323,9 +322,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
+        // if priority is different, return the higher priority
         if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
             return taskRun.getStatus().getPriority() - this.getStatus().getPriority();
         } else {
+            // if priority is the same, return the older task
             return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
         }
     }

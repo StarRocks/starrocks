@@ -4,9 +4,77 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
-## 3.2.4
+## 3.2.6
+
+Release date: April 18, 2024
+
+### Bug Fixes
+
+Fixed the following issue:
+
+- The privileges of external tables cannot be found due to incompatibility issues. [#44030](https://github.com/StarRocks/starrocks/pull/44030)
+
+## 3.2.5 (Deprecated)
+
+Release date: April 12, 2024
+
+:::tip
+
+This version has been taken offline due to privilege issues in querying external tables in external catalogs such as Hive and Iceberg.
+
+- **Problem**: When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege.
+
+- **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
+
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.2.6, users can run `REVOKE` to remove one of the privilege entries.
+
+:::
+
+### New Features
+
+- Supports the [dict_mapping](https://docs.starrocks.io/docs/sql-reference/sql-functions/dict-functions/dict_mapping/) column property, which can significantly facilitate the loading process during the construction of a global dictionary, accelerating the exact COUNT DISTINCT calculation.
+
+### Behavior Changes
+
+- When null values in JSON data are evaluated based on the `IS NULL` operator, they are considered NULL values following SQL language. For example, `true` is returned for `SELECT parse_json('{"a": null}') -> 'a' IS NULL` (before this behavior change, `false` is returned). [#42765](https://github.com/StarRocks/starrocks/pull/42765)
+
+### Improvements
+
+- Optimized the column type unionization rules for automatic schema detection in the FILES table function. When columns with the same name but different types exist in separate files, FILES will attempt to merge them by selecting the type with the larger granularity as the final type. For example, if there are columns with the same name but of types FLOAT and INT respectively, FILES will return DOUBLE as the final type. [#40959](https://github.com/StarRocks/starrocks/pull/40959)
+- Primary Key tables support Size-tiered Compaction to reduce the I/O amplification. [#41130](https://github.com/StarRocks/starrocks/pull/41130)
+- When Broker Load is used to load data from ORC files that contain TIMESTAMP-type data, StarRocks supports retaining microseconds in the timestamps when converting the timestamps to match its own DATETIME data type. [#42179](https://github.com/StarRocks/starrocks/pull/42179)
+- Optimized the error messages for Routine Load. [#41306](https://github.com/StarRocks/starrocks/pull/41306)
+- Optimized the error messages when the FILES table function is used to convert invalid data types. [#42717](https://github.com/StarRocks/starrocks/pull/42717)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- FEs fail to start after system-defined views are dropped. Dropping system-defined views is now prohibited. [#43552](https://github.com/StarRocks/starrocks/pull/43552)
+- BEs crash when duplicate sort key columns exist in Primary Key tables. Duplicate sort key columns are now prohibited. [#43206](https://github.com/StarRocks/starrocks/pull/43206)
+- An error, instead of NULL, is returned when the input value of the to_json() function is NULL. [#42171](https://github.com/StarRocks/starrocks/pull/42171)
+- In shared-data mode, the garbage collection and thread eviction mechanisms for handling persistent indexes created on Primary Key tables cannot take effect on CN nodes. As a result, obsolete data cannot be deleted. [#41955](https://github.com/StarRocks/starrocks/pull/41955)
+- In shared-data mode, an error is returned when users modify the `enable_persistent_index` property of a Primary Key table. [#42890](https://github.com/StarRocks/starrocks/pull/42890)
+- In shared-data mode, NULL values are given to columns that are not supposed to be changed when users update a Primary Key table with partial updates in column mode. [#42355](https://github.com/StarRocks/starrocks/pull/42355)
+- Queries cannot be rewritten with asynchronous materialized views created on logical views. [#42173](https://github.com/StarRocks/starrocks/pull/42173)
+- CNs crash when the Cross-cluster Data Migration Tool is used to migrate Primary Key tables to a shared-data cluster. [#42260](https://github.com/StarRocks/starrocks/pull/42260)
+- The partition ranges of the external catalog-based asynchronous materialized views are not consecutive. [#41957](https://github.com/StarRocks/starrocks/pull/41957)
+
+## 3.2.4 (Deprecated)
 
 Release date: March 12, 2024
+
+:::tip
+
+This version has been taken offline due to privilege issues in querying external tables in external catalogs such as Hive and Iceberg.
+
+- **Problem**: When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege.
+
+- **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
+
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.2.6, users can run `REVOKE` to remove one of the privilege entries.
+
+:::
 
 ### New Features
 

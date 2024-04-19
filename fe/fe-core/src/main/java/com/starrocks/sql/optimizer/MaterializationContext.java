@@ -18,9 +18,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -29,7 +29,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
 import org.apache.commons.collections4.SetUtils;
@@ -39,12 +41,10 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.isNeedCompensatePartitionPredicate;
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -61,15 +61,10 @@ public class MaterializationContext {
 
     private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
 
-    // Updated partition names of the materialized view
-    private final Set<String> mvPartitionNamesToRefresh;
-
     // Updated partition names of the ref base table which will be used in compensating partition predicates
-    private final Set<String> refTableUpdatePartitionNames;
+    private final MvUpdateInfo mvUpdateInfo;
 
     private final List<Table> baseTables;
-
-    private final Set<ColumnRefOperator> originQueryColumns;
 
     // tables both in query and mv
     private final List<Table> intersectingTables;
@@ -79,6 +74,9 @@ public class MaterializationContext {
     private final List<Integer> matchedGroups;
 
     private final ScalarOperator mvPartialPartitionPredicate;
+
+    // The output column refs of the MV which is ordered by user's select list.
+    private final List<ColumnRefOperator> mvOutputColumnRefs;
 
     // THe used count for MV used as the rewrite result in a query.
     // NOTE: mvUsedCount is a not exact value because MV may be rewritten multi times
@@ -91,7 +89,8 @@ public class MaterializationContext {
     // during one query, so it's safe to cache it and be used for each optimizer rule.
     // But it is different for each materialized view, compensate partition predicate from the plan's
     // `selectedPartitionIds`, and check `isNeedCompensatePartitionPredicate` to get more information.
-    private Optional<Boolean> isCompensatePartitionPredicateOpt = Optional.empty();
+    private MVCompensation mvMVCompensation = null;
+
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
 
@@ -100,24 +99,22 @@ public class MaterializationContext {
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
                                   ColumnRefFactory mvColumnRefFactory,
-                                  Set<String> mvPartitionNamesToRefresh,
                                   List<Table> baseTables,
-                                  Set<ColumnRefOperator> originQueryColumns,
                                   List<Table> intersectingTables,
                                   ScalarOperator mvPartialPartitionPredicate,
-                                  Set<String> refTableUpdatePartitionNames) {
+                                  MvUpdateInfo mvUpdateInfo,
+                                  List<ColumnRefOperator> mvOutputColumnRefs) {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
         this.mvColumnRefFactory = mvColumnRefFactory;
-        this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
         this.baseTables = baseTables;
-        this.originQueryColumns = originQueryColumns;
         this.intersectingTables = intersectingTables;
         this.matchedGroups = Lists.newArrayList();
         this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
-        this.refTableUpdatePartitionNames = refTableUpdatePartitionNames;
+        this.mvUpdateInfo = mvUpdateInfo;
+        this.mvOutputColumnRefs = mvOutputColumnRefs;
         this.scanOpToPartitionCompensatePredicates = Maps.newHashMap();
     }
 
@@ -157,10 +154,6 @@ public class MaterializationContext {
         this.outputMapping = outputMapping;
     }
 
-    public Set<String> getMvPartitionNamesToRefresh() {
-        return mvPartitionNamesToRefresh;
-    }
-
     public List<Table> getBaseTables() {
         return baseTables;
     }
@@ -197,8 +190,8 @@ public class MaterializationContext {
         this.mvUsedCount += 1;
     }
 
-    public Set<String> getRefTableUpdatePartitionNames() {
-        return this.refTableUpdatePartitionNames;
+    public MvUpdateInfo getMvUpdateInfo() {
+        return mvUpdateInfo;
     }
 
     private boolean checkOperatorCompatible(OperatorType query) {
@@ -207,6 +200,10 @@ public class MaterializationContext {
             return MvUtils.isLogicalSPJG(mvExpression);
         }
         return MvUtils.isLogicalSPJ(mvExpression);
+    }
+
+    public List<ColumnRefOperator> getMvOutputColumnRefs() {
+        return mvOutputColumnRefs;
     }
 
     /**
@@ -262,15 +259,15 @@ public class MaterializationContext {
                 return false;
             }
 
-            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
-            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
+            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression, queryRefFactory);
+            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression, mvColumnRefFactory);
             // there should be at least one same join type in mv scan descs for every query scan desc.
             // to forbid rewrite for:
             // query: a left outer join b
             // mv: a inner join b inner join c
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getJoinOptExpression() != null
-                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
+                        && mvTableScanDescs.stream().noneMatch(scanDesc -> scanDesc.isCompatible(queryScanDesc))) {
                     logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
                             "at least one same join type should be existed");
                     return false;
@@ -422,18 +419,17 @@ public class MaterializationContext {
      *  means MV's partitions can cover all needed partitions from Query.
      * </p>
      */
-    public boolean getOrInitCompensatePartitionPredicate(OptExpression queryExpression) {
-        if (!isCompensatePartitionPredicateOpt.isPresent()) {
-            SessionVariable sessionVariable = optimizerContext.getSessionVariable();
+    public MVCompensation getOrInitMVCompensation(OptExpression queryExpression) {
+        if (mvMVCompensation == null) {
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
-            isCompensatePartitionPredicateOpt = sessionVariable.isEnableMaterializedViewRewritePartitionCompensate() ?
-                    isNeedCompensatePartitionPredicate(queryExpression, this) : Optional.of(false);
+            this.mvMVCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
+            logMVRewrite(mv.getName(), "Init mv compensation: {}", mvMVCompensation);
         }
-        return isCompensatePartitionPredicateOpt.orElse(true);
+        return this.mvMVCompensation;
     }
 
-    public boolean isCompensatePartitionPredicate() {
-        return isCompensatePartitionPredicateOpt.orElse(true);
+    public MVCompensation getMvCompensation() {
+        return mvMVCompensation;
     }
 
     public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {

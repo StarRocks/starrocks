@@ -30,11 +30,9 @@ import com.starrocks.thrift.TRuntimeFilterLayoutMode;
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -76,6 +74,10 @@ public class RuntimeFilterDescription {
     private SessionVariable sessionVariable;
 
     private boolean onlyLocal;
+
+    // ExecGroupInfo. used for check build colocate runtime filter
+    private boolean isBuildFromColocateGroup = false;
+    private int execGroupId = -1;
 
     private RuntimeFilterType type;
 
@@ -147,8 +149,8 @@ public class RuntimeFilterDescription {
         this.sortInfo = sortInfo;
     }
 
-    public boolean canProbeUse(PlanNode node) {
-        if (!canAcceptFilter(node)) {
+    public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        if (!canAcceptFilter(node, rfPushCtx)) {
             return false;
         }
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
@@ -185,12 +187,18 @@ public class RuntimeFilterDescription {
     }
 
     // return true if Node could accept the Filter
-    public boolean canAcceptFilter(PlanNode node) {
+    public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
                 return scanNode.supportTopNRuntimeFilter();
             } else {
+                return false;
+            }
+        }
+        if (isBuildFromColocateGroup) {
+            int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
+            if (execGroupId != probeExecGroupId) {
                 return false;
             }
         }
@@ -323,16 +331,22 @@ public class RuntimeFilterDescription {
     public void setNumInstances(int numInstances) {
         this.numInstances = numInstances;
     }
+
     public int getNumInstances() {
         return numInstances;
     }
 
-    public void setNumDriversPerInstance(int numDriversPerInstance){
+    public void setNumDriversPerInstance(int numDriversPerInstance) {
         this.numDriversPerInstance = numDriversPerInstance;
     }
 
-    public int getNumDriversPerInstance(){
+    public int getNumDriversPerInstance() {
         return numDriversPerInstance;
+    }
+
+    public void setExecGroupInfo(boolean buildFromColocateGroup, int buildExecGroupId) {
+        this.isBuildFromColocateGroup = buildFromColocateGroup;
+        this.execGroupId = buildExecGroupId;
     }
 
     public boolean canPushAcrossExchangeNode() {
@@ -524,6 +538,8 @@ public class RuntimeFilterDescription {
                 }
             }
         }
+
+        t.setBuild_from_group_execution(isBuildFromColocateGroup);
 
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);

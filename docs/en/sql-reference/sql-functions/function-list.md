@@ -34,6 +34,7 @@ You can find a built-in function based on the following categories:
 
 - [any_value](./aggregate-functions/any_value.md)
 - [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)
+- [approx_top_k](./aggregate-functions/approx_top_k.md)
 - [array_agg](./array-functions/array_agg.md)
 - [avg](./aggregate-functions/avg.md)
 - [bitmap](./aggregate-functions/bitmap.md)
@@ -452,3 +453,7 @@ You can find a built-in function based on the following categories:
 - [uuid](./utility-functions/uuid.md)
 - [uuid_numeric](./utility-functions/uuid_numeric.md)
 - [version](./utility-functions/version.md)
+
+## Dictionary functions
+
+[dict_mapping](./dict-functions/dict_mapping.md)

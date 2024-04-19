@@ -15,182 +15,18 @@
 #include "connector/lake_connector.h"
 
 #include "exec/connector_scan_node.h"
-#include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
-#include "storage/conjunctive_predicates.h"
-#include "storage/lake/tablet_manager.h"
-#include "storage/lake/tablet_reader.h"
-#include "storage/lake/versioned_tablet.h"
+#include "storage/lake/tablet.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
-
-// ================================
-
-class LakeDataSourceProvider;
-
-// TODO: support parallel scan within a single tablet
-class LakeDataSource final : public DataSource {
-public:
-    explicit LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range);
-    ~LakeDataSource() override;
-
-    std::string name() const override;
-    Status open(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
-
-    int64_t raw_rows_read() const override { return _raw_rows_read; }
-    int64_t num_rows_read() const override { return _num_rows_read; }
-    int64_t num_bytes_read() const override { return _bytes_read; }
-    int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
-
-private:
-    Status get_tablet(const TInternalScanRange& scan_range);
-    Status init_global_dicts(TabletReaderParams* params);
-    Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
-    Status init_scanner_columns(std::vector<uint32_t>& scanner_columns);
-    void decide_chunk_size(bool has_predicate);
-    Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
-                              const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
-    Status init_tablet_reader(RuntimeState* state);
-    Status build_scan_range(RuntimeState* state);
-    void init_counter(RuntimeState* state);
-    void update_realtime_counter(Chunk* chunk);
-    void update_counter();
-
-private:
-    const LakeDataSourceProvider* _provider;
-    const TInternalScanRange _scan_range;
-
-    Status _status = Status::OK();
-    // The conjuncts couldn't push down to storage engine
-    std::vector<ExprContext*> _not_push_down_conjuncts;
-    ConjunctivePredicates _not_push_down_predicates;
-    std::vector<uint8_t> _selection;
-
-    ObjectPool _obj_pool;
-
-    RuntimeState* _runtime_state = nullptr;
-    const std::vector<SlotDescriptor*>* _slots = nullptr;
-    std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
-    std::vector<OlapScanRange*> _scanner_ranges;
-    OlapScanConjunctsManager _conjuncts_manager;
-
-    lake::VersionedTablet _tablet;
-    TabletSchemaCSPtr _tablet_schema;
-    TabletReaderParams _params{};
-    std::shared_ptr<lake::TabletReader> _reader;
-    // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
-    std::shared_ptr<ChunkIterator> _prj_iter;
-
-    std::unordered_set<uint32_t> _unused_output_column_ids;
-    // For release memory.
-    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
-    std::vector<PredicatePtr> _predicate_free_pool;
-
-    // slot descriptors for each one of |output_columns|.
-    std::vector<SlotDescriptor*> _query_slots;
-
-    // The following are profile meatures
-    int64_t _num_rows_read = 0;
-    int64_t _raw_rows_read = 0;
-    int64_t _bytes_read = 0;
-    int64_t _cpu_time_spent_ns = 0;
-
-    RuntimeProfile::Counter* _bytes_read_counter = nullptr;
-    RuntimeProfile::Counter* _rows_read_counter = nullptr;
-
-    RuntimeProfile::Counter* _expr_filter_timer = nullptr;
-    RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
-    RuntimeProfile::Counter* _io_timer = nullptr;
-    RuntimeProfile::Counter* _read_compressed_counter = nullptr;
-    RuntimeProfile::Counter* _decompress_timer = nullptr;
-    RuntimeProfile::Counter* _read_uncompressed_counter = nullptr;
-    RuntimeProfile::Counter* _raw_rows_counter = nullptr;
-    RuntimeProfile::Counter* _pred_filter_counter = nullptr;
-    RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
-    RuntimeProfile::Counter* _pred_filter_timer = nullptr;
-    RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
-    RuntimeProfile::Counter* _get_delvec_timer = nullptr;
-    RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
-    RuntimeProfile::Counter* _seg_init_timer = nullptr;
-    RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
-    RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
-    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
-    RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
-    RuntimeProfile::Counter* _rows_key_range_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
-    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _block_seek_timer = nullptr;
-    RuntimeProfile::Counter* _block_seek_counter = nullptr;
-    RuntimeProfile::Counter* _block_load_timer = nullptr;
-    RuntimeProfile::Counter* _block_load_counter = nullptr;
-    RuntimeProfile::Counter* _block_fetch_timer = nullptr;
-    RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bi_filter_timer = nullptr;
-    RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
-    RuntimeProfile::Counter* _rowsets_read_count = nullptr;
-    RuntimeProfile::Counter* _segments_read_count = nullptr;
-    RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
-    RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
-
-    // Page count
-    RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;
-    RuntimeProfile::Counter* _pages_count_local_disk_counter = nullptr;
-    RuntimeProfile::Counter* _pages_count_remote_counter = nullptr;
-    RuntimeProfile::Counter* _pages_count_total_counter = nullptr;
-    // Compressed bytes read
-    RuntimeProfile::Counter* _compressed_bytes_read_local_disk_counter = nullptr;
-    RuntimeProfile::Counter* _compressed_bytes_read_remote_counter = nullptr;
-    RuntimeProfile::Counter* _compressed_bytes_read_total_counter = nullptr;
-    RuntimeProfile::Counter* _compressed_bytes_read_request_counter = nullptr;
-    // IO count
-    RuntimeProfile::Counter* _io_count_local_disk_counter = nullptr;
-    RuntimeProfile::Counter* _io_count_remote_counter = nullptr;
-    RuntimeProfile::Counter* _io_count_total_counter = nullptr;
-    RuntimeProfile::Counter* _io_count_request_counter = nullptr;
-    // IO time
-    RuntimeProfile::Counter* _io_ns_local_disk_timer = nullptr;
-    RuntimeProfile::Counter* _io_ns_remote_timer = nullptr;
-    RuntimeProfile::Counter* _io_ns_total_timer = nullptr;
-    // Prefetch
-    RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
-    RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
-    RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
-};
-
-// ================================
-
-class LakeDataSourceProvider final : public DataSourceProvider {
-public:
-    friend class LakeDataSource;
-    LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    ~LakeDataSourceProvider() override = default;
-
-    DataSourcePtr create_data_source(const TScanRange& scan_range) override;
-
-    Status init(ObjectPool* pool, RuntimeState* state) override;
-    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
-
-    // Make cloud native table behavior same as olap table
-    bool always_shared_scan() const override { return false; }
-
-protected:
-    ConnectorScanNode* _scan_node;
-    const TLakeScanNode _t_lake_scan_node;
-};
-
-// ================================
 
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.internal_scan_range) {}
@@ -398,24 +234,30 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.use_page_cache = !config::disable_storage_page_cache && _scan_range.fill_data_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager.unarrived_runtime_filters());
+    _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
+    _params.scan_dop = _provider->get_scan_dop();
 
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(parser, &preds));
-    decide_chunk_size(!preds.empty());
-    _has_any_predicate = (!preds.empty());
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _not_push_down_predicates.add(p.get());
+    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager.get_predicate_tree(parser, _predicate_free_pool));
+    decide_chunk_size(!pred_tree.empty());
+    _has_any_predicate = !pred_tree.empty();
+    PredicateAndNode pushdown_pred_root;
+    PredicateAndNode non_pushdown_pred_root;
+    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
+                                    &pushdown_pred_root, &non_pushdown_pred_root);
+    _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+    _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
+
+    for (const auto& [_, col_nodes] : _non_pushdown_pred_tree.root().col_children_map()) {
+        for (const auto& col_node : col_nodes) {
+            _not_push_down_predicates.add(col_node.col_pred());
         }
-        _predicate_free_pool.emplace_back(std::move(p));
     }
+    // TODO(liuzihe): support OR predicate.
+    DCHECK(_non_pushdown_pred_tree.root().compound_children().empty());
 
     {
-        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                     *_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _not_push_down_predicates));
     }
 
     // Range
@@ -464,9 +306,28 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
+
+    if (_split_context != nullptr) {
+        auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
+        if (_provider->could_split_physically()) {
+            // physical
+            _params.rowid_range_option = split_context->rowid_range;
+        } else {
+            // logical
+            _params.short_key_ranges_option = split_context->short_key_range;
+        }
+    }
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
 
-    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema)));
+    // need to split
+    bool need_split = _provider->could_split() && _split_context == nullptr;
+    if (need_split) {
+        // used to construct a new morsel
+        _params.plan_node_id = _morsel->get_plan_node_id();
+        _params.scan_range = _morsel->get_scan_range();
+    }
+    ASSIGN_OR_RETURN(_reader,
+                     _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically()));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -666,7 +527,7 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
@@ -742,6 +603,96 @@ const TupleDescriptor* LakeDataSourceProvider::tuple_descriptor(RuntimeState* st
 DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<LakeDataSourceProvider>(scan_node, plan_node);
+}
+
+StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+        size_t num_total_scan_ranges) {
+    auto morsel_queue = DataSourceProvider::convert_scan_range_to_morsel_queue(
+            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            num_total_scan_ranges);
+    if (enable_tablet_internal_parallel) {
+        int64_t scan_dop;
+        ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                                       tablet_internal_parallel_mode, &scan_dop,
+                                                                       &splitted_scan_rows));
+        if (_could_split) {
+            ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(scan_ranges));
+        }
+    }
+    return morsel_queue;
+}
+
+StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
+        const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
+        int64_t* splitted_scan_rows) const {
+    //if (_t_lake_scan_node.use_pk_index) {
+    //    return false;
+    //}
+    bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
+    // The enough number of tablets shouldn't use tablet internal parallel.
+    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
+        return false;
+    }
+
+    int64_t num_table_rows = 0;
+    for (const auto& tablet_scan_range : scan_ranges) {
+        int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
+#ifdef BE_TEST
+        ASSIGN_OR_RETURN(auto tablet_num_rows,
+                         _tablet_manager->get_tablet_num_rows(
+                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
+        num_table_rows += static_cast<int64_t>(tablet_num_rows);
+#else
+        ASSIGN_OR_RETURN(auto tablet_num_rows,
+                         ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_num_rows(
+                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
+        num_table_rows += static_cast<int64_t>(tablet_num_rows);
+#endif
+    }
+
+    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
+    *splitted_scan_rows =
+            config::tablet_internal_parallel_max_splitted_scan_bytes / _scan_node->estimated_scan_row_bytes();
+    *splitted_scan_rows =
+            std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                     std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
+    // scan_dop is restricted in the range [1, dop].
+    *scan_dop = num_table_rows / *splitted_scan_rows;
+    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
+
+    if (force_split) {
+        return true;
+    }
+
+    bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    return could;
+}
+
+StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(
+        const std::vector<TScanRangeParams>& scan_ranges) const {
+    // Keys type needn't merge or aggregate.
+    int64_t version = std::stoll(scan_ranges[0].scan_range.internal_scan_range.version);
+    KeysType keys_type;
+#ifdef BE_TEST
+    ASSIGN_OR_RETURN(
+            auto first_tablet_schema,
+            _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
+    keys_type = first_tablet_schema->keys_type();
+#else
+    ASSIGN_OR_RETURN(auto first_tablet_schema,
+                     ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_schema(
+                             scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
+    keys_type = first_tablet_schema->keys_type();
+#endif
+
+    const auto skip_aggr = _t_lake_scan_node.is_preaggregation;
+    bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                ((keys_type == UNIQUE_KEYS || keys_type == AGG_KEYS) && skip_aggr);
+
+    return is_keys_type_matched;
 }
 
 } // namespace starrocks::connector
