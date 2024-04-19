@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -283,11 +284,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         boolean enableListSrcFiles = false;
         // list file
-        if (mvContext.getProperties().containsKey(SessionVariable.ENABLE_LIST_MV_SRC_FILES)) {
-            String enableListSrcStr = mvContext.getProperties().get(SessionVariable.ENABLE_LIST_MV_SRC_FILES);
-            enableListSrcFiles = enableListSrcStr.equalsIgnoreCase("TRUE");
-            LOG.info("enableListSrcStr: {}, enableListSrcFiles: {}", enableListSrcStr, enableListSrcFiles);
+        if (context.getCtx().getSessionVariable().isEnableListMvSrcFiles()) {
+            enableListSrcFiles = true;
+            LOG.info("enableListSrcFiles is true");
         }
+        LOG.info("enableListSrcFiles is: {}", enableListSrcFiles);
         if (enableListSrcFiles && mvContext.getRefBaseTable().isHiveTable()) {
             // list all files under partitions: refTablePartitionNames
             // two cases:
@@ -300,13 +301,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 LOG.info("can not get partitions for hive table: {}", hiveTable.getTableName());
             }
             LOG.info("partition name size: {}", partitionNameSet.size());
-            /*List<com.starrocks.connector.PartitionInfo> partitionInfos =  GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), hiveTable, Lists.newArrayList(partitionNameSet));
-            List<RemotePathKey> remotePathKeys = partitionInfos.stream()
-                    .map(partition -> RemotePathKey.of(((com.starrocks.connector.hive.Partition)partition).getFullPath(), true))
-                    .collect(Collectors.toList());
-            LOG.info("remotePathKeys size: {}", remotePathKeys.size());*/
-
+            Stopwatch sw = Stopwatch.createStarted();
             List<RemoteFileInfo> remoteFileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getRemoteFileInfos(hiveTable, Lists.newArrayList(partitionNameSet));
             int fileInfoCount = 0;
@@ -315,7 +310,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 fileInfoCount++;
                 fileInfoCount += remoteFileInfo.getFiles().size();
             }
-            LOG.info("partition size: {}, fileInfoCount: {}, fileCount: {}", partitionNameSet.size(), fileInfoCount, fileCount);
+            sw.stop();
+            LOG.info("partition size: {}, fileInfoCount: {}, fileCount: {}, timecost: {}",
+                    partitionNameSet.size(), fileInfoCount, fileCount, sw.elapsed());
         } else {
             // refresh materialized view
             doRefreshMaterializedViewWithRetry(mvToRefreshedPartitions, refTablePartitionNames);
