@@ -306,6 +306,148 @@ void JoinHashTable::close() {
     _table_items = nullptr;
 }
 
+void JoinHashTable::_init_mor_reader(const HashTableParam& param) {
+    for (const auto& build_slot : _table_items->build_slots) {
+        bool found_build_slot = false;
+        for (auto probe_slot : _table_items->probe_slots) {
+            if (probe_slot.slot->id() == build_slot.slot->id()) {
+                found_build_slot = true;
+                break;
+            }
+        }
+
+        if (!found_build_slot) {
+            HashTableSlotDescriptor hash_table_slot;
+            hash_table_slot.slot = build_slot.slot;
+            hash_table_slot.need_output = true;
+
+            _table_items->probe_slots.emplace_back(hash_table_slot);
+            _table_items->probe_column_count++;
+        }
+    }
+}
+
+void JoinHashTable::_init_probe_column(const HashTableParam& param) {
+    const auto& probe_desc = *param.probe_row_desc;
+    for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
+        for (const auto& slot : tuple_desc->slots()) {
+            HashTableSlotDescriptor hash_table_slot;
+            hash_table_slot.slot = slot;
+
+            if (param.enable_lazy_materialize) {
+                if (param.probe_output_slots.empty()) {
+                    hash_table_slot.need_output = true;
+                    hash_table_slot.need_lazy_materialize = false;
+                    _table_items->output_probe_column_count++;
+                } else if (std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
+                           param.probe_output_slots.end()) {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_probe_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = true;
+                        _table_items->lazy_output_probe_column_count++;
+                    }
+                } else {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_probe_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = false;
+                    }
+                }
+            } else {
+                if (param.probe_output_slots.empty() ||
+                    std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
+                            param.probe_output_slots.end() ||
+                    std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                            param.predicate_slots.end()) {
+                    hash_table_slot.need_output = true;
+                    _table_items->output_probe_column_count++;
+                } else {
+                    hash_table_slot.need_output = false;
+                }
+            }
+
+            _table_items->probe_slots.emplace_back(hash_table_slot);
+            _table_items->probe_column_count++;
+        }
+    }
+}
+
+void JoinHashTable::_init_build_column(const HashTableParam& param) {
+    const auto& build_desc = *param.build_row_desc;
+    for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
+        for (const auto& slot : tuple_desc->slots()) {
+            HashTableSlotDescriptor hash_table_slot;
+            hash_table_slot.slot = slot;
+
+            if (!param.mor_reader_mode && param.enable_lazy_materialize) {
+                if (param.build_output_slots.empty()) {
+                    hash_table_slot.need_output = true;
+                    hash_table_slot.need_lazy_materialize = false;
+                    _table_items->output_build_column_count++;
+                } else if (std::find(param.build_output_slots.begin(), param.build_output_slots.end(), slot->id()) !=
+                           param.build_output_slots.end()) {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_build_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = true;
+                        _table_items->lazy_output_build_column_count++;
+                    }
+                } else {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_build_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = false;
+                    }
+                }
+            } else {
+                if (!param.mor_reader_mode &&
+                    (param.build_output_slots.empty() ||
+                     std::find(param.build_output_slots.begin(), param.build_output_slots.end(), slot->id()) !=
+                             param.build_output_slots.end() ||
+                     std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                             param.predicate_slots.end())) {
+                    hash_table_slot.need_output = true;
+                    _table_items->output_build_column_count++;
+                } else {
+                    hash_table_slot.need_output = false;
+                }
+            }
+
+            _table_items->build_slots.emplace_back(hash_table_slot);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+            if (slot->is_nullable()) {
+                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+                nullable_column->append_default_not_null_value();
+            } else {
+                column->append_default();
+            }
+            _table_items->build_chunk->append_column(std::move(column), slot->id());
+            _table_items->build_column_count++;
+        }
+    }
+}
+
 // may be called more than once if spill
 void JoinHashTable::create(const HashTableParam& param) {
     _table_items = std::make_shared<JoinHashTableItems>();
@@ -320,6 +462,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->mor_reader_mode = param.mor_reader_mode;
+    _table_items->enable_lazy_materialize = param.enable_lazy_materialize;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN) {
@@ -335,75 +478,11 @@ void JoinHashTable::create(const HashTableParam& param) {
     }
     _table_items->join_keys = param.join_keys;
 
-    const auto& probe_desc = *param.probe_row_desc;
-    for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
-        for (const auto& slot : tuple_desc->slots()) {
-            HashTableSlotDescriptor hash_table_slot;
-            hash_table_slot.slot = slot;
-            if (param.probe_output_slots.empty() ||
-                std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
-                        param.probe_output_slots.end() ||
-                std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
-                        param.predicate_slots.end()) {
-                hash_table_slot.need_output = true;
-                _table_items->output_probe_column_count++;
-            } else {
-                hash_table_slot.need_output = false;
-            }
-
-            _table_items->probe_slots.emplace_back(hash_table_slot);
-            _table_items->probe_column_count++;
-        }
-    }
-
-    const auto& build_desc = *param.build_row_desc;
-    for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
-        for (const auto& slot : tuple_desc->slots()) {
-            HashTableSlotDescriptor hash_table_slot;
-            hash_table_slot.slot = slot;
-            if (!param.mor_reader_mode && (param.build_output_slots.empty() ||
-                                           std::find(param.build_output_slots.begin(), param.build_output_slots.end(),
-                                                     slot->id()) != param.build_output_slots.end() ||
-                                           std::find(param.predicate_slots.begin(), param.predicate_slots.end(),
-                                                     slot->id()) != param.predicate_slots.end())) {
-                hash_table_slot.need_output = true;
-                _table_items->output_build_column_count++;
-            } else {
-                hash_table_slot.need_output = false;
-            }
-
-            _table_items->build_slots.emplace_back(hash_table_slot);
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-            if (slot->is_nullable()) {
-                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-                nullable_column->append_default_not_null_value();
-            } else {
-                column->append_default();
-            }
-            _table_items->build_chunk->append_column(std::move(column), slot->id());
-            _table_items->build_column_count++;
-        }
-    }
+    _init_probe_column(param);
+    _init_build_column(param);
 
     if (param.mor_reader_mode) {
-        for (const auto& build_slot : _table_items->build_slots) {
-            bool found_build_slot = false;
-            for (auto probe_slot : _table_items->probe_slots) {
-                if (probe_slot.slot->id() == build_slot.slot->id()) {
-                    found_build_slot = true;
-                    break;
-                }
-            }
-
-            if (!found_build_slot) {
-                HashTableSlotDescriptor hash_table_slot;
-                hash_table_slot.slot = build_slot.slot;
-                hash_table_slot.need_output = true;
-
-                _table_items->probe_slots.emplace_back(hash_table_slot);
-                _table_items->probe_column_count++;
-            }
-        }
+        _init_mor_reader(param);
     }
 
     for (const auto& key_desc : _table_items->join_keys) {
@@ -483,6 +562,23 @@ Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
 #undef M
     default:
         assert(false);
+    }
+    return Status::OK();
+}
+
+Status JoinHashTable::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
+    switch (_hash_map_type) {
+#define M(NAME)                                                 \
+    case JoinHashMapType::NAME:                                 \
+        _##NAME->lazy_output(state, probe_chunk, result_chunk); \
+        break;
+        APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
+    default:
+        assert(false);
+    }
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*result_chunk)->downgrade());
     }
     return Status::OK();
 }

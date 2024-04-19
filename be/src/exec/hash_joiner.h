@@ -64,8 +64,7 @@ enum HashJoinPhase {
     EOS = 4,
 };
 struct HashJoinerParam {
-    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
-                    TPlanNodeType::type node_type, std::vector<bool> is_null_safes,
+    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, std::vector<bool> is_null_safes,
                     std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
                     std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
@@ -73,11 +72,9 @@ struct HashJoinerParam {
                     TPlanNodeType::type probe_node_type, bool build_conjunct_ctxs_is_empty,
                     std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> build_output_slots,
                     std::set<SlotId> probe_output_slots, const TJoinDistributionMode::type distribution_mode,
-                    bool mor_reader_mode)
+                    bool mor_reader_mode, bool enable_lazy_materialize)
             : _pool(pool),
               _hash_join_node(hash_join_node),
-              _node_id(node_id),
-              _node_type(node_type),
               _is_null_safes(std::move(is_null_safes)),
               _build_expr_ctxs(std::move(build_expr_ctxs)),
               _probe_expr_ctxs(std::move(probe_expr_ctxs)),
@@ -93,7 +90,8 @@ struct HashJoinerParam {
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
-              _mor_reader_mode(mor_reader_mode) {}
+              _mor_reader_mode(mor_reader_mode),
+              _enable_lazy_materialize(enable_lazy_materialize) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -101,8 +99,6 @@ struct HashJoinerParam {
 
     ObjectPool* _pool;
     const THashJoinNode& _hash_join_node;
-    TPlanNodeId _node_id;
-    TPlanNodeType::type _node_type;
     const std::vector<bool> _is_null_safes;
     const std::vector<ExprContext*> _build_expr_ctxs;
     const std::vector<ExprContext*> _probe_expr_ctxs;
@@ -120,6 +116,7 @@ struct HashJoinerParam {
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
+    const bool _enable_lazy_materialize;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -277,6 +274,15 @@ public:
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
     HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
 
+    Status lazy_probe_output_chunk(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+                                   JoinHashTable& hash_table) {
+        if (_enable_lazy_materialize && (*chunk) && !(*chunk)->is_empty()) {
+            return hash_table.lazy_output(state, probe_chunk, chunk);
+        } else {
+            return Status::OK();
+        }
+    }
+
     Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
         // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
@@ -368,7 +374,7 @@ private:
     StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
 
     Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all);
-    static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
+    void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                 bool filter_all, bool hit_all, const Filter& filter);
 
     Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
@@ -447,6 +453,7 @@ private:
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
+    bool _enable_lazy_materialize = false;
 };
 
 } // namespace starrocks

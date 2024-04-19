@@ -69,7 +69,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _build_output_slots(param._build_output_slots),
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
-          _mor_reader_mode(param._mor_reader_mode) {
+          _mor_reader_mode(param._mor_reader_mode),
+          _enable_lazy_materialize(param._enable_lazy_materialize) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -142,6 +143,7 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->mor_reader_mode = _mor_reader_mode;
+    param->enable_lazy_materialize = _enable_lazy_materialize;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -420,6 +422,14 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
                 null_column->set_has_null(true);
             }
         }
+        //if (_enable_lazy_materialize) {
+        //    size_t num_rows = (*chunk)->num_rows();
+        //    for (size_t i = start_column + column_count; i < (*chunk)->num_columns(); i++) {
+        //        auto col = (*chunk)->get_column_by_index(i);
+        //        col->resize(0);
+        //        col->resize(num_rows);
+        //    }
+        //}
     } else {
         if (hit_all) {
             return;
@@ -435,6 +445,17 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
                 }
             }
         }
+        //if (_enable_lazy_materialize) {
+        //    for (size_t i = start_column + column_count; i < (*chunk)->num_columns(); i++) {
+        //        auto col = (*chunk)->get_column_by_index(i);
+        //        auto& data = down_cast<UInt32Column*>(col.get())->get_data();
+        //        for (size_t j = 0; i < filter.size(); i++) {
+        //            if (filter[j] == 0) {
+        //                data[j] = 0;
+        //            }
+        //        }
+        //    }
+        //}
     }
 }
 
@@ -446,7 +467,6 @@ Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
-
     hash_table.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
 

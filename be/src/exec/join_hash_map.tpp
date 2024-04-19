@@ -416,6 +416,30 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::build(RuntimeState* state) {
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk,
+                                                        ChunkPtr* result_chunk) {
+    if ((*result_chunk)->num_rows() < _probe_state->count) {
+        _probe_state->match_flag = JoinMatchFlag::NORMAL;
+        _probe_state->count = (*result_chunk)->num_rows();
+    }
+
+    (*result_chunk)->remove_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    (*result_chunk)->remove_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+
+    if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN) {
+        _lazy_build_output(result_chunk);
+    } else if (_table_items->join_type == TJoinOp::LEFT_SEMI_JOIN || _table_items->join_type == TJoinOp::LEFT_ANTI_JOIN
+               || _table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
+        _lazy_probe_output(probe_chunk, result_chunk);
+    } else {
+        _lazy_probe_output(probe_chunk, result_chunk);
+        _lazy_build_output(result_chunk);
+    }
+
+    _probe_state->count = 0;
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Columns& key_columns,
                                                   ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* has_remain) {
     _probe_state->key_columns = &key_columns;
@@ -441,13 +465,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN) {
         // right semi join without other join conjunct
         // right anti join without other join conjunct
-        // don't need output the real probe column
+        // don't need output the probe column
         {
-            // output default values for probe-columns as placeholder.
             SCOPED_TIMER(_probe_state->output_probe_column_timer);
-            if (!_table_items->with_other_conjunct) {
-                _probe_null_output(chunk, _probe_state->count);
-            } else {
+            if (_table_items->with_other_conjunct) {
                 _probe_output(probe_chunk, chunk);
             }
         }
@@ -472,9 +493,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
                 return;
             }
 
-            if (!_table_items->with_other_conjunct) {
-                _build_default_output(chunk, _probe_state->count);
-            } else {
+            if (_table_items->with_other_conjunct) {
                 _build_output(chunk);
             }
         }
@@ -487,6 +506,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
             SCOPED_TIMER(_probe_state->output_build_column_timer);
             _build_output(chunk);
         }
+    }
+
+    if (_table_items->enable_lazy_materialize) {
+        _probe_index_output(chunk);
+        _build_index_output(chunk);
     }
 }
 
@@ -501,12 +525,45 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe_remain(RuntimeState* state, Ch
 
     if (_table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN || _table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN) {
         // right anti/semi join without other conjunct output default value of probe-columns as placeholder.
-        _probe_null_output(chunk, _probe_state->count);
+        if (_table_items->with_other_conjunct) {
+            _probe_null_output(chunk, _probe_state->count);
+        }
         _build_output(chunk);
     } else {
         // RIGHT_OUTER_JOIN || FULL_OUTER_JOIN
         _probe_null_output(chunk, _probe_state->count);
         _build_output(chunk);
+    }
+    if (_table_items->enable_lazy_materialize) {
+        _null_probe_index_output(chunk);
+        _build_index_output(chunk);
+
+        //_probe_state->build_index.resize((*chunk)->num_rows());
+        //(*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
+    bool to_nullable = _table_items->left_to_nullable;
+
+    for (size_t i = 0; i < _table_items->probe_column_count; i++) {
+        HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
+        SlotDescriptor* slot = hash_table_slot.slot;
+        if (hash_table_slot.need_lazy_materialize) {
+            if (probe_chunk == nullptr) {
+                ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+                column->append_nulls(_probe_state->count);
+                (*chunk)->append_column(std::move(column), slot->id());
+            } else {
+                auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+                if (!column->is_nullable()) {
+                    _copy_probe_column(&column, chunk, slot, to_nullable);
+                } else {
+                    _copy_probe_nullable_column(&column, chunk, slot);
+                }
+            }
+        }
     }
 }
 
@@ -529,6 +586,25 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chunk,
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_null_probe_index_output(ChunkPtr* chunk) {
+    auto* col = down_cast<UInt32Column*>(_probe_state->probe_index_column.get());
+    col->get_data().resize(_probe_state->count, 0);
+    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_index_output(ChunkPtr* chunk) {
+    _probe_state->probe_index.resize((*chunk)->num_rows());
+    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_index_output(ChunkPtr* chunk) {
+    _probe_state->build_index.resize(_probe_state->count);
+    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_null_output(ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
@@ -537,6 +613,23 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_null_output(ChunkPtr* chunk, 
             ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             column->append_nulls(count);
             (*chunk)->append_column(std::move(column), slot->id());
+        }
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_build_output(ChunkPtr* chunk) {
+    bool to_nullable = _table_items->right_to_nullable;
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
+        SlotDescriptor* slot = hash_table_slot.slot;
+        if (hash_table_slot.need_lazy_materialize) {
+            ColumnPtr& column = _table_items->build_chunk->columns()[i];
+            if (!column->is_nullable()) {
+                _copy_build_column(column, chunk, slot, to_nullable);
+            } else {
+                _copy_build_nullable_column(column, chunk, slot);
+            }
         }
     }
 }
@@ -554,19 +647,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
             } else {
                 _copy_build_nullable_column(column, chunk, slot);
             }
-        }
-    }
-}
-
-template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_default_output(ChunkPtr* chunk, size_t count) {
-    for (size_t i = 0; i < _table_items->build_column_count; i++) {
-        auto hash_tablet_slot = _table_items->build_slots[i];
-        SlotDescriptor* slot = hash_tablet_slot.slot;
-        if (hash_tablet_slot.need_output) {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
-            column->append_nulls(count);
-            (*chunk)->append_column(std::move(column), slot->id());
         }
     }
 }
@@ -663,6 +743,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const Co
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
+    _probe_state->probe_index.resize(state->chunk_size() + 8);
+    _probe_state->build_index.resize(state->chunk_size() + 8);
     if (!_probe_state->has_remain) {
         _probe_state->probe_row_count = (*probe_chunk)->num_rows();
         _probe_state->active_coroutines = state->query_options().interleaving_group_size;
@@ -694,6 +776,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
         _probe_state->cur_probe_index = 0;
     }
 
+    _probe_state->build_index.resize(state->chunk_size() + 8);
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
     for (; i < _probe_state->build_match_index.size(); i++) {
@@ -820,6 +903,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     if (match_count > state->chunk_size()) {                     \
         _probe_state->next[i] = _table_items->next[build_index]; \
         _probe_state->cur_probe_index = i;                       \
+        _probe_state->cur_build_index = build_index;             \
         _probe_state->has_remain = true;                         \
         _probe_state->count = state->chunk_size();               \
         return;                                                  \
@@ -945,8 +1029,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) { // chunk_size + 1 probe
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
         if (_probe_state->next[i] == 0) {
             i++;
@@ -1089,8 +1173,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
         if (_probe_state->next[i] == 0) {
             i++;
@@ -1333,8 +1417,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
         if (_probe_state->next[i] == 0) {
             i++;
@@ -1406,8 +1490,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
     }
 
@@ -1421,7 +1504,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 if (_probe_state->build_match_index[build_index] == 0) {
-                    _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
                     _probe_state->build_match_index[build_index] = 1;
                     match_count++;
@@ -1451,7 +1533,6 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_prob
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 if (_probe_state->build_match_index[build_index] == 0) {
                     COWAIT_IF_CHUNK_FULL()
-                    _probe_state->probe_index[_probe_state->match_count] = i;
                     _probe_state->build_index[_probe_state->match_count] = build_index;
                     _probe_state->build_match_index[build_index] = 1;
                     _probe_state->match_count++;
@@ -1521,8 +1602,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(R
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
         if (_probe_state->next[i] == 0) {
             i++;
@@ -1611,8 +1692,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_wi
 
     size_t i = _probe_state->cur_probe_index;
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
         if (_probe_state->next[i] == 0) {
             i++;
@@ -1685,8 +1766,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 
     size_t i = _probe_state->cur_probe_index;
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
         if (_probe_state->next[i] == 0) {
             i++;
@@ -1921,8 +2002,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_left_a
 
     size_t i = _probe_state->cur_probe_index;
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->probe_index[0] = _probe_state->cur_probe_index;
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
         if (_probe_state->next[i] == 0) {
             i++;

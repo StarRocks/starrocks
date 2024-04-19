@@ -94,6 +94,7 @@ struct JoinKeyDesc {
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
     bool need_output;
+    bool need_lazy_materialize = false;
 };
 
 struct JoinHashTableItems {
@@ -117,8 +118,10 @@ struct JoinHashTableItems {
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
     size_t output_build_column_count = 0;
+    size_t lazy_output_build_column_count = 0;
     size_t probe_column_count = 0;
     size_t output_probe_column_count = 0;
+    size_t lazy_output_probe_column_count = 0;
     bool with_other_conjunct = false;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
@@ -127,6 +130,7 @@ struct JoinHashTableItems {
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
     bool mor_reader_mode = false;
+    bool enable_lazy_materialize = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -157,13 +161,15 @@ struct HashTableProbeState {
     //TODO: memory release
     Buffer<uint8_t> is_nulls;
     Buffer<uint32_t> buckets;
-    Buffer<uint32_t> build_index;
-    Buffer<uint32_t> probe_index;
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
     Buffer<uint8_t>* null_array = nullptr;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
+    ColumnPtr build_index_column;
+    ColumnPtr probe_index_column;
+    Buffer<uint32_t>& build_index;
+    Buffer<uint32_t>& probe_index;
 
     // when exec right join
     // record the build items is matched or not
@@ -183,6 +189,7 @@ struct HashTableProbeState {
     // When one-to-many, one probe may not be able to probe all the data,
     // cur_probe_index records the position of the last probe
     uint32_t cur_probe_index = 0;
+    uint32_t cur_build_index = 0;
     uint32_t cur_row_match_count = 0;
 
     std::unique_ptr<MemPool> probe_pool = nullptr;
@@ -191,7 +198,11 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
-    HashTableProbeState() = default;
+    HashTableProbeState()
+            : build_index_column(UInt32Column::create()),
+              probe_index_column(UInt32Column::create()),
+              build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
+              probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()) {}
 
     struct ProbeCoroutine {
         struct ProbePromise {
@@ -222,13 +233,15 @@ struct HashTableProbeState {
     HashTableProbeState(const HashTableProbeState& rhs)
             : is_nulls(rhs.is_nulls),
               buckets(rhs.buckets),
-              build_index(rhs.build_index),
-              probe_index(rhs.probe_index),
               next(rhs.next),
               probe_slice(rhs.probe_slice),
               null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
               key_columns(rhs.key_columns),
+              build_index_column(rhs.build_index_column == nullptr ? nullptr : rhs.build_index_column->clone()),
+              probe_index_column(rhs.probe_index_column == nullptr ? nullptr : rhs.probe_index_column->clone()),
+              build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
+              probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
               build_match_index(rhs.build_match_index),
               probe_match_index(rhs.probe_match_index),
               probe_match_filter(rhs.probe_match_filter),
@@ -237,6 +250,7 @@ struct HashTableProbeState {
               match_flag(rhs.match_flag),
               has_remain(rhs.has_remain),
               cur_probe_index(rhs.cur_probe_index),
+              cur_build_index(rhs.cur_build_index),
               cur_row_match_count(rhs.cur_row_match_count),
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
@@ -260,6 +274,7 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
+    bool enable_lazy_materialize = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
@@ -506,13 +521,28 @@ public:
     explicit JoinHashMapForEmpty(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
 
-    void build_prepare(RuntimeState* state) { return; }
-    void probe_prepare(RuntimeState* state) { return; }
-    void build(RuntimeState* state) { return; }
+    void build_prepare(RuntimeState* state) {}
+    void probe_prepare(RuntimeState* state) {}
+    void build(RuntimeState* state) {}
+    void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
+        if ((*probe_chunk)->num_rows() < _probe_state->count) {
+            _probe_state->match_flag = JoinMatchFlag::NORMAL;
+            _probe_state->count = (*probe_chunk)->num_rows();
+        }
+
+        (*result_chunk)->remove_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+        (*result_chunk)->remove_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+
+        _lazy_probe_output(probe_chunk, result_chunk);
+        _lazy_build_output(result_chunk);
+        _probe_state->count = 0;
+    }
+
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain) {
         DCHECK_EQ(0, _table_items->row_count);
         *has_remain = false;
+        _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE;
         switch (_table_items->join_type) {
         case TJoinOp::FULL_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
@@ -521,6 +551,12 @@ public:
             _probe_state->count = (*probe_chunk)->num_rows();
             _probe_output(probe_chunk, chunk);
             _build_output(chunk);
+
+            if (_table_items->enable_lazy_materialize) {
+                _probe_index_output(chunk);
+                _build_index_output(chunk);
+            }
+
             _probe_state->count = 0;
             break;
         }
@@ -539,26 +575,78 @@ public:
     }
 
 private:
+    void _probe_index_output(ChunkPtr* chunk) {
+        _probe_state->probe_index_column->resize(_probe_state->count);
+        auto* col = down_cast<UInt32Column*>(_probe_state->probe_index_column.get());
+        std::iota(col->get_data().begin(), col->get_data().end(), 0);
+        (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    }
+
+    void _build_index_output(ChunkPtr* chunk) {
+        auto* col = down_cast<UInt32Column*>(_probe_state->build_index_column.get());
+        col->get_data().resize(_probe_state->count, 0);
+        (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    }
+
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_probe_column_timer);
         bool to_nullable = _table_items->left_to_nullable;
         for (size_t i = 0; i < _table_items->probe_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
-            auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
             if (hash_table_slot.need_output) {
-                if (to_nullable && !column->is_nullable()) {
-                    DCHECK_EQ(column->size(), _probe_state->count);
-                    ColumnPtr dest_column =
-                            NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
-                    (*chunk)->append_column(std::move(dest_column), slot->id());
+                auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+                if (!column->is_nullable()) {
+                    _copy_probe_column(&column, chunk, slot, to_nullable);
                 } else {
-                    // DCHECK_EQ(column->is_nullable(), to_nullable);
-                    (*chunk)->append_column(std::move(column), slot->id());
+                    _copy_probe_nullable_column(&column, chunk, slot);
                 }
             }
         }
     }
+
+    void _lazy_probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
+        SCOPED_TIMER(_probe_state->output_probe_column_timer);
+        bool to_nullable = _table_items->left_to_nullable;
+        for (size_t i = 0; i < _table_items->probe_column_count; i++) {
+            HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
+            SlotDescriptor* slot = hash_table_slot.slot;
+            if (hash_table_slot.need_lazy_materialize) {
+                auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+                if (!column->is_nullable()) {
+                    _copy_probe_column(&column, chunk, slot, to_nullable);
+                } else {
+                    _copy_probe_nullable_column(&column, chunk, slot);
+                }
+            }
+        }
+    }
+
+    void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
+        if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
+            if (to_nullable) {
+                ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create(_probe_state->count));
+                (*chunk)->append_column(std::move(dest_column), slot->id());
+            } else {
+                (*chunk)->append_column(*src_column, slot->id());
+            }
+        } else {
+            ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
+            dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+            (*chunk)->append_column(std::move(dest_column), slot->id());
+        }
+    }
+
+    void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
+        if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
+            (*chunk)->append_column(*src_column, slot->id());
+        } else {
+            ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+            dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+            (*chunk)->append_column(std::move(dest_column), slot->id());
+        }
+    }
+
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
 
@@ -571,6 +659,27 @@ private:
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
             if (hash_table_slot.need_output) {
+                // always output nulls.
+                DCHECK(to_nullable);
+                ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+                dest_column->append_nulls(_probe_state->count);
+                (*chunk)->append_column(std::move(dest_column), slot->id());
+            }
+        }
+    }
+
+    void _lazy_build_output(ChunkPtr* chunk) {
+        SCOPED_TIMER(_probe_state->output_build_column_timer);
+
+        if (_table_items->mor_reader_mode) {
+            return;
+        }
+        bool to_nullable = _table_items->right_to_nullable;
+
+        for (size_t i = 0; i < _table_items->build_column_count; i++) {
+            HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
+            SlotDescriptor* slot = hash_table_slot.slot;
+            if (hash_table_slot.need_lazy_materialize) {
                 // always output nulls.
                 DCHECK(to_nullable);
                 ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
@@ -599,20 +708,25 @@ public:
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain);
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
+    void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
 private:
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    void _lazy_probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
     void _probe_null_output(ChunkPtr* chunk, size_t count);
 
     void _build_output(ChunkPtr* chunk);
-    void _build_default_output(ChunkPtr* chunk, size_t count);
+    void _lazy_build_output(ChunkPtr* chunk);
+
+    void _probe_index_output(ChunkPtr* chunk);
+    void _build_index_output(ChunkPtr* chunk);
+
+    void _null_probe_index_output(ChunkPtr* chunk);
 
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
-
     void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
-
     void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
@@ -749,6 +863,7 @@ public:
     Status build(RuntimeState* state);
     Status reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
+    Status lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
     void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
@@ -769,6 +884,10 @@ public:
     int64_t mem_usage() const;
 
 private:
+    void _init_probe_column(const HashTableParam& param);
+    void _init_build_column(const HashTableParam& param);
+    void _init_mor_reader(const HashTableParam& param);
+
     JoinHashMapType _choose_join_hash_map();
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
 
