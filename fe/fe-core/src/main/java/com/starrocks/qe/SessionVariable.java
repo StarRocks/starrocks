@@ -1345,7 +1345,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePartitionBucketOptimize = false;
 
     @VarAttr(name = ENABLE_GROUP_EXECUTION)
-    private boolean enableGroupExecution = false;
+    private boolean enableGroupExecution = true;
 
     @VarAttr(name = GROUP_EXECUTION_GROUP_SCALE)
     private int groupExecutionGroupScale = 64;
@@ -1467,8 +1467,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableGroupExecution = enableGroupExecution;
     }
 
+    // runtime dop requires join probe to wait for all builds to complete before executing.
+    // It conflicts with group execution.
     public boolean isEnableGroupExecution() {
-        return enableGroupExecution;
+        return enableGroupExecution && !isEnableRuntimeAdaptiveDop();
     }
 
     public int getGroupExecutionGroupScale() {

@@ -27,6 +27,7 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -40,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
+#include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/disk_info.h"
 #include "util/mem_info.h"
@@ -130,6 +132,7 @@ private:
 
     std::string _file = "./be/test/exec/test_data/csv_scanner/csv_file1";
     Pipelines _pipelines;
+    ExecutionGroupPtr exec_group;
 };
 
 ChunkPtr PipeLineFileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
@@ -225,39 +228,32 @@ DescriptorTbl* PipeLineFileScanNodeTest::_create_table_desc(const std::vector<Ty
 
 void PipeLineFileScanNodeTest::prepare_pipeline() {
     // const auto& params = _request.params;
-
-    _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
     MorselQueueFactoryMap& morsel_queues = _fragment_ctx->morsel_queue_factories();
-    const auto& pipelines = _fragment_ctx->pipelines();
 
-    for (const auto& pipeline : pipelines) {
+    _fragment_ctx->iterate_pipeline([&morsel_queues](auto pipeline) {
         if (pipeline->source_operator_factory()->with_morsels()) {
-            auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
+            auto source_id = pipeline->source_operator_factory()->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue_factory = morsel_queues[source_id];
 
             pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
         }
-    }
+    });
 
-    for (const auto& pipeline : pipelines) {
-        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
-    }
+    _fragment_ctx->iterate_pipeline(
+            [this](auto pipeline) { pipeline->instantiate_drivers(_fragment_ctx->runtime_state()); });
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
-    Status prepare_status = _fragment_ctx->iterate_drivers(
+    _fragment_ctx->iterate_drivers(
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
-    ASSERT_TRUE(prepare_status.ok());
 
-    ASSERT_TRUE(_fragment_ctx
-                        ->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-                            exec_env->wg_driver_executor()->submit(driver.get());
-                            return Status::OK();
-                        })
-                        .ok());
+    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+        LOG(WARNING) << driver->to_readable_string();
+        exec_env->wg_driver_executor()->submit(driver.get());
+    });
 }
 
 void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks::ConnectorScanNode*>& scan_nodes,
@@ -410,12 +406,18 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     starrocks::pipeline::CounterPtr sinkCounter = std::make_shared<starrocks::pipeline::FileScanCounter>();
 
+    exec_group = ExecutionGroupBuilder::create_normal_exec_group();
+
     OpFactories op_factories = file_scan_node->decompose_to_pipeline(_context);
 
     op_factories.push_back(std::make_shared<starrocks::pipeline::TestFileScanSinkOperatorFactory>(
             _context->next_operator_id(), 0, sinkCounter));
 
-    _pipelines.push_back(std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories));
+    _pipelines.push_back(
+            std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories, exec_group.get()));
+    exec_group->add_pipeline(_pipelines.back().get());
+    auto pipelines = _pipelines;
+    _fragment_ctx->set_pipelines({exec_group}, std::move(pipelines));
 
     prepare_pipeline();
 
