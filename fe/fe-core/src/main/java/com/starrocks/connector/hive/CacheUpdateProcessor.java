@@ -263,7 +263,9 @@ public class CacheUpdateProcessor {
             }
             List<RemotePathKey> updateKeys = Lists.newArrayList();
             List<RemotePathKey> invalidateKeys = Lists.newArrayList();
+            RemotePathKey.HudiContext hudiContext = new RemotePathKey.HudiContext();
             presentPathKey.forEach(pathKey -> {
+                pathKey.setHudiContext(hudiContext);
                 String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
                 if (operator == Operator.UPDATE && existPaths.contains(pathWithSlash)) {
                     updateKeys.add(pathKey);
