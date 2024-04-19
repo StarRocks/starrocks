@@ -1352,7 +1352,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePartitionBucketOptimize = false;
 
     @VarAttr(name = ENABLE_GROUP_EXECUTION)
-    private boolean enableGroupExecution = false;
+    private boolean enableGroupExecution = true;
 
     @VarAttr(name = GROUP_EXECUTION_GROUP_SCALE)
     private int groupExecutionGroupScale = 64;

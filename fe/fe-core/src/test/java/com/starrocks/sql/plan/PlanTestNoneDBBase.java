@@ -79,6 +79,7 @@ public class PlanTestNoneDBBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.show_execution_groups = false;
         // disable checking tablets
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;

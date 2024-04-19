@@ -241,6 +241,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 }
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
+    RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
     if (should_spill_hash_table) {
         _aggregator->hash_map_variant().visit(
                 [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });

@@ -194,3 +194,8 @@ truncate table result_table;
 truncate table result_one_tablet_table;
 insert into blackhole() select distinct c0, c1, c2 from only_one_tablet;
 insert into blackhole() select distinct c0, c1, c2 from only_one_tablet limit 100;
+-- spill 
+set enable_spill=true;
+set spill_mode="force";
+select count(*) from (select distinct c0, c1 from only_one_tablet limit 10) tb;
+select count(c0), count(c1), count(sc1) from (select c0, c1, sum(c1) sc1 from only_one_tablet group by c1, c0 limit 10) tb;
