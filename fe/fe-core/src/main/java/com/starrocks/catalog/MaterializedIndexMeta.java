@@ -58,8 +58,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
-    private static final long UNINITIALIZED_SCHEMA_ID = -1;
-
     @SerializedName(value = "indexId")
     private long indexId;
     @SerializedName(value = "schema")
@@ -92,9 +90,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private Expr whereClause;
     private Set<Long> updateSchemaBackendId;
 
-    // Default constructor will be invoked by the gson library
-    private MaterializedIndexMeta() {
-        schemaId = UNINITIALIZED_SCHEMA_ID;
+    public MaterializedIndexMeta() {
     }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
@@ -355,7 +351,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        if (schemaId == UNINITIALIZED_SCHEMA_ID) {
+        if (schemaId <= 0) {
             schemaId = indexId;
         }
         // analyze define stmt
