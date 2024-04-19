@@ -14,28 +14,26 @@
 
 #include "storage/rowset/cast_column_iterator.h"
 
+#include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
-CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_iter, LogicalType source_type,
-                                       LogicalType target_type, bool nullable_source)
+CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_iter, const TypeDescriptor& source_type,
+                                       const TypeDescriptor& target_type, bool nullable_source)
         : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
           _obj_pool(new ObjectPool()),
           _cast_expr(nullptr),
           _source_chunk() {
     auto slot_id = SlotId{0};
-    auto column = ChunkHelper::column_from_field_type(source_type, nullable_source);
-    auto slot_desc = SlotDescriptor(slot_id, "", TypeDescriptor::from_logical_type(source_type));
+    auto column = ColumnHelper::create_column(source_type, nullable_source);
+    auto slot_desc = SlotDescriptor(slot_id, "", source_type);
     auto column_ref = _obj_pool->add(new ColumnRef(&slot_desc));
     CHECK(column != nullptr) << "source type=" << source_type;
     _source_chunk.append_column(column, slot_id);
-    _cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor::from_logical_type(source_type),
-                                                      TypeDescriptor::from_logical_type(target_type), column_ref,
-                                                      _obj_pool.get(), false);
+    _cast_expr = VectorizedCastExprFactory::from_type(source_type, target_type, column_ref, _obj_pool.get(), false);
     CHECK(_cast_expr != nullptr) << "Fail to create cast expr for source type=" << source_type
                                  << " target type=" << target_type;
 }
@@ -48,7 +46,6 @@ void CastColumnIterator::do_cast(Column* target) {
     if ((target->is_nullable() == cast_result->is_nullable()) && (target->size() == 0)) {
         target->swap_column(*cast_result);
     } else if (!target->is_nullable() && cast_result->is_nullable()) {
-        DCHECK(!cast_result->has_null());
         auto sz = cast_result->size();
         target->append(*(down_cast<NullableColumn*>(cast_result.get())->data_column()), 0, sz);
     } else {
