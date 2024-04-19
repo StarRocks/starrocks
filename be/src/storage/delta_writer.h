@@ -152,6 +152,20 @@ public:
 
     const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
 
+<<<<<<< HEAD
+=======
+    bool is_immutable() const { return _is_immutable.load(std::memory_order_relaxed); }
+
+    int64_t last_write_ts() const { return _last_write_ts; }
+
+    int64_t write_buffer_size() const { return _write_buffer_size; }
+
+    static bool is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
+                                                         const std::vector<int32_t>& referenced_column_ids,
+                                                         const std::vector<ColumnId>& sort_key_idxes,
+                                                         size_t num_key_columns);
+
+>>>>>>> 7bc6c592f1 ([BugFix] fix partial update with sort key conflict check  (#44377))
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
@@ -193,7 +207,16 @@ private:
     bool _with_rollback_log;
     // initial value is max value
     size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
+<<<<<<< HEAD
     bool _partial_schema_with_sort_key = false;
+=======
+    bool _partial_schema_with_sort_key_conflict = false;
+    std::atomic<bool> _is_immutable = false;
+
+    int64_t _last_write_ts = 0;
+    // for concurrency issue, we can't get write_buffer_size from memtable directly
+    int64_t _write_buffer_size = 0;
+>>>>>>> 7bc6c592f1 ([BugFix] fix partial update with sort key conflict check  (#44377))
 };
 
 } // namespace starrocks
