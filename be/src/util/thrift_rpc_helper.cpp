@@ -59,9 +59,8 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
 }
 
-template <>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
-                                 ClientConnection<FrontendServiceClient>& client,
+template <typename T>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
     try {
@@ -77,19 +76,6 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendSer
         ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
     }
 
-    return Status::ThriftRpcError(ss.str());
-}
-
-template <typename T>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
-                                 const TNetworkAddress& address) noexcept {
-    std::stringstream ss;
-    try {
-        callback(client);
-        return Status::OK();
-    } catch (apache::thrift::TException& e) {
-        ss << "RPC failure, address=" << address << ", reason=" << e.what();
-    }
     return Status::ThriftRpcError(ss.str());
 }
 
