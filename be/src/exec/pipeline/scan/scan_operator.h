@@ -79,7 +79,6 @@ public:
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
-    virtual void begin_pickup_morsels() {}
     bool output_chunk_by_bucket() const { return _output_chunk_by_bucket; }
     void begin_pull_chunk(const ChunkPtr& res) {
         _op_pull_chunks += 1;
