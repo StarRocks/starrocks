@@ -226,7 +226,8 @@ Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPt
         return _write_datetime(orc_column, column);
     }
     default: {
-        CHECK(false) << "unreachable";
+        return Status::NotSupported(
+                fmt::format("ORC writer does not support to write {} type yet", type_desc.debug_string()));
     }
     }
 }
