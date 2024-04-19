@@ -300,9 +300,6 @@ public class EditLog {
                 }
                 case OperationType.OP_DROP_PARTITIONS: {
                     DropPartitionsInfo info = (DropPartitionsInfo) journal.getData();
-                    LOG.info("Begin to unprotect drop partitions. db = " + info.getDbId()
-                            + " table = " + info.getTableId()
-                            + " partitionNames = " + info.getPartitionNames());
                     globalStateMgr.getLocalMetastore().replayDropPartitions(info);
                     break;
                 }

@@ -1564,9 +1564,9 @@ public class LocalMetastore implements ConnectorMetadata {
         CatalogUtils.checkTableExist(db, table.getName());
         Locker locker = new Locker();
         OlapTable olapTable = (OlapTable) table;
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         Map<String, String> tableProperties = olapTable.getTableProperty().getProperties();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
@@ -1676,9 +1676,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     clause.isForceDrop());
         } else {
             DropPartitionsInfo info =
-                    new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), partitionNames);
+                    new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), existPartitions);
             editLog.logDropPartitions(info);
-            LOG.info("succeed in dropping partitions[{}], is temp : {}, is force : {}", partitionNames, isTempPartition,
+            LOG.info("succeed in dropping partitions[{}], is temp : {}, is force : {}", existPartitions, isTempPartition,
                     clause.isForceDrop());
         }
 
@@ -1745,6 +1745,9 @@ public class LocalMetastore implements ConnectorMetadata {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
+            LOG.info("Begin to unprotect drop partitions. db = " + info.getDbId()
+                    + " table = " + info.getTableId()
+                    + " partitionNames = " + info.getPartitionNames());
             List<String> partitionNames = info.getPartitionNames();
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             boolean isTempPartition = info.isTempPartition();
@@ -1868,7 +1871,7 @@ public class LocalMetastore implements ConnectorMetadata {
         buildPartitions(db, copiedTable, subPartitions, warehouseId);
 
         // check again
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("db " + db.getFullName()
                     + "(" + db.getId() + ") has been dropped");
         }
@@ -3129,12 +3132,11 @@ public class LocalMetastore implements ConnectorMetadata {
             // use try lock to avoid blocking a long time.
             // if block too long, backend report rpc will timeout.
             Locker locker = new Locker();
-            if (!locker.tryLockDatabase(db, LockType.WRITE, Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                LOG.warn("try get db {}-{} write lock but failed when checking backend storage medium",
-                        db.getFullName(), dbId);
+            if (!locker.tryLockDatabase(db, LockType.WRITE, Database.TRY_LOCK_TIMEOUT_MS)) {
+                LOG.warn("try get db {} writelock but failed when hecking backend storage medium", dbId);
                 continue;
             }
-            Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
+            Preconditions.checkState(locker.isWriteLockHeldByCurrentThread(db));
             try {
                 for (Long tableId : tableIdToPartitionIds.keySet()) {
                     Table table = db.getTable(tableId);
@@ -3647,16 +3649,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties().put(
                         PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, str);
                 properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
-            }
-
-            // enable_query_rewrite
-            if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
-                String str = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
-                TableProperty.MVTransparentRewriteMode value = TableProperty.analyzeMVTransparentRewrite(str);
-                materializedView.getTableProperty().setMvTransparentRewriteMode(value);
-                materializedView.getTableProperty().getProperties().put(
-                        PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, str);
-                properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             }
 
             // lake storage info
@@ -4390,7 +4382,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         if (colocateTableIndex.isColocateTable(table.getId())) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
@@ -4440,7 +4432,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void modifyTableDefaultReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         if (colocateTableIndex.isColocateTable(table.getId())) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
@@ -4483,7 +4475,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void modifyTableEnablePersistentIndexMeta(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);
@@ -4506,7 +4498,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
                 db.getId(),
                 table.getId(),
@@ -4523,7 +4515,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);
@@ -4547,7 +4539,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void modifyTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         Table table = db.getTable(tableName);
         if (table == null) {
             throw new DdlException(String.format("table:%s does not exist", tableName));
@@ -4570,7 +4562,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // The caller need to hold the db write lock
     public void modifyTableWriteQuorum(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);
@@ -4588,7 +4580,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // The caller need to hold the db write lock
     public void modifyTableReplicatedStorage(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);
@@ -4606,7 +4598,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // The caller need to hold the db write lock
     public void modifyTableAutomaticBucketSize(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);
@@ -4623,7 +4615,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void modifyTablePrimaryIndexCacheExpireSec(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);

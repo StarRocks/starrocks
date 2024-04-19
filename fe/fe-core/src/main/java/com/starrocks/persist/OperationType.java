@@ -88,9 +88,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_PARTITION = 13;
 
-    @IgnorableOnReplayFailed
-    public static final short OP_DROP_PARTITIONS = 20;
-
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PARTITION = 14;
@@ -624,6 +621,8 @@ public class OperationType {
     public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
     @IgnorableOnReplayFailed
     public static final short OP_RECOVER_PARTITION_VERSION = 10245;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_PARTITIONS = 10246;
 
     // new privilege, all ends with V2
 

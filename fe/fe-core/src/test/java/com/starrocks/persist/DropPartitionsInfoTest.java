@@ -53,7 +53,8 @@ public class DropPartitionsInfoTest {
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
         List<String> partitionNames = new ArrayList<>();
-        partitionNames.add("test_partition");
+        partitionNames.add("test_partition1");
+        partitionNames.add("test_partition2");
         DropPartitionsInfo info1 = new DropPartitionsInfo(1L, 2L, false, true, partitionNames);
         info1.write(dos);
 
@@ -76,7 +77,8 @@ public class DropPartitionsInfoTest {
         Assert.assertNotEquals(info1, new DropPartitionsInfo(-1L, 2L, false, true, partitionNames));
         Assert.assertNotEquals(info1, new DropPartitionsInfo(1L, -2L, false, true, partitionNames));
         List<String> partitionNames1 = new ArrayList<>();
-        partitionNames1.add("test_partition1");
+        partitionNames1.add("test_partition2");
+        partitionNames1.add("test_partition3");
         Assert.assertNotEquals(info1, new DropPartitionsInfo(1L, 2L, false, true, partitionNames1));
         Assert.assertNotEquals(info1, new DropPartitionsInfo(1L, 2L, true, true, partitionNames));
         Assert.assertNotEquals(info1, new DropPartitionsInfo(1L, 2L, false, false, partitionNames));
