@@ -45,6 +45,7 @@
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
+#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/inverted/index_descriptor.hpp"
 #include "storage/inverted/inverted_plugin_factory.h"
@@ -576,8 +577,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         std::vector<std::unique_ptr<ColumnIterator>> flat_iters;
         // short name path, e.g. 'a'
         std::vector<std::string> flat_paths;
-        // full json path, e.g. '$.a'
-        // std::vector<std::string> full_paths;
+        std::vector<LogicalType> target_types;
+        std::vector<LogicalType> source_types;
         {
             for (auto& p : path->children()) {
                 if (UNLIKELY(!p->children().empty())) {
@@ -586,7 +587,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
                                                    p->absolute_path());
                 }
                 flat_paths.emplace_back(p->path());
-                // full_paths.emplace_back("$." + p->path());
+                target_types.emplace_back(p->value_type().type);
             }
         }
 
@@ -597,6 +598,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
                 if (rd->name() == p) {
                     ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
                     flat_iters.emplace_back(std::move(iter));
+                    source_types.emplace_back(rd->column_type());
                     break;
                 }
             }
@@ -604,14 +606,15 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         if (flat_iters.size() != flat_paths.size()) {
             // we must dynamic flat json, because we don't know other segment wasn't the paths
-            return create_json_dynamic_flat_iterator(std::move(json_iter), flat_paths, path);
+            return create_json_dynamic_flat_iterator(std::move(json_iter), flat_paths, target_types, path);
         }
 
         std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
             ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[0]->new_iterator());
         }
-        return create_json_flat_iterator(this, std::move(null_iterator), std::move(flat_iters), flat_paths, path);
+        return create_json_flat_iterator(this, std::move(null_iterator), std::move(flat_iters), flat_paths,
+                                         target_types, source_types, path);
     } else if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {

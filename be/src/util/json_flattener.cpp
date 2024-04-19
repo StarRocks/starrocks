@@ -334,6 +334,8 @@ void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* r
             continue;
         }
 
+        // bitset, all 1,
+        // to mark which column exists in json, to fill null if doesn't found in json
         uint32_t flat_hit = (1 << _flat_paths.size()) - 1;
         vpack::ObjectIterator iter(vslice);
         for (const auto& it : iter) {
@@ -344,6 +346,7 @@ void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* r
                 uint8_t type = _flat_types[index];
                 auto func = JSON_BITS_FUNC.at(type);
                 func(&it.value, flat_jsons[index]);
+                // set index to 0
                 flat_hit ^= (1 << index);
             }
 

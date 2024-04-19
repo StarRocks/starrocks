@@ -422,6 +422,8 @@ Status JsonFunctions::native_json_path_prepare(FunctionContext* context, Functio
     }
 
     auto* state = new NativeJsonState();
+    state->init_flat = false;
+    context->set_function_state(scope, state);
     if (context->is_notnull_constant_column(1)) {
         auto path_column = context->get_constant_column(1);
         Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
@@ -430,9 +432,6 @@ Status JsonFunctions::native_json_path_prepare(FunctionContext* context, Functio
         state->json_path.reset(std::move(json_path.value()));
         VLOG(10) << "prepare json path: " << path_value;
     }
-
-    state->init_flat = false;
-    context->set_function_state(scope, state);
     return Status::OK();
 }
 
@@ -466,7 +465,7 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
     }
 
     auto* state = get_native_json_state(context);
-    if (state == nullptr) {
+    if (UNLIKELY(state == nullptr)) {
         // ut test may be hit here, the json path is invaild
         return Status::JsonFormatError("flat json required prepare status");
     }
@@ -508,15 +507,8 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
 
     JsonPath required_path;
     JsonPath* required_path_ptr = &required_path;
+    ASSIGN_OR_RETURN(required_path_ptr, get_prepared_or_parse(context, path, required_path_ptr));
 
-    auto ret = get_prepared_or_parse(context, path, required_path_ptr);
-
-    if (UNLIKELY(!ret.ok())) {
-        // invaild path, return null
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
-
-    required_path_ptr = ret.value();
     JsonColumn* json_column;
     if (columns[0]->is_nullable()) {
         auto* nullable = down_cast<NullableColumn*>(columns[0].get());
@@ -651,8 +643,12 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_exists(FunctionContext* context, c
 
         JsonPath stored_path;
         for (int row = 0; row < rows; row++) {
-            if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+            if (columns[0]->is_null(row)) {
                 result.append_null();
+                continue;
+            }
+            if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+                result.append(0);
                 continue;
             }
             JsonValue* json_value = json_viewer.value(row);
