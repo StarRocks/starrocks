@@ -53,7 +53,7 @@ public class InsertLoadJobTest {
     public void testGetTableNames(@Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Database database,
                                   @Injectable Table table) throws MetaNotFoundException {
-        InsertLoadJob insertLoadJob = new InsertLoadJob("label", 1L, 1L, 1000, "", "");
+        InsertLoadJob insertLoadJob = new InsertLoadJob("label", 1L, 1L, 1000, "", "", null);
         String tableName = "table1";
         new Expectations() {
             {

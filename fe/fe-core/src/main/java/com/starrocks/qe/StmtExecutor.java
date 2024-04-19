@@ -1743,7 +1743,8 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         context.getCurrentWarehouse(),
-                        context.isStatisticsJob());
+                        context.isStatisticsJob(),
+                        coord);
             }
 
             coord.setJobId(jobId);
