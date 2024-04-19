@@ -82,7 +82,7 @@ public interface IcebergCatalog {
         }
     }
 
-    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
+    default List<String> listPartitionNames(String dbName, String tableName,  long snapshotId, ExecutorService executorService) {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
         Set<String> partitionNames = Sets.newHashSet();
 

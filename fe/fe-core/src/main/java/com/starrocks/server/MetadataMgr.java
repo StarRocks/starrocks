@@ -536,11 +536,15 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+        return listPartitionNames(catalogName, dbName, tableName, -1);
+    }
+
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName, long snapshotId) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listPartitionNames(dbName, tableName).forEach(partitionNames::add);
+                connectorMetadata.get().listPartitionNames(dbName, tableName, snapshotId).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
                 throw e;

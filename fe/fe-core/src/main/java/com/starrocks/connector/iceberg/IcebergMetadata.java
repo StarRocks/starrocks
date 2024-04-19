@@ -301,7 +301,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName) {
+    public List<String> listPartitionNames(String dbName, String tblName, long snapshotId) {
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 
         if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
@@ -309,7 +309,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        return icebergCatalog.listPartitionNames(dbName, tblName, jobPlanningExecutor);
+        return icebergCatalog.listPartitionNames(dbName, tblName, snapshotId, jobPlanningExecutor);
     }
 
     @Override
