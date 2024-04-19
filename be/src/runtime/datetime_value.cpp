@@ -145,27 +145,29 @@ bool JodaFormat::prepare(std::string_view format) {
             // NOT SUPPORTED
             return false;
         case joda::JodaFormatChar::WEEK_OF_WEEKYEAR: {
-            _token_parsers.emplace_back([&]() {
+            _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 int64_t int_value = 0;
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                week_num = int_value;
-                if (week_num > 53 || (strict_week_number && week_num == 0)) {
+                *(state->week_num) = int_value;
+                if (*(state->week_num) > 53 || (strict_week_number && *(state->week_num) == 0)) {
                     return false;
                 }
-                val = tmp;
-                date_part_used = true;
+                *(state->valptr) = tmp;
+                *(state->date_part_used) = true;
                 return true;
             });
             break;
         }
         case joda::JodaFormatChar::DAY_OF_WEEK_NUM: {
-            _token_parsers.emplace_back([&]() {
-                int64_t int_value = 0;
+            _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(1, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
                 if (int_value >= 7) {
@@ -174,35 +176,34 @@ bool JodaFormat::prepare(std::string_view format) {
                 if (int_value == 0) {
                     int_value = 7;
                 }
-                weekday = int_value;
-                val = tmp;
-                date_part_used = true;
+                *(state->weekday) = int_value;
+                *(state->valptr) = tmp;
+                *(state->date_part_used) = true;
                 return true;
             });
             break;
         }
         case joda::JodaFormatChar::DAY_OF_WEEK: {
             if (repeat_count <= 3) {
-                _token_parsers.emplace_back([&]() {
-                    int64_t int_value = 0;
-                    int_value = check_word(s_ab_day_name, val, val_end, &val);
+                _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                    int64_t int_value = check_word(s_ab_day_name, *(state->valptr), val_end, state->valptr);
                     if (int_value < 0) {
                         return false;
                     }
                     int_value++;
-                    weekday = int_value;
-                    date_part_used = true;
+                    *(state->weekday) = int_value;
+                    *(state->date_part_used) = true;
                     return true;
                 });
             } else {
-                _token_parsers.emplace_back([&]() {
-                    int64_t int_value = check_word(s_day_name, val, val_end, &val);
+                _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                    int64_t int_value = check_word(s_day_name, *(state->valptr), val_end, state->valptr);
                     if (int_value < 0) {
                         return false;
                     }
                     int_value++;
-                    weekday = int_value;
-                    date_part_used = true;
+                    *(state->weekday) = int_value;
+                    *(state->date_part_used) = true;
                     return true;
                 });
             }
@@ -211,33 +212,35 @@ bool JodaFormat::prepare(std::string_view format) {
         case joda::JodaFormatChar::WEEK_YEAR:
         case joda::JodaFormatChar::YEAR_OF_ERA:
         case joda::JodaFormatChar::YEAR: {
-            _token_parsers.emplace_back([&]() {
+            _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
                 // year
-                int64_t int_value = 0;
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(4, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                if (tmp - val <= 2) {
+                if (tmp - *(state->valptr) <= 2) {
                     int_value += int_value >= 70 ? 1900 : 2000;
                 }
-                _year = int_value;
-                val = tmp;
-                date_part_used = true;
+                state->_year = int_value;
+                *(state->valptr) = tmp;
+                *(state->date_part_used) = true;
                 return true;
             });
             break;
         }
         case joda::JodaFormatChar::DAY_OF_YEAR: {
-            _token_parsers.emplace_back([&, repeat_count]() {
-                int64_t int_value = 0;
+            _token_parsers.emplace_back([&, repeat_count](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                yearday = int_value;
-                val = tmp;
-                date_part_used = true;
+                *(state->yearday) = int_value;
+                *(state->valptr) = tmp;
+                *(state->date_part_used) = true;
                 return true;
             });
             break;
@@ -245,36 +248,36 @@ bool JodaFormat::prepare(std::string_view format) {
         case joda::JodaFormatChar::MONTH_OF_YEAR:
             // month of year
             if (repeat_count == 2) {
-                _token_parsers.emplace_back([&]() {
-                    int64_t int_value = 0;
+                _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                    const char* val = *(state->valptr);
                     const char* tmp = val + std::min<int>(2, val_end - val);
-                    if (!str_to_int64(val, &tmp, &int_value)) {
+                    int64_t int_value = 0;
+                    if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                         return false;
                     }
-                    _month = int_value;
-                    val = tmp;
-                    date_part_used = true;
+                    state->_month = int_value;
+                    *(state->valptr) = tmp;
+                    *(state->date_part_used) = true;
                     return true;
                 });
             } else if (repeat_count == 3) {
-                _token_parsers.emplace_back([&]() {
+                _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
                     int64_t int_value = 0;
-                    int_value = check_word(s_ab_month_name, val, val_end, &val);
+                    int_value = check_word(s_ab_month_name, *(state->valptr), val_end, state->valptr);
                     if (int_value < 0) {
                         return false;
                     }
-                    _month = int_value;
+                    state->_month = int_value;
                     return true;
                 });
 
             } else if (repeat_count == 4) {
-                _token_parsers.emplace_back([&]() {
-                    int64_t int_value = 0;
-                    int_value = check_word(s_month_name, val, val_end, &val);
+                _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                    int64_t int_value = check_word(s_month_name, *(state->valptr), val_end, state->valptr);
                     if (int_value < 0) {
                         return false;
                     }
-                    _month = int_value;
+                    state->_month = int_value;
                     return true;
                 });
             } else {
@@ -282,40 +285,43 @@ bool JodaFormat::prepare(std::string_view format) {
             }
             break;
         case joda::JodaFormatChar::DAY_OF_MONTH: {
-            _token_parsers.emplace_back([&]() {
-                int64_t int_value = 0;
+            _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(2, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                _day = int_value;
-                val = tmp;
-                date_part_used = true;
+                state->_day = int_value;
+                *(state->valptr) = tmp;
+                *(state->date_part_used) = true;
                 return true;
             });
             break;
         }
         case joda::JodaFormatChar::HALFDAY_OF_DAY: {
-            _token_parsers.emplace_back([&]() {
+            _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 if ((val_end - val) < 2 || toupper(*(val + 1)) != 'M') {
                     return false;
                 }
                 if (toupper(*val) == 'P') {
                     // PM
-                    halfday = 12;
+                    *(state->halfday) = 12;
                 }
-                time_part_used = true;
-                val += 2;
+                *(state->time_part_used) = true;
+                *(state->valptr) += 2;
                 return true;
             });
             break;
         }
         case joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY:
         case joda::JodaFormatChar::CLOCKHOUR_OF_DAY:
-            _token_parsers.emplace_back([&, ch, repeat_count]() {
-                int64_t int_value = 0;
+            _token_parsers.emplace_back([&, ch, repeat_count](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
                 if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 24)) {
@@ -324,18 +330,19 @@ bool JodaFormat::prepare(std::string_view format) {
                 if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 12)) {
                     return false;
                 }
-                _hour = int_value;
-                val = tmp;
-                time_part_used = true;
+                state->_hour = int_value;
+                *(state->time_part_used) = true;
+                *(state->valptr) = tmp;
                 return true;
             });
             break;
         case joda::JodaFormatChar::HOUR_OF_HALFDAY:
         case joda::JodaFormatChar::HOUR_OF_DAY: {
-            _token_parsers.emplace_back([&, ch, repeat_count]() {
-                int64_t int_value = 0;
+            _token_parsers.emplace_back([&, ch, repeat_count](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
                 if (UNLIKELY(ch == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 23)) {
@@ -345,77 +352,80 @@ bool JodaFormat::prepare(std::string_view format) {
                     return false;
                 }
 
-                _hour = int_value;
-                val = tmp;
-                time_part_used = true;
+                state->_hour = int_value;
+                *(state->valptr) = tmp;
+                *(state->time_part_used) = true;
                 return true;
             });
             break;
         }
         case joda::JodaFormatChar::MINUTE_OF_HOUR:
-            _token_parsers.emplace_back([&, repeat_count]() {
-                int64_t int_value = 0;
+            _token_parsers.emplace_back([&, repeat_count](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                _minute = int_value;
-                val = tmp;
-                time_part_used = true;
+                state->_minute = int_value;
+                *(state->valptr) = tmp;
+                *(state->time_part_used) = true;
                 return true;
             });
             break;
         case joda::JodaFormatChar::SECOND_OF_MINUTE:
-            _token_parsers.emplace_back([&]() {
+            _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
                 int64_t int_value = 0;
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(2, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                _second = int_value;
-                val = tmp;
-                time_part_used = true;
+                state->_second = int_value;
+                *(state->valptr) = tmp;
+                *(state->time_part_used) = true;
                 return true;
             });
             break;
         case joda::JodaFormatChar::FRACTION_OF_SECOND:
-            _token_parsers.emplace_back([&, repeat_count]() {
-                int64_t int_value = 0;
+            _token_parsers.emplace_back([&, repeat_count](JodaRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                int64_t int_value = 0;
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
                 // The exact number of fractional digits. If more millisecond digits are available then specified the number
                 // will be truncated, if there are fewer than specified then the number will be zero-padded to the right.
                 // When parsing, only the exact number of digits are accepted.
-                for (int actual_count = tmp - val; actual_count < 6; actual_count++) {
+                for (int actual_count = tmp - *(state->valptr); actual_count < 6; actual_count++) {
                     int_value *= 10;
                 }
-                _microsecond = int_value;
-                val = tmp;
-                time_part_used = true;
-                frac_part_used = true;
+                state->_microsecond = int_value;
+                *(state->valptr) = tmp;
+                *(state->time_part_used) = true;
+                *(state->frac_part_used) = true;
                 return true;
             });
             break;
         case joda::JodaFormatChar::TIME_ZONE:
         case joda::JodaFormatChar::TIME_ZONE_OFFSET: {
-            _token_parsers.emplace_back([&]() {
-                std::string_view tz(val, val_end);
-                if (!TimezoneUtils::find_cctz_time_zone(tz, ctz)) {
+            _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+                std::string_view tz(*(state->valptr), val_end);
+                if (!TimezoneUtils::find_cctz_time_zone(tz, *(state->ctz))) {
                     return false;
                 }
-                has_timezone = true;
+                *(state->has_timezone) = true;
                 return true;
             });
             break;
         }
         default: {
-            _token_parsers.emplace_back([&, ch]() {
-                if (ch != *val) {
+            _token_parsers.emplace_back([&, ch](JodaRuntimeState* state, const char* val_end) {
+                if (ch != **(state->valptr)) {
                     return false;
                 }
-                val++;
+                *(state->valptr) += 1;
                 return true;
             });
             break;
@@ -425,71 +435,74 @@ bool JodaFormat::prepare(std::string_view format) {
         ptr += repeat_count;
     }
 
-    _token_parsers.emplace_back([&]() {
-        if (halfday > 0) {
-            _hour = (_hour % 12) + halfday;
+    _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
+        if (*(state->halfday) > 0) {
+            state->_hour = (state->_hour % 12) + *(state->halfday);
         }
 
         // Year day
-        if (yearday > 0) {
-            uint64_t days = calc_daynr(_year, 1, 1) + yearday - 1;
-            if (!get_date_from_daynr(days)) {
+        if (*(state->yearday) > 0) {
+            uint64_t days = DateTimeValue::calc_daynr(state->_year, 1, 1) + *(state->yearday) - 1;
+            if (!state->get_date_from_daynr(days)) {
                 return false;
             }
         }
         // weekday
-        if (week_num >= 0 && weekday > 0) {
+        if (*(state->week_num) >= 0 && *(state->weekday) > 0) {
             // Check
             if ((strict_week_number && (strict_week_number_year < 0 || strict_week_number_year_type != sunday_first)) ||
                 (!strict_week_number && strict_week_number_year >= 0)) {
                 return false;
             }
-            uint64_t days = calc_daynr(strict_week_number ? strict_week_number_year : _year, 1, 1);
+            uint64_t days =
+                    DateTimeValue::calc_daynr(strict_week_number ? strict_week_number_year : state->_year, 1, 1);
 
-            uint8_t weekday_b = calc_weekday(days, sunday_first);
+            uint8_t weekday_b = DateTimeValue::calc_weekday(days, sunday_first);
 
             if (sunday_first) {
-                days += ((weekday_b == 0) ? 0 : 7) - weekday_b + (week_num - 1) * 7 + weekday % 7;
+                days += ((weekday_b == 0) ? 0 : 7) - weekday_b + (*(state->week_num) - 1) * 7 + *(state->weekday) % 7;
             } else {
-                days += ((weekday_b <= 3) ? 0 : 7) - weekday_b + (week_num - 1) * 7 + weekday - 1;
+                days += ((weekday_b <= 3) ? 0 : 7) - weekday_b + (*(state->week_num) - 1) * 7 + *(state->weekday) - 1;
             }
-            if (!get_date_from_daynr(days)) {
+            if (!state->get_date_from_daynr(days)) {
                 return false;
             }
         }
 
         // Compute timestamp type
-        if (frac_part_used) {
-            if (date_part_used) {
-                _type = TIME_DATETIME;
+        if (*(state->frac_part_used)) {
+            if (*(state->date_part_used)) {
+                state->_type = TIME_DATETIME;
             } else {
-                _type = TIME_TIME;
+                state->_type = TIME_TIME;
             }
         } else {
-            if (date_part_used) {
-                if (time_part_used) {
-                    _type = TIME_DATETIME;
+            if (*(state->date_part_used)) {
+                if (*(state->time_part_used)) {
+                    state->_type = TIME_DATETIME;
                 } else {
-                    _type = TIME_DATE;
+                    state->_type = TIME_DATE;
                 }
             } else {
-                _type = TIME_TIME;
+                state->_type = TIME_TIME;
             }
         }
 
         // Timezone
-        if (has_timezone) {
-            const auto tp = cctz::convert(cctz::civil_second(_year, _month, _day, _hour, _minute, _second), ctz);
+        if (*(state->has_timezone)) {
+            const auto tp = cctz::convert(cctz::civil_second(state->_year, state->_month, state->_day, state->_hour,
+                                                             state->_minute, state->_second),
+                                          *(state->ctz));
             int64_t timestamp = tp.time_since_epoch().count();
-            if (!from_unixtime(timestamp, TimezoneUtils::local_time_zone())) {
+            if (!state->from_unixtime(timestamp, TimezoneUtils::local_time_zone())) {
                 return false;
             }
         }
 
-        if (check_range() || check_date()) {
+        if (state->check_range() || state->check_date()) {
             return false;
         }
-        _neg = false;
+        state->_neg = false;
 
         return true;
     });
@@ -497,26 +510,41 @@ bool JodaFormat::prepare(std::string_view format) {
 }
 
 bool JodaFormat::parse(std::string_view str, DateTimeValue* output) {
-    val = str.data();
-    val_end = str.data() + str.length();
-    date_part_used = false;
-    time_part_used = false;
-    frac_part_used = false;
-    _year = 2000;
-    _month = 1;
-    _day = 1;
-    halfday = 0;
-    yearday = -1;
-    weekday = -1;
-    week_num = -1;
-    has_timezone = false;
+    const char* val = str.data();
+    const char* val_end = str.data() + str.length();
 
+    bool date_part_used = false;
+    bool time_part_used = false;
+    bool frac_part_used = false;
+
+    int halfday = 0;
+    int weekday = -1;
+    int yearday = -1;
+    int week_num = -1;
+
+    cctz::time_zone ctz; // default UTC
+    bool has_timezone = false;
+
+    JodaRuntimeState state{.valptr = &val,
+                           .date_part_used = &date_part_used,
+                           .time_part_used = &time_part_used,
+                           .frac_part_used = &frac_part_used,
+                           .halfday = &halfday,
+                           .weekday = &weekday,
+                           .yearday = &yearday,
+                           .week_num = &week_num,
+                           .ctz = &ctz,
+                           .has_timezone = &has_timezone};
+    state._year = 2000;
+    state._month = 1;
+    state._day = 1;
     for (auto& p : _token_parsers) {
-        if (!p()) {
+        if (!p(&state, val_end)) {
             return false;
         }
     }
-    *output = DateTimeValue(type(), year(), month(), day(), hour(), minute(), second(), microsecond());
+    *output = DateTimeValue(state.type(), state.year(), state.month(), state.day(), state.hour(), state.minute(),
+                            state.second(), state.microsecond());
     return true;
 }
 
@@ -2438,11 +2466,11 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::T10: {
             //  - / , . ; :	Punctuation characters are ignored
             auto ignored_char = *ptr;
-            _token_parsers.emplace_back([&, ignored_char]() {
-                if (*val != ignored_char) {
+            _token_parsers.emplace_back([&, ignored_char](TeradataRuntimeState* state, const char* val_end) {
+                if (**(state->valptr) != ignored_char) {
                     return false;
                 }
-                val++;
+                *(state->valptr) += 1;
                 return true;
             });
             break;
@@ -2452,14 +2480,15 @@ bool TeradataFormat::prepare(std::string_view format) {
             if (repeat_count != 2) {
                 return false;
             }
-            _token_parsers.emplace_back([&]() {
+            _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
+                const char* val = *(state->valptr);
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                _day = int_value;
-                val = tmp;
+                state->_day = int_value;
+                *(state->valptr) = tmp;
                 return true;
             });
             break;
@@ -2478,14 +2507,15 @@ bool TeradataFormat::prepare(std::string_view format) {
                 }
                 ++next_ch_ptr;
             }
-            _token_parsers.emplace_back([&]() {
+            _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
                 int64_t int_value = 0;
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(2, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                _hour = int_value;
-                val = tmp;
+                state->_hour = int_value;
+                *(state->valptr) = tmp;
                 return true;
             });
             break;
@@ -2500,15 +2530,15 @@ bool TeradataFormat::prepare(std::string_view format) {
             }
             next_ch_ptr++;
             ptr++;
-            _token_parsers.emplace_back([&]() {
-                if (*val != 'a') {
+            _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
+                if (**(state->valptr) != 'a') {
                     return false;
                 }
-                val++;
-                if (*val != 'm') {
+                *(state->valptr) += 1;
+                if (**(state->valptr) != 'm') {
                     return false;
                 }
-                val++;
+                *(state->valptr) += 1;
                 return true;
             });
             break;
@@ -2523,16 +2553,16 @@ bool TeradataFormat::prepare(std::string_view format) {
             }
             next_ch_ptr++;
             ptr++;
-            _token_parsers.emplace_back([&]() {
-                if (*val != 'p') {
+            _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
+                if (**(state->valptr) != 'p') {
                     return false;
                 }
-                val++;
-                if (*val != 'm') {
+                *(state->valptr) += 1;
+                if (**(state->valptr) != 'm') {
                     return false;
                 }
-                val++;
-                _hour += 12;
+                *(state->valptr) += 1;
+                state->_hour += 12;
                 return true;
             });
             break;
@@ -2540,14 +2570,15 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::M: {
             if (repeat_count == 2) {
                 // mm
-                _token_parsers.emplace_back([&]() {
+                _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
+                    const char* val = *(state->valptr);
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
-                    if (!str_to_int64(val, &tmp, &int_value)) {
+                    if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                         return false;
                     }
-                    _month = int_value;
-                    val = tmp;
+                    state->_month = int_value;
+                    *(state->valptr) = tmp;
                     return true;
                 });
             } else if (repeat_count == 1) {
@@ -2558,15 +2589,15 @@ bool TeradataFormat::prepare(std::string_view format) {
                 ptr++;
 
                 // mi
-                _token_parsers.emplace_back([&]() {
+                _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
+                    const char* val = *(state->valptr);
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
-                    ;
-                    if (!str_to_int64(val, &tmp, &int_value)) {
+                    if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                         return false;
                     }
-                    _minute = int_value;
-                    val = tmp;
+                    state->_minute = int_value;
+                    *(state->valptr) = tmp;
                     return true;
                 });
             } else {
@@ -2579,14 +2610,15 @@ bool TeradataFormat::prepare(std::string_view format) {
                 return false;
             }
             // ss
-            _token_parsers.emplace_back([&]() {
+            _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
                 int64_t int_value = 0;
+                const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(2, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
+                if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                _second = int_value;
-                val = tmp;
+                state->_second = int_value;
+                *(state->valptr) = tmp;
                 return true;
             });
             break;
@@ -2594,29 +2626,29 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::Y: {
             // yy
             if (repeat_count == 2) {
-                _token_parsers.emplace_back([&]() {
+                _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
+                    const char* val = *(state->valptr);
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
-                    ;
-                    if (!str_to_int64(val, &tmp, &int_value)) {
+                    if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                         return false;
                     }
                     int_value += int_value >= 70 ? 1900 : 2000;
-                    _year = int_value;
-                    val = tmp;
+                    state->_year = int_value;
+                    *(state->valptr) = tmp;
                     return true;
                 });
             } else if (repeat_count == 4) {
                 // yyyy
-                _token_parsers.emplace_back([&]() {
+                _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
+                    const char* val = *(state->valptr);
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(4, val_end - val);
-                    ;
-                    if (!str_to_int64(val, &tmp, &int_value)) {
+                    if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                         return false;
                     }
-                    _year = int_value;
-                    val = tmp;
+                    state->_year = int_value;
+                    *(state->valptr) = tmp;
                     return true;
                 });
             } else {
@@ -2635,15 +2667,19 @@ bool TeradataFormat::prepare(std::string_view format) {
 }
 
 bool TeradataFormat::parse(std::string_view str, DateTimeValue* output) {
-    val = str.data();
-    val_end = str.data() + str.length();
-
+    const char* val = str.data();
+    const char* val_end = str.data() + str.length();
+    TeradataRuntimeState state{.valptr = &val};
+    state._year = 2000;
+    state._month = 1;
+    state._day = 1;
     for (auto& p : _token_parsers) {
-        if (!p()) {
+        if (!p(&state, val_end)) {
             return false;
         }
     }
-    *output = DateTimeValue(type(), year(), month(), day(), hour(), minute(), second(), microsecond());
+    *output = DateTimeValue(state.type(), state.year(), state.month(), state.day(), state.hour(), state.minute(),
+                            state.second(), state.microsecond());
     return true;
 }
 
