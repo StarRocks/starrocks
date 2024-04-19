@@ -513,7 +513,8 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     TLoadJobType.INSERT_QUERY,
                     0L,
                     wh,
-                    isStatisticsJob);
+                    isStatisticsJob,
+                    null);
             if (isFinished) {
                 loadMgr.getLoadJob(jobId).updateState(JobState.FINISHED);
             }
