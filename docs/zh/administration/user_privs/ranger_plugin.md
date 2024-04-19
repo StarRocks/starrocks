@@ -90,9 +90,15 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    "implClass": "",
    ```
 
+   如果您开启了 Ranger 的自动补全功能，即在上一步骤中安装了 ranger-starrocks-plugin，您需要确保 .json 文件中的 `implClass` 为 `org.apache.ranger.services.starrocks.RangerServiceStarRocks`，即：
+
+   ```JSON
+   "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
+   ```
+
    :::
 
-2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
+1. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
    ```SQL
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
@@ -100,11 +106,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
    ```
 
-3. 登录 Ranger 界面 `http://<ranger-ip>:<ranger-host>/login.jsp`。可以看到界面上出现了 STARROCKS 服务。
+2. 登录 Ranger 界面 `http://<ranger-ip>:<ranger-host>/login.jsp`。可以看到界面上出现了 STARROCKS 服务。
 
    ![home](../../assets/ranger_home.png)
 
-4. 点击 **STARROCKS** 后的加号 (`+`) 配置 StarRocks Service 信息。
+3. 点击 **STARROCKS** 后的加号 (`+`) 配置 StarRocks Service 信息。
 
    ![service config](../../assets/ranger_service_details.png)
 
@@ -123,8 +129,8 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    ![service](../../assets/ranger_added_service.png)
 
-5. 点击 **Test connection** 测试连通性，连通成功后保存。
-6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
+4. 点击 **Test connection** 测试连通性，连通成功后保存。
+5. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
    - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
@@ -156,16 +162,16 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ...
    ```
 
-7. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
+6. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
 
-8. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
+7. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-9. 重启所有 FE。
+8. 重启所有 FE。
 
    ```SQL
    -- 回到 FE 文件夹内
