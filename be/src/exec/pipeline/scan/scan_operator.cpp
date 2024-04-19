@@ -177,6 +177,7 @@ bool ScanOperator::has_output() const {
             return true;
         }
     }
+
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
@@ -332,7 +333,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     }
 
     // pick up new chunk source.
-    begin_pickup_morsels();
     ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
     if (size > 0 && morsel_ready) {
         for (int i = 0; i < size; i++) {

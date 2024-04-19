@@ -240,6 +240,12 @@ Status FileReader::_build_split_tasks() {
         }
         int64_t start_offset = _get_row_group_start_offset(row_group);
         int64_t end_offset = _get_row_group_end_offset(row_group);
+#ifndef NDEBUG
+        if ((i + 1) < row_group_size) {
+            const tparquet::RowGroup& next_row_group = _file_metadata->t_metadata().row_groups[i + 1];
+            DCHECK_EQ(end_offset, _get_row_group_start_offset(next_row_group));
+        }
+#endif
         auto split_ctx = std::make_unique<SplitContext>();
         split_ctx->split_start = start_offset;
         split_ctx->split_end = end_offset;
@@ -252,8 +258,14 @@ Status FileReader::_build_split_tasks() {
         _scanner_ctx->split_tasks.clear();
     }
 
-    VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                  << ", split_tasks.size = " << _scanner_ctx->split_tasks.size();
+    if (VLOG_OPERATOR_IS_ON) {
+        std::stringstream ss;
+        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->split_tasks) {
+            ss << "[" << ctx->split_start << "," << ctx->split_end << "]";
+        }
+        VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
+                      << ", split_tasks.size = " << _scanner_ctx->split_tasks.size() << ", range = " << ss.str();
+    }
     return Status::OK();
 }
 
