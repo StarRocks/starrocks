@@ -296,9 +296,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // one with file caches
             // control it by enable_remote_file_cache
             HiveTable hiveTable = (HiveTable) mvContext.getRefBaseTable();
-            Set<String> partitionNameSet = refTablePartitionNames.get(hiveTable);
+            Set<String> partitionNameSet = refTablePartitionNames.get(hiveTable.getName());
             if (partitionNameSet == null) {
                 LOG.info("can not get partitions for hive table: {}", hiveTable.getTableName());
+                return RefreshJobStatus.FAILED;
             }
             LOG.info("partition name size: {}", partitionNameSet.size());
             Stopwatch sw = Stopwatch.createStarted();
