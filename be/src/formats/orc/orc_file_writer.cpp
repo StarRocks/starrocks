@@ -171,72 +171,59 @@ StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(ChunkP
 
     for (size_t i = 0; i < _column_evaluators.size(); ++i) {
         ASSIGN_OR_RETURN(auto column, _column_evaluators[i]->evaluate(chunk.get()));
-        _write_column(*root->fields[i], column, _type_descs[i]);
+        RETURN_IF_ERROR(_write_column(*root->fields[i], column, _type_descs[i]));
     }
 
     root->numElements = chunk->num_rows();
     return cvb;
 }
 
-void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
-                                  const TypeDescriptor& type_desc) {
+Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
+                                    const TypeDescriptor& type_desc) {
     switch (type_desc.type) {
     case TYPE_BOOLEAN: {
-        _write_number<TYPE_BOOLEAN, orc::LongVectorBatch>(orc_column, column);
-        break;
+        return _write_number<TYPE_BOOLEAN, orc::LongVectorBatch>(orc_column, column);
     }
     case TYPE_TINYINT: {
-        _write_number<TYPE_TINYINT, orc::LongVectorBatch>(orc_column, column);
-        break;
+        return _write_number<TYPE_TINYINT, orc::LongVectorBatch>(orc_column, column);
     }
     case TYPE_SMALLINT: {
-        _write_number<TYPE_SMALLINT, orc::LongVectorBatch>(orc_column, column);
-        break;
+        return _write_number<TYPE_SMALLINT, orc::LongVectorBatch>(orc_column, column);
     }
     case TYPE_INT: {
-        _write_number<TYPE_INT, orc::LongVectorBatch>(orc_column, column);
-        break;
+        return _write_number<TYPE_INT, orc::LongVectorBatch>(orc_column, column);
     }
     case TYPE_BIGINT: {
-        _write_number<TYPE_BIGINT, orc::LongVectorBatch>(orc_column, column);
-        break;
+        return _write_number<TYPE_BIGINT, orc::LongVectorBatch>(orc_column, column);
     }
     case TYPE_FLOAT: {
-        _write_number<TYPE_FLOAT, orc::DoubleVectorBatch>(orc_column, column);
-        break;
+        return _write_number<TYPE_FLOAT, orc::DoubleVectorBatch>(orc_column, column);
     }
     case TYPE_DOUBLE: {
-        _write_number<TYPE_DOUBLE, orc::DoubleVectorBatch>(orc_column, column);
-        break;
+        return _write_number<TYPE_DOUBLE, orc::DoubleVectorBatch>(orc_column, column);
     }
     case TYPE_CHAR:
         [[fallthrough]];
     case TYPE_VARCHAR: {
-        _write_string(orc_column, column);
-        break;
+        return _write_string(orc_column, column);
     }
     case TYPE_DECIMAL32: {
-        _write_decimal32or64or128<TYPE_DECIMAL32, orc::Decimal64VectorBatch, int64_t>(
+        return _write_decimal32or64or128<TYPE_DECIMAL32, orc::Decimal64VectorBatch, int64_t>(
                 orc_column, column, type_desc.precision, type_desc.scale);
-        break;
     }
     case TYPE_DECIMAL64: {
-        _write_decimal32or64or128<TYPE_DECIMAL64, orc::Decimal64VectorBatch, int64_t>(
+        return _write_decimal32or64or128<TYPE_DECIMAL64, orc::Decimal64VectorBatch, int64_t>(
                 orc_column, column, type_desc.precision, type_desc.scale);
-        break;
     }
     case TYPE_DECIMAL128: {
-        _write_decimal32or64or128<TYPE_DECIMAL128, orc::Decimal128VectorBatch, int128_t>(
+        return _write_decimal32or64or128<TYPE_DECIMAL128, orc::Decimal128VectorBatch, int128_t>(
                 orc_column, column, type_desc.precision, type_desc.scale);
-        break;
     }
     case TYPE_DATE: {
-        _write_date(orc_column, column);
-        break;
+        return _write_date(orc_column, column);
     }
     case TYPE_DATETIME: {
-        _write_datetime(orc_column, column);
-        break;
+        return _write_datetime(orc_column, column);
     }
     default: {
         CHECK(false) << "unreachable";
@@ -261,7 +248,7 @@ inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
 }
 
 template <LogicalType Type, typename VectorBatchType>
-void ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& number_orc_column = dynamic_cast<VectorBatchType&>(orc_column);
     auto column_size = column->size();
     orc_column.resize(column_size);
@@ -275,9 +262,11 @@ void ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     for (size_t i = 0; i < column_size; ++i) {
         number_orc_column.data[i] = data_col[i];
     }
+
+    return Status::OK();
 }
 
-void ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& string_orc_column = dynamic_cast<orc::StringVectorBatch&>(orc_column);
     auto column_size = column->size();
     orc_column.resize(column_size);
@@ -293,11 +282,13 @@ void ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr&
         string_orc_column.data[i] = const_cast<char*>(slice.get_data());
         string_orc_column.length[i] = slice.get_size();
     }
+
+    return Status::OK();
 }
 
 template <LogicalType DecimalType, typename VectorBatchType, typename T>
-void ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision,
-                                              int scale) {
+Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision,
+                                                int scale) {
     auto& decimal_orc_column = dynamic_cast<VectorBatchType&>(orc_column);
     auto column_size = column->size();
     using Type = RunTimeCppType<DecimalType>;
@@ -323,9 +314,11 @@ void ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column
             decimal_orc_column.values[i] = value;
         }
     }
+
+    return Status::OK();
 }
 
-void ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& date_orc_column = dynamic_cast<orc::LongVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -340,9 +333,11 @@ void ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& c
     for (size_t i = 0; i < column_size; ++i) {
         date_orc_column.data[i] = OrcDateHelper::native_date_to_orc_date(data_col[i]);
     }
+
+    return Status::OK();
 }
 
-void ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& timestamp_orc_column = dynamic_cast<orc::TimestampVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -358,6 +353,8 @@ void ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPt
         OrcTimestampHelper::native_ts_to_orc_ts(data_col[i], timestamp_orc_column.data[i],
                                                 timestamp_orc_column.nanoseconds[i]);
     }
+
+    return Status::OK();
 }
 
 StatusOr<orc::CompressionKind> ORCFileWriter::_convert_compression_type(TCompressionType::type type) {
@@ -445,9 +442,10 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
         return orc::createPrimitiveType(orc::TypeKind::TIMESTAMP);
     }
     // TODO(letian-jiang): support nested type
-    default:
+    default: {
         return Status::NotSupported(
                 fmt::format("ORC writer does not support to write {} type yet", type_desc.debug_string()));
+    }
     }
 }
 

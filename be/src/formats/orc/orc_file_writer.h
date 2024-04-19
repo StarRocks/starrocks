@@ -76,19 +76,19 @@ private:
 
     StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(ChunkPtr chunk);
 
-    void _write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type_desc);
+    Status _write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type_desc);
 
     template <LogicalType Type, typename VectorBatchType>
-    void _write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
-    void _write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
     template <LogicalType DecimalType, typename VectorBatchType, typename T>
-    void _write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale);
+    Status _write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale);
 
-    void _write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
-    void _write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
     inline static const std::string STARROCKS_ORC_WRITER_VERSION_KEY = "starrocks.writer.version";
 
