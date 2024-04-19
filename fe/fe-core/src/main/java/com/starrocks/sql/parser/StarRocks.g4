@@ -683,7 +683,7 @@ dropTaskStatement
     ;
 
 taskScheduleDesc
-    : SCHEDULE (START '(' string ')')? EVERY '(' interval ')'
+    : SCHEDULE (START '(' string ')')? EVERY '(' taskInterval ')'
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
@@ -2682,6 +2682,14 @@ booleanValue
 
 interval
     : INTERVAL value=expression from=unitIdentifier
+    ;
+
+taskInterval
+    : INTERVAL value=expression from=taskUnitIdentifier
+    ;
+
+taskUnitIdentifier
+    : DAY | HOUR | MINUTE | SECOND
     ;
 
 unitIdentifier
