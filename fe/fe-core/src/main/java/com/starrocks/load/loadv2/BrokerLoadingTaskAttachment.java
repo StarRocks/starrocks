@@ -89,4 +89,9 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
     public long getWriteDurationMs() {
         return writeDurationMs;
     }
+
+    @Override
+    public String toString() {
+        return "BrokerLoadingTxnCommitAttachment " + counters.toString();
+    }
 }

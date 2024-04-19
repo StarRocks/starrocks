@@ -24,6 +24,7 @@ import com.starrocks.transaction.TxnCommitAttachment;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
 public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("ls")
@@ -34,6 +35,8 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
     private long unselectedRows;
     private long receivedBytes;
     private long loadedBytes;
+
+    private Map<Long, Long> partitionRows;
     // optional
     @SerializedName("eu")
     private String errorLogUrl;
@@ -49,6 +52,7 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         this.receivedBytes = tManualLoadTxnCommitAttachment.getReceivedBytes();
         this.filteredRows = tManualLoadTxnCommitAttachment.getFilteredRows();
         this.unselectedRows = tManualLoadTxnCommitAttachment.getUnselectedRows();
+        this.partitionRows = tManualLoadTxnCommitAttachment.getPartitionRows();
         if (tManualLoadTxnCommitAttachment.isSetErrorLogUrl()) {
             this.errorLogUrl = tManualLoadTxnCommitAttachment.getErrorLogUrl();
         }
@@ -106,5 +110,15 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         //     receivedBytes = in.readLong();
         //     loadedBytes = in.readLong();
         // }
+    }
+
+    @Override
+    public String toString() {
+        return "ManualLoadTxnCommitAttachment [filteredRows=" + filteredRows
+                + ", loadedRows=" + loadedRows
+                + ", loadBytes=" + loadedBytes
+                + ", partitionRows=" + partitionRows
+                + ", unselectedRows=" + unselectedRows
+                + ", receivedBytes=" + receivedBytes + "]";
     }
 }

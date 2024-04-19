@@ -229,6 +229,7 @@ public:
     int64_t number_filtered_rows = 0;
     int64_t number_unselected_rows = 0;
     int64_t loaded_bytes = 0;
+    std::map<int64_t, int64_t> partition_num_rows;
     int64_t start_nanos = 0;
     int64_t start_write_data_nanos = 0;
     int64_t load_cost_nanos = 0;
@@ -277,6 +278,7 @@ public:
 
     int64_t load_deadline_sec = -1;
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
+    const std::map<int64_t, int64_t> get_partition_num_rows() { return partition_num_rows; }
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }

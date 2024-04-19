@@ -21,10 +21,13 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
 public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
     private long loadedRows;
+
+    private Map<String, String> loadCounters;
 
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
@@ -33,6 +36,11 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     public InsertTxnCommitAttachment(long loadedRows) {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
         this.loadedRows = loadedRows;
+    }
+
+    public InsertTxnCommitAttachment(long loadedRows, Map<String, String> loadCounters) {
+        this(loadedRows);
+        this.loadCounters = loadCounters;
     }
 
     public long getLoadedRows() {
@@ -52,5 +60,10 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         InsertTxnCommitAttachment insertTxnCommitAttachment =
                 GsonUtils.GSON.fromJson(s, InsertTxnCommitAttachment.class);
         this.loadedRows = insertTxnCommitAttachment.getLoadedRows();
+    }
+
+    @Override
+    public String toString() {
+        return "InsertTxnCommitAttachment " + loadCounters.toString();
     }
 }
