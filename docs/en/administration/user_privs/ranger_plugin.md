@@ -92,9 +92,15 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    "implClass": "",
    ```
 
+   If you need Ranger's autocomplete feature (which means you have installed the ranger-starrocks-plugin), you must set `implClass` in the .json file to `org.apache.ranger.services.starrocks.RangerServiceStarRocks`:
+
+   ```JSON
+   "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
+   ```
+
    :::
 
-2. Add StarRocks Service by running the following command as a Ranger administrator.
+3. Add StarRocks Service by running the following command as a Ranger administrator.
 
    ```SQL
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
@@ -102,11 +108,11 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
    ```
 
-3. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The STARROCKS service appears on the page.
+4. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The STARROCKS service appears on the page.
 
    ![home](../../assets/ranger_home.png)
 
-4. Click the plus sign (`+`) after **STARROCKS** to configure StarRocks Service.
+5. Click the plus sign (`+`) after **STARROCKS** to configure StarRocks Service.
 
    ![service detail](../../assets/ranger_service_details.png)
 
@@ -125,8 +131,8 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
    ![added service](../../assets/ranger_added_service.png)
 
-5. Click **Test connection** to test the connectivity, and save it after the connection is successful.
-6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
+6. Click **Test connection** to test the connectivity, and save it after the connection is successful.
+7. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
 
    - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
    - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
@@ -157,16 +163,16 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    ...
    ```
 
-7. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
+8. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
 
-8. Add the configuration `access_control = ranger` to all FE configuration files.
+9. Add the configuration `access_control = ranger` to all FE configuration files.
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-9. Restart all FE machines.
+10. Restart all FE machines.
 
    ```SQL
    -- Switch to the FE folder. 
