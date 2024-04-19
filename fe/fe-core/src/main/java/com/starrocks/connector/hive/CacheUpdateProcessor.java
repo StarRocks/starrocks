@@ -19,6 +19,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
@@ -134,7 +135,11 @@ public class CacheUpdateProcessor {
     }
 
     public Set<HiveTableName> getCachedTableNames() {
-        return ((CachingHiveMetastore) metastore).getCachedTableNames();
+        if (metastore instanceof CachingHiveMetastore) {
+            return ((CachingHiveMetastore) metastore).getCachedTableNames();
+        } else {
+            return Sets.newHashSet();
+        }
     }
 
     private Map<BasePartitionInfo, Partition> getUpdatedPartitions(HiveMetaStoreTable table,
