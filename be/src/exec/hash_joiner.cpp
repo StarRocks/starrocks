@@ -107,8 +107,8 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     _hash_join_builder->create(hash_table_param());
     auto& ht = _hash_join_builder->hash_table();
 
-    _probe_column_count = ht.get_probe_column_count();
-    _build_column_count = ht.get_build_column_count();
+    _output_probe_column_count = ht.get_output_probe_column_count();
+    _output_build_column_count = ht.get_output_build_column_count();
 
     return Status::OK();
 }
@@ -321,8 +321,8 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
 
     // _hash_table_build_rows is root truth, it used to by _short_circuit_break().
     _hash_table_build_rows = src_join_builder->_hash_table_build_rows;
-    _probe_column_count = src_join_builder->_probe_column_count;
-    _build_column_count = src_join_builder->_build_column_count;
+    _output_probe_column_count = src_join_builder->_output_probe_column_count;
+    _output_build_column_count = src_join_builder->_output_build_column_count;
 
     _has_referenced_hash_table = true;
 
@@ -486,7 +486,8 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count, hash_table);
+        return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count,
+                                                       hash_table);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:

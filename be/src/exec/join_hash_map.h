@@ -102,7 +102,6 @@ struct JoinHashTableItems {
     Columns key_columns;
     Buffer<HashTableSlotDescriptor> build_slots;
     Buffer<HashTableSlotDescriptor> probe_slots;
-    const RowDescriptor* row_desc;
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
     // buckets of the hash map, and it holds the index of the first key value saved in each bucket,
     // while other keys can be found by following the indices saved in
@@ -117,7 +116,9 @@ struct JoinHashTableItems {
     uint32_t bucket_size = 0;
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
+    size_t output_build_column_count = 0;
     size_t probe_column_count = 0;
+    size_t output_probe_column_count = 0;
     bool with_other_conjunct = false;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
@@ -556,11 +557,6 @@ private:
                     // DCHECK_EQ(column->is_nullable(), to_nullable);
                     (*chunk)->append_column(std::move(column), slot->id());
                 }
-            } else {
-                ColumnPtr default_column =
-                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
-                default_column->append_default(_probe_state->count);
-                (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
     }
@@ -575,18 +571,12 @@ private:
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
-            ColumnPtr& column = _table_items->build_chunk->columns()[i];
             if (hash_table_slot.need_output) {
                 // always output nulls.
                 DCHECK(to_nullable);
                 ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
                 dest_column->append_nulls(_probe_state->count);
                 (*chunk)->append_column(std::move(dest_column), slot->id());
-            } else {
-                ColumnPtr default_column =
-                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
-                default_column->append_default(_probe_state->count);
-                (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
     }
@@ -771,7 +761,9 @@ public:
     Columns& get_key_columns() { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
+    size_t get_output_probe_column_count() const { return _table_items->output_probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
+    size_t get_output_build_column_count() const { return _table_items->output_build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     float get_keys_per_bucket() const;
     void remove_duplicate_index(Filter* filter);
