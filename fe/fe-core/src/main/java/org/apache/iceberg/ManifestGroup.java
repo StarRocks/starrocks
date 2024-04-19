@@ -27,6 +27,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+
+import com.google.common.cache.Cache;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -66,6 +68,9 @@ class ManifestGroup {
     private Set<Integer> columnsToKeepStats;
     private ExecutorService executorService;
     private ScanMetrics scanMetrics;
+    private boolean dataFileCacheWithMetrics;
+    private Cache<String, Set<DataFile>> dataFileCache;
+    private DeleteFileIndex preparedDeleteFileIndex;
 
     ManifestGroup(FileIO io, Iterable<ManifestFile> manifests) {
         this(
@@ -169,6 +174,21 @@ class ManifestGroup {
         return this;
     }
 
+    ManifestGroup cacheWithMetrics(boolean cacheWithMetrics) {
+        this.dataFileCacheWithMetrics = cacheWithMetrics;
+        return this;
+    }
+
+    ManifestGroup withDataFileCache(Cache<String, Set<DataFile>> fileCache) {
+        this.dataFileCache = fileCache;
+        return this;
+    }
+
+    ManifestGroup preparedDeleteFileIndex(DeleteFileIndex deleteFileIndex) {
+        this.preparedDeleteFileIndex = deleteFileIndex;
+        return this;
+    }
+
     /**
      * Returns an iterable of scan tasks. It is safe to add entries of this iterable to a collection
      * as {@link DataFile} in each {@link FileScanTask} is defensively copied.
@@ -189,7 +209,8 @@ class ManifestGroup {
                                     return ResidualEvaluator.of(spec, filter, caseSensitive);
                                 });
 
-        DeleteFileIndex deleteFiles = deleteIndexBuilder.scanMetrics(scanMetrics).build();
+        DeleteFileIndex deleteFiles = preparedDeleteFileIndex != null ? preparedDeleteFileIndex :
+                deleteIndexBuilder.scanMetrics(scanMetrics).build();
 
         boolean dropStats = ManifestReader.dropStats(columns);
         if (!deleteFiles.isEmpty()) {
@@ -323,6 +344,8 @@ class ManifestGroup {
                                                 .filterPartitions(partitionFilter)
                                                 .caseSensitive(caseSensitive)
                                                 .select(columns)
+                                                .dataFileCache(dataFileCache)
+                                                .cacheWithMetrics(dataFileCacheWithMetrics)
                                                 .scanMetrics(scanMetrics);
 
                                 CloseableIterable<ManifestEntry<DataFile>> entries;
