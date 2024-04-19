@@ -194,17 +194,18 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
     using Key = uint64_t;
+    const int M = 5;
     const int N = 100;
     vector<Key> total_keys;
     vector<Slice> total_key_slices;
     vector<IndexValue> total_values;
     vector<size_t> idxes;
-    total_key_slices.reserve(config::lake_pk_index_sst_max_compaction_versions * N);
-    total_keys.reserve(config::lake_pk_index_sst_max_compaction_versions * N);
+    total_key_slices.reserve(M * N);
+    total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     int k = 0;
-    for (int i = 0; i < config::lake_pk_index_sst_max_compaction_versions; ++i) {
+    for (int i = 0; i < M; ++i) {
         vector<Key> keys;
         keys.reserve(N);
         vector<Slice> key_slices;
@@ -226,18 +227,16 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     }
 
     index->minor_compact();
-    vector<IndexValue> get_values(config::lake_pk_index_sst_max_compaction_versions * N);
-    ASSERT_OK(index->get(config::lake_pk_index_sst_max_compaction_versions * N, total_key_slices.data(),
-                         get_values.data()));
+    vector<IndexValue> get_values(M * N);
+    ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
 
     get_values.clear();
-    get_values.reserve(config::lake_pk_index_sst_max_compaction_versions * N);
+    get_values.reserve(M * N);
     auto txn_log = std::make_shared<TxnLogPB>();
     ASSERT_OK(index->major_compact(*_tablet_metadata, 0, txn_log.get()));
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
-    ASSERT_OK(index->get(config::lake_pk_index_sst_max_compaction_versions * N, total_key_slices.data(),
-                         get_values.data()));
-    for (int i = 0; i < config::lake_pk_index_sst_max_compaction_versions * N; i++) {
+    ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
+    for (int i = 0; i < M * N; i++) {
         ASSERT_EQ(total_values[i], get_values[i]);
     }
     config::l0_max_mem_usage = l0_max_mem_usage;
