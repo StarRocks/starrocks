@@ -61,6 +61,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -181,13 +182,14 @@ public class DatabaseTransactionMgr {
         FeNameFormat.checkLabel(label);
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+        boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, listenerId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
                 coordinator, listenerId, timeoutSecond * 1000);
         transactionState.setPrepareTime(System.currentTimeMillis());
         transactionState.setWarehouseId(warehouseId);
-
+        transactionState.setUseCombinedTxnLog(combinedTxnLog);
         transactionState.writeLock();
         try {
             writeLock();

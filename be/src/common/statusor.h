@@ -703,6 +703,11 @@ void StatusOr<T>::IgnoreError() const {
     // no-op
 }
 
+template <typename T>
+inline std::ostream& operator<<(std::ostream& os, const StatusOr<T>& st) {
+    return os << st.status();
+}
+
 #define ASSIGN_OR_RETURN_IMPL(varname, lhs, rhs) \
     auto&& varname = (rhs);                      \
     RETURN_IF_ERROR(varname);                    \

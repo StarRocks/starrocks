@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.lake;
 
-#include <memory>
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.transaction.TransactionState;
 
-#include "gen_cpp/lake_types.pb.h"
-
-namespace starrocks {
-
-using TxnLog = TxnLogPB;
-using TxnLogPtr = std::shared_ptr<const TxnLog>;
-using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
-using CombinedTxnLog = CombinedTxnLogPB;
-using CombinedTxnLogPtr = std::shared_ptr<const CombinedTxnLog>;
-
-} // namespace starrocks
+public class TxnInfoHelper {
+    public static TxnInfoPB fromTransactionState(TransactionState state) {
+        TxnInfoPB infoPB = new TxnInfoPB();
+        infoPB.txnId = state.getTransactionId();
+        infoPB.combinedTxnLog = state.isUseCombinedTxnLog();
+        infoPB.commitTime = state.getCommitTime() / 1000; // milliseconds to seconds
+        infoPB.txnType = state.getTxnTypePB();
+        return infoPB;
+    }
+}

@@ -129,6 +129,24 @@ std::shared_ptr<const TxnLogPB> Metacache::lookup_txn_log(std::string_view key) 
     }
 }
 
+std::shared_ptr<const CombinedTxnLogPB> Metacache::lookup_combined_txn_log(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_txnlog_cache_miss << 1;
+        return nullptr;
+    }
+    DeferOp defer([this, handle]() { _cache->release(handle); });
+
+    try {
+        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto log = std::get<std::shared_ptr<const CombinedTxnLogPB>>(*value);
+        g_txnlog_cache_hit << 1;
+        return log;
+    } catch (const std::bad_variant_access& e) {
+        return nullptr;
+    }
+}
+
 std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_view key) {
     auto handle = _cache->lookup(CacheKey(key));
     if (handle == nullptr) {
@@ -223,6 +241,11 @@ void Metacache::cache_tablet_metadata(std::string_view key, std::shared_ptr<cons
 }
 
 void Metacache::cache_txn_log(std::string_view key, std::shared_ptr<const TxnLogPB> log) {
+    auto value_ptr = std::make_unique<CacheValue>(log);
+    insert(key, value_ptr.release(), log->SpaceUsedLong());
+}
+
+void Metacache::cache_combined_txn_log(std::string_view key, std::shared_ptr<const CombinedTxnLogPB> log) {
     auto value_ptr = std::make_unique<CacheValue>(log);
     insert(key, value_ptr.release(), log->SpaceUsedLong());
 }
