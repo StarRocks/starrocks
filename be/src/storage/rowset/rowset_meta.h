@@ -254,7 +254,7 @@ public:
         } else {
             // Only for compatible, in very old versions, there is no schema id.
             // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
-            _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+            _schema = TabletSchema::copy(*tablet_schema_ptr);
         }
         _has_tablet_schema_pb = true;
     }
