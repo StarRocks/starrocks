@@ -94,6 +94,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
     }
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::push_chunk(state, chunk));
     set_revocable_mem_bytes(_aggregator->hash_set_memory_usage());
+    if (_is_finished) return Status::OK();
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
     }
@@ -101,6 +102,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
 }
 
 Status SpillableAggregateDistinctBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
+    RETURN_IF(_aggregator->hash_set_variant().size() == 0, Status::OK());
     _aggregator->hash_set_variant().visit(
             [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
     CHECK(!_aggregator->spill_channel()->has_task());
@@ -185,6 +187,7 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (_aggregator->spiller()->has_output_data()) {
         return true;
     }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_aggregator->spiller());
     if (_aggregator->spiller()->is_cancel()) {
         return true;
     }
@@ -218,6 +221,7 @@ Status SpillableAggregateDistinctBlockingSourceOperator::set_finished(RuntimeSta
 }
 
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->spiller()->task_status());
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::pull_chunk(state);
     }
