@@ -500,7 +500,6 @@ TEST_F(SegmentReaderWriterTest, TestTypeConversion) {
 
     auto file_size = uint64_t{0};
     auto index_size = uint64_t{0};
-    ;
     auto footer_position = uint64_t{0};
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 

@@ -644,7 +644,13 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for handling other indices
 
-        if (modColumn.isKey() || !modColumn.getType().isScalarType()) {
+        // fast schema evolution supports the conversion of scalar types to decimal types, but does not support the conversion
+        // of decimal types to other scale types, due to the fact that the precision and scale of the decimal are not recorded
+        // in the segment file
+        if (modColumn.isKey() || !modColumn.getType().isScalarType()
+                || oriColumn.isKey()
+                || !oriColumn.getType().isScalarType()
+                || oriColumn.getType().isDecimalOfAnyVersion()) {
             fastSchemaEvolution = false;
         }
         return fastSchemaEvolution;
