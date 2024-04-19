@@ -28,6 +28,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -116,6 +117,8 @@ bool LakePersistentIndex::is_memtable_full() const {
 }
 
 Status LakePersistentIndex::minor_compact() {
+    MonotonicStopWatch watch;
+    watch.start();
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
@@ -135,6 +138,8 @@ Status LakePersistentIndex::minor_compact() {
     }
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     _sstables.emplace_back(std::move(sstable));
+    TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
+    TRACE_COUNTER_INCREMENT("minor_compact_latency_us", 1000 * watch.elapsed_time());
     return Status::OK();
 }
 
@@ -392,6 +397,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     if (max_sstable_version > base_version) {
         return Status::OK();
     }
+    TRACE_COUNTER_INCREMENT("max_sstable_version", max_sstable_version);
 
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
@@ -408,6 +414,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
+        TRACE_COUNTER_INCREMENT("total_rowsets", 1);
+        TRACE_COUNTER_INCREMENT("total_segments", rowset->num_segments());
+        TRACE_COUNTER_INCREMENT("total_datasize", rowset->data_size());
         // If it is upgraded from old version of sr, the rowset version will be not set.
         // The generated rowset version will be treated as base_version.
         int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
@@ -471,6 +480,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             }
             itr->close();
         }
+        TRACE_COUNTER_INCREMENT("loaded_rowsets", 1);
+        TRACE_COUNTER_INCREMENT("loaded_segments", rowset->num_segments());
+        TRACE_COUNTER_INCREMENT("loaded_datasize", rowset->data_size());
     }
     return Status::OK();
 }
