@@ -7,38 +7,24 @@ use test_commit_kafka_offset;
 -- result:
 -- !result
 
-create table herbavro (
-	advertiser_id int not null,
-    advertiser_ad_type int not null,
-    advertiser_ad_width int not null,
-    advertiser_currency_type varchar(60) not null,
-    event_day DATE
-)
-DUPLICATE KEY(advertiser_id) COMMENT "OLAP" 
-PARTITION BY RANGE (event_day) (
-    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
-    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
-    PARTITION p3 VALUES LESS THAN ("2030-03-31")
-)
-DISTRIBUTED BY HASH(advertiser_id) BUCKETS 3 
-PROPERTIES ( "replication_num" = "1");
+create table tbl_csv_file2 (
+	col_0 int not null,
+    col_1 double not null,
+    col_2 string not null,
+    col_3 date not null,
+    col_4 string not null
+) PROPERTIES ( "replication_num" = "1");
 -- result:
 -- !result
 
 CREATE ROUTINE LOAD testherbavro on herbavro 
-COLUMNS TERMINATED BY '\t',
-COLUMNS (advertiser_id, advertiser_ad_type, advertiser_ad_width, advertiser_currency_type),
-PARTITIONS (p1, p2, p3),
-WHERE advertiser_id > -10
+COLUMNS TERMINATED BY '|',
+COLUMNS (col_0, col_1, col_2, col_3, col_4)
 PROPERTIES (
-"desired_concurrent_number"="1",
-"max_error_number"="1000",
-"max_batch_interval"="5",
-"format"="avro") 
+"format"="csv") 
 FROM KAFKA (
-"confluent.schema.registry.url"="http://172.26.194.240:8081",
-"kafka_broker_list"="172.26.194.239:9092",
-"kafka_topic"="herb-avro",
+"kafka_broker_list"="${broker_list}",
+"kafka_topic"="topic-csv-file2",
 "kafka_partitions"="0",
 "kafka_offsets"="OFFSET_BEGINNING"
 );
