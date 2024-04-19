@@ -466,4 +466,5 @@ message FileTail {
   optional Footer footer = 2;
   optional uint64 fileLength = 3;
   optional uint64 postscriptLength = 4;
+  optional Metadata metadata = 5;
 }

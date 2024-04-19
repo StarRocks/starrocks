@@ -426,6 +426,11 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
             (_scanner_ctx.enable_split_tasks && stripes.size() >= 2) && (_scanner_ctx.split_context == nullptr);
     if (!enable_split_tasks) return Status::OK();
 
+    // to ensure metadata is loaded. because metadata is loaded lazily
+    // if we don't load it here, then we have to loaded in splitted tasks
+    // and that will incur repeated reads.
+    // in most cases(to enable search argument), this field is necessary.
+    { (void)reader->getNumberOfStripeStatistics(); }
     auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();

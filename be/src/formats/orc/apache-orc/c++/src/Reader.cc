@@ -550,6 +550,10 @@ std::string ReaderImpl::getSerializedFileTail() const {
     mutable_ps->CopyFrom(*contents->postscript);
     proto::Footer* mutableFooter = tail.mutable_footer();
     mutableFooter->CopyFrom(*footer);
+    if (contents->metadata != nullptr) {
+        proto::Metadata* mutableMetadata = tail.mutable_metadata();
+        mutableMetadata->CopyFrom(*contents->metadata);
+    }
     tail.set_filelength(fileLength);
     tail.set_postscriptlength(postscriptLength);
     std::string result;
@@ -790,7 +794,7 @@ void ReaderImpl::readMetadata() const {
         throw ParseError(msg.str());
     }
     uint64_t metadataStart = fileLength - metadataSize - footerLength - postscriptLength - 1;
-    if (metadataSize != 0) {
+    if (metadataSize != 0 && (contents->metadata == nullptr)) {
         std::unique_ptr<SeekableInputStream> pbStream =
                 createDecompressor(contents->compression,
                                    std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
@@ -1454,6 +1458,9 @@ std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const 
         }
         contents->postscript.reset(new proto::PostScript(tail.postscript()));
         contents->footer.reset(new proto::Footer(tail.footer()));
+        if (tail.has_metadata()) {
+            contents->metadata.reset(new proto::Metadata(tail.metadata()));
+        }
         fileLength = tail.filelength();
         postscriptLength = tail.postscriptlength();
     } else {
