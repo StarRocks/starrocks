@@ -4,18 +4,15 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
-<!--
 ## 3.2.6
 
-Release date: April 16, 2024
+Release date: April 18, 2024
 
 ### Bug Fixes
 
 Fixed the following issue:
 
 - The privileges of external tables cannot be found due to incompatibility issues. [#44030](https://github.com/StarRocks/starrocks/pull/44030)
-
--->
 
 ## 3.2.5 (Deprecated)
 
@@ -29,7 +26,7 @@ This version has been taken offline due to privilege issues in querying external
 
 - **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
 
-- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. <!--But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.1.11, users can run `REVOKE` to remove one of the privilege entries.-->
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.2.6, users can run `REVOKE` to remove one of the privilege entries.
 
 :::
 
@@ -75,7 +72,7 @@ This version has been taken offline due to privilege issues in querying external
 
 - **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
 
-- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. <!--But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.1.11, users can run `REVOKE` to remove one of the privilege entries.-->
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.2.6, users can run `REVOKE` to remove one of the privilege entries.
 
 :::
 
