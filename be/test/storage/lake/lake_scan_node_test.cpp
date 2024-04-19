@@ -78,7 +78,7 @@ public:
 
     void TearDown() override { remove_test_dir_ignore_error(); }
 
-    void create_rowsets_for_testing() {
+    void create_rowsets_for_testing(TabletMetadata* tablet_metadata, int64_t version) {
         std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}; // 23 rows
         std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -97,7 +97,7 @@ public:
         Chunk chunk0({c0, c1}, _schema);
         Chunk chunk1({c2, c3}, _schema);
 
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_metadata->id()));
 
         {
             int64_t txn_id = next_id();
@@ -120,7 +120,7 @@ public:
             ASSERT_EQ(2, files.size());
 
             // add rowset metadata
-            auto* rowset = _tablet_metadata->add_rowsets();
+            auto* rowset = tablet_metadata->add_rowsets();
             rowset->set_overlapped(true);
             rowset->set_id(1);
             rowset->set_num_rows(k0.size() + k1.size());
@@ -133,8 +133,8 @@ public:
         }
 
         // write tablet metadata
-        _tablet_metadata->set_version(2);
-        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        tablet_metadata->set_version(version);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*tablet_metadata));
     }
 
 protected:
@@ -146,7 +146,7 @@ protected:
 };
 
 TEST_F(LakeScanNodeTest, test_could_split) {
-    create_rowsets_for_testing();
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
 
     std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
     std::vector<TypeDescriptor> types;
@@ -191,6 +191,45 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     pipeline_dop = 2;
     config::tablet_internal_parallel_min_scan_dop = 4;
     ASSIGN_OR_ABORT(morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+    ASSERT_TRUE(data_source_provider->could_split());
+    ASSERT_TRUE(data_source_provider->could_split_physically());
+}
+
+// test issue https://github.com/StarRocks/starrocks/pull/44386
+TEST_F(LakeScanNodeTest, test_issue_44386) {
+    auto new_tablet_metadata = std::make_unique<TabletMetadata>(*_tablet_metadata);
+    new_tablet_metadata->set_id(next_id());
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*new_tablet_metadata));
+    create_rowsets_for_testing(new_tablet_metadata.get(), 3);
+
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_cloud();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    bool enable_tablet_internal_parallel = true;
+    auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::AUTO;
+    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
+
+    auto data_source_provider = scan_node->data_source_provider();
+    dynamic_cast<connector::LakeDataSourceProvider*>(data_source_provider)->set_lake_tablet_manager(_tablet_mgr.get());
+
+    config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
+    config::tablet_internal_parallel_min_splitted_scan_rows = 4;
+
+    int pipeline_dop = 3;
+    config::tablet_internal_parallel_min_scan_dop = 4;
+    auto tablet_metas = std::vector<TabletMetadata*>{new_tablet_metadata.get(), _tablet_metadata.get()};
+    auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
+    config::tablet_internal_parallel_min_scan_dop = 4;
+    ASSIGN_OR_ABORT(auto morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));

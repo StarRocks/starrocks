@@ -119,8 +119,8 @@ private:
     ChunkPtr _probing_chunk = nullptr;
 
     Columns _key_columns;
-    size_t _probe_column_count = 0;
-    size_t _build_column_count = 0;
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
     size_t _probe_chunk_count = 0;
     size_t _output_chunk_count = 0;
 

@@ -31,8 +31,8 @@ public:
     // REQUIRES:
     //  - |source_iter| cannot be NULL
     //  - |source_type| and |target_type| both are scalar type
-    explicit CastColumnIterator(std::unique_ptr<ColumnIterator> source_iter, LogicalType source_type,
-                                LogicalType target_type, bool nullable_source);
+    explicit CastColumnIterator(std::unique_ptr<ColumnIterator> source_iter, const TypeDescriptor& source_type,
+                                const TypeDescriptor& target_type, bool nullable_source);
 
     ~CastColumnIterator() override;
 

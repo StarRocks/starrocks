@@ -1984,7 +1984,8 @@ public class StmtExecutor {
                         estimateFileNum,
                         estimateScanFileSize,
                         type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                        coord);
             }
 
             coord.setLoadJobId(jobId);

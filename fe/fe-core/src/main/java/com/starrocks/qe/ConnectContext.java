@@ -62,6 +62,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -984,6 +985,26 @@ public class ConnectContext {
         }
 
         this.setDatabase(dbName);
+    }
+
+    public void cleanTemporaryTable() {
+        if (sessionId == null) {
+            return;
+        }
+        if (!GlobalStateMgr.getCurrentState().getTemporaryTableMgr().sessionExists(sessionId)) {
+            return;
+        }
+        LOG.debug("clean temporary table on session {}", sessionId);
+        try {
+            setQueryId(UUIDUtil.genUUID());
+            CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
+            cleanTemporaryTableStmt.setOrigStmt(
+                    new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
+            executor = new StmtExecutor(this, cleanTemporaryTableStmt);
+            executor.execute();
+        } catch (Throwable e) {
+            LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);
+        }
     }
 
     /**
