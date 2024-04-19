@@ -254,7 +254,7 @@ public:
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
     constexpr static SchemaId invalid_id() { return 0; }
 
-    TabletSchema() = delete;
+    TabletSchema() = default;
     explicit TabletSchema(const TabletSchemaPB& schema_pb);
     // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
     TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
