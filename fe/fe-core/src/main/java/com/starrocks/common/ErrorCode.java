@@ -287,7 +287,7 @@ public enum ErrorCode {
                     "A default storage volume can be created by following these steps: " +
                     "1. Create a storage volume. 2. Set the storage volume as default"),
     ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
-                "Can not use replicated storage as TRUE when the table has GIN"),
+                "Can not enable replicated storage when the table has GIN"),
 
     /**
      * 5600 - 5699: DML operation failure
