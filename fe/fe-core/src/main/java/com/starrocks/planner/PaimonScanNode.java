@@ -28,6 +28,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -144,7 +145,7 @@ public class PaimonScanNode extends ScanNode {
                     boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
                     if (validFormat) {
                         for (RawFile rawFile : rawFiles) {
-                            addRowfileScanRangeLocations(rawFile);
+                            splitRawFileScanRangeLocations(rawFile);
                         }
                     } else {
                         long totalFileLength = getTotalFileLength(dataSplit);
@@ -183,15 +184,19 @@ public class PaimonScanNode extends ScanNode {
         return tHdfsFileFormat;
     }
 
-    private void addRowfileScanRangeLocations(RawFile rawFile) {
+    private void addRawFileScanRangeLocations(RawFile rawFile) {
+        addRawFileScanRangeLocations(rawFile, rawFile.offset(), rawFile.length());
+    }
+
+    private void addRawFileScanRangeLocations(RawFile rawFile, long offset, long length) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_paimon_jni_reader(false);
         hdfsScanRange.setFull_path(rawFile.path());
-        hdfsScanRange.setOffset(rawFile.offset());
+        hdfsScanRange.setOffset(offset);
         hdfsScanRange.setFile_length(rawFile.length());
-        hdfsScanRange.setLength(rawFile.length());
+        hdfsScanRange.setLength(length);
         hdfsScanRange.setFile_format(fromType(rawFile.format()));
 
         TScanRange scanRange = new TScanRange();
@@ -204,7 +209,34 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    private void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
+    protected void splitRawFileScanRangeLocations(RawFile rawFile) {
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+        long splitSize = sv.getConnectorMaxSplitSize();
+
+        long totalSize = rawFile.length();
+        long offset = rawFile.offset();
+        boolean needSplit = totalSize > splitSize;
+        if (needSplit) {
+            splitScanRangeLocations(rawFile, offset, totalSize, splitSize);
+        } else {
+            addRawFileScanRangeLocations(rawFile);
+        }
+    }
+
+    protected void splitScanRangeLocations(RawFile rawFile, long offset, long length, long splitSize) {
+        long remainingBytes = length;
+        do {
+            if (remainingBytes < 2 * splitSize) {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, remainingBytes);
+                remainingBytes = 0;
+            } else {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, splitSize);
+                remainingBytes -= splitSize;
+            }
+        } while (remainingBytes > 0);
+    }
+
+    protected void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -213,6 +245,11 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
         hdfsScanRange.setFile_length(totalFileLength);
         hdfsScanRange.setLength(totalFileLength);
+        // Only uses for hasher in HDFSBackendSelector to select BE
+        if (split instanceof DataSplit) {
+            DataSplit dataSplit = (DataSplit) split;
+            hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode()));
+        }
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
