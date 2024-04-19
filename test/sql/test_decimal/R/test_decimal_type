@@ -1,0 +1,82 @@
+-- name: test_decimal_type
+CREATE TABLE t1 (
+    c1 int,
+    c2 boolean,
+    c3 tinyint,
+    c4 int,
+    c5 bigint,
+    c6 largeint,
+    c7 string,
+    c8 decimal(22, 7),
+    c9 decimal(38, 7),
+    c10 decimal(38, 6)
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 values
+    (1, true, 11, 111, 1111, 11111, "111111", 1.0, 2.0, 3.0),
+    (2, false, 22, 222, 2222, 22222, "222222", 1.0, 1.0, 1.0),
+    (3, true, 33, 333, 3333, 33333, "333333", NULL, NULL, NULL),
+    (4, null, null, null, null, null, null, null, null, null),
+    (5, -1, -11, -111, -1111, -11111, "-111111", 4.0, 3.0, 2.0),
+    (6, null, null, null, null, "36893488147419103232", "680564733841876926926749214863536422912", 111111, 22222, NULL);
+-- result:
+-- !result
+select c1, greatest(coalesce(c8, 0), coalesce(c9, 0), coalesce(c10, 0)) from t1 order by c1;
+-- result:
+1	3.0
+2	1.0
+3	0.0
+4	0.0
+5	4.0
+6	111111.0
+-- !result
+select c1, least(coalesce(c8, 0), coalesce(c9, 0), coalesce(c10, 0)) from t1 order by c1;
+-- result:
+1	1.0
+2	1.0
+3	0.0
+4	0.0
+5	2.0
+6	0.0
+-- !result
+select c1, min(coalesce(c8, 0)), max(coalesce(c9, 0)), avg(coalesce(c10, 0)) from t1 group by c1 order by c1;
+-- result:
+1	1.0000000	2.0000000	3.000000000000
+2	1.0000000	1.0000000	1.000000000000
+3	0E-7	0E-7	0E-12
+4	0E-7	0E-7	0E-12
+5	4.0000000	3.0000000	2.000000000000
+6	111111.0000000	22222.0000000	0E-12
+-- !result
+select c1, VARIANCE(coalesce(c8, 0)), STDDEV(coalesce(c9, 0)), STD(coalesce(c10, 0)) from t1 group by c1 order by c1;
+-- result:
+1	0.0	0.0	0.0
+2	0.0	0.0	0.0
+3	0.0	0.0	0.0
+4	0.0	0.0	0.0
+5	0.0	0.0	0.0
+6	0.0	0.0	0.0
+-- !result
+select c1, ROUND(coalesce(c9, 0)), DROUND(coalesce(c10, 0)) from t1 order by c1;
+-- result:
+1	2	3
+2	1	1
+3	0	0
+4	0	0
+5	3	2
+6	22222	0
+-- !result
+select c1, max_by(coalesce(c8, 0), c4), max(coalesce(c9, 0)), avg(coalesce(c10, 0)) from t1 group by c1 order by c1;
+-- result:
+1	1.0000000	2.0000000	3.000000000000
+2	1.0000000	1.0000000	1.000000000000
+3	0E-7	0E-7	0E-12
+4	None	0E-7	0E-12
+5	4.0000000	3.0000000	2.000000000000
+6	None	22222.0000000	0E-12
+-- !result
