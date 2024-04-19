@@ -1191,6 +1191,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "whether to collect metrics for materialized view by default")
     public static boolean enable_materialized_view_metrics_collect = true;
 
+    @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
+               "build ast tree in materialized view initialization")
+    public static boolean enable_materialized_view_text_based_rewrite = true;
+
     /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,
