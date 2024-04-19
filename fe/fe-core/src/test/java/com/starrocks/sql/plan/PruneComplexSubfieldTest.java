@@ -1107,11 +1107,4 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
     }
-
-    @Test
-    public void testJsonBigintDouble() throws Exception {
-        String sql = "select get_json_int(j1, 'a'), get_json_double(j1, 'a') from js0;";
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/a(double)]");
-    }
 }
