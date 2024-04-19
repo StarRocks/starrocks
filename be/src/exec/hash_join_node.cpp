@@ -142,6 +142,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.output_columns) {
         _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
+    if (tnode.hash_join_node.__isset.enable_lazy_materialize) {
+        _enable_lazy_materialize = tnode.hash_join_node.enable_lazy_materialize;
+    }
     return Status::OK();
 }
 

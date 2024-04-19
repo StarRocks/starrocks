@@ -92,6 +92,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // contains both the cols required by parent node and cols required by
     // other join conjuncts and predicates
     protected List<Integer> outputSlots;
+    protected boolean enableLazyMaterialize = false;
 
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;

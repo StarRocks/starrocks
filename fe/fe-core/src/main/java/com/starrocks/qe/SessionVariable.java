@@ -288,6 +288,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
 
+    public static final String ENABLE_LAZY_MATERIALIZATION_JOIN = "enable_lazy_materialization_join";
+
     public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
             "enable_prune_column_after_index_filter";
     
@@ -1178,6 +1180,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LAZY_MATERIALIZATION_JOIN)
+    private boolean enableLazyMaterializeJoin = false;
 
     @VariableMgr.VarAttr(name = ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enablePruneColumnAfterIndexFilter = true;
@@ -2671,6 +2676,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableGinFilter() {
         return enableGinFilter;
+    }
+
+    public boolean isEnableLazyMaterializeJoin() {
+        return enableLazyMaterializeJoin;
+    }
+
+    public void enableLazyMaterializeJoin() {
+        this.enableLazyMaterializeJoin = true;
+    }
+
+    public void disableLazyMaterializeJoin() {
+        this.enableLazyMaterializeJoin = false;
     }
 
     public void disableTrimOnlyFilteredColumnsInScanStage() {

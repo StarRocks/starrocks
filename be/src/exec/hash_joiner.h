@@ -274,7 +274,7 @@ public:
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
     HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
 
-    [[nodiscard]] Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
+    Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
         // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
         // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
@@ -289,6 +289,15 @@ public:
         }
 
         return Status::OK();
+    }
+
+    template <bool is_remain>
+    Status lazy_output_chunk(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* chunk, JoinHashTable& hash_table) {
+        if (_enable_lazy_materialize && (*chunk) && !(*chunk)->is_empty()) {
+            return hash_table.lazy_output<is_remain>(state, probe_chunk, chunk);
+        } else {
+            return Status::OK();
+        }
     }
 
     [[nodiscard]] Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
@@ -443,6 +452,7 @@ private:
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
+    bool _enable_lazy_materialize = false;
 };
 
 } // namespace starrocks
