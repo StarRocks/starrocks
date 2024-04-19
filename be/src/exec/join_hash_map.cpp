@@ -340,8 +340,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (param.probe_output_slots.empty() ||
-                std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
+            if (std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
                         param.probe_output_slots.end() ||
                 std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
                         param.predicate_slots.end()) {
@@ -361,8 +360,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (!param.mor_reader_mode && (param.build_output_slots.empty() ||
-                                           std::find(param.build_output_slots.begin(), param.build_output_slots.end(),
+            if (!param.mor_reader_mode && (std::find(param.build_output_slots.begin(), param.build_output_slots.end(),
                                                      slot->id()) != param.build_output_slots.end() ||
                                            std::find(param.predicate_slots.begin(), param.predicate_slots.end(),
                                                      slot->id()) != param.predicate_slots.end())) {
