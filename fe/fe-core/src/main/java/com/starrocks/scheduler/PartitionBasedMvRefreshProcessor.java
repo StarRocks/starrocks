@@ -303,15 +303,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return RefreshJobStatus.FAILED;
             }
             LOG.info("partition name size: {}, partition column name: {}", partitionNameSet.size(), partitionColumn.getName());
-            List<String> hivePartitionNames = Lists.newArrayList();
+            /*List<String> hivePartitionNames = Lists.newArrayList();
             for (String partitionName : partitionNameSet) {
                 String hivePartitionName = String.join("=", Lists.newArrayList(partitionColumn.getName(), partitionName));
                 hivePartitionNames.add(hivePartitionName);
                 LOG.info("add partition name: {}", hivePartitionName);
+            }*/
+            List<PartitionKey> partitionKeys = Lists.newArrayList();
+            for (String partitionName : partitionNameSet) {
+                partitionKeys.add(mvContext.getRefBaseTableRangePartitionMap().get(partitionName).lowerEndpoint());
             }
             Stopwatch sw = Stopwatch.createStarted();
             List<RemoteFileInfo> remoteFileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getRemoteFileInfos(hiveTable, Lists.newArrayList(partitionNameSet));
+                    .getRemoteFileInfos(hiveTable.getCatalogName(), hiveTable, partitionKeys);
             int fileInfoCount = 0;
             int fileCount = 0;
             for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
