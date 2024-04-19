@@ -114,7 +114,8 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
             col_param->short_key_column_count = p_index.column_param().short_key_column_count();
             index->column_param = col_param;
         }
-        if (p_index.has_schema_id()) {
+        if (p_index.has_schema_id() && p_index.schema_id() > 0) {
+            //                         ^^^^^^^^^^^^^^^^^^^^^^^ Older version FE may incorrectly set the schema id to 0
             index->schema_id = p_index.schema_id();
         } else {
             index->schema_id = p_index.id();
