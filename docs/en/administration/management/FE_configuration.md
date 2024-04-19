@@ -1228,6 +1228,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
 
+##### enable_materialized_view_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: whether to collect metrics for materialized view by default.
+- Introduced in: v3.1.11
+
+##### enable_materialized_view_text_based_rewrite
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: whether to enable text based rewrite by default, if true it will build ast tree in materialized view initialization.
+- Introduced in: v3.2.5
+
 ##### enable_mv_automatic_active_check
 
 - Default: true

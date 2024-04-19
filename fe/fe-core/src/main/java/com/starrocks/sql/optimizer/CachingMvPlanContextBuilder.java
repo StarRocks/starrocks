@@ -160,7 +160,7 @@ public class CachingMvPlanContextBuilder {
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
     public void putAstIfAbsent(MaterializedView mv) {
-        if (mv == null || !mv.isEnableRewrite()) {
+        if (!Config.enable_materialized_view_text_based_rewrite || mv == null || !mv.isEnableRewrite()) {
             return;
         }
         try {
