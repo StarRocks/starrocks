@@ -1735,6 +1735,23 @@ struct TReportLakeCompactionResponse {
     1: optional bool valid
 }
 
+struct TListSessionsOptions {
+    1: optional bool temporary_table_only;
+}
+
+struct TListSessionsRequest {
+    1: optional TListSessionsOptions options;
+}
+
+struct TSessionInfo {
+    1: optional string session_id;
+}
+
+struct TListSessionsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TSessionInfo> sessions;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1839,5 +1856,7 @@ service FrontendService {
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
+
+    TListSessionsResponse listSessions(1: TListSessionsRequest request)
 }
 

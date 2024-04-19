@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -2210,6 +2211,19 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 }
             }
         });
+        return null;
+    }
+
+    @Override
+    public Void visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 

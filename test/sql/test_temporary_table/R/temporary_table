@@ -252,3 +252,44 @@ drop temporary table `c`;
 -- result:
 E: (5502, "Getting analyzing error. Detail message: Unknown table 'c'.")
 -- !result
+-- name: test_drop_rename_db
+create database temp_table_test_${uuid0};
+-- result:
+-- !result
+use temp_table_test_${uuid0};
+-- result:
+-- !result
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into `t` values (1,1,1),(2,2,2);
+-- result:
+-- !result
+select * from `t` order by 1,2,3;
+-- result:
+1	1	1
+2	2	2
+-- !result
+alter database temp_table_test_${uuid0} rename temp_table_test_${uuid0}_new;
+-- result:
+-- !result
+select * from temp_table_test_${uuid0}.t order by 1,2,3;
+-- result:
+[REGEX].*Unknown database*
+-- !result
+select * from temp_table_test_${uuid0}_new.t order by 1,2,3;
+-- result:
+1	1	1
+2	2	2
+-- !result
+drop database temp_table_test_${uuid0}_new;
+-- result:
+[REGEX].*cannot be dropped because there are still some temporary tables*
+-- !result
+drop database temp_table_test_${uuid0}_new force;
+-- result:
+-- !result

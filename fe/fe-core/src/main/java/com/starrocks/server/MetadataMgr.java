@@ -54,6 +54,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -436,6 +437,37 @@ public class MetadataMgr {
                         catalogName, dbName, tableName, e.getMessage());
             }
         });
+    }
+
+    public void cleanTemporaryTables(CleanTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        cleanTemporaryTables(stmt.getSessionId());
+    }
+
+    public void cleanTemporaryTables(UUID sessionId) {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        com.google.common.collect.Table<Long, String, Long> allTables = temporaryTableMgr.getTemporaryTables(sessionId);
+
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database database = localMetastore.getDb(databaseId);
+            if (database == null) {
+                // database maybe dropped by force, we should clean temporary tables on it.
+                temporaryTableMgr.dropTemporaryTables(sessionId, databaseId);
+                continue;
+            }
+            Map<String, Long> tables = allTables.row(databaseId);
+            tables.forEach((tableName, tableId) -> {
+                try {
+                    database.dropTemporaryTable(tableId, tableName, true, true);
+                    temporaryTableMgr.dropTemporaryTable(sessionId, database.getId(), tableName);
+                } catch (DdlException e) {
+                    LOG.error("Failed to drop temporary table {}.{} in session {}",
+                            database.getFullName(), tableName, sessionId, e);
+                }
+            });
+        }
+        temporaryTableMgr.removeTemporaryTables(sessionId);
     }
 
     public Optional<Table> getTable(TableName tableName) {
