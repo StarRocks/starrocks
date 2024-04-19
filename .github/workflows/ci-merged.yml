@@ -37,7 +37,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-3.3
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '3.3')
