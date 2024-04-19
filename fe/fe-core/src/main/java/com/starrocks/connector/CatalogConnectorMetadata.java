@@ -129,6 +129,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+        return normal.getRemoteFileInfos(table, partitionNames);
+    }
+
+    @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
         return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
