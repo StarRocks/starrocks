@@ -2393,7 +2393,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **NOTE**
 >
-> - StarRocks shared-data clusters do not support this parameter.
+> - StarRocks shared-data clusters supports this parameter from v3.3.0.
 > - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
