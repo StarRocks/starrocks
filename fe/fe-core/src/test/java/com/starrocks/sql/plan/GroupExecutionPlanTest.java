@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import org.junit.AfterClass;
 import org.junit.Test;
@@ -26,6 +27,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        Config.show_execution_groups = true;
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
@@ -39,6 +41,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void testColocateGroupExecutionJoin() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
@@ -72,6 +75,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void testGroupExecutionAgg() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
@@ -98,6 +102,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void unsupportedQuerys() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
