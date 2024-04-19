@@ -1742,12 +1742,9 @@ public class StmtExecutor {
                         estimateScanRows,
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
-<<<<<<< HEAD
                         context.getCurrentWarehouse(),
-                        context.isStatisticsJob());
-=======
+                        context.isStatisticsJob(),
                         coord);
->>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
             }
 
             coord.setJobId(jobId);
