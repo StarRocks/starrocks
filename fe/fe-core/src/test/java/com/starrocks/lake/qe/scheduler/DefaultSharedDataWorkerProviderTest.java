@@ -131,7 +131,7 @@ public class DefaultSharedDataWorkerProviderTest {
     private WorkerProvider newWorkerProvider() {
         return factory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
-                -1, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                -1, "all_nodes", WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
