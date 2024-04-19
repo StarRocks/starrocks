@@ -1916,7 +1916,8 @@ public class StmtExecutor {
                         createTime,
                         estimateScanRows,
                         type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                        coord);
             }
 
             coord.setLoadJobId(jobId);

@@ -63,6 +63,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
@@ -231,7 +232,13 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
+<<<<<<< HEAD
                                 long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
+=======
+                                long createTimestamp, long estimateScanRows,
+                                int estimateFileNum, long estimateFileSize,
+                                TLoadJobType type, long timeout, Coordinator coordinator)
+>>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
             throws UserException {
 
         // get db id
@@ -242,8 +249,14 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         LoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
+<<<<<<< HEAD
             loadJob =
                     new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
+=======
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout, coordinator);
+            loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
+            loadJob.setEstimateScanRow(estimateScanRows);
+>>>>>>> 147483cbed ([BugFix] Fix canceling insert load job throwing exception (#44239))
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
