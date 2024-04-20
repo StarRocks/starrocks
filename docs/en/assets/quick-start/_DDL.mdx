@@ -62,5 +62,3 @@ CREATE TABLE IF NOT EXISTS weatherdata (
 );
 ```
 
-Note: 
-If you are using shared-data mode, one tablet can only be assigned to one compute node at a time.  For instance if you had 16 compute nodes (CN) with 4 tablets, then only 4 compute nodes will be utilized in a query.   If you want all 16 compute nodes to be utlized, create a table with 16 tablets. 
