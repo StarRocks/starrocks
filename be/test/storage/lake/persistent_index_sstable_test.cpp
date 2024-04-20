@@ -23,6 +23,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/utils.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -370,8 +371,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             ASSERT_EQ(iter->key().to_string(), fmt::format("test_key_{:016X}", i));
             IndexValueWithVerPB index_value_with_ver_pb;
             ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
-            ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-            ASSERT_EQ(index_value_with_ver_pb.values(0), i);
+            ASSERT_EQ(index_value_with_ver_pb.items(0).version(), 100);
+            ASSERT_EQ(index_value_with_ver_pb.items(0).rowid(), i);
             i++;
         }
         ASSERT_OK(iter->status());
@@ -388,8 +389,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             ASSERT_EQ(iter->key().to_string(), fmt::format("test_key_{:016X}", i));
             IndexValueWithVerPB index_value_with_ver_pb;
             ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
-            ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-            ASSERT_EQ(index_value_with_ver_pb.values(0), i);
+            ASSERT_EQ(index_value_with_ver_pb.items(0).version(), 100);
+            ASSERT_EQ(index_value_with_ver_pb.items(0).rowid(), i);
             i--;
         }
         ASSERT_OK(iter->status());
@@ -409,13 +410,29 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
                 ASSERT_EQ(iter->key().to_string(), fmt::format("test_key_{:016X}", r));
                 IndexValueWithVerPB index_value_with_ver_pb;
                 ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
-                ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-                ASSERT_EQ(index_value_with_ver_pb.values(0), r);
+                ASSERT_EQ(index_value_with_ver_pb.items(0).version(), 100);
+                ASSERT_EQ(index_value_with_ver_pb.items(0).rowid(), r);
             } else {
                 ASSERT_FALSE(iter->Valid());
             }
         }
         delete iter;
+    }
+}
+
+TEST_F(PersistentIndexSstableTest, test_index_value_protobuf) {
+    IndexValueWithVerPB index_value_pb;
+    for (int i = 0; i < 10; i++) {
+        auto* item = index_value_pb.add_items();
+        item->set_version(i);
+        item->set_rssid(i * 10 + i);
+        item->set_rowid(i * 20 + i);
+    }
+    for (int i = 0; i < 10; i++) {
+        const auto& item = index_value_pb.items(i);
+        ASSERT_EQ(item.version(), i);
+        IndexValue val = build_index_value(item);
+        ASSERT_TRUE(val == IndexValue(((uint64_t)(i * 10 + i) << 32) | (i * 20 + i)));
     }
 }
 

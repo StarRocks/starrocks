@@ -23,6 +23,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/utils.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -36,15 +37,12 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
     }
-    if (index_value_ver.versions_size() != index_value_ver.values_size()) {
-        return Status::InternalError("The size of version and the size of value are not equal");
-    }
-    if (index_value_ver.versions_size() == 0) {
+    if (index_value_ver.items_size() == 0) {
         return Status::OK();
     }
 
-    auto version = index_value_ver.versions(0);
-    auto index_value = index_value_ver.values(0);
+    auto version = index_value_ver.items(0).version();
+    auto index_value = build_index_value(index_value_ver.items(0));
     if (_key == key) {
         if (_index_value_vers.empty()) {
             _index_value_vers.emplace_front(version, index_value);
@@ -68,8 +66,10 @@ void KeyValueMerger::flush() {
 
     IndexValueWithVerPB index_value_pb;
     for (const auto& index_value_with_ver : _index_value_vers) {
-        index_value_pb.add_versions(index_value_with_ver.first);
-        index_value_pb.add_values(index_value_with_ver.second.get_value());
+        auto* item = index_value_pb.add_items();
+        item->set_version(index_value_with_ver.first);
+        item->set_rssid(index_value_with_ver.second.get_rssid());
+        item->set_rowid(index_value_with_ver.second.get_rowid());
     }
     _builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString()));
     _index_value_vers.clear();
