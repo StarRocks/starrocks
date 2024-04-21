@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
@@ -64,7 +65,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     // shadow index id -> index schema
     @SerializedName(value = "schemaInfos")
     private List<IndexSchemaInfo> schemaInfos;
-    private Set<Long> visitedIndexSet = new HashSet<>();
+    private Set<String> partitionsWithSchemaFile = new HashSet<>();
 
     LakeTableAsyncFastSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
@@ -76,7 +77,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
             setIndexTabletSchema(indexSchemaInfo.indexId, indexSchemaInfo.indexName, indexSchemaInfo.schemaInfo);
         }
-        visitedIndexSet.addAll(other.visitedIndexSet);
+        partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
     public void setIndexTabletSchema(long indexId, String indexName, SchemaInfo schemaInfo) {
@@ -84,12 +85,14 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
-    protected TabletMetadataUpdateAgentTask createTask(MaterializedIndex index, long nodeId, Set<Long> tablets) {
+    protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition, MaterializedIndex index, long nodeId,
+            Set<Long> tablets) {
+        String tag = String.format("%d_%d", partition.getId(), index.getId());
         TabletMetadataUpdateAgentTask task = null;
         for (IndexSchemaInfo info : schemaInfos) {
             if (info.indexId == index.getId()) {
-                boolean createSchemaFile = !visitedIndexSet.contains(info.indexId);
-                visitedIndexSet.add(info.indexId);
+                // `Set.add()` returns true means this set did not already contain the specified element
+                boolean createSchemaFile = partitionsWithSchemaFile.add(tag);
                 task = TabletMetadataUpdateAgentTaskFactory.createTabletSchemaUpdateTask(nodeId,
                         new ArrayList<>(tablets), info.schemaInfo.toTabletSchema(), createSchemaFile);
                 break;
@@ -208,6 +211,6 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     public void gsonPostProcess() throws IOException {
-        visitedIndexSet = new HashSet<>();
+        partitionsWithSchemaFile = new HashSet<>();
     }
 }
