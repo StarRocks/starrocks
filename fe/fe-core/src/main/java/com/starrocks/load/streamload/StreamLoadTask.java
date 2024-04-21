@@ -76,7 +76,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static com.starrocks.common.ErrorCode.ERR_NO_DATA_TO_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback
         implements Writable, GsonPostProcessable, GsonPreProcessable {
@@ -813,7 +813,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 Status status = coord.getExecStatus();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(ERR_NO_DATA_TO_LOAD.formatErrorMsg());
+                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -821,7 +821,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(ERR_NO_DATA_TO_LOAD.formatErrorMsg());
+                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
                 }
 
                 if (coord.isEnableLoadProfile()) {

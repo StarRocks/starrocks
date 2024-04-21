@@ -482,7 +482,8 @@ public class SparkLoadJob extends BulkLoadJob {
             writeLock();
             try {
                 // check state is still loading. If state is cancelled or finished, return.
-                // if state is cancelled or finished and not return, this would throw all partitions have no load data exception,
+                // if state is cancelled or finished and not return, this would throw
+                // "No partitions have data available for loading" exception,
                 // because tableToLoadPartitions was already cleaned up,
                 if (state != JobState.LOADING) {
                     LOG.warn("job state is not loading. job id: {}, state: {}", id, state);
@@ -588,7 +589,7 @@ public class SparkLoadJob extends BulkLoadJob {
                     String errMsg = new LogBuilder(LogKey.LOAD_JOB, id)
                             .add("database_id", dbId)
                             .add("label", label)
-                            .add("error_msg", "all partitions have no load data")
+                            .add("error_msg", "No partitions have data available for loading")
                             .build();
                     throw new LoadException(errMsg);
                 }

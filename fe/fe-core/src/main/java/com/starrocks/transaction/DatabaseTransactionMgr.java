@@ -97,7 +97,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-import static com.starrocks.common.ErrorCode.ERR_NO_DATA_TO_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -296,10 +296,11 @@ public class DatabaseTransactionMgr {
                 LOG.debug("transaction is already prepared: {}", transactionId);
                 return;
             }
-            // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+            // For compatible reason, the default behavior of empty load is still returning
+            // "No partitions have data available for loading" and abort transaction.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
-                throw new TransactionCommitFailedException(ERR_NO_DATA_TO_LOAD.formatErrorMsg());
+                throw new TransactionCommitFailedException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
             }
 
             if (transactionState.getWriteEndTimeMs() < 0) {

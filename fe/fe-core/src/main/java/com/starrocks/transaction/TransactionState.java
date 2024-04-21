@@ -159,7 +159,7 @@ public class TransactionState implements Writable {
                 case OFFSET_OUT_OF_RANGE:
                     return "Offset out of range";
                 case NO_PARTITIONS:
-                    return "all partitions have no load data";
+                    return "No partitions have data available for loading";
                 case FILTERED_ROWS:
                     return "too many filtered rows";
                 default:

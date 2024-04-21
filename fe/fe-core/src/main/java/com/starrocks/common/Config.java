@@ -2393,7 +2393,7 @@ public class Config extends ConfigBase {
     public static boolean enable_password_reuse = true;
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `all partitions have no load data` is returned.
+     * Otherwise, `No partitions have data available for loading` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
