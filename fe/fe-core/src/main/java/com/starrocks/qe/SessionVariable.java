@@ -1820,7 +1820,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long connectorMaxSplitSize = 64L * 1024L * 1024L;
 
     @VarAttr(name = CONNECTOR_HUGE_FILE_SIZE)
-    private long connectorHugeFileSize = 1024L * 1024L * 1024L;
+    private long connectorHugeFileSize = 512L * 1024L * 1024L;
 
     @VarAttr(name = ENABLE_CONNECTOR_SINK_WRITER_SCALING)
     private boolean enableConnectorSinkWriterScaling = true;
