@@ -439,6 +439,7 @@ public class ConnectContext {
     public Map<String, UserVariable> getUserVariables() {
         return userVariables;
     }
+
     public UserVariable getUserVariable(String variable) {
         return userVariables.get(variable);
     }
@@ -863,6 +864,10 @@ public class ConnectContext {
 
     public int getTotalBackendNumber() {
         return globalStateMgr.getNodeMgr().getClusterInfo().getTotalBackendNumber();
+    }
+
+    public int getAliveComputeNumber() {
+        return globalStateMgr.getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
     }
 
     public void setPending(boolean pending) {
