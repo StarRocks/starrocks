@@ -30,7 +30,8 @@ CREATE TABLE test.table1
     k1 CHAR(10),
     k2 CHAR(10),
     v1 INT SUM,
-    INDEX index_name (k2) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.05") COMMENT ''
+    INDEX index_name (k2) USING NGRAMBF ("gram_num" = "4",
+                                         "bloom_filter_fpp" = "0.05") COMMENT ''
 )
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
@@ -42,12 +43,12 @@ PROPERTIES ("replication_num"= "1");
 
   | **参数**         | **必选** | **说明**                                                     |
   | ---------------- | -------- | ------------------------------------------------------------ |
-  | index_name       | 是       | 索引名称。命名要求参见[系统限制](../../reference/System_limit.md)。在同一张表中不能创建名称相同的索引。 |
-  | column_name      | 是       | 创建索引的列名。只能指定单个列名, 上述例子中为"k2"。         |
-  | gram_num         | 是       | Ngram bloom filter对字符串列的一行数据分词时, 字符串子串的长度。上述例子中gram_num为4。 |
-  | bloom_filter_fpp | 否       | flase positive possibility, 即bloom filter的假阳率, 取值在[0.0001,0.05]。默认为0.05, 值越小, 过滤效果越好, 但是存储开销越大。 |
-  | case_sensitive   | 否       | 该索引是否大小写敏感.默认大小写敏感|
-  | COMMENT          | 否       | 索引备注。                                                   |
+  | `index_name`       | 是       | 索引名称。命名要求参见[系统限制](../../reference/System_limit.md)。在同一张表中不能创建名称相同的索引。 |
+  | `column_name`      | 是       | 创建索引的列名。只能指定单个列名, 上述例子中为"k2"。         |
+  | `gram_num`         | 是       | Ngram bloom filter对字符串列的一行数据分词时, 字符串子串的长度。上述例子中gram_num为4。 |
+  | `bloom_filter_fpp` | 否       | flase positive possibility, 即bloom filter的假阳率, 取值在[0.0001,0.05]。默认为0.05, 值越小, 过滤效果越好, 但是存储开销越大。 |
+  | `case_sensitive`   | 否       | 该索引是否大小写敏感.默认大小写敏感|
+  | `COMMENT`          | 否       | 索引备注。                                                   |
 
   关于建表的其他参数说明，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
@@ -56,8 +57,8 @@ PROPERTIES ("replication_num"= "1");
 可以通过 show create table或者show index from table 查看该表的所有index，因为创建索引是异步的, 因此只有创建索引成功后才能通过show命令看到对应的索引。
 
 ```SQL
-SHOW CREATE table table1;
-show index from table1;
+SHOW CREATE TABLE table1;
+SHOW INDEX FROM table1;
 ```
 
 ## 修改索引
@@ -67,7 +68,9 @@ show index from table1;
 - 如下语句为表table1增加了一个Ngram Bloom filter 索引列 `k1`, 该索引名为new_index_name。
 
     ```SQL
-    ALTER TABLE table1 ADD INDEX new_index_name(k1) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.05") COMMENT ''
+    ALTER TABLE table1 
+    ADD INDEX new_index_name(k1) USING NGRAMBF ("gram_num" = "4",
+                                                "bloom_filter_fpp" = "0.05") COMMENT ''
     ```
 
 - 如下语句删除了表table1中名为new_index_name的Ngram Bloom filter 索引。
@@ -94,7 +97,9 @@ CREATE TABLE test.table1
     k1 CHAR(10),
     k2 CHAR(10),
     v1 INT SUM,
-    INDEX index_name (k2) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.05", "case_sensitive" = "false") COMMENT ''
+    INDEX index_name (k2) USING NGRAMBF ("gram_num" = "4",
+                                         "bloom_filter_fpp" = "0.05",
+                                         "case_sensitive" = "false") COMMENT ''
 )
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
@@ -103,5 +108,8 @@ PROPERTIES ("replication_num"= "1");
 ```
 或者如果已经创建了索引，则修改索引：
 ```SQL
-ALTER TABLE table1 ADD INDEX new_index_name(k1) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05","case_sensitive" = "false") COMMENT '';
+ALTER TABLE table1 
+ADD INDEX new_index_name(k1) USING NGRAMBF ("gram_num" = "4", 
+                                            "bloom_filter_fpp" = "0.05",
+                                            "case_sensitive" = "false") COMMENT '';
 ```
