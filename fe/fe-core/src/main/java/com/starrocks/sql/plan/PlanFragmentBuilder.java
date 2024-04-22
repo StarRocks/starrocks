@@ -63,6 +63,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -84,6 +85,7 @@ import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
+import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.JDBCScanNode;
@@ -157,6 +159,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -1328,6 +1331,42 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), icebergScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalIcebergMetadataScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalIcebergMetadataScanOperator node = (PhysicalIcebergMetadataScanOperator) optExpression.getOp();
+
+            LogicalIcebergMetadataTable table = (LogicalIcebergMetadataTable) node.getTable();
+            context.getDescTbl().addReferencedTable(table);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(table);
+
+            Column phCol = table.getPlaceHolderColumns().stream().findFirst().get();
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                if (entry.getValue().getName().equalsIgnoreCase(phCol.getName())) {
+                    continue;
+                }
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setIsOutputColumn(node.getOutputColumns().contains(entry.getKey()));
+                if (slotDescriptor.getOriginType().isComplexType()) {
+                    slotDescriptor.setOriginType(entry.getKey().getType());
+                    slotDescriptor.setType(entry.getKey().getType());
+                }
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            IcebergMetadataScanNode metadataScanNode =
+                    new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
+                            "IcebergMetadataScanNode");
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), metadataScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }
