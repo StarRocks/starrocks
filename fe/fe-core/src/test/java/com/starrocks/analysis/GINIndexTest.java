@@ -73,7 +73,7 @@ public class GINIndexTest extends PlanTestBase {
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
-                "The inverted index can only be build on column with type of scalar type.");
+                "The inverted index can only be build on column with type of VARCHAR type.");
 
         Column c2 = new Column("f2", Type.STRING, true);
         Assertions.assertThrows(
