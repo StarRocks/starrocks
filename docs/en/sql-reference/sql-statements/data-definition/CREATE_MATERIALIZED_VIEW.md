@@ -23,6 +23,8 @@ StarRocks supports asynchronous materialized views from v2.4. The major differen
 
 ## Synchronous materialized view
 
+StarRocks shared-data clusters support synchronous materialized views from v3.3.0 onwards.
+
 ### Syntax
 
 ```SQL
