@@ -79,7 +79,7 @@ public:
 
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
     void release_to_offset(int64_t offset);
-    void release();
+    void release() override;
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
 

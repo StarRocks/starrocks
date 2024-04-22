@@ -82,6 +82,8 @@ public:
 
     virtual bool is_cache_hit() const { return false; };
 
+    virtual void release() const {};
+
 protected:
     std::string _filename = "";
 };
