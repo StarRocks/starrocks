@@ -68,7 +68,7 @@ OutPut Exchange Id: 28
 |  other join predicates: [39: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (8: l_orderkey), remote = true
-|  output columns: 2, 10, 39
+|  output columns: 2
 |  cardinality: 1600098
 |  column statistics:
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -108,7 +108,7 @@ OutPut Exchange Id: 24
 |  other join predicates: [56: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
 |  build runtime filters:
 |  - filter_id = 3, build_expr = (8: l_orderkey), remote = true
-|  output columns: 2, 8, 10, 56
+|  output columns: 2, 8, 10
 |  cardinality: 1600099
 |  column statistics:
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE

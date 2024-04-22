@@ -175,9 +175,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
     }
 
     update_build_rows(chunk->num_rows());
-    RETURN_IF_ERROR(_hash_join_builder->append_chunk(chunk));
-
-    return Status::OK();
+    return _hash_join_builder->append_chunk(chunk);
 }
 
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
