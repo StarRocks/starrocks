@@ -400,6 +400,7 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
+        ./storage/delta_writer_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
