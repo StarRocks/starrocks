@@ -242,7 +242,8 @@ jobs:
   update_feature_issue:
     runs-on: [ self-hosted, quick ]
     needs: update_backport_merged_msg
-    if: !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
+    if: >
+      !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
     env:
       VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
     steps:
