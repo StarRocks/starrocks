@@ -391,3 +391,47 @@ WITH BROKER
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Do not support exporting temporary table.')
 -- !result
+-- name: test_sys_temp_tables
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+desc information_schema.temp_tables;
+-- result:
+TABLE_CATALOG	varchar(512)	YES	false	None	
+TABLE_SCHEMA	varchar(2048)	YES	false	None	
+TABLE_NAME	varchar(2048)	YES	false	None	
+TABLE_TYPE	varchar(2048)	YES	false	None	
+ENGINE	varchar(2048)	YES	false	None	
+VERSION	bigint	YES	false	None	
+ROW_FORMAT	varchar(10)	YES	false	None	
+TABLE_ROWS	bigint	YES	false	None	
+AVG_ROW_LENGTH	bigint	YES	false	None	
+DATA_LENGTH	bigint	YES	false	None	
+MAX_DATA_LENGTH	bigint	YES	false	None	
+INDEX_LENGTH	bigint	YES	false	None	
+DATA_FREE	bigint	YES	false	None	
+AUTO_INCREMENT	bigint	YES	false	None	
+CREATE_TIME	datetime	YES	false	None	
+UPDATE_TIME	datetime	YES	false	None	
+CHECK_TIME	datetime	YES	false	None	
+TABLE_COLLATION	varchar(32)	YES	false	None	
+CHECKSUM	bigint	YES	false	None	
+CREATE_OPTIONS	varchar(255)	YES	false	None	
+TABLE_COMMENT	varchar(2048)	YES	false	None	
+SESSION	varchar(128)	YES	false	None	
+TABLE_ID	bigint	YES	false	None	
+-- !result
+select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA_LENGTH,MAX_DATA_LENGTH,INDEX_LENGTH,DATA_FREE,AUTO_INCREMENT,TABLE_COMMENT from information_schema.temp_tables where `session`=(select session_id());
+-- result:
+def	t	BASE TABLE	StarRocks	0	0	0	None	None	None	None	
+-- !result
+drop temporary table `t`;
+-- result:
+-- !result
+select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA_LENGTH,MAX_DATA_LENGTH,INDEX_LENGTH,DATA_FREE,AUTO_INCREMENT,TABLE_COMMENT from information_schema.temp_tables where `session`=(select session_id());
+-- result:
+-- !result
