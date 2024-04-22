@@ -34,6 +34,7 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
 - Iceberg catalogs support v1 tables. Additionally, Iceberg catalogs support ORC-formatted v2 tables from StarRocks v3.0 onwards and support Parquet-formatted v2 tables from StarRocks v3.1 onwards.
+- Since v3.3, Iceberg catalogs support queries that include equality deletes on ORC- and Parquet-formatted v2 tables.
 
 ## Integration preparation
 
