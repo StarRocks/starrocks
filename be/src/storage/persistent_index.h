@@ -549,6 +549,8 @@ private:
                                         std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
                                         std::map<size_t, LargeIndexPage>& pages) const;
 
+    Status _read_page(size_t shard_idx, size_t pageid, IndexPage* page, IOStat* stat) const;
+
     Status _get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                  KeysInfo* found_keys_info, std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
                                  IOStat* stat) const;
@@ -585,6 +587,7 @@ private:
         uint64_t data_size;
         uint64_t uncompressed_size;
         uint64_t page_size;
+        std::vector<int32_t> page_off;
     };
 
     std::vector<ShardInfo> _shards;
