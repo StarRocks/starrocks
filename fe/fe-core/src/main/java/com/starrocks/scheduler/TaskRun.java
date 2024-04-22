@@ -327,8 +327,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (taskRunStatus == null) {
             // prefer other
             return 1;
-        } else if (otherTaskRunStatus == null){
-            // perfer this
+        } else if (otherTaskRunStatus == null) {
+            // prefer this
             return -1;
         } else {
             // if priority is different, return the higher priority

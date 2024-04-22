@@ -62,7 +62,7 @@ public class TaskRunSchedulerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
-       return makeExecuteOption(isMergeRedundant, isSync, 0);
+        return makeExecuteOption(isMergeRedundant, isSync, 0);
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
