@@ -78,6 +78,13 @@ public class SecurityPolicyRewriteRule {
             allTablesRelations.values().forEach(r -> r.setCreateByPolicyRewritten(true));
         }
 
+        // Eliminate the effects of aliases
+        // `select v1 from tbl t` is rewritten as `select t.v1 from (select tbl.v1 from tbl) t`
+        // If the influence of alias is not eliminated, it will cause tbl.v1 resolve error.
+        if (relation.getAlias() != null) {
+            relation.setAlias(null);
+        }
+
         SelectRelation selectRelation = new SelectRelation(new SelectList(selectListItemList, false),
                 relation, rowAccessExpr, null, null);
         selectRelation.setOrderBy(Collections.emptyList());
