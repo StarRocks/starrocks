@@ -1270,7 +1270,7 @@ public class QueryAnalyzer {
                 return resolvedAliases.get(ref);
             }
             if (resolvingAlias.contains(ref)) {
-                throw new SemanticException("Cyclic aliases: " + ref);
+                throw new SemanticException("Cyclic aliases: " + ref, slotRef.getPos());
             }
 
             // Use resolvingAliases to detect cyclic aliases
