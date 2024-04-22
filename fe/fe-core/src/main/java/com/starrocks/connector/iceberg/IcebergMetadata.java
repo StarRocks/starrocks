@@ -489,8 +489,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits);
     }
 
-
-
     private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
         triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null);
     }
