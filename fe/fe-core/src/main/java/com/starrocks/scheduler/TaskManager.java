@@ -659,7 +659,6 @@ public class TaskManager implements MemoryTrackable {
                 .filter(t -> isShowTaskRunStatus(t, dbName))
                 .forEach(taskRunList::add);
 
-
         // history task runs
         List<TaskRunStatus> historyTaskRuns = taskRunManager.getTaskRunHistory().getAllHistory();
         historyTaskRuns.stream()

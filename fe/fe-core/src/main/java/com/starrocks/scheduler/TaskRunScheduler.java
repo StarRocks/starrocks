@@ -101,7 +101,7 @@ public class TaskRunScheduler {
         if (taskRun == null) {
             return;
         }
-        LOG.warn("remove pending task run: {}", taskRun);
+        LOG.info("remove pending task run: {}", taskRun);
 
         if (!pendingTaskRunQueue.remove(taskRun)) {
             LOG.warn("remove pending task run from queue failed: {}", taskRun);
@@ -110,6 +110,11 @@ public class TaskRunScheduler {
         Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskRun.getTaskId());
         if (!taskRunQueue.remove(taskRun)) {
             LOG.warn("remove pending task run from pending map failed: {}", taskRun);
+
+        }
+        if (taskRunQueue.isEmpty()) {
+            LOG.warn("remove pending task run from pending map: {}", taskRun);
+            pendingTaskRunMap.remove(taskRun.getTaskId());
         }
     }
 
@@ -170,7 +175,7 @@ public class TaskRunScheduler {
 
             // remove task run from pending task run map
             Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
-            if (taskRunQueue == null) {
+            if (taskRunQueue == null || pendingTaskRunMap.isEmpty()) {
                 pendingTaskRunMap.remove(taskId);
             } else {
                 TaskRun taskRunInMap = taskRunQueue.poll();

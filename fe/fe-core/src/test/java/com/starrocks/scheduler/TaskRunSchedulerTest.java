@@ -61,6 +61,10 @@ public class TaskRunSchedulerTest {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
 
+    private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
+       return makeExecuteOption(isMergeRedundant, isSync, 0);
+    }
+
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
         ExecuteOption executeOption = new ExecuteOption();
         executeOption.setMergeRedundant(isMergeRedundant);
@@ -69,13 +73,19 @@ public class TaskRunSchedulerTest {
         return executeOption;
     }
 
+    private TaskRun makeTaskRun(long taskId, Task task, ExecuteOption executeOption) {
+        return makeTaskRun(taskId, task, executeOption, -1);
+    }
+
     private TaskRun makeTaskRun(long taskId, Task task, ExecuteOption executeOption, long createTime) {
         TaskRun taskRun = TaskRunBuilder
                 .newBuilder(task)
                 .setExecuteOption(executeOption)
                 .build();
         taskRun.setTaskId(taskId);
-        taskRun.initStatus("1", createTime);
+        if (createTime >= 0) {
+            taskRun.initStatus("1", createTime);
+        }
         return taskRun;
     }
 
@@ -201,5 +211,55 @@ public class TaskRunSchedulerTest {
         Assert.assertTrue(scheduler.toString().equals("{\"running\":\"{\\\"0\\\":{},\\\"1\\\":{},\\\"2\\\":{},\\\"3\\\":{}}\"," +
                 "\"pending_map\":\"{\\\"4\\\":[{}],\\\"5\\\":[{}],\\\"6\\\":[{}],\\\"7\\\":[{}],\\\"8\\\":[{}]," +
                 "\\\"9\\\":[{}]}\",\"pending_queue\":\"[{},{},{},{},{},{}]\"}"));
+    }
+
+
+    @Test
+    public void testTaskSchedulerWithDifferentTaskIds() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        for (int i = 0; i < N; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(i, task, makeExecuteOption(true, false));
+            taskRun.setProcessor(new MockTaskRunProcessor());
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
+        Assert.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
+    }
+
+    @Test
+    public void testTaskSchedulerWithSameTaskIdsAndMergeable() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        for (int i = 0; i < N; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false));
+            taskRun.setProcessor(new MockTaskRunProcessor());
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
+        Assert.assertEquals(1, pendingTaskRunsCount + runningTaskRunsCount);
+    }
+
+    @Test
+    public void testTaskSchedulerWithSameTaskIdsAndNoMergeable() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        for (int i = 0; i < N; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(false, false));
+            taskRun.setProcessor(new MockTaskRunProcessor());
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
+        System.out.println(taskRunScheduler);
+        Assert.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
     }
 }

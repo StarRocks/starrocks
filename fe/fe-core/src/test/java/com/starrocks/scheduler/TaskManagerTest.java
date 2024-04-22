@@ -423,7 +423,54 @@ public class TaskManagerTest {
 
         TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
         Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+    }
 
+    @Test
+    public void testReplayUpdateTaskRun1() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        taskManager.replayCreateTask(task);
+        long taskId = 1;
+
+        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+
+        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        taskRun2.setTaskId(taskId);
+        taskRun2.initStatus("2", now);
+        taskManager.replayCreateTaskRun(taskRun2.getStatus());
+        taskManager.replayCreateTaskRun(taskRun1.getStatus());
+
+        TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+        {
+            // task run 2
+            TaskRunStatusChange change1 = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
+                    Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+            taskManager.replayUpdateTaskRun(change1);
+            Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+            Assert.assertEquals(1, taskRunScheduler.getPendingQueueCount());
+        }
+
+        {
+            // task run 2
+            TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
+                    Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
+            taskManager.replayUpdateTaskRun(change);
+            Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
+            Assert.assertEquals(1, taskRunScheduler.getPendingQueueCount());
+        }
+
+        {
+            // task run 1
+            TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
+                    Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
+            taskManager.replayUpdateTaskRun(change);
+            Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
+            Assert.assertEquals(0, taskRunScheduler.getPendingQueueCount());
+        }
     }
 
     @Test

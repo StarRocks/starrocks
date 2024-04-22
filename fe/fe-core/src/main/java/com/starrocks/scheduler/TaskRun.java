@@ -322,12 +322,22 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        // if priority is different, return the higher priority
-        if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
-            return taskRun.getStatus().getPriority() - this.getStatus().getPriority();
+        TaskRunStatus taskRunStatus = this.getStatus();
+        TaskRunStatus otherTaskRunStatus = taskRun.getStatus();
+        if (taskRunStatus == null) {
+            // prefer other
+            return 1;
+        } else if (otherTaskRunStatus == null){
+            // perfer this
+            return -1;
         } else {
-            // if priority is the same, return the older task
-            return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
+            // if priority is different, return the higher priority
+            if (taskRunStatus.getPriority() != otherTaskRunStatus.getPriority()) {
+                return otherTaskRunStatus.getPriority() - taskRunStatus.getPriority();
+            } else {
+                // if priority is the same, return the older task
+                return taskRunStatus.getCreateTime() > otherTaskRunStatus.getCreateTime() ? 1 : -1;
+            }
         }
     }
 
