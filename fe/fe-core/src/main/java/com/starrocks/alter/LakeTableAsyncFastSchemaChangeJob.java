@@ -202,7 +202,6 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             } else {
                 info.add(warehouse.getName());
             }
-
             infos.add(info);
         }
     }
