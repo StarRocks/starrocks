@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -205,7 +206,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private List<String> listPartitionNamesWithSnapshotId(
             Table table, String dbName, String tableName, long snapshotId, ExecutorService executorService) {
         Set<String> partitionNames = Sets.newHashSet();
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext();
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(PlanMode.LOCAL);
         scanContext.setOnlyReadCache(true);
         TableScan tableScan = getTableScan(table, scanContext)
                 .planWith(executorService)
@@ -303,7 +304,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             return;
         }
 
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext();
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(PlanMode.LOCAL);
         StarRocksIcebergTableScan tableScan = (StarRocksIcebergTableScan) getTableScan(updatedTable, scanContext)
                 .planWith(executorService)
                 .useSnapshot(updatedSnapshotId);
@@ -341,12 +342,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
-        StarRocksIcebergTableScan scan = delegate.getTableScan(table, scanContext);
+        scanContext.setLocalParallelism(icebergProperties.getIcebergJobPlanningThreadNum());
+        scanContext.setLocalPlanningMaxSlotSize(icebergProperties.getLocalPlanningMaxSlotBytes());
+        scanContext.setDataFileCache(dataFileCache);
+        scanContext.setDeleteFileCache(deleteFileCache);
+        scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
 
-        return scan
-                .dataFileCache(dataFileCache)
-                .deleteFileCache(deleteFileCache)
-                .dataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
+        return delegate.getTableScan(table, scanContext);
     }
 
 
