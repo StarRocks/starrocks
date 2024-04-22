@@ -640,7 +640,7 @@ public class TaskManager implements MemoryTrackable {
         if (dbName == null) {
             return true;
         }
-        return !taskRunStatus.getDbName().equals(dbName);
+        return dbName.equals(taskRunStatus.getDbName());
     }
 
     public List<TaskRunStatus> showTaskRunStatus(String dbName) {
