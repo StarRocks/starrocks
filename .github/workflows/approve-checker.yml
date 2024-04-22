@@ -93,6 +93,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
+<<<<<<< HEAD
 
   feature-review:
     needs: info
@@ -111,3 +112,5 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
+=======
+>>>>>>> acd0ba76e6 ([Tool] Add issue checker for feature prs (#44542))
