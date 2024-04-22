@@ -370,7 +370,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
             List<String> columnNames = columnDefs.stream().map(col -> ParseUtil.backquote(col.getName()))
-                .collect(Collectors.toList());
+                    .collect(Collectors.toList());
 
             for (String column : clause.getSortKeys()) {
                 int idx = columnNames.indexOf(column);
