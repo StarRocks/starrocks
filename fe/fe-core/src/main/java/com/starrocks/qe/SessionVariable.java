@@ -2177,7 +2177,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
         if (!"compute_nodes_only".equals(computationFragmentSchedulingPolicy)
                 && !"all_nodes".equals(computationFragmentSchedulingPolicy)) {
-            throw new IllegalArgumentException("Invalid computationFragmentSchedulingPolicy: " + computationFragmentSchedulingPolicy);
+            throw new IllegalArgumentException("Invalid computationFragmentSchedulingPolicy: " 
+                                               + computationFragmentSchedulingPolicy);
         }
         this.computationFragmentSchedulingPolicy = computationFragmentSchedulingPolicy;
     }
