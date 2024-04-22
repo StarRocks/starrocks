@@ -586,19 +586,28 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 
 ### max_allowed_packet
 
-Used for compatibility with the JDBC connection pool C3P0. This variable specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. Unit: Byte. You can raise this value if the client reports "PacketTooBigException".
-
-### max_scan_key_num
-
-The maximum number of scan key segmented by each query. Default value: -1, indicating that the value in the `be.conf` file is used. If this variable is set to a value greater than 0, the value in `be.conf` is ignored.
+* **Description**: Used for compatibility with the JDBC connection pool C3P0. This variable specifies the maximum size of packets that can be transmitted between the client and server.
+* **Default**: 33554432 (32 MB). You can raise this value if the client reports "PacketTooBigException".
+* **Unit**: Byte
+* **Data type**: Int
 
 ### max_pushdown_conditions_per_column
 
-The maximum number of predicates that can be pushed down for a column. Default value: -1, indicating that the value in the `be.conf` file is used. If this variable is set to a value greater than 0, the value in `be.conf` is ignored.
+* **Description**: The maximum number of predicates that can be pushed down for a column.
+* **Default**: -1, indicating that the value in the `be.conf` file is used. If this variable is set to a value greater than 0, the value in `be.conf` is ignored.
+* **Data type**: Int
+
+### max_scan_key_num
+
+* **Description**: The maximum number of scan key segmented by each query.
+* **Default**: -1, indicating that the value in the `be.conf` file is used. If this variable is set to a value greater than 0, the value in `be.conf` is ignored.
 
 ### nested_mv_rewrite_max_level
 
-The maximum levels of nested materialized views that can be used for query rewrite. Type: INT. Range: [1, +∞). The value of `1` indicates that only materialized views created on base tables can be used for query rewrite. Default: `3`.
+* **Description**: The maximum levels of nested materialized views that can be used for query rewrite.
+* **Value range**: [1, +∞). The value of `1` indicates that only materialized views created on base tables can be used for query rewrite.
+* **Default**: 3
+* **Data type**: Int
 
 ### net_buffer_length
 
@@ -614,9 +623,9 @@ Used for MySQL client compatibility. No practical usage.
 
 ### new_planner_optimize_timeout
 
-The timeout duration of the query optimizer. When the optimizer times out, an error is returned and the query is stopped, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting. A timeout often occurs when a query has too many joins.
-
-Default value: 3000. Unit: ms.
+* **Description**: The timeout duration of the query optimizer. When the optimizer times out, an error is returned and the query is stopped, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting. A timeout often occurs when a query has too many joins.
+* **Default**: 3000
+* **Unit**: ms
 
 ### parallel_exchange_instance_num
 
@@ -634,51 +643,69 @@ A query plan typically produces a set of scan ranges. This data is distributed a
 
 The number of scan instances determines the number of other execution nodes in the upper level, such as aggregation nodes and join nodes. Therefore, it increases the concurrency of the entire query plan execution. Modifying this variable will help  improve efficiency, but larger values will consume more machine resources, such as CPU, memory, and disk IO.
 
-### partial_update_mode (3.1 and later)
+### partial_update_mode
 
-Used to control the mode of partial updates. Valid values:
+* **Description**: Used to control the mode of partial updates. Valid values:
 
-* `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved.
-* `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
+  * `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved.
+  * `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
 
-For more information, see [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#partial-updates-in-column-mode-since-v31).
+  For more information, see [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#partial-updates-in-column-mode-since-v31).
+* **Default**: auto
+* **Introduced in**: v3.1
 
-### performance_schema
+### performance_schema (global)
 
 Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
 
 ### prefer_compute_node
 
-Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
-
-* true: indicates that the FEs distribute query execution plans to CN nodes.
-* false: indicates that the FEs do not distribute query execution plans to CN nodes.
+* **Description**: Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
+  * `true`: indicates that the FEs distribute query execution plans to CN nodes.
+  * `false`: indicates that the FEs do not distribute query execution plans to CN nodes.
+* **Default**: false
+* **Introduced in**: v2.4
 
 ### pipeline_dop
 
-The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
+* **Description**: The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
 
-From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
+  From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
+
+* **Default**: 0
+* **Data type**: Int
 
 ### pipeline_profile_level
 
-Controls the level of the query profile. A query profile often has five layers: Fragment, FragmentInstance, Pipeline, PipelineDriver, and Operator. Different levels provide different details of the profile:
+* **Description**: Controls the level of the query profile. A query profile often has five layers: Fragment, FragmentInstance, Pipeline, PipelineDriver, and Operator. Different levels provide different details of the profile:
 
-* 0: StarRocks combines metrics of the profile and shows only a few core metrics.
-* 1: default value. StarRocks simplifies the profile and combines metrics of the profile to reduce profile layers.
-* 2: StarRocks retains all the layers of the profile. The profile size is large in this scenario, especially when the SQL query is complex. This value is not recommended.
+  * 0: StarRocks combines metrics of the profile and shows only a few core metrics.
+  * 1: default value. StarRocks simplifies the profile and combines metrics of the profile to reduce profile layers.
+  * 2: StarRocks retains all the layers of the profile. The profile size is large in this scenario, especially when the SQL query is complex. This value is not recommended.
 
-### query_cache_entry_max_bytes (2.5 and later)
+* **Default**: 1
+* **Data type**: Int
 
-The threshold for triggering the Passthrough mode. Valid values: 0 to 9223372036854775807. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by `query_cache_entry_max_bytes` or `query_cache_entry_max_rows`, the query is switched to Passthrough mode.
+### query_cache_entry_max_bytes
 
-### query_cache_entry_max_rows (2.5 and later)
+* **Description**: The threshold for triggering the Passthrough mode. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by `query_cache_entry_max_bytes` or `query_cache_entry_max_rows`, the query is switched to Passthrough mode.
+* **Valid values**: 0 to 9223372036854775807
+* **Default**: 4194304
+* **Unit**: Byte
+* **Introduced in**: v2.5
 
-The upper limit of rows that can be cached. See the description in `query_cache_entry_max_bytes`. Default value: 409600.
+### query_cache_entry_max_rows
+
+* **Description**: The upper limit of rows that can be cached. See the description in `query_cache_entry_max_bytes`. Default value: .
+* **Default**: 409600
+* **Introduced in**: v2.5
 
 ### query_cache_agg_cardinality_limit (2.5 and later)
 
-The upper limit of cardinality for GROUP BY in Query Cache. Query Cache is not enabled if the rows generated by GROUP BY exceeds this value. Default value: 5000000. If `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` is set to 0, the Passthrough mode is used even when no computation results are generated from the involved tablets.
+* **Description**: The upper limit of cardinality for GROUP BY in Query Cache. Query Cache is not enabled if the rows generated by GROUP BY exceeds this value. Default value: 5000000. If `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` is set to 0, the Passthrough mode is used even when no computation results are generated from the involved tablets.
+* **Default**: 5000000
+* **Data type**: Long
+* **Introduced in**: v2.5
 
 ### query_cache_size (global)
 
@@ -690,37 +717,52 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
-Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled.
-
-When the `Memory Exceed Limit` error happens, you could try to increase this variable.
+* **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable.
+* **Default**: 0, which means no limit.
+* **Unit**: Byte
 
 ### query_queue_concurrency_limit (global)
 
-The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Default: `0`.
+* **Description**: The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`.
+* **Default**: 0
+* **Data type**: Int
 
 ### query_queue_cpu_used_permille_limit (global)
 
-The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Default: `0`. Range: [0, 1000]
+* **Description**: The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`.
+* **Value range**: [0, 1000]
+* **Default**: `0`
 
 ### query_queue_max_queued_queries (global)
 
-The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `1024`.
+* **Description**: The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`.
+* **Default**: `1024`.
 
 ### query_queue_mem_used_pct_limit (global)
 
-The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Default: `0`. Range: [0, 1]
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`.
+* **Value range**: [0, 1]
+* **Default**: 0
 
 ### query_queue_pending_timeout_second (global)
 
-The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected. Unit: second. Default: `300`.
+* **Description**: The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected.
+* **Default**: 300
+* **Unit**: Second
 
 ### query_timeout
 
-Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds. Value range: [1, 259200].
+* **Description**: Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds.
+* **Value range**: [1, 259200]
+* **Default**: 300
+* **Data type**: Int
+* **Unit**: Second
 
 ### range_pruner_max_predicate (v3.0 and later)
 
-The maximum number of IN predicates that can be used for Range partition pruning. Default value: 100. A value larger than 100 may cause the system to scan all tablets, which compromises the query performance.
+* **Description**: The maximum number of IN predicates that can be used for Range partition pruning. Default value: 100. A value larger than 100 may cause the system to scan all tablets, which compromises the query performance.
+* **Default**: 100
+* **Introduced in**: v3.0
 
 ### rewrite_count_distinct_to_bitmap_hll
 
@@ -728,21 +770,25 @@ Used to decide whether to rewrite count distinct queries to bitmap_union_count a
 
 ### runtime_filter_on_exchange_node
 
-Whether to place GRF on Exchange Node after GRF is pushed down across the Exchange operator to a lower-level operator. The default value is `false`, which means GRF will not be placed on Exchange Node after it is pushed down across the Exchange operator to a lower-level operator. This prevents repetitive use of GRF and reduces the computation time.
+* **Description**: Whether to place GRF on Exchange Node after GRF is pushed down across the Exchange operator to a lower-level operator. The default value is `false`, which means GRF will not be placed on Exchange Node after it is pushed down across the Exchange operator to a lower-level operator. This prevents repetitive use of GRF and reduces the computation time.
 
-However, GRF delivery is a "try-best" process. If the lower-level operator fails to receive the GRF but the GRF is not placed on Exchange Node, data cannot be filtered, which compromises filter performance. `true` means GRF will still be placed on Exchange Node even after it is pushed down across the Exchange operator to a lower-level operator.
+  However, GRF delivery is a "try-best" process. If the lower-level operator fails to receive the GRF but the GRF is not placed on Exchange Node, data cannot be filtered, which compromises filter performance. `true` means GRF will still be placed on Exchange Node even after it is pushed down across the Exchange operator to a lower-level operator.
+
+* **Default**: false
 
 ### runtime_join_filter_push_down_limit
 
-The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
-
-The value is an integer. Default value: 1024000.
+* **Description**: The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
+* **Default**: 1024000
+* **Data type**: Int
 
 ### runtime_profile_report_interval
 
-The time interval at which runtime profiles are reported. This variable is supported from v3.1.0 onwards.
-
-Unit: second, Default: `10`.
+* **Description**: The time interval at which runtime profiles are reported.
+* **Default**: 10
+* **Unit**: Second
+* **Data type**: Int
+* **Introduced in**: v3.1.0
 
 ### spill_mode (3.0 and later)
 
@@ -757,13 +803,16 @@ This variable takes effect only when the variable `enable_spill` is set to `true
 
 Used for compatibility with the JDBC connection pool C3P0. No practical usage.
 
-### sql_dialect  (v3.0 and later)
+### sql_dialect
 
-The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
+* **Description**: The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
 
-> **NOTICE**
->
-> After you configure StarRocks to use the Trino dialect, identifiers in queries are not case-sensitive by default. Therefore, you must specify names in lowercase for your databases and tables at database and table creation. If you specify database and table names in uppercase, queries against these databases and tables will fail.
+  > **NOTICE**
+  >
+  > After you configure StarRocks to use the Trino dialect, identifiers in queries are not case-sensitive by default. Therefore, you must specify names in lowercase for your databases and tables at database and table creation. If you specify database and table names in uppercase, queries against these databases and tables will fail.
+
+* **Data type**: StarRocks
+* **Introduced in**: v3.0
 
 ### sql_mode
 
@@ -800,13 +849,15 @@ Used for MySQL client compatibility. No practical usage.
 
 ### statistic_collect_parallel
 
-Used to adjust the parallelism of statistics collection tasks that can run on BEs. Default value: 1. You can increase this value to speed up collection tasks.
+* **Description**: Used to adjust the parallelism of statistics collection tasks that can run on BEs. Default value: 1. You can increase this value to speed up collection tasks.
+* **Default**: 1
+* **Data type**: Int
 
 ### storage_engine
 
 The types of engines supported by StarRocks:
 
-* olap: StarRocks system-owned engine.
+* olap (default): StarRocks system-owned engine.
 * mysql: MySQL external tables.
 * broker: Access external tables through a broker program.
 * elasticsearch or es: Elasticsearch external tables.
@@ -833,20 +884,21 @@ Used to set the time zone of the current session. The time zone can affect the r
 
 ### trace_log_mode
 
-* Description: Used to control where to output the logs of query trace profiles. Valid values:
+* **Description**: Used to control where to output the logs of query trace profiles. Valid values:
   * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
   * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
 
   For more information on query trace profile, see [Query Trace Profile](../developers/trace-tools/query_trace_profile.md).
 
-* Default: `command`
-* Introduced in: v3.2.0
+* **Default**: `command`
+* **Data type**: String
+* **Introduced in**: v3.2.0
 
 ### transaction_read_only
 
-* Description: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
-* Default: OFF
-* Introduced in: v2.5.18, v3.0.9, v3.1.7
+* **Description**: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
+* **Default**: OFF
+* **Introduced in**: v2.5.18, v3.0.9, v3.1.7
 
 ### tx_isolation
 
@@ -854,10 +906,13 @@ Used for MySQL client compatibility. No practical usage. The alias is `transacti
 
 ### use_compute_nodes
 
-The maximum number of CN nodes that can be used. This variable is valid when `prefer_compute_node=true`. Valid values:
+* **Description**: The maximum number of CN nodes that can be used. This variable is valid when `prefer_compute_node=true`. Valid values:
 
-* `-1`: indicates that all CN nodes are used.
-* `0`: indicates that no CN nodes are used.
+  * `-1`: indicates that all CN nodes are used.
+  * `0`: indicates that no CN nodes are used.
+* **Default**: -1
+* **Data type**: Int
+* **Introduced in**: v2.4
 
 ### use_v2_rollup
 
@@ -869,7 +924,7 @@ Used to control whether the vectorized engine is used to execute queries. A valu
 
 ### version (global)
 
-The MySQL server version returned to the client.
+The MySQL server version returned to the client. The value is the same as FE parameter `mysql_server_version`.
 
 ### version_comment (global)
 
@@ -877,10 +932,13 @@ The StarRocks version. Cannot be changed.
 
 ### wait_timeout
 
-The number of seconds the server waits for activity on a noninteractive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
-
-Unit: seconds. Default value: 28800 (8 hours).
+* **Description**: The number of seconds the server waits for activity on a non-interactive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+* **Default**: 28800 (8 hours).
+* **Unit**: Second
+* **Data type**: Int
 
 ### orc_use_column_names
 
-Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names. This variable is supported from v3.1.10 onwards.
+* **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
+* **Default**: false
+* **Introduced in**: v3.1.10
