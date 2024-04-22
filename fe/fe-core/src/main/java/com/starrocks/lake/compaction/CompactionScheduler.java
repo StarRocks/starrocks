@@ -38,6 +38,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -228,29 +229,10 @@ public class CompactionScheduler extends Daemon {
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
             compactionManager.getAllPartitions()
                     .stream()
-                    .filter(p -> !isPartitionExist(p))
+                    .filter(p -> !MetaUtils.isPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;
-        }
-    }
-
-    private boolean isPartitionExist(PartitionIdentifier partition) {
-        Database db = stateMgr.getDb(partition.getDbId());
-        if (db == null) {
-            return false;
-        }
-        // lake table or lake materialized view
-        OlapTable table = (OlapTable) db.getTable(partition.getTableId());
-        if (table == null) {
-            return false;
-        }
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
-        try {
-            return table.getPhysicalPartition(partition.getPartitionId()) != null;
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
