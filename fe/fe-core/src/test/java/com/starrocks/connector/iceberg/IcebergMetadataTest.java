@@ -39,6 +39,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
@@ -1210,5 +1211,17 @@ public class IcebergMetadataTest extends TableTestBase {
         expected2.put("k4", MetricsModes.Truncate.withLength(32));
         expected2.put("k5", MetricsModes.Full.get());
         Assert.assertEquals(expected2, actual2);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testPlanMode() {
+        Assert.assertEquals(PlanMode.AUTO.modeName(), PlanMode.fromName("AUTO").modeName());
+        Assert.assertEquals(PlanMode.AUTO.modeName(), PlanMode.fromName("auto").modeName());
+        Assert.assertEquals(PlanMode.LOCAL.modeName(), PlanMode.fromName("local").modeName());
+        Assert.assertEquals(PlanMode.LOCAL.modeName(), PlanMode.fromName("LOCAL").modeName());
+        Assert.assertEquals(PlanMode.DISTRIBUTED.modeName(), PlanMode.fromName("distributed").modeName());
+        Assert.assertEquals(PlanMode.DISTRIBUTED.modeName(), PlanMode.fromName("DISTRIBUTED").modeName());
+
+        PlanMode.fromName("unknown");
     }
 }
