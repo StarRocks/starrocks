@@ -96,7 +96,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                                              long warehouseId) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, computationFragmentSchedulingPolicy, warehouseId);
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
+                                         computationFragmentSchedulingPolicy, warehouseId);
 
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
