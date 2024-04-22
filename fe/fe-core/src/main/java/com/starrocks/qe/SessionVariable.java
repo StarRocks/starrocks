@@ -48,6 +48,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PlanMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
@@ -396,6 +397,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+    public static final String PLAN_MODE = "plan_mode";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
@@ -1907,6 +1909,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
+    @VarAttr(name = PLAN_MODE)
+    private String planMode = PlanMode.AUTO.modeName();
+
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
     @VarAttr(name = ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN)
@@ -1996,6 +2001,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
         this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public String getPlanMode() {
+        return planMode;
+    }
+
+    public void setPlanMode(String planMode) {
+        PlanMode.fromName(planMode);
+        this.planMode = planMode;
     }
 
     public boolean isCboPredicateSubfieldPath() {

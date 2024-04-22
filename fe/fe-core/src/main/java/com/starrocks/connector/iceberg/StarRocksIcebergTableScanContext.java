@@ -15,18 +15,23 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.cache.Cache;
+import com.starrocks.connector.PlanMode;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 
 import java.util.Set;
 
 public class StarRocksIcebergTableScanContext {
+    private final PlanMode planMode;
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
     private boolean onlyReadCache;
+    private int localParallelism;
+    private long localPlanningMaxSlotSize;
 
-    public StarRocksIcebergTableScanContext() {
+    public StarRocksIcebergTableScanContext(PlanMode planMode) {
+        this.planMode = planMode;
     }
 
     public boolean isDataFileCacheWithMetrics() {
@@ -59,5 +64,25 @@ public class StarRocksIcebergTableScanContext {
 
     public void setOnlyReadCache(boolean onlyReadCache) {
         this.onlyReadCache = onlyReadCache;
+    }
+
+    public PlanMode getPlanMode() {
+        return planMode;
+    }
+
+    public int getLocalParallelism() {
+        return localParallelism;
+    }
+
+    public void setLocalParallelism(int localParallelism) {
+        this.localParallelism = localParallelism;
+    }
+
+    public long getLocalPlanningMaxSlotSize() {
+        return localPlanningMaxSlotSize;
+    }
+
+    public void setLocalPlanningMaxSlotSize(long localPlanningMaxSlotSize) {
+        this.localPlanningMaxSlotSize = localPlanningMaxSlotSize;
     }
 }

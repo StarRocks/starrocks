@@ -21,6 +21,8 @@ import org.apache.iceberg.util.PropertyUtil;
 
 import java.util.Map;
 
+import static org.apache.iceberg.TableProperties.MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
+
 public class IcebergCatalogProperties {
     public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
     @Deprecated
@@ -41,6 +43,7 @@ public class IcebergCatalogProperties {
     // internal config
     public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
+    public static final String ICEBERG_LOCAL_PLANNING_MAX_SLOT_BYTES = "iceberg_local_planning_max_slot_bytes";
 
     private final Map<String, String> properties;
     private IcebergCatalogType catalogType;
@@ -53,6 +56,7 @@ public class IcebergCatalogProperties {
     private long icebergTableCacheTtlSec;
     private long icebergManifestCacheMaxNum;
     private long refreshIcebergManifestMinLength;
+    private long localPlanningMaxSlotBytes;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -63,6 +67,7 @@ public class IcebergCatalogProperties {
         initCatalogType();
         initIcebergMetadataCache();
         initThreadPoolNum();
+        initDistributedPlanProperties();
     }
 
     private void initCatalogType() {
@@ -97,6 +102,11 @@ public class IcebergCatalogProperties {
         this.backgroundIcebergJobPlanningThreadNum =
                 PropertyUtil.propertyAsInt(properties, BACKGROUND_ICEBERG_JOB_PLANNING_THREAD_NUM,
                         Math.max(2, Runtime.getRuntime().availableProcessors() / 8));
+    }
+
+    private void initDistributedPlanProperties() {
+        this.localPlanningMaxSlotBytes = PropertyUtil.propertyAsLong(
+                properties, ICEBERG_LOCAL_PLANNING_MAX_SLOT_BYTES, MANIFEST_TARGET_SIZE_BYTES_DEFAULT);
     }
 
     public IcebergCatalogType getCatalogType() {
@@ -142,5 +152,9 @@ public class IcebergCatalogProperties {
 
     public long getRefreshIcebergManifestMinLength() {
         return refreshIcebergManifestMinLength;
+    }
+
+    public long getLocalPlanningMaxSlotBytes() {
+        return localPlanningMaxSlotBytes;
     }
 }
