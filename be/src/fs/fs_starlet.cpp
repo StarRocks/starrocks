@@ -534,30 +534,24 @@ public:
     }
 
     Status delete_files(std::span<const std::string> paths) override {
-        if (paths.empty()) {
-            return Status::OK();
-        }
-
-        std::vector<std::string> parsed_paths;
-        parsed_paths.reserve(paths.size());
-        std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
-        int64_t shard_id;
+        using FsPtr = std::shared_ptr<staros::starlet::fslib::FileSystem>;
+        using PathList = std::vector<std::string>;
+        auto parsed_paths = std::unordered_map<FsPtr, PathList>{};
         for (auto&& path : paths) {
             ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
-            auto fs_st = get_shard_filesystem(pair.second);
-            if (!fs_st.ok()) {
-                return to_status(fs_st.status());
+            auto fs_or = get_shard_filesystem(pair.second);
+            if (!fs_or.ok()) {
+                return to_status(fs_or.status());
             }
-            if (fs == nullptr) {
-                shard_id = pair.second;
-                fs = *fs_st;
-            }
-            if (shard_id != pair.second) {
-                return Status::InternalError("Not all paths have the same scheme");
-            }
-            parsed_paths.emplace_back(std::move(pair.first));
+            auto fs = std::move(fs_or).value();
+            parsed_paths[fs].emplace_back(pair.first);
         }
-        return to_status(fs->delete_files(parsed_paths));
+        for (auto&& [fs, files] : parsed_paths) {
+            if (auto res = fs->delete_files(files); !res.ok()) {
+                return to_status(res);
+            }
+        }
+        return Status::OK();
     }
 
 private:
