@@ -65,7 +65,7 @@ public class MvRewriteStrategy {
     public boolean enableMaterializedViewRewrite = false;
     // Whether enable force rewrite for query plans with join operator by rule based mv rewrite
     public boolean enableForceRBORewrite = false;
-    public static MVStrategy mvStrategy = MVStrategy.DEFAULT;
+    public MVStrategy mvStrategy = MVStrategy.DEFAULT;
 
     // rbo config
     public boolean enableRBOViewBasedRewrite = false;
