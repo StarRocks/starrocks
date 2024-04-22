@@ -142,7 +142,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -153,20 +152,28 @@ public class AlterJobMgr {
     private final SchemaChangeHandler schemaChangeHandler;
     private final MaterializedViewHandler materializedViewHandler;
     private final SystemHandler clusterHandler;
-    private CompactionHandler compactionHandler;
+    private final CompactionHandler compactionHandler;
 
-    public AlterJobMgr() {
-        schemaChangeHandler = new SchemaChangeHandler();
-        materializedViewHandler = new MaterializedViewHandler();
-        clusterHandler = new SystemHandler();
-        compactionHandler = new CompactionHandler();
+    public AlterJobMgr(SchemaChangeHandler schemaChangeHandler,
+                       MaterializedViewHandler materializedViewHandler,
+                       SystemHandler systemHandler,
+                       CompactionHandler compactionHandler) {
+        this.schemaChangeHandler = schemaChangeHandler;
+        this.materializedViewHandler = materializedViewHandler;
+        this.clusterHandler = systemHandler;
+        this.compactionHandler = compactionHandler;
     }
 
     public void start() {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
-        compactionHandler = new CompactionHandler();
+    }
+
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
     }
 
     public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
@@ -339,11 +346,19 @@ public class AlterJobMgr {
         List<Column> existedColumns = materializedView.getColumns().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        if (!Objects.equals(newColumns, existedColumns)) {
-            String msg = String.format("mv schema changed: [%s] does not match [%s]",
-                    existedColumns, newColumns);
-            materializedView.setInactiveAndReason(msg);
-            throw new SemanticException(msg);
+        if (newColumns.size() != existedColumns.size()) {
+            throw new SemanticException(String.format("number of columns changed: %d != %d",
+                    existedColumns.size(), newColumns.size()));
+        }
+        for (int i = 0; i < existedColumns.size(); i++) {
+            Column existed = existedColumns.get(i);
+            Column created = newColumns.get(i);
+            if (!existed.isSchemaCompatible(created)) {
+                String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                        existed.toString(), created.toString());
+                materializedView.setInactiveAndReason(message);
+                throw new SemanticException(message);
+            }
         }
 
         return createStmt.getQueryStatement();
@@ -419,8 +434,7 @@ public class AlterJobMgr {
         Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
-            currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
-                    materializedView.getViewDefineSql());
+            currentTask.setDefinition(materializedView.getTaskDefinition());
             currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }
@@ -982,7 +996,7 @@ public class AlterJobMgr {
         }
     }
 
-    public AlterHandler getSchemaChangeHandler() {
+    public SchemaChangeHandler getSchemaChangeHandler() {
         return this.schemaChangeHandler;
     }
 

@@ -17,8 +17,12 @@ package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -37,12 +41,14 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -164,7 +170,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 .map(c -> inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
                 .collect(Collectors.toList());
 
-        // @todo: refactor it, SingleDistinctFunctionPos depend on the map's order
         Map<ColumnRefOperator, CallOperator> aggregations = Maps.newLinkedHashMap();
         for (ColumnRefOperator aggRef : aggregate.getAggregations().keySet()) {
             CallOperator aggFn = aggregate.getAggregations().get(aggRef);
@@ -282,6 +287,44 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     }
 
     @Override
+    public OptExpression visitPhysicalTableFunction(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalTableFunctionOperator tableFunc = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(tableFunc);
+        ColumnRefSet inputStringRefs = new ColumnRefSet();
+        inputStringRefs.union(info.inputStringColumns);
+
+        List<ColumnRefOperator> outers = tableFunc.getOuterColRefs().stream()
+                .map(c -> inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                .collect(Collectors.toList());
+
+        List<ColumnRefOperator> fnInputs = tableFunc.getFnParamColumnRefs();
+        List<ColumnRefOperator> fnOutputs = tableFunc.getFnResultColRefs();
+        TableFunction function = tableFunc.getFn();
+        if (FunctionSet.UNNEST.equalsIgnoreCase(tableFunc.getFn().getFunctionName().getFunction()) &&
+                inputStringRefs.containsAny(fnInputs)) {
+            for (int i = 0; i < fnInputs.size(); i++) {
+                if (!inputStringRefs.contains(fnInputs.get(i))) {
+                    continue;
+                }
+
+                inputStringRefs.union(fnOutputs.get(i));
+                fnInputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnInputs.get(i), fnInputs.get(i)));
+                fnOutputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnOutputs.get(i), fnOutputs.get(i)));
+            }
+            function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
+                    fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        }
+
+        ScalarOperator predicate = rewritePredicate(tableFunc.getPredicate(), inputStringRefs);
+        Projection projection = rewriteProjection(tableFunc.getProjection(), inputStringRefs);
+
+        PhysicalTableFunctionOperator op = new PhysicalTableFunctionOperator(fnOutputs, function, fnInputs,
+                outers, tableFunc.getLimit(), predicate, projection);
+        return rewriteOptExpression(optExpression, op, info.outputStringColumns);
+    }
+
+    @Override
     public OptExpression visitPhysicalOlapScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
         DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
@@ -311,6 +354,11 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         builder.setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
 
         builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
+        if (CollectionUtils.isNotEmpty(scanOperator.getPrunedPartitionPredicates())) {
+            List<ScalarOperator> prunedPredicates = scanOperator.getPrunedPartitionPredicates().stream()
+                    .map(p -> rewritePredicate(p, info.inputStringColumns)).collect(Collectors.toList());
+            builder.setPrunedPartitionPredicates(prunedPredicates);
+        }
         builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
         return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
     }

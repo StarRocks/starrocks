@@ -82,6 +82,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return normal.getTableType();
+    }
+
+    @Override
     public List<String> listDbNames() {
         return ImmutableList.<String>builder()
                 .addAll(this.normal.listDbNames())
@@ -293,10 +298,5 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return normal.getCloudConfiguration();
-    }
-
-    @Override
-    public List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
-        return normal.getChangedPartitionInfo(table, mvSnapShotID);
     }
 }

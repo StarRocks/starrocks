@@ -155,8 +155,8 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
                                                                           int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
 
-    auto op = std::make_shared<SpillableAggregateDistinctBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
-                                                                               driver_sequence);
+    auto op = std::make_shared<SpillableAggregateDistinctBlockingSinkOperator>(
+            aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());
     // create spiller
     auto spiller = _spill_factory->create(*_spill_options);
     // create spill process channel
@@ -190,6 +190,7 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (_aggregator->spiller()->has_output_data()) {
         return true;
     }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_aggregator->spiller());
     if (_aggregator->spiller()->is_cancel()) {
         return true;
     }
@@ -223,6 +224,7 @@ Status SpillableAggregateDistinctBlockingSourceOperator::set_finished(RuntimeSta
 }
 
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_aggregator->spiller()->task_status());
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::pull_chunk(state);
     }

@@ -25,6 +25,8 @@ namespace starrocks {
 using DataCacheMetrics = starcache::CacheMetrics;
 using DataCacheStatus = starcache::CacheStatus;
 
+enum class DataCacheEngineType { STARCACHE, CACHELIB };
+
 class KvCache {
 public:
     virtual ~KvCache() = default;
@@ -48,6 +50,12 @@ public:
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove(const std::string& key) = 0;
 
+    // Update the datacache memory quota.
+    virtual Status update_mem_quota(size_t quota_bytes) = 0;
+
+    // Update the datacache disk space infomation, such as disk quota or disk path.
+    virtual Status update_disk_spaces(const std::vector<DirSpace>& spaces) = 0;
+
     virtual const DataCacheMetrics cache_metrics(int level) = 0;
 
     virtual void record_read_remote(size_t size, int64_t lateny_us) = 0;
@@ -55,6 +63,8 @@ public:
     virtual void record_read_cache(size_t size, int64_t lateny_us) = 0;
 
     virtual Status shutdown() = 0;
+
+    virtual DataCacheEngineType engine_type() = 0;
 };
 
 } // namespace starrocks

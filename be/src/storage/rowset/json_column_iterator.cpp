@@ -29,7 +29,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "util/json_util.h"
+#include "util/json_flattener.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -59,7 +59,8 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _flat_iters[0]->get_current_ordinal(); }
 
-    /// for vectorized engine
+    ordinal_t num_rows() const override { return _flat_iters[0]->num_rows(); }
+
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
@@ -222,6 +223,8 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _json_iter->get_current_ordinal(); }
 
+    ordinal_t num_rows() const override { return _json_iter->num_rows(); }
+
     /// for vectorized engine
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
@@ -275,8 +278,8 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
     // 2. flat
     json_data->init_flat_columns(_flat_paths);
 
-    JsonFlater flater(_flat_paths);
-    flater.flatten(input, &(json_data->get_flat_fields()));
+    JsonFlattener flattener(_flat_paths);
+    flattener.flatten(input, &(json_data->get_flat_fields()));
     return Status::OK();
 }
 

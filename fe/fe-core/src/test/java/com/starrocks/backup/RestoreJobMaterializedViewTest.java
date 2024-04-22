@@ -493,20 +493,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(6)
     public void testMVRestore_TestMVWithBaseTable4() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getCurrentState().getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {

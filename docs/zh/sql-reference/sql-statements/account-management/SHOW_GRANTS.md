@@ -63,7 +63,7 @@ mysql> SHOW GRANTS FOR 'user_g'@'%';
 |UserIdentity |Catalog      |Grants                                                                                         |
 +-------------+-------------------------------------------------------------------------------------------------------------+
 |'user_g'@'%' |NULL         |GRANT role_g, public to `user_g`@`%`;                                                          | 
-|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON `user_a`@`%`, `user_b`@`%`TO `user_g`@`%`;                                | 
+|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON USER `user_a`@`%` TO USER `user_g`@`%`;                                | 
 |'user_g'@'%' |default      |GRANT CREATE DATABASE ON CATALOG default_catalog TO USER `user_g`@`%`;                         |
 |'user_g'@'%' |default      |GRANT ALTER, DROP, CREATE_TABLE ON DATABASE db1 TO USER `user_g`@`%`;                          |
 |'user_g'@'%' |default      |GRANT CREATE_VIEW ON DATABASE db1 TO USER `user_g`@`%` WITH GRANT OPTION;                      |

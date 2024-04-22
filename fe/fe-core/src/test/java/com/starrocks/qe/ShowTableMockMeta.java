@@ -27,6 +27,7 @@ import com.starrocks.privilege.IdGenerator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,7 +46,7 @@ public class ShowTableMockMeta extends MetadataMgr {
     private final Map<String, Table> externalTbSet;
 
     public ShowTableMockMeta(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
         idGenerator = new IdGenerator();
 

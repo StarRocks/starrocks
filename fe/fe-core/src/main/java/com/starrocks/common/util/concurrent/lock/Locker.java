@@ -15,18 +15,29 @@
 package com.starrocks.common.util.concurrent.lock;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-public class Locker implements Cloneable {
+public class Locker {
+    private static final Logger LOG = LogManager.getLogger(Locker.class);
+
     /* The rid of the lock that this locker is waiting for. */
     private Long waitingForRid;
 
@@ -39,6 +50,8 @@ public class Locker implements Cloneable {
 
     /* The thread stack that created this locker */
     private final String stackTrace;
+
+    private final Map<Long, Long> lastSlowLockLogTimeMap = new HashMap<>();
 
     public Locker() {
         this.waitingForRid = null;
@@ -87,8 +100,8 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void lockDatabase(Database database, LockType lockType) {
-        if (Config.use_lock_manager) {
-            assert database != null;
+        if (Config.lock_manager_enabled) {
+            Preconditions.checkNotNull(database);
             try {
                 lock(database.getId(), lockType, 0);
             } catch (IllegalLockStateException e) {
@@ -96,9 +109,17 @@ public class Locker implements Cloneable {
             }
         } else {
             if (lockType.isWriteLock()) {
-                database.writeLock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+                String threadDump = getOwnerInfo(rwLock.getOwner());
+                rwLock.exclusiveLock();
+                logSlowLockEventIfNeeded(startMs, "writeLock", threadDump, database.getId(), database.getFullName());
             } else {
-                database.readLock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+                String threadDump = getOwnerInfo(rwLock.getOwner());
+                rwLock.sharedLock();
+                logSlowLockEventIfNeeded(startMs, "readLock", threadDump, database.getId(), database.getFullName());
             }
         }
     }
@@ -107,8 +128,8 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
-        if (Config.use_lock_manager) {
-            assert database != null;
+        if (Config.lock_manager_enabled) {
+            Preconditions.checkNotNull(database);
             try {
                 lock(database.getId(), lockType, timeout);
                 return true;
@@ -119,12 +140,37 @@ public class Locker implements Cloneable {
                 return false;
             }
         } else {
-            if (lockType.isWriteLock()) {
-                return database.tryWriteLock(timeout, TimeUnit.MILLISECONDS);
-            } else {
-                return database.tryReadLock(timeout, TimeUnit.MILLISECONDS);
+            Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+
+            QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+            try {
+                long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+                String threadDump = getOwnerInfo(rwLock.getOwner());
+
+                boolean result;
+                if (lockType.isWriteLock()) {
+                    result = rwLock.tryExclusiveLock(timeout, TimeUnit.MILLISECONDS);
+                } else {
+                    result = rwLock.trySharedLock(timeout, TimeUnit.MILLISECONDS);
+                }
+
+                if (!result) {
+                    logTryLockFailureEvent(lockType.toString(), threadDump);
+                    return false;
+                } else {
+                    logSlowLockEventIfNeeded(startMs, "try" + lockType, threadDump, database.getId(),
+                            database.getFullName());
+                    return true;
+                }
+            } catch (InterruptedException e) {
+                LOG.warn("failed to try " + lockType + " lock at db[" + database.getId() + "]", e);
+                return false;
             }
         }
+    }
+
+    private void logTryLockFailureEvent(String type, String threadDump) {
+        LOG.warn("try db lock failed. type: {}, current {}", type, threadDump);
     }
 
     /**
@@ -144,15 +190,71 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void unLockDatabase(Database database, LockType lockType) {
-        if (Config.use_lock_manager) {
-            assert database != null;
+        if (Config.lock_manager_enabled) {
+            Preconditions.checkNotNull(database);
             release(database.getId(), lockType);
         } else {
             if (lockType.isWriteLock()) {
-                database.writeUnlock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                rwLock.exclusiveUnlock();
             } else {
-                database.readUnlock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                rwLock.sharedUnlock();
             }
+        }
+    }
+
+    /**
+     * FYI: should deduplicate dbs before call this api.
+     * lock databases in ascending order of id.
+     * @param dbs: databases to be locked
+     * @param lockType: lock type
+     */
+    public void lockDatabases(List<Database> dbs, LockType lockType) {
+        if (dbs == null) {
+            return;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        for (Database db : dbs) {
+            lockDatabase(db, lockType);
+        }
+    }
+
+    /**
+     * FYI: should deduplicate dbs before call this api.
+     * @param dbs: databases to be locked
+     * @param lockType: lock type
+     */
+    public void unlockDatabases(List<Database> dbs, LockType lockType) {
+        if (dbs == null) {
+            return;
+        }
+        for (Database db : dbs) {
+            unLockDatabase(db, lockType);
+        }
+    }
+
+    private String getOwnerInfo(Thread owner) {
+        if (owner == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("owner id: ").append(owner.getId()).append(", owner name: ")
+                .append(owner.getName()).append(", owner stack: ").append(Util.dumpThread(owner, 50));
+        return sb.toString();
+    }
+
+    private void logSlowLockEventIfNeeded(long startMs, String type, String threadDump, Long databaseId,
+                                          String fullQualifiedName) {
+        long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        Long lastSlowLockLogTime = lastSlowLockLogTimeMap.getOrDefault(databaseId, 0L);
+        if (endMs - startMs > Config.slow_lock_threshold_ms &&
+                endMs > lastSlowLockLogTime + Config.slow_lock_log_every_ms) {
+            lastSlowLockLogTime = endMs;
+            lastSlowLockLogTimeMap.put(databaseId, lastSlowLockLogTime);
+            LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
+                            "former: {}, current stack trace: {}", type, databaseId, fullQualifiedName, endMs - startMs,
+                    threadDump, LogUtil.getCurrentStackTrace());
         }
     }
 
@@ -160,10 +262,10 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public boolean isWriteLockHeldByCurrentThread(Database database) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             return true;
         } else {
-            return database.isWriteLockHeldByCurrentThread();
+            return database.getRwLock().isWriteLockHeldByCurrentThread();
         }
     }
 
@@ -171,19 +273,21 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void lockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
-        assert lockType == LockType.WRITE || lockType == LockType.READ;
-        if (Config.use_lock_manager) {
-            assert !tableList.isEmpty();
+        Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        List<Long> tableListClone = new ArrayList<>(tableList);
+
+        if (Config.lock_manager_enabled) {
+            Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, 0);
-                } else if (lockType == LockType.READ) {
+                } else {
                     this.lock(database.getId(), LockType.INTENTION_SHARED, 0);
                 }
 
-                Collections.sort(tableList);
-                for (Long rid : tableList) {
+                Collections.sort(tableListClone);
+                for (Long rid : tableListClone) {
                     this.lock(rid, lockType, 0);
                 }
             } catch (IllegalLockStateException e) {
@@ -196,14 +300,16 @@ public class Locker implements Cloneable {
     }
 
     public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, long timeout) {
-        assert lockType == LockType.WRITE || lockType == LockType.READ;
-        if (Config.use_lock_manager) {
-            assert !tableList.isEmpty();
+        Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        List<Long> tableListClone = new ArrayList<>(tableList);
+
+        if (Config.lock_manager_enabled) {
+            Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, timeout);
-                } else if (lockType == LockType.READ) {
+                } else {
                     this.lock(database.getId(), LockType.INTENTION_SHARED, timeout);
                 }
             } catch (IllegalLockStateException e) {
@@ -212,8 +318,8 @@ public class Locker implements Cloneable {
 
             List<Long> ridLockedList = new ArrayList<>();
             try {
-                Collections.sort(tableList);
-                for (Long rid : tableList) {
+                Collections.sort(tableListClone);
+                for (Long rid : tableListClone) {
                     this.lock(rid, lockType, timeout);
                     ridLockedList.add(rid);
                 }
@@ -222,7 +328,7 @@ public class Locker implements Cloneable {
             } catch (IllegalLockStateException e) {
                 if (lockType == LockType.WRITE) {
                     release(database.getId(), LockType.INTENTION_EXCLUSIVE);
-                } else if (lockType == LockType.READ) {
+                } else {
                     release(database.getId(), LockType.INTENTION_SHARED);
                 }
 
@@ -241,14 +347,17 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void unLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
-        if (Config.use_lock_manager) {
+        Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        List<Long> tableListClone = new ArrayList<>(tableList);
+
+        if (Config.lock_manager_enabled) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
-            } else if (lockType == LockType.READ) {
+            } else {
                 this.release(database.getId(), LockType.INTENTION_SHARED);
             }
-            Collections.sort(tableList);
-            for (Long rid : tableList) {
+            Collections.sort(tableListClone);
+            for (Long rid : tableListClone) {
                 this.release(rid, lockType);
             }
         } else {

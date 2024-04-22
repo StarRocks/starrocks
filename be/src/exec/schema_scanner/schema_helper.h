@@ -47,6 +47,8 @@ public:
                                            TObjectDependencyRes* res);
     static Status list_fe_locks(const std::string& ip, int32_t port, const TFeLocksReq& req, TFeLocksRes* res);
 
+    static Status list_fe_memory_usage(const std::string& ip, int32_t port, const TFeMemoryReq& req, TFeMemoryRes* res);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response, const int timeout_ms);
 

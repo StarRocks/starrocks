@@ -35,6 +35,8 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -193,7 +195,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public void removeWorker(String hostAndPort) throws DdlException {
+        public void removeWorker(String hostAndPort, long workergroupid) throws DdlException {
             workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
         }
 
@@ -250,6 +252,11 @@ public class PseudoCluster {
         }
 
         @Override
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
+        }
+
+        @Override
         public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
             Set<Long> results = new HashSet<>();
             shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
@@ -294,7 +301,8 @@ public class PseudoCluster {
         if (db == null) {
             return null;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -312,7 +320,7 @@ public class PseudoCluster {
             }
             return ret;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

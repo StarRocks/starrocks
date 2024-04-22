@@ -26,7 +26,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -118,7 +117,7 @@ public class DictionaryCacheSink extends DataSink {
         columns.addAll(table.getBaseSchema().stream().map(Column::getPhysicalName).collect(Collectors.toList()));
         for (Column column : table.getBaseSchema()) {
             TColumn tColumn = column.toThrift();
-            tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+            tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
             columnsDesc.add(tColumn);
         }
         TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids, 0);
@@ -140,17 +139,17 @@ public class DictionaryCacheSink extends DataSink {
         Map<String, SlotDescriptor> valueSlots = new HashMap();
 
         for (Column column : tbl.getBaseSchema()) {
-            if (!dictionary.getKeys().contains(column.getName()) && !dictionary.getValues().contains(column.getName())) {
-                currentSlotId++;
-                continue;
-            }
-            SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsMaterialized(true);
-
             if (dictionary.getKeys().contains(column.getName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsMaterialized(true);
+
                 keySlots.put(column.getName(), slotDescriptor);
             } else if (dictionary.getValues().contains(column.getName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsMaterialized(true);
+
                 valueSlots.put(column.getName(), slotDescriptor);
             }
         }

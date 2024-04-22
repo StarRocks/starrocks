@@ -855,8 +855,7 @@ public class PipeManagerTest {
         // show
         String sql = "show pipes";
         ShowPipeStmt showPipeStmt = (ShowPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor showExecutor = new ShowExecutor(ctx, showPipeStmt);
-        ShowResultSet result = showExecutor.execute();
+        ShowResultSet result = ShowExecutor.execute(showPipeStmt, ctx);
         Assert.assertEquals(
                 Arrays.asList("show_1", "RUNNING", "pipe_test_db.tbl1",
                         "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
@@ -869,8 +868,7 @@ public class PipeManagerTest {
         // desc
         sql = "desc pipe show_1";
         DescPipeStmt descPipeStmt = (DescPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        showExecutor = new ShowExecutor(ctx, descPipeStmt);
-        result = showExecutor.execute();
+        result = ShowExecutor.execute(descPipeStmt, ctx);
         Assert.assertEquals(
                 Arrays.asList("show_1", "FILE", "pipe_test_db.tbl1", "FILE_SOURCE(path=fake://pipe)",
                         "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')", ""),

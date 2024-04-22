@@ -19,12 +19,14 @@ ARG prebuild_maven=true
 # value: true | false
 # default: false
 ARG predownload_thirdparty=false
-ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230720.tar
+ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20240411.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v3.2-rc7
+ARG starlet_tag=v3.3-rc0
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
+# Token to access artifacts in private github repositories.
+ARG GITHUB_TOKEN
 
 FROM starrocks/toolchains-${distro}:main-20231123 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
@@ -35,6 +37,7 @@ FROM base as builder
 ARG prebuild_maven
 ARG predownload_thirdparty
 ARG thirdparty_url
+ARG GITHUB_TOKEN
 
 COPY . ./starrocks
 RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
@@ -42,7 +45,7 @@ RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
         mkdir -p starrocks/thirdparty/src && tar -xf thirdparty.tar -C starrocks/thirdparty/src ; \
     fi
 RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd starrocks/thirdparty && \
-     PARALLEL=`nproc` ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
+     PARALLEL=`nproc` GH_TOKEN=${GITHUB_TOKEN} ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
 RUN if test "x$prebuild_maven" = "xtrue" ; then \
         export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd /root/starrocks ; ./build.sh --fe || true ; \
         cd java-extensions ; mvn package -DskipTests || true ;  \
@@ -54,6 +57,14 @@ FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
+# remove unnecessary and big starlet dependencies
+COPY --from=builder /root/starrocks/docker/dockerfiles/dev-env/starlet_exclude.txt .
+RUN while read line; do \
+        if [[ "$line" == \#* ]] ; then \
+            continue ; \
+        fi ; \
+        rm -rvf /release/$line ; \
+    done < starlet_exclude.txt
 
 FROM base as dev-env
 ARG commit_id

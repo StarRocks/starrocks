@@ -263,28 +263,32 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
-    // trying to prune the current segment by segment-level zone map
-    for (const auto& pair : read_options.predicates_for_zone_map) {
-        ColumnId column_id = pair.first;
-        const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
-                                                               : _tablet_schema->column(column_id);
-        auto column_unique_id = tablet_column.unique_id();
-        if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
-            continue;
-        }
-        if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
-            // skip segment zonemap filter when this segment has column files link to it.
-            if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
-                if (read_options.is_first_split_of_segment) {
-                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+
+    if (config::enable_index_segment_level_zonemap_filter) {
+        // trying to prune the current segment by segment-level zone map
+        for (const auto& pair : read_options.predicates_for_zone_map) {
+            ColumnId column_id = pair.first;
+            const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
+                                                                   : _tablet_schema->column(column_id);
+            auto column_unique_id = tablet_column.unique_id();
+            if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
+                continue;
+            }
+            if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
+                // skip segment zonemap filter when this segment has column files link to it.
+                if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
+                    if (read_options.is_first_split_of_segment) {
+                        read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+                    }
+                    return Status::EndOfFile(
+                            strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
+                } else {
+                    break;
                 }
-                return Status::EndOfFile(
-                        strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
-            } else {
-                break;
             }
         }
     }
+
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
@@ -293,6 +297,20 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
         return Status::InvalidArgument("stats is null pointer");
     }
     return _new_iterator(schema, read_options);
+}
+
+Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter,
+                                            const SegmentReadOptions& opts) {
+    auto column_reader_iter = _column_readers.find(ucid);
+
+    if (column_reader_iter != _column_readers.end()) {
+        std::shared_ptr<TabletIndex> index_meta;
+        RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
+        if (index_meta.get() != nullptr) {
+            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts));
+        }
+    }
+    return Status::OK();
 }
 
 Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
@@ -350,7 +368,12 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);
-        column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
+                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
+            return Status::InternalError("Duplicate column id");
+        }
     }
 
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
@@ -448,4 +471,12 @@ size_t Segment::mem_usage() const {
     }
     return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
 }
+
+StatusOr<int64_t> Segment::get_data_size() const {
+    if (_segment_file_info.size.has_value()) {
+        return _segment_file_info.size.value();
+    }
+    return _fs->get_file_size(_segment_file_info.path);
+}
+
 } // namespace starrocks

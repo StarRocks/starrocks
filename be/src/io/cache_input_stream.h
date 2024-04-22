@@ -65,7 +65,11 @@ public:
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
+    void set_enable_async_populate_mode(bool v) { _enable_async_populate_mode = v; }
+
     void set_enable_block_buffer(bool v) { _enable_block_buffer = v; }
+
+    void set_enable_cache_io_adaptor(bool v) { _enable_cache_io_adaptor = v; }
 
     int64_t get_align_size() const;
 
@@ -81,20 +85,28 @@ private:
         int64_t offset;
         IOBuffer buffer;
     };
+    using SharedBufferPtr = SharedBufferedInputStream::SharedBufferPtr;
 
-    Status _read_block(int64_t offset, int64_t size, char* out, bool single_read);
-    void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count);
-    void _deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb);
+    // Read block from local, if not found, will return Status::NotFound();
+    Status _read_block_from_local(const int64_t offset, const int64_t size, char* out);
+    // Read multiple blocks from remote
+    Status _read_blocks_from_remote(const int64_t offset, const int64_t size, char* out);
+    Status _populate_to_cache(const int64_t offset, const int64_t size, char* src);
+    void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count, const SharedBufferPtr& sb);
+    void _deduplicate_shared_buffer(const SharedBufferPtr& sb);
 
     std::string _cache_key;
     std::string _filename;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream;
     int64_t _offset;
+    int64_t _buffer_size;
     std::string _buffer;
     Stats _stats;
     int64_t _size;
     bool _enable_populate_cache = false;
+    bool _enable_async_populate_mode = false;
     bool _enable_block_buffer = false;
+    bool _enable_cache_io_adaptor = false;
     BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;

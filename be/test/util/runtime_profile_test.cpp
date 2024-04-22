@@ -301,6 +301,31 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
     ASSERT_EQ(expected_values, actual_values);
 }
 
+static void test_mass_conflict_info_string(int num) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
+    std::vector<std::shared_ptr<RuntimeProfile>> profile_ptrs;
+    std::vector<RuntimeProfile*> profiles;
+    for (int i = 1; i <= num; ++i) {
+        auto profile = std::make_shared<RuntimeProfile>("profile");
+        profile->add_info_string("key", std::to_string(i));
+        profile_ptrs.push_back(profile);
+        profiles.push_back(profile.get());
+    }
+
+    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
+    for (int i = 0; i < num - 1; ++i) {
+        ASSERT_TRUE(merged_profile->get_info_string("key__DUP(" + std::to_string(i) + ")") != nullptr);
+    }
+}
+
+TEST(TestRuntimeProfile, testMassConflictInfoString) {
+    for (int i = 1; i <= 32; ++i) {
+        test_mass_conflict_info_string(i);
+    }
+    test_mass_conflict_info_string(1024);
+    test_mass_conflict_info_string(3267);
+}
+
 TEST(TestRuntimeProfile, testCopyCounterWithParent) {
     auto strategy_unit = create_strategy(TUnit::UNIT);
     auto strategy_time = create_strategy(TUnit::TIME_NS);
@@ -450,4 +475,110 @@ TEST(TestRuntimeProfile, testRemoveCounter) {
                                         "counter2-2-2", "counter3"});
     }
 }
+
+TEST(TestRuntimeProfile, testUpdateWithOldAndNewProfile) {
+    auto profile = std::make_shared<RuntimeProfile>("parent-profile");
+    auto* counter1 =
+            profile->add_counter("counter1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    auto* child_profile = profile->create_child("child-profile", true);
+    auto* counter2 =
+            child_profile->add_counter("counter2", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+
+    ASSERT_EQ(0, profile->get_version());
+    ASSERT_EQ(0, child_profile->get_version());
+    COUNTER_UPDATE(counter1, 1);
+    COUNTER_UPDATE(counter2, 2);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(2, counter2->value());
+
+    // thrift profile whose parent and child profiles are both 1
+    TRuntimeProfileTree tree;
+    profile->to_thrift(&tree);
+    ASSERT_EQ(2, tree.nodes.size());
+    ASSERT_TRUE(tree.nodes[0].__isset.version);
+    ASSERT_EQ(0, tree.nodes[0].version);
+    ASSERT_TRUE(tree.nodes[1].__isset.version);
+    ASSERT_EQ(0, tree.nodes[1].version);
+
+    // update with new versions for both parent and child profile,
+    // both should update success
+    COUNTER_SET(counter1, int64_t(2));
+    COUNTER_SET(counter2, int64_t(3));
+    ASSERT_EQ(2, counter1->value());
+    ASSERT_EQ(3, counter2->value());
+    // make thrift profile versions newer
+    tree.nodes[0].version = 1;
+    tree.nodes[1].version = 1;
+    profile->update(tree);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(2, counter2->value());
+    ASSERT_EQ(1, profile->get_version());
+    ASSERT_EQ(1, child_profile->get_version());
+
+    // update with an old version for both parent profile, and a new
+    // version for child profile, both should skip
+    COUNTER_SET(counter1, int64_t(4));
+    COUNTER_SET(counter2, int64_t(5));
+    ASSERT_EQ(4, counter1->value());
+    ASSERT_EQ(5, counter2->value());
+    // make thrift parent older, and child newer
+    tree.nodes[0].version = 0;
+    tree.nodes[1].version = 2;
+    // increase parent version to 2
+    profile->inc_version();
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(1, child_profile->get_version());
+    profile->update(tree);
+    ASSERT_EQ(4, counter1->value());
+    ASSERT_EQ(5, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(1, child_profile->get_version());
+
+    // update with a new version for parent profile, and an old
+    // version for child profile, the parent should success, and
+    // the child skip
+    COUNTER_SET(counter1, int64_t(5));
+    COUNTER_SET(counter2, int64_t(6));
+    ASSERT_EQ(5, counter1->value());
+    ASSERT_EQ(6, counter2->value());
+    // make thrift parent equal, and child older
+    tree.nodes[0].version = 2;
+    tree.nodes[1].version = 0;
+    // increase child version to 2
+    child_profile->inc_version();
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+    profile->update(tree);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(6, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+
+    // update with old versions for both parent and child profile,
+    // both should skip
+    COUNTER_SET(counter1, int64_t(7));
+    COUNTER_SET(counter2, int64_t(8));
+    ASSERT_EQ(7, counter1->value());
+    ASSERT_EQ(8, counter2->value());
+    // make thrift both parent and child older
+    tree.nodes[0].version = 1;
+    tree.nodes[1].version = 1;
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+    profile->update(tree);
+    ASSERT_EQ(7, counter1->value());
+    ASSERT_EQ(8, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+
+    // If thrift not set version, should success
+    tree.nodes[0].__isset.version = false;
+    tree.nodes[1].__isset.version = false;
+    profile->update(tree);
+    ASSERT_EQ(1, counter1->value());
+    ASSERT_EQ(2, counter2->value());
+    ASSERT_EQ(2, profile->get_version());
+    ASSERT_EQ(2, child_profile->get_version());
+}
+
 } // namespace starrocks

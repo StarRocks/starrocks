@@ -266,6 +266,8 @@ struct TBrokerScanRangeParams {
     28: optional string confluent_schema_registry_url
     29: optional i64 json_file_size_limit;
     30: optional i64 schema_sample_file_count
+    31: optional i64 schema_sample_file_row_count
+    32: optional bool flexible_column_mapping 
 }
 
 // Broker scan range
@@ -493,6 +495,7 @@ struct TColumnAccessPath {
     2: optional Exprs.TExpr path
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
+    5: optional Types.TTypeDesc type_desc
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -522,6 +525,7 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+  35: optional bool enable_prune_column_after_index_filter
 }
 
 struct TJDBCScanNode {
@@ -747,6 +751,9 @@ struct TAggregationNode {
   27: optional bool use_sort_agg
 
   28: optional bool use_per_bucket_optimize
+
+  // enable runtime limit, pipelines share one limit
+  29: optional bool enable_pipeline_share_limit = false
 }
 
 struct TRepeatNode {
@@ -972,7 +979,7 @@ struct TExchangeNode {
   3: optional i64 offset
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
-  5: optional bool enable_parallel_merge;
+  5: optional bool enable_parallel_merge
 }
 
 // This contains all of the information computed by the plan as part of the resource

@@ -33,12 +33,13 @@ jobs:
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
+      PR_STATE: ${{ steps.pr_details.outputs.PR_STATE }}
     steps:
       - run: |
-          sleep 30
+          sleep 10
 
       - name: Download workflow artifact - PR
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
@@ -58,8 +59,11 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          base_ref=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName -q .baseRefName`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,state`
+          base_ref=$(echo ${pr_info} | jq -r .baseRefName)
+          pr_state=$(echo ${pr_info} | jq -r .state)
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
+          echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
       - name: INFO
@@ -71,7 +75,7 @@ jobs:
   FE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != ''
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
@@ -205,7 +209,7 @@ jobs:
   BE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -222,7 +226,7 @@ jobs:
           bucket_prefix=`echo ${REPO%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -231,10 +235,17 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/DEBUG/pr/UT-Report/${PR_NUMBER}
-          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/be_ut_coverage.xml | grep "Object Number is" | awk '{print $NF}')
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}
+          be_ut_res_path=${oss_path}/flag/be_ut_res
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${be_ut_res_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
+            ossutil64 --config-file ~/.ossutilconfig cp ${be_ut_res_path} . >/dev/null
+            res=`cat be_ut_res`
+            if [[ "$res" != "0" ]]; then
+              echo "::error::BE UT failed!"
+              exit 1
+            fi
             cd be
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . -f 1>/dev/null
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/base_version.txt . -f 1>/dev/null
@@ -251,7 +262,7 @@ jobs:
 
       - name: Merge BE Total Coverage
         id: merge
-        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0'
+        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           
@@ -270,7 +281,7 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: always() && steps.download-ut-xml.outputs.size != '0'
+        if: always() && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
         env:
           be_path: ${{ github.workspace }}/be
           merge_outcome: ${{ steps.merge.outcome }}
@@ -297,7 +308,7 @@ jobs:
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
@@ -324,11 +335,12 @@ jobs:
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          else
+            cp /var/local/env/sqltester_empty_coverage.xml .
           fi
 
       - name: Prepare Tools
         id: prepare-tools
-        if: steps.download-SQL-Tester-xml.outputs.size != '0'
         run: |
           mkdir -p .actions/nose-report-action
           cd .actions/nose-report-action
@@ -348,7 +360,7 @@ jobs:
   Admit-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
@@ -399,7 +411,7 @@ jobs:
   NOTIFICATION:
     runs-on: [ self-hosted, quick ]
     needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
-    if: always() && needs.INFO.outputs.PR_NUMBER != ''
+    if: always() && needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
       FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}

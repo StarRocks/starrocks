@@ -24,7 +24,10 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,6 +41,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 
 public class ColocatedBackendSelector implements BackendSelector {
+    private static final Logger LOG = LogManager.getLogger(ColocatedBackendSelector.class);
 
     private final OlapScanNode scanNode;
     private final FragmentScanRangeAssignment assignment;
@@ -111,8 +115,19 @@ public class ColocatedBackendSelector implements BackendSelector {
         Map<Long, Integer> buckendIdToBucketCountMap = colocatedAssignment.backendIdToBucketCount;
         int minBucketNum = Integer.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;
+        List<TScanRangeLocation> backupLocations = new ArrayList<>();
         for (TScanRangeLocation location : seqLocation.locations) {
             if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
+                if (workerProvider.allowUsingBackupNode()) {
+                    long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id());
+                    LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
+                    if (backupNodeId > 0) {
+                        // using the backupNode to generate a new ScanRangeLocation
+                        TScanRangeLocation backupLocation = new TScanRangeLocation();
+                        backupLocation.setBackend_id(backupNodeId);
+                        backupLocations.add(backupLocation);
+                    }
+                }
                 continue;
             }
 
@@ -120,6 +135,16 @@ public class ColocatedBackendSelector implements BackendSelector {
             if (bucketNum < minBucketNum) {
                 minBucketNum = bucketNum;
                 minBackendId = location.backend_id;
+            }
+        }
+
+        if (minBackendId == Long.MAX_VALUE && !backupLocations.isEmpty()) {
+            for (TScanRangeLocation location : backupLocations) {
+                Integer bucketNum = buckendIdToBucketCountMap.getOrDefault(location.backend_id, 0);
+                if (bucketNum < minBucketNum) {
+                    minBucketNum = bucketNum;
+                    minBackendId = location.backend_id;
+                }
             }
         }
 

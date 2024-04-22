@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
@@ -39,7 +40,7 @@ public class StatisticExecutorTest extends PlanTestBase {
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
-        Assert.assertThrows(IllegalStateException.class,
+        Assert.assertThrows(AnalysisException.class,
                 () -> statisticExecutor.queryStatisticSync(
                         StatisticUtils.buildConnectContext(), db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
     }
@@ -49,13 +50,13 @@ public class StatisticExecutorTest extends PlanTestBase {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 10003, null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 1000, null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
         List<TStatisticData> stats = statisticExecutor.queryStatisticSync(
-                StatisticUtils.buildConnectContext(), null, 10003L, Lists.newArrayList("foo", "bar"));
+                StatisticUtils.buildConnectContext(), null, 1000L, Lists.newArrayList("foo", "bar"));
         Assert.assertEquals(0, stats.size());
     }
 }

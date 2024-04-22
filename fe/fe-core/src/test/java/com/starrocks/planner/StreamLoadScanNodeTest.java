@@ -39,7 +39,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
@@ -59,7 +58,10 @@ import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
@@ -71,8 +73,11 @@ import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TTypeNode;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
@@ -87,6 +92,16 @@ public class StreamLoadScanNodeTest {
     @Injectable
     OlapTable dstTable;
 
+    @Before
+    public void setUp() {
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+        };
+    }
 
     TStreamLoadPutRequest getBaseRequest() {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
@@ -243,7 +258,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = ParsingException.class)
-    public void testBadColumns() throws UserException, UserException {
+    public void testBadColumns(@Mocked GlobalStateMgr globalStateMgr) throws UserException, UserException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 

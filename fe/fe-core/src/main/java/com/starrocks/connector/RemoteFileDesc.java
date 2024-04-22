@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.iceberg.FileScanTask;
 
 import java.util.ArrayList;
@@ -41,6 +42,8 @@ public class RemoteFileDesc {
     private List<FileScanTask> icebergScanTasks = new ArrayList<>();
     private PaimonSplitsInfo paimonSplitsInfo;
     private OdpsSplitsInfo odpsSplitsInfo;
+
+    private HoodieInstant hudiInstant;
 
     private RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                            ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
@@ -103,13 +106,13 @@ public class RemoteFileDesc {
         return splittable;
     }
 
-    public TextFileFormatDesc getTextFileFormatDesc() {
-        return textFileFormatDesc;
-    }
-
     public RemoteFileDesc setSplittable(boolean splittable) {
         this.splittable = splittable;
         return this;
+    }
+
+    public TextFileFormatDesc getTextFileFormatDesc() {
+        return textFileFormatDesc;
     }
 
     public RemoteFileDesc setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {
@@ -117,13 +120,13 @@ public class RemoteFileDesc {
         return this;
     }
 
+    public String getFullPath() {
+        return this.fullPath;
+    }
+
     public RemoteFileDesc setFullPath(String fullPath) {
         this.fullPath = fullPath;
         return this;
-    }
-
-    public String getFullPath() {
-        return this.fullPath;
     }
 
     public ImmutableList<String> getHudiDeltaLogs() {
@@ -137,8 +140,17 @@ public class RemoteFileDesc {
     public PaimonSplitsInfo getPaimonSplitsInfo() {
         return paimonSplitsInfo;
     }
+
     public OdpsSplitsInfo getOdpsSplitsInfo() {
         return odpsSplitsInfo;
+    }
+
+    public HoodieInstant getHudiInstant() {
+        return hudiInstant;
+    }
+
+    public void setHudiInstant(HoodieInstant instant) {
+        hudiInstant = instant;
     }
 
     @Override

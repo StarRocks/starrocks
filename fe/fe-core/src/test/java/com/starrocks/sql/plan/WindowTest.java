@@ -20,6 +20,9 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
 public class WindowTest extends PlanTestBase {
 
     @Test
@@ -44,10 +47,11 @@ public class WindowTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, lag(NULL, 1, 1), ]");
 
-        sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("The type of the third parameter of LEAD/LAG not match the type DATETIME");
-        getThriftPlan(sql);
+
+        String invalidSql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
+        SemanticException e = assertThrows(SemanticException.class, () -> getThriftPlan(invalidSql));
+        Assert.assertTrue(e.getMessage(),
+                e.getMessage().contains("The type of the third parameter of LEAD/LAG not match the type DATETIME"));
     }
 
     @Test
@@ -979,7 +983,7 @@ public class WindowTest extends PlanTestBase {
                 "(select v1 from t0 where v1 = 1) b " +
                 "where a.v1 = b.v1";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:SORT\n" +
+        assertContains(plan, "1:SORT\n" +
                 "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 1\n" +
@@ -987,7 +991,7 @@ public class WindowTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: t0, rollup: t0\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: 1: v1 IS NOT NULL\n" +
+                "     Predicates: [1: v1, BIGINT, true] = 1, 1: v1 IS NOT NULL\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     actualRows=0, avgRowSize=2.0\n" +
@@ -1115,10 +1119,8 @@ public class WindowTest extends PlanTestBase {
                 "    select *, " +
                         "        row_number() over (PARTITION BY v1 order by v2) as rk " +
                         "    from t0 where v1 > 1 and v2 > 1 having rk = 1;\n";
-
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("HAVING clause cannot contain window function");
-        getFragmentPlan(sql);
+        SemanticException e = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        assertTrue(e.getMessage(), e.getMessage().contains("HAVING clause cannot contain window function"));
     }
 
     @Test
@@ -1323,5 +1325,34 @@ public class WindowTest extends PlanTestBase {
                 "  |  isSkewed\n" +
                 "  |  \n" +
                 "  1:SORT");
+    }
+
+    @Test
+    public void testWindowOutputColumnNullCheck() throws Exception {
+        String sql = "select t1a, t1b, t1c, count(t1d) over (partition by t1d) " +
+                "from test_all_type_not_null";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, count[([4: t1d, BIGINT, false]); args: BIGINT; result: BIGINT; " +
+                "args nullable: false; result nullable: false], ]\n" +
+                "  |  partition by: [4: t1d, BIGINT, false]\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, false]\n" +
+                "  |  3 <-> [3: t1c, INT, false]\n" +
+                "  |  11 <-> [11: count(4: t1d), BIGINT, false]\n" +
+                "  |  cardinality: 1");
+
+        plan = getDescTbl(sql);
+        assertContains(plan, "TSlotDescriptor(id:11, parent:2, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+        assertContains(plan, "TSlotDescriptor(id:11, parent:4, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
     }
 }

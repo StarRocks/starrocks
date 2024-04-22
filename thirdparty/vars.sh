@@ -320,10 +320,10 @@ GCS_CONNECTOR_SOURCE="gcs-connector-hadoop3-2.2.11-shaded"
 GCS_CONNECTOR_MD5SUM="51fd0eb5cb913a84e4ad8a5ed2069e21"
 
 # aws-sdk-cpp
-AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.10.36.tar.gz"
-AWS_SDK_CPP_NAME="aws-sdk-cpp-1.10.36.tar.gz"
-AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.10.36"
-AWS_SDK_CPP_MD5SUM="8fed635c5ac98b448bc1a98cf7c97c70"
+AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.11.267.tar.gz"
+AWS_SDK_CPP_NAME="aws-sdk-cpp-1.11.267.tar.gz"
+AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.11.267"
+AWS_SDK_CPP_MD5SUM="fdf43e7262f9d08968eb34f9ad18b8e7"
 
 # velocypack: A fast and compact format for serialization and storage
 VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"
@@ -348,12 +348,6 @@ FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v
 FAST_FLOAT_NAME="fast-float-3.5.1.tar.gz"
 FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
-
-# cachelib
-CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230130.tar.gz"
-CACHELIB_NAME="cachelib.tar.gz"
-CACHELIB_SOURCE="cachelib"
-CACHELIB_MD5SUM="7cc245be5cb10afa6aeea0121ec77e9e"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
@@ -419,5 +413,5 @@ CLUCENE_MD5SUM="d71f8156bbcbe78e5064ec5616072a5a"
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
+            BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             ASYNC_PROFILER FIU LIBDEFLATE LLVM"

@@ -41,7 +41,7 @@ public:
 
     PrimaryIndex();
     PrimaryIndex(const Schema& pk_schema);
-    ~PrimaryIndex();
+    virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
@@ -69,6 +69,24 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
+
+    // replace old values, and make sure key exist
+    // Used in compaction apply & publish.
+    // [not thread-safe]
+    //
+    // |rssid| output segment's rssid
+    // |rowid_start| row id left open interval
+    // |replace_indexes| The index of the |pks| array that need to replace.
+    // |pks| each output segment row's *encoded* primary key
+    //
+    // E.g.
+    // pks : {a, b, c, d, e}
+    // replace_indexes : {2, 3}
+    // So we only need to replace {c : rssid + rowid_start + 2, d : rssid + rowid_start + 3}
+    //
+    // Return NotFound error when key not exist.
+    Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                   const Column& pks);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -111,9 +129,7 @@ public:
 
     Status on_commited();
 
-    double get_write_amp_score();
-
-    Status major_compaction(Tablet* tablet);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
 
     Status abort();
 
@@ -122,9 +138,6 @@ public:
 
     // [not thread-safe]
     std::size_t size() const;
-
-    // [not thread-safe]
-    std::size_t capacity() const;
 
     // [not thread-safe]
     void reserve(size_t s);
@@ -140,6 +153,12 @@ public:
     void reset_cancel_major_compaction();
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
+    // only for ut
+    void set_status(bool loaded, Status st) {
+        _loaded = loaded;
+        _status = st;
+    }
 
 protected:
     void _set_schema(const Schema& pk_schema);
@@ -171,6 +190,11 @@ private:
     Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                      const uint32_t max_src_rssid, vector<uint32_t>* deletes);
 
+    Status _replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
+                                                const std::vector<uint32_t>& replace_indexes, const Column& pks);
+
+    void _calc_memory_usage();
+
 protected:
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
@@ -184,6 +208,7 @@ private:
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
+    std::atomic<size_t> _memory_usage{0};
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {

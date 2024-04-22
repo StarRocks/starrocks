@@ -49,6 +49,7 @@ include "MasterService.thrift"
 include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
+include "DataCache.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -401,6 +402,7 @@ struct TMaterializedViewStatus {
     25: optional string inactive_reason
 
     26: optional string extra_message
+    27: optional string query_rewrite_status
 }
 
 struct TListPipesParams {
@@ -485,6 +487,7 @@ struct TTaskInfo {
     5: optional string definition
     6: optional i64 expire_time
     7: optional string properties
+    8: optional string catalog
 }
 
 struct TGetTaskInfoResult {
@@ -506,6 +509,8 @@ struct TTaskRunInfo {
 
     12: optional string extra_message
     13: optional string properties
+
+    14: optional string catalog
 }
 
 struct TGetTaskRunInfoResult {
@@ -716,6 +721,10 @@ struct TReportExecStatusParams {
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
   27: optional string rejected_record_path
+
+  28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
+
+  29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
 }
 
 struct TAuditStatistics {
@@ -778,6 +787,7 @@ struct TMasterOpRequest {
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
+    35: optional string session_id
 }
 
 struct TColumnDefinition {
@@ -837,6 +847,7 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
+    101: optional string warehouse   // begin from 101, in case of conflict with other's change
 }
 
 struct TLoadTxnBeginResult {
@@ -902,6 +913,8 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
+
+    101: optional string warehouse   // begin from 101, in case of conflict with other's change
 }
 
 struct TStreamLoadPutResult {
@@ -1616,6 +1629,22 @@ struct TFeLocksRes {
     1: optional list<TFeLocksItem> items
 }
 
+struct TFeMemoryItem {
+    1: optional string module_name
+    2: optional string class_name
+    3: optional i64 current_consumption
+    4: optional i64 peak_consumption
+    5: optional string counter_info
+}
+
+struct TFeMemoryReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeMemoryRes {
+    1: optional list<TFeMemoryItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1696,6 +1725,14 @@ struct TTableReplicationRequest {
 
 struct TTableReplicationResponse {
     1: optional Status.TStatus status
+}
+
+struct TReportLakeCompactionRequest {
+    1: optional i64 txn_id
+}
+
+struct TReportLakeCompactionResponse {
+    1: optional bool valid
 }
 
 service FrontendService {
@@ -1786,6 +1823,9 @@ service FrontendService {
     // sys.fe_locks
     TFeLocksRes listFeLocks(1: TFeLocksReq request)
 
+    // sys.fe_memory_usage
+    TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
+
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
     TReleaseSlotResponse releaseSlot(1: TReleaseSlotRequest request)
@@ -1797,5 +1837,7 @@ service FrontendService {
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
+
+    TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 }
 

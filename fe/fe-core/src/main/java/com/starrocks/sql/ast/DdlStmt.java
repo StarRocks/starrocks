@@ -18,11 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
-
 public abstract class DdlStmt extends StatementBase {
-    private Map<String, String> optHints;
-
     protected DdlStmt(NodePosition pos) {
         super(pos);
     }
@@ -37,11 +33,4 @@ public abstract class DdlStmt extends StatementBase {
         return visitor.visitDDLStatement(this, context);
     }
 
-    public Map<String, String> getOptHints() {
-        return optHints;
-    }
-
-    public void setOptHints(Map<String, String> optHints) {
-        this.optHints = optHints;
-    }
 }

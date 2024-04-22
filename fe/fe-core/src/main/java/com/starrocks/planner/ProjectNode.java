@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -147,7 +146,6 @@ public class ProjectNode extends PlanNode {
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
-
     @Override
     public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
         if (!(expr instanceof SlotRef)) {
@@ -169,10 +167,13 @@ public class ProjectNode extends PlanNode {
         }
         return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
     }
+
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -181,7 +182,8 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
@@ -194,7 +196,9 @@ public class ProjectNode extends PlanNode {
     // digest from Q1, the ProjectNode is trivial, it just extract v1 from outputs of the
     // OlapScanNode, so we can ignore the trivial project when we compute digest of the fragment.
     public boolean isTrivial() {
-        return slotMap.values().stream().allMatch(e -> e instanceof SlotRef) && commonSlotMap.isEmpty();
+        return slotMap.entrySet().stream().allMatch(
+                e -> e.getValue() instanceof SlotRef && ((SlotRef) e.getValue()).getSlotId().equals(e.getKey())) &&
+                commonSlotMap.isEmpty();
     }
 
     @Override

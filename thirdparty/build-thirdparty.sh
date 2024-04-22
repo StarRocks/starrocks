@@ -224,6 +224,71 @@ build_llvm() {
     export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=200112L"
     export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess"
 
+    LLVM_TARGET="X86"
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        LLVM_TARGET="AArch64"
+    fi
+
+    LLVM_TARGETS_TO_BUILD=(
+        "LLVMBitstreamReader"
+        "LLVMRuntimeDyld" 
+        "LLVMOption"
+        "LLVMAsmPrinter"
+        "LLVMProfileData"
+        "LLVMAsmParser"
+        "LLVMOrcTargetProcess"
+        "LLVMExecutionEngine"
+        "LLVMBinaryFormat"
+        "LLVMDebugInfoDWARF"
+        "LLVMObjCARCOpts"
+        "LLVMPasses"
+        "LLVMCodeGen"
+        "LLVMFrontendOpenMP"
+        "LLVMMCDisassembler"
+        "LLVMSupport"
+        "LLVMJITLink"
+        "LLVMCFGuard"
+        "LLVMInstrumentation"
+        "LLVMInstCombine"
+        "LLVMipo"
+        "LLVMVectorize"
+        "LLVMIRReader"
+        "LLVMCore"
+        "LLVMTarget"
+        "LLVMMC"
+        "LLVMAnalysis"
+        "LLVMGlobalISel"
+        "LLVMScalarOpts"
+        "LLVMLinker"
+        "LLVMCoroutines"
+        "LLVMTargetParser"
+        "LLVMDemangle"
+        "LLVMRemarks"
+        "LLVMDebugInfoCodeView"
+        "LLVMAggressiveInstCombine"
+        "LLVMIRPrinter"
+        "LLVMOrcShared"
+        "LLVMOrcJIT"
+        "LLVMTextAPI"
+        "LLVMBitWriter"
+        "LLVMBitReader"
+        "LLVMObject"
+        "LLVMTransformUtils"
+        "LLVMSelectionDAG"
+        "LLVMMCParser"
+        "LLVMSupport"
+    )
+    if [ "${LLVM_TARGET}" == "X86" ]; then
+        LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen" "LLVMX86AsmParser" "LLVMX86Disassembler")
+    elif [ "${LLVM_TARGET}" == "AArch64" ]; then
+        LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen" "LLVMAArch64Utils" "LLVMAArch64AsmParser" "LLVMAArch64Disassembler")
+    fi
+
+    LLVM_TARGETS_TO_INSTALL=()
+    for target in ${LLVM_TARGETS_TO_BUILD[@]}; do
+        LLVM_TARGETS_TO_INSTALL+=("install-${target}")
+    done
+
     check_if_source_exist $LLVM_SOURCE
 
     cd $TP_SOURCE_DIR
@@ -237,23 +302,22 @@ build_llvm() {
     -DLLVM_ENABLE_RTTI:Bool=True \
     -DLLVM_ENABLE_PIC:Bool=True \
     -DLLVM_ENABLE_TERMINFO:Bool=False \
-    `# require tools/llvm-shlib for libllvm` \
-    -DLLVM_INCLUDE_TOOLS:BOOL=TRUE \
+    -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
+    -DLLVM_INCLUDE_TOOLS:BOOL=False \
     -DLLVM_BUILD_TOOLS:BOOL=False \
     -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
-    -DLLVM_BUILD_LLVM_DYLIB=ON \
-    -DLLVM_LINK_LLVM_DYLIB=ON \
+    -DBUILD_SHARED_LIBS:BOOL=False \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
 
-
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1
-    ${BUILD_SYSTEM} install
-    # only reserve libLLVM.so
-    rm -f ${TP_INSTALL_DIR}/llvm/*.a
-    rm -rf ${TP_INSTALL_DIR}/llvm/cmake
+    # TODO(yueyang): Add more targets.
+    # This is a little bit hack, we need to minimize the build time and binary size.
+    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
+    ${BUILD_SYSTEM} install-llvm-headers
+    ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
 
     restore_compile_flags
 }
@@ -1027,11 +1091,6 @@ build_fast_float() {
     cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $TP_INSTALL_DIR
 }
 
-build_cachelib() {
-    check_if_source_exist $CACHELIB_SOURCE
-    rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
-}
-
 build_starcache() {
     check_if_source_exist $STARCACHE_SOURCE
     rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
@@ -1200,8 +1259,8 @@ strip_binary() {
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
 export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L"
-export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L -gz=zlib"
+export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -gz=zlib"
 
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
 export CPPFLAGS=$GLOBAL_CPPFLAGS
@@ -1258,7 +1317,6 @@ build_vpack
 build_opentelemetry
 build_benchmark
 build_fast_float
-build_cachelib
 build_starcache
 build_streamvbyte
 build_jansson

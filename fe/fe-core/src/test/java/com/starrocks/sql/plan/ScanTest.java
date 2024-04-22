@@ -437,7 +437,7 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: false; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: false; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, VARCHAR, false]); args: INVALID_TYPE; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, false]); args: INVALID_TYPE; " +
                 "result: VARCHAR; args nullable: false; result nullable: true]");
 
         // with count, all columns should be nullable
@@ -447,9 +447,9 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, VARCHAR, true]); args: INVALID_TYPE; result: VARCHAR; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "sum[([count_t1a, VARCHAR, true]); args: BIGINT; result: BIGINT; " +
+                "sum[([count_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
                 "args nullable: true; result nullable: true]");
     }
 
@@ -528,83 +528,5 @@ public class ScanTest extends PlanTestBase {
             List<ScanNode> scanNodeList = plan.getScanNodes();
             Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
-    }
-
-    @Test
-    public void testChangeDatePredicat() throws Exception {
-        connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(true);
-        // same month
-        String sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
-                "        and  id_datetime <= '2011-03-21 00:00:00';";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: ((8: id_datetime >= '2011-03-05 00:00:00') " +
-                "AND (8: id_datetime <= '2011-03-21 00:00:00')) " +
-                "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
-                "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
-                "AND (date_trunc('month', 8: id_datetime) < '2011-03-01 00:00:00')) " +
-                "OR ((date_trunc('year', 8: id_datetime) >= '2012-01-01 00:00:00') " +
-                "AND (date_trunc('year', 8: id_datetime) < '2011-01-01 00:00:00')))");
-
-        // two month
-        sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
-                "        and  id_datetime <= '2011-04-11 00:00:00';";
-        plan = getFragmentPlan(sql);
-        assertContains(plan,
-                "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
-                        "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
-                        "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
-                        "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
-                        "AND (date_trunc('month', 8: id_datetime) < '2011-04-01 00:00:00')) " +
-                        "OR ((date_trunc('year', 8: id_datetime) >= '2012-01-01 00:00:00') " +
-                        "AND (date_trunc('year', 8: id_datetime) < '2011-01-01 00:00:00')))) " +
-                        "OR ((8: id_datetime >= '2011-04-01 00:00:00') " +
-                        "AND (8: id_datetime <= '2011-04-11 00:00:00'))\n");
-
-        // three month
-        sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
-                "        and  id_datetime <= '2011-05-11 00:00:00';";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
-                "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
-                "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
-                "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
-                "AND (date_trunc('month', 8: id_datetime) < '2011-05-01 00:00:00')) " +
-                "OR ((date_trunc('year', 8: id_datetime) >= '2012-01-01 00:00:00') " +
-                "AND (date_trunc('year', 8: id_datetime) < '2011-01-01 00:00:00')))) " +
-                "OR ((8: id_datetime >= '2011-05-01 00:00:00') " +
-                "AND (8: id_datetime <= '2011-05-11 00:00:00'))");
-
-        // two year
-        sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
-                "        and  id_datetime <= '2012-08-11 00:00:00';";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
-                "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
-                "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
-                "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
-                "AND (date_trunc('month', 8: id_datetime) < '2012-08-01 00:00:00')) " +
-                "OR ((date_trunc('year', 8: id_datetime) >= '2012-01-01 00:00:00') " +
-                "AND (date_trunc('year', 8: id_datetime) < '2012-01-01 00:00:00')))) " +
-                "OR (((date_trunc('month', 8: id_datetime) >= '2012-01-01 00:00:00') " +
-                "AND (date_trunc('month', 8: id_datetime) < '2012-08-01 00:00:00')) " +
-                "OR ((8: id_datetime >= '2012-08-01 00:00:00') " +
-                "AND (8: id_datetime <= '2012-08-11 00:00:00')))");
-
-        // three year
-        sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
-                "        and  id_datetime <= '2013-08-11 00:00:00';";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
-                "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
-                "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
-                "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
-                "AND (date_trunc('month', 8: id_datetime) < '2013-08-01 00:00:00')) " +
-                "OR ((date_trunc('year', 8: id_datetime) >= '2012-01-01 00:00:00') " +
-                "AND (date_trunc('year', 8: id_datetime) < '2013-01-01 00:00:00')))) " +
-                "OR (((date_trunc('month', 8: id_datetime) >= '2013-01-01 00:00:00') " +
-                "AND (date_trunc('month', 8: id_datetime) < '2013-08-01 00:00:00')) " +
-                "OR ((8: id_datetime >= '2013-08-01 00:00:00') " +
-                "AND (8: id_datetime <= '2013-08-11 00:00:00')))");
-        connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(false);
     }
 }

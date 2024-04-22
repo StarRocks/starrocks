@@ -192,7 +192,7 @@ public class ShowCreateViewStmtTest {
             List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
             List<String> res = Lists.newArrayList();
             AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
-                    null, null, false, false);
+                    null, null, false, false, false);
 
             Assert.assertEquals(testcase[2], res.get(0));
 
@@ -211,7 +211,7 @@ public class ShowCreateViewStmtTest {
         List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
-                null, null, false, false);
+                null, null, false, false, false);
         Assert.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
                 "COMMENT \"view comment\" AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
                 "FROM `test`.`tbl1`;", res.get(0));
@@ -251,8 +251,7 @@ public class ShowCreateViewStmtTest {
                 com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
         Assert.assertTrue(statement instanceof DescribeStmt);
-        ShowExecutor showExecutor = new ShowExecutor(ctx, (DescribeStmt) statement);
-        ShowResultSet rs = showExecutor.execute();
+        ShowResultSet rs = ShowExecutor.execute((DescribeStmt) statement, ctx);
         Assert.assertTrue(rs.getResultRows().stream().allMatch(r -> r.get(1).toUpperCase().startsWith("VARCHAR")));
         String query = "select * from v2 union all select c1 as a, c2 as b, NULL as c, c4 as d from t0";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
@@ -281,7 +280,7 @@ public class ShowCreateViewStmtTest {
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("test", commentTest, res,
-                null, null, false, false);
+                null, null, false, false, false);
         StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof CreateTableStmt);
     }
@@ -292,7 +291,7 @@ public class ShowCreateViewStmtTest {
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,
-                null, null, false, false);
+                null, null, false, false, false);
         Assert.assertTrue(storageTest.isOlapTable() &&
                 ((OlapTable) storageTest).getStorageType() == COLUMN_WITH_ROW);
     }

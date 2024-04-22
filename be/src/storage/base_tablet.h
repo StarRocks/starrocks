@@ -92,7 +92,7 @@ public:
     // The result string will often be printed to the log.
     const std::string full_name() const;
     int64_t partition_id() const;
-    int64_t tablet_id() const;
+    virtual int64_t tablet_id() const;
     int32_t schema_hash() const;
     int16_t shard_id();
     const int64_t creation_time() const;
@@ -115,6 +115,8 @@ public:
         return flag;
     }
 
+    virtual size_t num_rows() const = 0;
+
 protected:
     virtual void on_shutdown() {}
 
@@ -125,10 +127,6 @@ protected:
 
     DataDir* _data_dir;
     std::string _tablet_path; // TODO: remove this variable for less memory occupation
-
-private:
-    BaseTablet(const BaseTablet&) = delete;
-    const BaseTablet& operator=(const BaseTablet&) = delete;
 };
 
 inline DataDir* BaseTablet::data_dir() const {

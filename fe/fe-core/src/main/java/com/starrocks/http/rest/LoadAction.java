@@ -45,11 +45,11 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections.CollectionUtils;
@@ -110,11 +110,16 @@ public class LoadAction extends RestBaseAction {
         Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
                 dbName, tableName, PrivilegeType.INSERT);
 
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
+
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            for (long nodeId : computeIds) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAvailable()) {
                     nodeIds.add(nodeId);
@@ -125,7 +130,7 @@ public class LoadAction extends RestBaseAction {
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, false, false, null);
         }
-        
+
         if (CollectionUtils.isEmpty(nodeIds)) {
             throw new DdlException("No backend alive.");
         }
@@ -138,8 +143,8 @@ public class LoadAction extends RestBaseAction {
 
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
-        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}",
-                redirectAddr.toString(), dbName, tableName, label);
+        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}, warehouse: {}",
+                redirectAddr.toString(), dbName, tableName, label, warehouseName);
         redirectTo(request, response, redirectAddr);
     }
 }

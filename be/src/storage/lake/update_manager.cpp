@@ -17,6 +17,9 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -24,7 +27,6 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
-#include "storage/tablet_meta_manager.h"
 #include "testutil/sync_point.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
@@ -50,6 +52,10 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
     _index_cache.set_capacity(update_mem_limit);
+
+    const int64_t block_cache_mem_limit =
+            update_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, block_cache_mem_limit);
 }
 
 UpdateManager::~UpdateManager() {
@@ -64,6 +70,22 @@ inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
 
 Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
     return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
+}
+
+PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
+        : _cache(new_lru_cache(cache_limit)) {
+    _mem_tracker = std::make_unique<MemTracker>(cache_limit, "lake_persistent_index_block_cache", mem_tracker);
+}
+
+void PersistentIndexBlockCache::update_memory_usage() {
+    std::lock_guard<std::mutex> lg(_mutex);
+    size_t current_mem_usage = _cache->get_memory_usage();
+    if (_memory_usage > current_mem_usage) {
+        _mem_tracker->release(_memory_usage - current_mem_usage);
+    } else {
+        _mem_tracker->consume(current_mem_usage - _memory_usage);
+    }
+    _memory_usage = current_mem_usage;
 }
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
@@ -85,6 +107,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
+    _block_cache->update_memory_usage();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
         _index_cache.remove(index_entry);
@@ -96,27 +119,6 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
     return index_entry;
 }
 
-Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tablet) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        if (index.enable_persistent_index()) {
-            // only take affect in local persistent index
-            PersistentIndexMetaPB index_meta;
-            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet->id());
-            RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
-            RETURN_IF_ERROR(index.commit(&index_meta));
-            RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
-            // Call `on_commited` here, which will remove old files is safe.
-            // Because if publish version fail after `on_commited`, index will be rebuild.
-            RETURN_IF_ERROR(index.on_commited());
-            TRACE("commit primary index");
-        }
-    }
-
-    return Status::OK();
-}
-
 void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
         _index_cache.release(index_entry);
@@ -125,6 +127,17 @@ void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
 
 void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
+        _index_cache.remove(index_entry);
+    }
+}
+
+void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        auto guard = index.fetch_guard();
+        index.unload();
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
     }
 }
@@ -178,6 +191,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (const auto& one_delete : state.auto_increment_deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
     }
+    _block_cache->update_memory_usage();
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -240,6 +254,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     TRACE_COUNTER_INCREMENT("deletes", state.deletes().size());
     TRACE_COUNTER_INCREMENT("new_del", new_del);
     TRACE_COUNTER_INCREMENT("total_del", total_del);
+    TRACE_COUNTER_INCREMENT("upsert_rows", op_write.rowset().num_rows());
     TRACE_COUNTER_INCREMENT("base_version", base_version);
     _print_memory_stats();
     return Status::OK();
@@ -257,7 +272,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
                                                 int32_t upsert_idx, int32_t condition_column,
                                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
                                                 int64_t tablet_id, DeletesMap* new_deletes) {
-    CHECK(condition_column >= 0);
+    RETURN_ERROR_IF_FALSE(condition_column >= 0);
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
     const auto& tablet_column = tablet_schema->column(condition_column);
     std::vector<uint32_t> read_column_ids;
@@ -276,7 +291,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
                 ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_columns[0] = old_unordered_column->clone_empty();
         RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, num_default > 0,
-                                          old_rowids_by_rssid, &old_columns));
+                                          true, old_rowids_by_rssid, &old_columns));
         auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -290,7 +305,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
         std::vector<std::unique_ptr<Column>> new_columns(1);
         auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_columns[0] = new_column->clone_empty();
-        RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, false,
+        RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, false, true,
                                           new_rowids_by_rssid, &new_columns));
 
         int idx_begin = 0;
@@ -350,6 +365,7 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
         return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
     op(index);
+    _block_cache->update_memory_usage();
 
     return Status::OK();
 }
@@ -386,7 +402,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
 
 Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
                                         const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
-                                        std::vector<uint32_t>& column_ids, bool with_default,
+                                        std::vector<uint32_t>& column_ids, bool with_default, bool include_op_write,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns,
                                         AutoIncrementPartialUpdateState* auto_increment_state) {
@@ -416,7 +432,9 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     watch.reset();
 
     std::unordered_map<uint32_t, FileInfo> rssid_to_file_info;
-    rowset_rssid_to_path(metadata, op_write, rssid_to_file_info);
+    // When `include_op_write` is true, that means we want to get columns from segment in op_write log too.
+    // It happens when using condition update.
+    rowset_rssid_to_path(metadata, include_op_write ? &op_write : nullptr, rssid_to_file_info);
     cost_str << " [catch rssid_to_path] " << watch.elapsed_time();
     watch.reset();
 
@@ -458,6 +476,11 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
         }
 
+        if (rssid_to_file_info.count(rssid) == 0) {
+            // It may happen when preload partial update state by old tablet meta
+            return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist", metadata.id(),
+                                                 metadata.version(), rssid));
+        }
         // use 0 segment_id is safe, because we need not get either delvector or dcg here
         RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, tablet_schema, rowids));
     }
@@ -570,8 +593,9 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
 }
 
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                 const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
-                                                 MetaFileBuilder* builder, int64_t base_version) {
+                                                 const TabletMetadata& metadata, const Tablet& tablet,
+                                                 IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                 int64_t base_version) {
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
@@ -621,6 +645,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         delvecs.emplace_back(rssid, dv);
         compaction_state.release_segments(i);
     }
+    _block_cache->update_memory_usage();
 
     // 3. update TabletMeta and write to meta file
     for (auto&& each : delvecs) {
@@ -628,6 +653,8 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     }
     builder->apply_opcompaction(op_compaction, max_rowset_id);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
+
+    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
@@ -685,6 +712,16 @@ void UpdateManager::update_primary_index_data_version(const Tablet& tablet, int6
         index.update_data_version(version);
         _index_cache.release(index_entry);
     }
+}
+
+int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        int64_t version = index_entry->value().data_version();
+        _index_cache.release(index_entry);
+        return version;
+    }
+    return 0;
 }
 
 void UpdateManager::_print_memory_stats() {
@@ -818,6 +855,28 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
         _compaction_cache.release(compaction_entry);
     }
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
+}
+
+void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        index.set_enable_persistent_index(enable_persistent_index);
+        _index_cache.release(index_entry);
+    }
+}
+
+Status UpdateManager::execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata,
+                                                     TxnLogPB* txn_log) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return Status::OK();
+    }
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    // release index entry but keep it in cache
+    DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+    auto& index = index_entry->value();
+    return index.major_compact(metadata, txn_log);
 }
 
 } // namespace starrocks::lake

@@ -20,6 +20,7 @@
 #include <variant>
 
 #include "common/statusor.h"
+#include "compaction_task_context.h"
 #include "gutil/macros.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
@@ -67,11 +68,11 @@ public:
 
     StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
 
-    StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
+    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
+    Status put_tablet_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadataPtr& metadata);
+    Status put_tablet_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version);
 
@@ -81,17 +82,19 @@ public:
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
 
-    [[nodiscard]] Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
+    Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+    Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
+    Status put_txn_log(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log, const std::string& path);
+    Status put_txn_log(const TxnLogPtr& log, const std::string& path);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+    Status put_txn_slog(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+    Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+
+    Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
@@ -136,6 +139,8 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+    std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
+
     const LocationProvider* location_provider() const { return _location_provider; }
 
     UpdateManager* update_mgr();
@@ -149,11 +154,15 @@ public:
 
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
+    StatusOr<int64_t> get_tablet_num_rows(int64_t tablet_id, int64_t version);
+
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+    void add_in_writing_data_size(int64_t tablet_id, int64_t size);
 
-    void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
+    void remove_in_writing_data_size(int64_t tablet_id);
+
+    void clean_in_writing_data_size();
 
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
@@ -167,16 +176,21 @@ public:
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                       TabletSchemaPtr tablet_schema);
+    // for load segment parallel
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
+                                      bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
+
+    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
+
+    Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
 
-    Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
-    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
-    StatusOr<TabletSchemaPtr> get_tablet_schema_by_index_id(int64_t tablet_id, int64_t index_id);
+    StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
 
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
@@ -187,7 +201,7 @@ private:
     UpdateManager* _update_mgr;
 
     std::shared_mutex _meta_lock;
-    std::unordered_map<int64_t, std::unordered_map<int64_t, int64_t>> _tablet_in_writing_txn_size;
+    std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
 };
 
 } // namespace starrocks::lake

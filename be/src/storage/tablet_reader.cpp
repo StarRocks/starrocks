@@ -161,9 +161,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed tablet_id:" << _tablet->tablet_id();
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
 
     // get rowid using pk index
@@ -285,6 +283,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
     rs_opts.asc_hint = _is_asc_hint;
+    rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {

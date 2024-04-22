@@ -56,7 +56,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -443,7 +442,7 @@ public class CreateTableTest {
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Generated Column "
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illegal expression type for Generated Column "
                         + "Column Type: INT, Expression Type: DOUBLE",
                 () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
@@ -884,8 +883,8 @@ public class CreateTableTest {
         String showSql = "show create table test.`test_location_no_prop`";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        
+        ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -916,8 +915,7 @@ public class CreateTableTest {
         showSql = "show create table test.`test_location_no_backend_prop`";
         showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
-        showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        showResultSet = showExecutor.execute();
+        showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -989,8 +987,7 @@ public class CreateTableTest {
                 showSql = "show create table test.`test_location_prop_" + i + "`";
                 showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                         connectContext);
-                showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-                showResultSet = showExecutor.execute();
+                showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
                 System.out.println(showResultSet.getResultRows());
                 Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                         PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + expectedAnalyzedProp + "\""));
@@ -1381,32 +1378,6 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testTemporaryTable() throws Exception {
-        Config.enable_experimental_temporary_table = true;
-        createTable(
-                "CREATE TABLE test.base_tbl (\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ")"
-        );
-
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
-                "create temporary table test.temp_table select * from test.base_tbl",
-                connectContext);
-        // String sql = stmt.toSql();
-        // Assert.assertEquals("hehe", sql);
-
-        // drop table
-        UtFrameUtils.parseStmtWithNewParser("drop temporary table test.base_tbl", connectContext);
-    }
-
-    @Test
     public void testCreateTableWithConstraint() {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table1(\n" +
@@ -1745,6 +1716,14 @@ public class CreateTableTest {
                                 ") DISTRIBUTED BY HASH(item_id1)\n" +
                                 "PROPERTIES(\"replication_num\" = \"1\");"
                 ));
+    }
+
+    @Test
+    public void testDropTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "cannot drop table in system database: information_schema",
+                () -> starRocksAssert.dropTable("information_schema.tables")
+        );
     }
 
     @Test

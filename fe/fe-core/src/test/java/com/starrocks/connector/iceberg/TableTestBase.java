@@ -101,6 +101,9 @@ public class TableTestBase {
     protected static final PartitionSpec SPEC_F =
             PartitionSpec.builderFor(SCHEMA_F).day("dt").build();
 
+    protected static final PartitionSpec SPEC_F_1 =
+            PartitionSpec.builderFor(SCHEMA_F).identity("dt").build();
+
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC_A)
                     .withPath("/path/to/data-a.parquet")
@@ -112,7 +115,8 @@ public class TableTestBase {
     public static DeleteFile FILE_A_DELETES =
             FileMetadata.deleteFileBuilder(SPEC_A)
                     .ofPositionDeletes()
-                    .withPath("/path/to/data-a-deletes.parquet")
+                    .withPath("/path/to/data-a-deletes.orc")
+                    .withFormat(FileFormat.ORC)
                     .withFileSizeInBytes(10)
                     .withPartitionPath("data_bucket=0") // easy way to set partition data for now
                     .withRecordCount(1)
@@ -121,7 +125,8 @@ public class TableTestBase {
     public static DeleteFile FILE_A2_DELETES =
             FileMetadata.deleteFileBuilder(SPEC_A)
                     .ofEqualityDeletes(1)
-                    .withPath("/path/to/data-a2-deletes.parquet")
+                    .withPath("/path/to/data-a2-deletes.orc")
+                    .withFormat(FileFormat.ORC)
                     .withFileSizeInBytes(10)
                     .withPartitionPath("data_bucket=0")
                     .withRecordCount(1)
@@ -218,6 +223,7 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableF = null;
     public TestTables.TestTable mockedNativeTableG = null;
     public TestTables.TestTable mockedNativeTableH = null;
+    public TestTables.TestTable mockedNativeTableI = null;
 
     protected final int formatVersion = 1;
 
@@ -235,6 +241,7 @@ public class TableTestBase {
         this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
         this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
         this.mockedNativeTableH = create(SCHEMA_H, PartitionSpec.unpartitioned(), "th", 1);
+        this.mockedNativeTableI = create(SCHEMA_F, SPEC_F_1, "ti", 1);
     }
 
     @After

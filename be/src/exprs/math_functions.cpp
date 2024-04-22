@@ -768,6 +768,17 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
                 fmt::format("cosine_similarity does not support null values. {} array has null value.",
                             base->has_null() ? "base" : "target"));
     }
+    if (base->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(base);
+        const_column->data_column()->assign(base->size(), 0);
+        base = const_column->data_column().get();
+    }
+    if (target->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->assign(target->size(), 0);
+        target = const_column->data_column().get();
+    }
+
     if (base->is_nullable()) {
         base = down_cast<const NullableColumn*>(base)->data_column().get();
     }
@@ -873,6 +884,7 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         }
         result_data[i] = result_value;
         target_data += dim_size;
+        base_data += dim_size;
     }
     return result;
 }

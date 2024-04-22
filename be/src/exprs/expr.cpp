@@ -73,6 +73,7 @@
 #include "exprs/map_apply_expr.h"
 #include "exprs/map_element_expr.h"
 #include "exprs/map_expr.h"
+#include "exprs/match_expr.h"
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
 #include "gutil/strings/substitute.h"
@@ -191,11 +192,15 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     if (node.__isset.is_monotonic) {
         _is_monotonic = node.is_monotonic;
     }
+    if (node.__isset.is_index_only_filter) {
+        _is_index_only_filter = node.is_index_only_filter;
+    }
 }
 
 Expr::~Expr() = default;
 
-Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state) {
+Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
+                              bool can_jit) {
     // input is empty
     if (texpr.nodes.empty()) {
         *ctx = nullptr;
@@ -203,7 +208,12 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
     int node_idx = 0;
     Expr* e = nullptr;
-    Status status = create_tree_from_thrift_with_jit(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    Status status;
+    if (can_jit) {
+        status = create_tree_from_thrift_with_jit(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    } else {
+        status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    }
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
@@ -217,12 +227,22 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
+Status Expr::prepare_jit_expr(RuntimeState* state, ExprContext* context) {
+    if (this->node_type() == TExprNodeType::JIT_EXPR) {
+        RETURN_IF_ERROR(((JITExpr*)this)->prepare_impl(state, context));
+    }
+    for (auto child : _children) {
+        RETURN_IF_ERROR(child->prepare_jit_expr(state, context));
+    }
+    return Status::OK();
+}
+
 Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
-                               RuntimeState* state) {
+                               RuntimeState* state, bool can_jit) {
     ctxs->clear();
     for (const auto& texpr : texprs) {
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, state));
+        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, state, can_jit));
         ctxs->push_back(ctx);
     }
     return Status::OK();
@@ -231,28 +251,21 @@ Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texpr
 Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
                                               int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
-
-    // Enable JIT based on the "enable_jit" parameters.
+    // Enable JIT based on the "jit_level" parameters.
     if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
         return status;
     }
 
-    // Check if JIT compilation is feasible on this platform.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->support_jit()) {
-        return status;
-    }
-
-    const auto* prev_e = *root_expr;
-    status = (*root_expr)->replace_compilable_exprs(root_expr, pool);
+    bool replaced = false;
+    status = (*root_expr)->replace_compilable_exprs(root_expr, pool, state, replaced);
     if (!status.ok()) {
         LOG(WARNING) << "Can't replace compilable exprs.\n" << status.message() << "\n" << (*root_expr)->debug_string();
         // Fall back to the non-JIT path.
         return Status::OK();
     }
 
-    if (*root_expr != prev_e) {
-        // The root node was replaced, so we need to update the context.
+    if (replaced) {
+        // The node was replaced, so we need to update the context.
         *ctx = pool->add(new ExprContext(*root_expr));
     }
 
@@ -339,12 +352,15 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
             *expr = pool->add(VectorizedCastExprFactory::from_thrift(
                     pool, texpr_node, (state == nullptr) ? false : state->query_options().allow_throw_exception));
             if (*expr == nullptr) {
-                LogicalType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
-                LogicalType from_type = thrift_to_type(texpr_node.child_type);
-                std::string err_msg = fmt::format(
-                        "Vectorized engine does not support the operator, cast from {} to {} failed, maybe use switch "
-                        "function",
-                        type_to_string_v2(from_type), type_to_string_v2(to_type));
+                TypeDescriptor to_type = TypeDescriptor::from_thrift(texpr_node.type);
+                TypeDescriptor from_type(thrift_to_type(texpr_node.child_type));
+                // In cast TExprNode, child_type is used to represent scalar type,
+                // and child_type_desc is used to represent complex types, such as struct, map, array
+                if (texpr_node.__isset.child_type_desc) {
+                    from_type = TypeDescriptor::from_thrift(texpr_node.child_type_desc);
+                }
+                auto err_msg =
+                        fmt::format("Not support cast {} to {}.", from_type.debug_string(), to_type.debug_string());
                 LOG(WARNING) << err_msg;
                 return Status::InternalError(err_msg);
             } else {
@@ -433,6 +449,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::DICTIONARY_GET_EXPR:
         *expr = pool->add(new DictionaryGetExpr(texpr_node));
+        break;
+    case TExprNodeType::MATCH_EXPR:
+        *expr = pool->add(new MatchExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
@@ -698,8 +717,16 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
+StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, JITContext* jit_ctx) {
+    if (this->is_compilable(context->_runtime_state)) {
+        return this->generate_ir_impl(context, jit_ctx);
+    } else {
+        return Expr::generate_ir_impl(context, jit_ctx);
+    }
+}
+
 StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
-    if (is_compilable()) {
+    if (is_compilable(context->_runtime_state)) {
 #if BE_TEST
         throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
 #else
@@ -729,47 +756,117 @@ StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit
     return datum;
 }
 
-void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
-    if (!this->is_compilable()) {
+void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state) {
+    if (!this->is_compilable(state)) {
         exprs.emplace_back(this);
         return;
     }
     for (auto child : this->children()) {
-        child->get_uncompilable_exprs(exprs);
+        child->get_uncompilable_exprs(exprs, state);
     }
+}
+
+std::string Expr::jit_func_name(RuntimeState* state) const {
+    if (this->is_compilable(state)) {
+        return this->jit_func_name_impl(state);
+    } else {
+        return Expr::jit_func_name_impl(state);
+    }
+}
+
+std::string Expr::jit_func_name_impl(RuntimeState* state) const {
+    DCHECK(!is_compilable(state));
+    // uncompilable inputs, reducing string size.
+    return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
+           "]";
 }
 
 // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
-Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
-    if ((*expr)->should_compile()) {
+Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced) {
+    if (_node_type == TExprNodeType::DICT_EXPR || _node_type == TExprNodeType::DICT_QUERY_EXPR ||
+        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR ||
+        _node_type == TExprNodeType::MATCH_EXPR) {
+        return Status::OK();
+    }
+    DCHECK(JITEngine::get_instance()->support_jit());
+    if ((*expr)->should_compile(state)) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
-        *expr = JITExpr::create(pool, *expr);
+        auto* jit_expr = JITExpr::create(pool, *expr);
+        jit_expr->set_uncompilable_children(state);
+        *expr = jit_expr;
+        replaced = true;
     }
 
     for (auto& child : (*expr)->_children) {
-        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
+        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool, state, replaced));
     }
     return Status::OK();
 }
 
-bool Expr::should_compile() const {
-    if (!is_compilable() || _children.empty() || is_constant()) {
+JitScore Expr::compute_jit_score(RuntimeState* state) const {
+    JitScore jit_score = {0, 0};
+    if (!is_compilable(state)) {
+        return jit_score;
+    }
+    for (auto child : _children) {
+        auto tmp = child->compute_jit_score(state);
+        jit_score.score += tmp.score;
+        jit_score.num += tmp.num;
+    }
+    jit_score.num++;
+    jit_score.score++; // helpful by default.
+    return jit_score;
+}
+
+bool Expr::should_compile(RuntimeState* state) const {
+    if (!is_compilable(state) || _children.empty() || is_constant()) {
         return false;
     }
 
-    for (auto child : _children) {
-        // If an expr is compilable, and it has compilable child nodes that are not leaf nodes,
-        // compiling these compilable nodes into one node via JIT will provide benefits.
-        // The 'literal' is special. It is compilable, but it doesn't have any child nodes
-        if (child->is_compilable() && !child->children().empty()) {
+    if (state->is_adaptive_jit()) {
+        auto score = compute_jit_score(state);
+        auto valid = (score.score > score.num * IRHelper::jit_score_ratio && score.num > 2);
+        VLOG_QUERY << "JIT score expr: score = " << score.score << " / " << score.num << " = "
+                   << score.score * 1.0 / score.num << " valid = " << valid << "  " << jit_func_name(state);
+        if (!valid) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
+    bool support = false;
+    for (auto& child : _children) {
+        if (child->support_ngram_bloom_filter(context)) {
             return true;
         }
     }
+    return support;
+}
 
-    return true;
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
+                              const NgramBloomFilterReaderOptions& reader_options) const {
+    bool no_need_to_filt = true;
+    for (auto& child : _children) {
+        if (!child->ngram_bloom_filter(context, bf, reader_options)) {
+            return false;
+        }
+    }
+    return no_need_to_filt;
+}
+
+bool Expr::is_index_only_filter() const {
+    bool is_index_only_filter = _is_index_only_filter;
+    for (auto& child : _children) {
+        if (child->is_index_only_filter()) {
+            return true;
+        }
+    }
+    return is_index_only_filter;
 }
 
 } // namespace starrocks

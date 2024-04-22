@@ -61,11 +61,11 @@ public class Log4jConfig extends XmlConfiguration {
             "<Configuration status=\"info\" packages=\"com.starrocks.common\">\n" +
             "  <Appenders>\n" +
             "    <Console name=\"ConsoleErr\" target=\"SYSTEM_ERR\" follow=\"true\">\n" +
-            "      <PatternLayout pattern=\"%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n\"/>\n" +
+            "      <PatternLayout pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n\"/>\n" +
             "    </Console>\n" +
             "    <RollingFile name=\"Sys\" fileName=\"${sys_log_dir}/fe.log\" filePattern=\"${sys_log_dir}/fe.log.${sys_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -80,7 +80,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    </RollingFile>\n" +
             "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -95,7 +95,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    </RollingFile>\n" +
             "    <RollingFile name=\"Auditfile\" fileName=\"${audit_log_dir}/fe.audit.log\" filePattern=\"${audit_log_dir}/fe.audit.log.${audit_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} [%c{1}] %m%n</Pattern>\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -110,7 +110,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    </RollingFile>\n" +
             "    <RollingFile name=\"dumpFile\" fileName=\"${dump_log_dir}/fe.dump.log\" filePattern=\"${dump_log_dir}/fe.dump.log.${dump_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} [%c{1}] %m%n</Pattern>\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -125,7 +125,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    </RollingFile>\n" +
             "    <RollingFile name=\"BigQueryFile\" fileName=\"${big_query_log_dir}/fe.big_query.log\" filePattern=\"${big_query_log_dir}/fe.big_query.log.${big_query_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} [%c{1}] %m%n</Pattern>\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -138,9 +138,24 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+            "    <RollingFile name=\"ProfileFile\" fileName=\"${profile_log_dir}/fe.profile.log\" filePattern=\"${profile_log_dir}/fe.profile.log.${profile_file_pattern}-%i\">\n" +
+            "      <PatternLayout charset=\"UTF-8\">\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
+            "      </PatternLayout>\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${profile_log_roll_size_mb}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${profile_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.profile.log.*\" />\n" +
+            "          <IfLastModified age=\"${profile_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
             "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -169,6 +184,9 @@ public class Log4jConfig extends XmlConfiguration {
             "    </Logger>\n" +
             "    <Logger name=\"big_query\" level=\"ERROR\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"BigQueryFile\"/>\n" +
+            "    </Logger>\n" +
+            "    <Logger name=\"profile\" level=\"INFO\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"ProfileFile\"/>\n" +
             "    </Logger>\n" +
             "    <Logger name=\"org.apache.kafka\" level=\"WARN\"> \n" +
             "      <AppenderRef ref=\"SysWF\"/>\n" +
@@ -230,6 +248,14 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("big_query_log_delete_age", String.valueOf(Config.big_query_log_delete_age));
         properties.put("big_query_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.big_query_log_roll_interval));
+
+        // profile log config
+        properties.put("profile_log_dir", Config.profile_log_dir);
+        properties.put("profile_log_roll_size_mb", String.valueOf(Config.profile_log_roll_size_mb));
+        properties.put("profile_log_roll_num", String.valueOf(Config.profile_log_roll_num));
+        properties.put("profile_log_delete_age", String.valueOf(Config.profile_log_delete_age));
+        properties.put("profile_file_pattern",
+                getIntervalPattern("profile_log_roll_interval", Config.profile_log_roll_interval));
 
         // internal log config
         properties.put("internal_log_dir", Config.internal_log_dir);

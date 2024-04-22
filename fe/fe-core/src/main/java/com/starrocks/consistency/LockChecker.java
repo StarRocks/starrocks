@@ -55,12 +55,12 @@ public class LockChecker extends FrontendDaemon {
         for (Database db : dbs.values()) {
             boolean hasSlowLock = false;
             JsonObject ownerInfo = new JsonObject();
-            QueryableReentrantReadWriteLock lock = db.getLock();
+            QueryableReentrantReadWriteLock lock = db.getRwLock();
             // holder information
             Thread exclusiveLockThread = lock.getOwner();
             List<Long> sharedLockThreadIds = lock.getSharedLockThreadIds();
             if (exclusiveLockThread != null) {
-                long lockStartTime = db.getLock().getExclusiveLockTime();
+                long lockStartTime = db.getRwLock().getExclusiveLockTime();
                 if (lockStartTime > 0L && System.currentTimeMillis() - lockStartTime > Config.slow_lock_threshold_ms) {
                     hasSlowLock = true;
                     ownerInfo.addProperty("lockState", "writeLocked");

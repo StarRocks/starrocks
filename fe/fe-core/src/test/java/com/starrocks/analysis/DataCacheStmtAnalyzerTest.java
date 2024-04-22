@@ -18,6 +18,7 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheRule;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import org.elasticsearch.common.collect.List;
@@ -108,5 +109,17 @@ public class DataCacheStmtAnalyzerTest {
         Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(stmt.getTarget());
         Assert.assertTrue(dataCacheRule.isPresent());
         Assert.assertEquals("[id = 0, target = hive0.datacache_db.multi_partition_table, predicates = `hive0`.`datacache_db`.`multi_partition_table`.`l_shipdate` > '2012-1-1', priority = -1, properties = NULL]", dataCacheRule.get().toString());
+    }
+
+    @Test
+    public void testCacheSelect() {
+        DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table");
+        Assert.assertEquals("black_hole_catalog.black_hole_db.black_hole_table",
+                stmt.getInsertStmt().getTableName().toString());
+        analyzeSuccess("cache select * from hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1'");
+        analyzeFail("cache select * from hive0.datacache_db.not_existed");
+        analyzeFail("cache select * from default_catalog.test.t0",
+                "Currently cache select is only supported in external catalog");
     }
 }

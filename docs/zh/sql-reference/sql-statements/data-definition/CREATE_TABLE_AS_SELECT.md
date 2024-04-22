@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['CTAS']
 ---
 
 # CREATE TABLE AS SELECT
@@ -16,11 +17,13 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
   ```SQL
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-  [(column_name [, column_name2, ...]]
+  [column_name1 [, column_name2, ...]]
+  [index_definition1 [, index_definition2, ...]]
   [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
+  [ORDER BY (column_name1 [, column_name2, ...])]
   [PROPERTIES ("key"="value", ...)]AS SELECT query
   [ ... ]
   ```
@@ -30,12 +33,14 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
   ```SQL
   SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-  [(column_name [, column_name2, ...]]
+  [column_name1 [, column_name2, ...]]
+  [index_definition1 [, index_definition2, ...]]
   [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
-  [PROPERTIES ("key"="value", ...)]AS SELECT query
+  [ORDER BY (column_name1 [, column_name2, ...])]
+  [PROPERTIES ("key"="value", ...)] AS SELECT query
   [ ... ]
   ```
 
@@ -43,11 +48,13 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 | **参数**          | **必填** | **描述**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
-| column_name       | 是       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为 VARCHAR(65533)。 |
+| column_name       | 否       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为 VARCHAR(65533)。 |
+| index_definition  | 否       | 自 3.1.8 开始支持为新表创建 Bitmap 索引，语法是 `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']`。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md)。|
 | key_desc          | 否       | 语法是 `key_type (<col_name1> [, <col_name2>, ...])`。<br />**参数**：<ul><li>`key_type`：新表的 Key 类型。有效值：`DUPLICATE KEY` 和 `PRIMARY KEY`。默认值：`DUPLICATE KEY`。</li><li> `col_name`：组成 Key 的列。</li></ul>|
 | COMMENT           | 否       | 新表注释。                                                   |
-| partition_desc    | 否       | 新表的分区方式。如不指定该参数，则默认新表为无分区。更多有关分区的设置，参见 CREATE TABLE。 |
-| distribution_desc | 否       | 新表的分桶方式。如不指定该参数，则默认新表的分桶列为使用 CBO 优化器采集的统计信息中基数最高的列，且分桶数量默认为 10。如果 CBO 优化器没有采集基数信息，则默认新表的第一列为分桶列。更多有关分桶的设置，参见 CREATE TABLE。 |
+| partition_desc    | 否       | 新表的分区方式。如不指定该参数，则默认新表为无分区。更多有关分区的设置，参见 [CREATE TABLE](./CREATE_TABLE.md#partition_desc)。 |
+| distribution_desc | 否       | 新表的分桶方式。如不指定该参数，则默认新表的分桶列为使用 CBO 优化器采集的统计信息中基数最高的列，且分桶数量默认为 10。如果 CBO 优化器没有采集基数信息，则默认新表的第一列为分桶列。更多有关分桶的设置，参见 [CREATE TABLE](./CREATE_TABLE.md#distribution_desc)。 |
+| ORDER BY| 否       |自 v3.1.8 版本以来，如果新表是主键表，则可以为新表指定排序键。排序键可以是任意列的组合。主键表是指在创建表时指定了 `PRIMARY KEY (xxx)` 的表。| 
 | Properties        | 否       | 新表的属性。                                                 |
 | AS SELECT query   | 是       | 查询结果。该参数支持如下值： 列。比如 `... AS SELECT a, b, c FROM table_a;`，其中 `a`、`b` 和 `c` 为原表的列名。如果您没有为新表指定列名，那么新表的列名也为 `a`、`b` 和 `c`。 表达式。比如 `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`，其中 `a+1`、`b+2` 和 `c*c` 为原表的列名，`x`、`y` 和 `z` 为新表的列名。 说明： 新表的列数需要与 `AS SELECT query` 中指定的列数保持一致。 建议您为新表的列设置具有业务意义的列名，便于后续识别使用。 |
 
@@ -69,7 +76,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 - 新表创建后，如果存在多种方式（比如 Insert Into）将数据插入到新表中，那么最先执行完插入操作的即最先将数据插入到新表中。
 
-- 新表创建成功后，您需要手动授予用户对该表的权限。参见 [表权限](../../../administration/privilege_item.md#表权限-table) 和 [GRANT](../account-management/GRANT.md)。
+- 新表创建成功后，您需要手动授予用户对该表的权限。参见 [表权限](../../../administration/user_privs/privilege_item.md#表权限-table) 和 [GRANT](../account-management/GRANT.md)。
 - 当异步查询原表并基于查询结果创建新表时，如果不指定 Task 名称，那么 StarRocks 会自动生成一个 Task 名称。
 
 ## 示例
@@ -114,7 +121,27 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-示例四：使用 CTAS 创建一张主键表。需要注意的是，主键表中的数据行数可能会比查询结果中的数据行数少。这是因为主键表只存储具有相同主键的一组数据行中最新的一条数据行。
+示例四：同步查询原表 `customers` 中的 `customer_id` 和 `first_name` 列并根据查询结果创建新表 `customers_new`，然后将查询结果插入到新表中，并指定新表中列的名称为 `customer_id_new` 和 `first_name_new`。同时在新表中基于列 `customer_id_new` 构建 Bitmap 索引。
+
+```SQL
+CREATE TABLE customers_new 
+(   customer_id_new,
+    first_name_new,
+    INDEX idx_bitmap_customer_id (customer_id_new) USING BITMAP
+) 
+AS SELECT customer_id,first_name FROM customers;
+```
+
+示例五：同步查询原表 `customers` 并根据查询结果创建新表 `customers_new`，然后将查询结果插入到新表中。 并且指定新表为主键表并且指定其排序键为 `first_name` 和 `last_name`。
+
+```SQL
+CREATE TABLE customers_pk
+PRIMARY KEY (customer_id)
+ORDER BY (first_name,last_name)
+AS SELECT  * FROM customers;
+```
+
+示例六：使用 CTAS 创建一张主键表。需要注意的是，主键表中的数据行数可能会比查询结果中的数据行数少。这是因为主键表只存储具有相同主键的一组数据行中最新的一条数据行。
 
 ```SQL
 CREATE TABLE employee_new
@@ -126,7 +153,7 @@ FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
 GROUP BY order_id;
 ```
 
-示例五：同步查询四张原表 `lineorder`、`customer`、`supplier` 和 `part` 并根据查询结果创建新表 `lineorder_flat`，然后将查询结果插入到新表中，并指定新表的分区和分桶方式。
+示例七：同步查询四张原表 `lineorder`、`customer`、`supplier` 和 `part` 并根据查询结果创建新表 `lineorder_flat`，然后将查询结果插入到新表中，并指定新表的分区和分桶方式。
 
 ```SQL
 CREATE TABLE lineorder_flat
@@ -178,7 +205,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-示例六：异步查询原表 `order_detail` 并根据查询结果创建新表 `order_statistics`，然后将查询结果插入到新表中。
+示例八：异步查询原表 `order_detail` 并根据查询结果创建新表 `order_statistics`，然后将查询结果插入到新表中。
 
 ```Plain_Text
 SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;

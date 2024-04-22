@@ -39,6 +39,7 @@
 #include "storage/chunk_helper.h"
 #include "types/logical_type.h"
 #include "util/json.h"
+#include "util/json_converter.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -265,36 +266,32 @@ std::string JsonFunctions::jsonpaths_to_string(const std::vector<SimpleJsonPath>
     return output;
 }
 
-JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
-JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
-JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
-
 StatusOr<ColumnPtr> JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
-    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
-    const auto& paths = columns[1];
+    return _get_json_value<TYPE_INT>(context, columns);
+}
 
-    ASSIGN_OR_RETURN(jsons, json_query(context, Columns{jsons, paths}));
-    return _json_int(context, Columns{jsons});
+StatusOr<ColumnPtr> JsonFunctions::get_json_bigint(FunctionContext* context, const Columns& columns) {
+    return _get_json_value<TYPE_BIGINT>(context, columns);
 }
 
 StatusOr<ColumnPtr> JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
-    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
-    const auto& paths = columns[1];
-
-    ASSIGN_OR_RETURN(jsons, json_query(context, Columns{jsons, paths}));
-    return _json_double(context, Columns{jsons});
+    return _get_json_value<TYPE_DOUBLE>(context, columns);
 }
 
 StatusOr<ColumnPtr> JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
-    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
-    const auto& paths = columns[1];
+    return _get_json_value<TYPE_VARCHAR>(context, columns);
+}
 
-    ASSIGN_OR_RETURN(jsons, json_query(context, Columns{jsons, paths}));
-    return _json_string_unescaped(context, Columns{jsons});
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_bool(FunctionContext* context, const Columns& columns) {
+    return _json_query_impl<TYPE_BOOLEAN>(context, columns);
 }
 
 StatusOr<ColumnPtr> JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_INT>(context, columns);
+}
+
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_bigint(FunctionContext* context, const Columns& columns) {
+    return _json_query_impl<TYPE_BIGINT>(context, columns);
 }
 
 StatusOr<ColumnPtr> JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {
@@ -349,47 +346,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_string(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> JsonFunctions::_json_int(FunctionContext* context, const Columns& columns) {
-    ColumnViewer<TYPE_JSON> viewer(columns[0]);
-    ColumnBuilder<TYPE_INT> result(columns[0]->size());
-
-    for (int row = 0; row < columns[0]->size(); row++) {
-        if (viewer.is_null(row)) {
-            result.append_null();
-        } else {
-            JsonValue* json = viewer.value(row);
-            auto json_int = json->get_int();
-            if (!json_int.ok()) {
-                result.append_null();
-            } else {
-                result.append(json_int.value());
-            }
-        }
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
-}
-
-StatusOr<ColumnPtr> JsonFunctions::_json_double(FunctionContext* context, const Columns& columns) {
-    ColumnViewer<TYPE_JSON> viewer(columns[0]);
-    ColumnBuilder<TYPE_DOUBLE> result(columns[0]->size());
-
-    for (int row = 0; row < columns[0]->size(); row++) {
-        if (viewer.is_null(row)) {
-            result.append_null();
-        } else {
-            JsonValue* json = viewer.value(row);
-            auto json_d = json->get_double();
-            if (!json_d.ok()) {
-                result.append_null();
-            } else {
-                result.append(json_d.value());
-            }
-        }
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
-}
-
-StatusOr<ColumnPtr> JsonFunctions::_string_json(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(columns[0]->size());
 
@@ -410,42 +367,11 @@ StatusOr<ColumnPtr> JsonFunctions::_string_json(FunctionContext* context, const 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> JsonFunctions::_json_string_unescaped(FunctionContext* context, const Columns& columns) {
-    ColumnViewer<TYPE_JSON> viewer(columns[0]);
-    ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
-
-    for (int row = 0; row < columns[0]->size(); row++) {
-        if (viewer.is_null(row)) {
-            result.append_null();
-        } else {
-            JsonValue* json = viewer.value(row);
-            auto json_str = json->to_string();
-            if (!json_str.ok()) {
-                result.append_null();
-                continue;
-            }
-            auto str = json_str.value();
-
-            // Since the string extract from json may be escaped, unescaping is needed.
-            // The src and dest of strings::CUnescape could be the same.
-            if (!strings::CUnescape(StringPiece{str}, &str, nullptr)) {
-                result.append_null();
-                continue;
-            }
-
-            if (str.length() < 2) {
-                result.append(str);
-                continue;
-            }
-
-            // Try to trim the first/last quote.
-            if (str[0] == '"') str = str.substr(1, str.size() - 1);
-            if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
-
-            result.append(str);
-        }
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
+template <LogicalType ResultType>
+StatusOr<ColumnPtr> JsonFunctions::_get_json_value(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
+    const auto& paths = columns[1];
+    return _full_json_query_impl<ResultType>(context, Columns{jsons, paths});
 }
 
 //////////////////////////// User visiable functions /////////////////////////////////
@@ -487,42 +413,6 @@ Status JsonFunctions::native_json_path_close(FunctionContext* context, FunctionC
 
 StatusOr<ColumnPtr> JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_JSON>(context, columns);
-}
-
-// Convert the JSON Slice to a LogicalType through ColumnBuilder
-template <LogicalType ResultType>
-static Status _convert_json_slice(const vpack::Slice& slice, ColumnBuilder<ResultType>& result) {
-    try {
-        if (slice.isNone()) {
-            result.append_null();
-        } else if constexpr (ResultType == TYPE_JSON) {
-            JsonValue value(slice);
-            result.append(std::move(value));
-        } else if (slice.isNull()) {
-            result.append_null();
-        } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
-            if (LIKELY(slice.isType(vpack::ValueType::String))) {
-                vpack::ValueLength len;
-                const char* str = slice.getStringUnchecked(len);
-                result.append(Slice(str, len));
-            } else {
-                vpack::Options options = vpack::Options::Defaults;
-                options.singleLinePrettyPrint = true;
-                std::string str = slice.toJson(&options);
-
-                result.append(Slice(str));
-            }
-        } else if constexpr (ResultType == TYPE_INT) {
-            result.append(slice.getNumber<int64_t>());
-        } else if constexpr (ResultType == TYPE_DOUBLE) {
-            result.append(slice.getNumber<double>());
-        } else {
-            CHECK(false) << "unsupported";
-        }
-    } catch (const vpack::Exception& e) {
-        return Status::InvalidArgument("failed to convert json to primitive");
-    }
-    return Status::OK();
 }
 
 template <LogicalType ResultType>
@@ -616,7 +506,7 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             JsonValue* json_value = json_viewer.value(row);
             builder.clear();
             vpack::Slice slice = JsonPath::extract(json_value, json_path, &builder);
-            Status st = _convert_json_slice<ResultType>(slice, result);
+            Status st = cast_vpjson_to<ResultType, false>(slice, result);
             if (!st.ok()) {
                 result.append_null();
                 continue;
@@ -635,7 +525,7 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
                 continue;
             }
             JsonValue* j = json_viewer.value(row);
-            Status st = _convert_json_slice<ResultType>(j->to_vslice(), result);
+            Status st = cast_vpjson_to<ResultType, false>(j->to_vslice(), result);
             if (!st.ok()) {
                 result.append_null();
                 continue;
@@ -671,7 +561,7 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_query_impl(FunctionContext* contex
 
         builder.clear();
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
-        Status st = _convert_json_slice<ResultType>(slice, result);
+        Status st = cast_vpjson_to<ResultType, false>(slice, result);
         if (!st.ok()) {
             result.append_null();
             continue;
@@ -720,8 +610,14 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_exists(FunctionContext* context, c
 
         ColumnBuilder<TYPE_BOOLEAN> result(rows);
         for (size_t row = 0; row < rows; ++row) {
-            if (json_viewer.is_null(row)) {
+            if (columns[0]->is_null(row)) {
+                // only the json value is null, return null
                 result.append_null();
+                continue;
+            }
+            if (json_viewer.is_null(row)) {
+                // may be flat json is NONE/JSON-NULL, return false
+                result.append(0);
                 continue;
             }
             result.append(!json_viewer.value(row)->to_vslice().isNone());
@@ -918,11 +814,15 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_length(FunctionContext* context, c
 
         ColumnBuilder<TYPE_INT> result(rows);
         for (size_t row = 0; row < rows; ++row) {
-            if (json_viewer.is_null(row)) {
+            if (columns[0]->is_null(row)) {
+                // only the json value is null, return null
                 result.append_null();
                 continue;
             }
-
+            if (json_viewer.is_null(row)) {
+                result.append(0);
+                continue;
+            }
             vpack::Slice slice = json_viewer.value(row)->to_vslice();
             if (slice.isObject() || slice.isArray()) {
                 result.append(slice.length());

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['zhujian']
 ---
 
 # 通过导入实现数据变更
@@ -154,7 +155,7 @@ StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 IN
         columns terminated by ","
         format as "csv"
     )
-    with broker
+    WITH BROKER;
     ```
 
   - 添加 `__op` 字段：
@@ -168,7 +169,7 @@ StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 IN
         format as "csv"
         set (__op = 'upsert')
     )
-    with broker
+    WITH BROKER;
     ```
 
 - 通过 Routine Load 导入：
@@ -303,7 +304,7 @@ SELECT * FROM table1;
       format as "csv"
       set (__op = 'delete')
   )
-  with broker  
+  WITH BROKER;
   ```
 
 - 通过 Routine Load 导入：
@@ -420,7 +421,7 @@ SELECT * FROM table2;
       (id, name, score, temp)
       set (__op=temp)
   )
-  with broker
+  WITH BROKER;
   ```
 
 - 通过 Routine Load 导入：
@@ -647,7 +648,7 @@ SELECT * FROM table4;
 
 ### 导入数据
 
-通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `verion` 大于等于 `table5` 中对应行的`version` 值时，更新才会生效。
+通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `version` 大于等于 `table5` 中对应行的`version` 值时，更新才会生效。
 
 - 通过 Stream Load 导入：
 

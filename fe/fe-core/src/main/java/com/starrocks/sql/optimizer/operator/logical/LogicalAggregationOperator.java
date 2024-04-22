@@ -35,6 +35,9 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -175,6 +178,35 @@ public class LogicalAggregationOperator extends LogicalOperator {
         aggregations.entrySet().forEach(entry -> columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(),
                 entry.getValue())));
         return new RowOutputInfo(columnOutputInfoList);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
+
+        Map<ScalarOperator, DomainProperty.DomainWrapper> newDomainMap = Maps.newHashMap();
+        for (ColumnRefOperator groupByKey : groupingKeys) {
+            if (childDomainProperty.contains(groupByKey)) {
+                newDomainMap.put(groupByKey, childDomainProperty.getValueWrapper(groupByKey));
+            }
+        }
+
+        ColumnRefSet groupByCols = new ColumnRefSet(groupingKeys);
+        for (Map.Entry<ScalarOperator, DomainProperty.DomainWrapper> entry : childDomainProperty.getDomainMap().entrySet()) {
+            if (!newDomainMap.containsKey(entry.getKey()) && groupByCols.containsAll(entry.getKey().getUsedColumns())) {
+                newDomainMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        DomainProperty domainProperty = new DomainProperty(newDomainMap);
+        if (predicate != null) {
+            DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+            DomainProperty property = deriver.derive(predicate);
+            domainProperty = domainProperty.filterDomainProperty(property);
+        }
+        return domainProperty;
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {

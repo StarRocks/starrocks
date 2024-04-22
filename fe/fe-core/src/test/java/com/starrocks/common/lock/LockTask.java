@@ -53,7 +53,7 @@ public class LockTask implements Future<LockResult> {
     @Override
     public LockResult get() throws InterruptedException, ExecutionException {
         while (true) {
-            boolean result = latch.await(100, TimeUnit.MILLISECONDS);
+            boolean result = latch.await(1000, TimeUnit.MILLISECONDS);
             if (result) {
                 return lockResult;
             } else {

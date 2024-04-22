@@ -48,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
@@ -64,12 +65,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -108,12 +104,6 @@ public class SystemInfoServiceTest {
                 editLog.logBackendStateChange((Backend) any);
                 minTimes = 0;
 
-                db.readLock();
-                minTimes = 0;
-
-                db.readUnlock();
-                minTimes = 0;
-
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = backendId;
@@ -147,14 +137,6 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
-            }
-        };
-
-        new Expectations(localMetastore) {
-            {
-                localMetastore.getCluster();
-                minTimes = 0;
-                result = new Cluster("cluster", 1);
             }
         };
 
@@ -225,13 +207,13 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void validHostAndPortTest1() throws Exception {
         createHostAndPort(1);
         systemInfoService.validateHostAndPort(hostPort, false);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void validHostAndPortTest3() throws Exception {
         createHostAndPort(3);
         systemInfoService.validateHostAndPort(hostPort, false);
@@ -247,6 +229,14 @@ public class SystemInfoServiceTest {
     public void addBackendTest() throws AnalysisException {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
+                com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
@@ -280,6 +270,15 @@ public class SystemInfoServiceTest {
     public void addComputeNodeTest() throws AnalysisException {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+
+        com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
+                com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
 
         try {
@@ -302,6 +301,14 @@ public class SystemInfoServiceTest {
     public void removeBackendTest() throws AnalysisException {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
+                com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
@@ -335,7 +342,7 @@ public class SystemInfoServiceTest {
         new Expectations(starosAgent) {
             {
                 try {
-                    starosAgent.removeWorker("192.168.0.1:1235");
+                    starosAgent.removeWorker("192.168.0.1:1235", StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                     minTimes = 0;
                     result = null;
                 } catch (DdlException e) {
@@ -379,37 +386,18 @@ public class SystemInfoServiceTest {
     }
 
     @Test
-    public void testSaveLoadBackend() throws Exception {
-        clearAllBackend();
-        String dir = "testLoadBackend";
-        mkdir(dir);
-        File file = new File(dir, "image");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        Backend back1 = new Backend(1L, "localhost", 3);
-        back1.updateOnce(4, 6, 8);
-        systemInfoService.replayAddBackend(back1);
-        long checksum1 = systemInfoService.saveBackends(dos, 0);
-        globalStateMgr.clear();
-        globalStateMgr = null;
-        dos.close();
-
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        long checksum2 = systemInfoService.loadBackends(dis, 0);
-        Assert.assertEquals(checksum1, checksum2);
-        Assert.assertEquals(1, systemInfoService.getIdToBackend().size());
-        Backend back2 = systemInfoService.getBackend(1);
-        Assert.assertTrue(back1.equals(back2));
-        dis.close();
-
-        deleteDir(dir);
-    }
-
-    @Test
     public void testSeqChooseComputeNodes() {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+
+        com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
+                com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
 
         try {

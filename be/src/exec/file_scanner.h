@@ -44,6 +44,7 @@ struct ScannerCounter {
     int64_t init_chunk_ns = 0;
 
     int64_t file_read_ns = 0;
+    int64_t file_read_count = 0;
 };
 
 class FileScanner {
@@ -74,6 +75,10 @@ public:
 
     // only for test
     RuntimeState* TEST_runtime_state() { return _state; }
+    ScannerCounter* TEST_scanner_counter() { return _counter; }
+
+    static void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                             std::vector<SlotDescriptor>* output);
 
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,

@@ -60,6 +60,14 @@ import java.util.Optional;
 
 public interface ConnectorMetadata {
     /**
+     * Use connector type as a hint of table type.
+     * Caveat: there are exceptions that hive connector may have non-hive(e.g. iceberg) tables.
+     */
+    default Table.TableType getTableType() {
+        throw new StarRocksConnectorException("This connector doesn't support getting table type");
+    }
+
+    /**
      * List all database names of connector
      *
      * @return a list of string containing all database names of connector
@@ -227,6 +235,11 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support dropping tables");
     }
 
+    default void dropTemporaryTable(String dbName, long tableId, String tableName, boolean isSetIfExists, boolean isForce)
+            throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support dropping temporary tables");
+    }
+
     default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
@@ -291,10 +304,6 @@ public interface ConnectorMetadata {
 
     default CloudConfiguration getCloudConfiguration() {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
-    }
-
-    default List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
-        return Lists.newArrayList();
     }
 }
 

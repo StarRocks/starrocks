@@ -36,6 +36,7 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -109,13 +110,13 @@ public class AggregationAnalyzer {
     /**
      * visitor returns true if all expressions are constant with respect to the group.
      */
-    private class VerifyExpressionVisitor extends AstVisitor<Boolean, Void> {
+    private class VerifyExpressionVisitor implements AstVisitor<Boolean, Void> {
         @Override
         public Boolean visit(ParseNode expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
                 return true;
             }
-            return super.visit(expr);
+            return expr.accept(this, null);
         }
 
         @Override
@@ -288,6 +289,11 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitLikePredicate(LikePredicate node, Void context) {
+            return visit(node.getChild(0));
+        }
+
+        @Override
+        public Boolean visitMatchExpr(MatchExpr node, Void context) {
             return visit(node.getChild(0));
         }
 

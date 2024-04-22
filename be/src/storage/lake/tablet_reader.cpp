@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_reader.h"
 
+#include <future>
 #include <utility>
 
 #include "column/datum_convert.h"
@@ -32,6 +33,7 @@
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
@@ -47,6 +49,14 @@ using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema)
         : ChunkIterator(std::move(schema)), _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(metadata)) {}
+
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                           bool need_split, bool could_split_physically)
+        : ChunkIterator(std::move(schema)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
+          _need_split(need_split),
+          _could_split_physically(could_split_physically) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                            std::vector<RowsetPtr> rowsets)
@@ -91,8 +101,73 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
-    Status st = init_collector(read_params);
-    return st;
+
+    if (_need_split) {
+        std::vector<BaseTabletSharedPtr> tablets;
+        auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
+        // to avoid list tablet metadata by set version_hint
+        tablet_shared_ptr->set_version_hint(_tablet_metadata->version());
+        tablets.emplace_back(tablet_shared_ptr);
+
+        std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+        tablet_rowsets.emplace_back();
+        auto& rss = tablet_rowsets.back();
+        int64_t tablet_num_rows = 0;
+        for (auto& rowset : _rowsets) {
+            tablet_num_rows += rowset->num_rows();
+            rss.emplace_back(rowset);
+        }
+
+        // not split for data skew between tablet
+        if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
+            return init_collector(read_params);
+        }
+
+        std::vector<std::unique_ptr<pipeline::ScanMorsel>> morsels;
+        morsels.emplace_back(
+                std::make_unique<pipeline::ScanMorsel>(read_params.plan_node_id, *(read_params.scan_range)));
+
+        std::shared_ptr<pipeline::SplitMorselQueue> split_morsel_queue = nullptr;
+
+        if (_could_split_physically) {
+            split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
+                    std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+        } else {
+            // logical
+            split_morsel_queue = std::make_shared<pipeline::LogicalSplitMorselQueue>(
+                    std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+        }
+
+        // do prepare
+        split_morsel_queue->set_tablets(std::move(tablets));
+        split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
+        split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
+                                           read_params.end_key);
+
+        while (true) {
+            auto split = split_morsel_queue->try_get().value();
+            if (split != nullptr) {
+                auto ctx = std::make_unique<pipeline::LakeSplitContext>();
+
+                if (_could_split_physically) {
+                    auto physical_split = dynamic_cast<pipeline::PhysicalSplitScanMorsel*>(split.get());
+                    ctx->rowid_range = physical_split->get_rowid_range_option();
+                } else {
+                    auto logical_split = dynamic_cast<pipeline::LogicalSplitScanMorsel*>(split.get());
+                    ctx->short_key_range = logical_split->get_short_key_ranges_option();
+                }
+                ctx->split_morsel_queue = split_morsel_queue;
+                _split_tasks.emplace_back(std::move(ctx));
+            } else {
+                break;
+            }
+        }
+
+    } else {
+        return init_collector(read_params);
+    }
+
+    return Status::OK();
 }
 
 void TabletReader::close() {
@@ -107,18 +182,24 @@ void TabletReader::close() {
 
 Status TabletReader::do_get_next(Chunk* chunk) {
     DCHECK(!_is_vertical_merge);
+    if (_need_split) {
+        // return eof
+        return Status::EndOfFile("split morsel");
+    }
     RETURN_IF_ERROR(_collect_iter->get_next(chunk));
     return Status::OK();
 }
 
 Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     DCHECK(_is_vertical_merge);
+    if (_need_split) {
+        // return eof
+        return Status::EndOfFile("split morsel");
+    }
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
     return Status::OK();
 }
 
-// TODO: support
-//  1. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet_schema->keys_type();
@@ -149,10 +230,44 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.version = _tablet_metadata->version();
     }
 
+    rs_opts.rowid_range_option = params.rowid_range_option;
+    rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+
+    std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
-        iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
+            continue;
+        }
+
+        if (config::enable_load_segment_parallel) {
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
+                    [&, rowset]() { return enhance_error_prompt(rowset->read(schema(), rs_opts)); });
+
+            auto packaged_func = [task]() { (*task)(); };
+            if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+                !st.ok()) {
+                // try load rowset serially if sumbit_func failed
+                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                             << ", try to load rowset serially, rowset_id: " << rowset->id();
+                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+                iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+            } else {
+                futures.push_back(task->get_future());
+            }
+        } else {
+            ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+            iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+        }
+    }
+
+    for (auto& future : futures) {
+        auto seg_iters_or = future.get();
+        if (!seg_iters_or.ok()) {
+            return seg_iters_or.status();
+        }
+        iters->insert(iters->end(), seg_iters_or.value().begin(), seg_iters_or.value().end());
     }
     return Status::OK();
 }

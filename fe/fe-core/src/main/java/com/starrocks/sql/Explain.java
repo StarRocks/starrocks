@@ -84,6 +84,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
@@ -909,6 +910,11 @@ public class Explain {
             }
 
             return print(predicate.getChild(0)) + " REGEXP " + print(predicate.getChild(1));
+        }
+
+        @Override
+        public String visitMatchExprOperator(MatchExprOperator predicate, Void context) {
+            return print(predicate.getChild(0)) + " MATCH " + print(predicate.getChild(1));
         }
 
         @Override

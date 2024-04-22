@@ -198,6 +198,8 @@ Status GlobalEnv::_init_mem_tracker() {
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+    int64_t query_pool_spill_limit = query_pool_mem_limit * config::query_pool_spill_mem_limit_threshold;
+    _query_pool_mem_tracker->set_reserve_limit(query_pool_spill_limit);
     _connector_scan_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit * config::connector_scan_use_query_mem_ratio,
                            "query_pool/connector_scan", nullptr);
@@ -226,6 +228,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
     _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
     _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
+    _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
@@ -256,18 +259,17 @@ void GlobalEnv::_init_storage_page_cache() {
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (process_mem_tracker()->has_limit()) {
         mem_limit = process_mem_tracker()->limit();
     }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
 }
 
 int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
@@ -442,6 +444,26 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     } else {
         _load_path_mgr = new LoadPathMgr(this);
     }
+
+    std::unique_ptr<ThreadPool> load_rowset_pool;
+    std::unique_ptr<ThreadPool> load_segment_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_rowset_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_rowset_pool));
+    _load_rowset_thread_pool = load_rowset_pool.release();
+
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_segment_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_segment_pool));
+    _load_segment_thread_pool = load_segment_pool.release();
 
     _broker_mgr = new BrokerMgr(this);
 #ifndef BE_TEST
@@ -667,6 +689,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_streaming_load_thread_pool);
+    SAFE_DELETE(_load_segment_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();

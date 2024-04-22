@@ -148,6 +148,17 @@ void Chunk::update_column_by_index(ColumnPtr column, size_t idx) {
     check_or_die();
 }
 
+void Chunk::append_or_update_column(ColumnPtr column, SlotId slot_id) {
+    if (_slot_id_to_index.contains(slot_id)) {
+        _columns[_slot_id_to_index[slot_id]] = std::move(column);
+    } else {
+        _slot_id_to_index[slot_id] = _columns.size();
+        _columns.emplace_back(std::move(column));
+        // only check it when append a new column
+        check_or_die();
+    }
+}
+
 void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
     DCHECK_LT(idx, _columns.size());
     _columns.emplace(_columns.begin() + idx, std::move(column));
@@ -433,6 +444,17 @@ bool Chunk::has_const_column() const {
         }
     }
     return false;
+}
+
+void Chunk::unpack_and_duplicate_const_columns() {
+    size_t num_rows = this->num_rows();
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto column = _columns[i];
+        if (column->is_constant()) {
+            auto unpack_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, column);
+            update_column_by_index(std::move(unpack_column), i);
+        }
+    }
 }
 
 } // namespace starrocks

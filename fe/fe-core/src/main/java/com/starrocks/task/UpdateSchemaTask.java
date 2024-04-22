@@ -51,7 +51,7 @@ public class UpdateSchemaTask extends AgentTask {
                             long tableId, long indexId, List<Long> tablets,
                             long schemaId, long schemaVersion,
                             TOlapTableColumnParam columnParam) {
-        super(null, backendId, TTaskType.UPDATE_SCHEMA, dbId, tableId, -1, indexId, -1);
+        super(null, backendId, TTaskType.UPDATE_SCHEMA, dbId, tableId, -1, indexId, -1, schemaId);
 
         this.schemaId = schemaId;
         this.schemaVersion = schemaVersion;

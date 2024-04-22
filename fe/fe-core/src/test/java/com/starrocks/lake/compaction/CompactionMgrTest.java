@@ -15,12 +15,22 @@
 package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.server.GlobalStateMgr;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionMgrTest {
 
@@ -93,5 +103,42 @@ public class CompactionMgrTest {
 
         compactionMgr.removePartition(partition2);
         Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
+    }
+
+    @Test
+    public void testTriggerManualCompaction() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+
+        PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition);
+        Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, statistics.getPriority());
+
+        Collection<PartitionStatistics> allStatistics = compactionManager.getAllStatistics();
+        Assert.assertEquals(1, allStatistics.size());
+        Assert.assertTrue(allStatistics.contains(statistics));
+    }
+
+    @Test
+    public void testExistCompaction() {
+        long txnId = 11111;
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+        compactionManager.setCompactionScheduler(compactionScheduler);
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+                ConcurrentHashMap<PartitionIdentifier, CompactionJob> r = new ConcurrentHashMap<>();
+                PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
+                Database db = new Database();
+                Table table = new LakeTable();
+                PhysicalPartition partition = new Partition(123, "aaa", null, null);
+                CompactionJob job = new CompactionJob(db, table, partition, txnId);
+                r.put(partitionIdentifier, job);
+                return r;
+            }
+        };
+        Assert.assertEquals(true, compactionManager.existCompaction(txnId));
     }
 }

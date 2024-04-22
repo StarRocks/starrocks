@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -266,7 +267,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             MaterializationContext materializationContext3 =
                     optimizer3.getContext().getCandidateMvs().iterator().next();
             Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
-            List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
+            List<LogicalScanOperator> scanExpr3 = MvUtils.getScanOperator(materializationContext3.getMvExpression());
             Assert.assertEquals(1, scanExpr3.size());
             ScalarOperator scalarOperator3 = materializationContext3.getMvPartialPartitionPredicate();
             if (scalarOperator3 != null) {
@@ -283,7 +284,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
         }
     }
 
-    private MvRewritePreprocessor buildMvProcessor(String query) {
+    private Pair<MvRewritePreprocessor, OptExpression> buildMvProcessor(String query) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         OptimizerConfig optimizerConfig = new OptimizerConfig();
         OptimizerContext context = new OptimizerContext(new Memo(), columnRefFactory, connectContext, optimizerConfig);
@@ -296,8 +297,8 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             ColumnRefSet requiredColumns = new ColumnRefSet(logicalPlan.getOutputColumn());
             OptExpression logicalTree = logicalPlan.getRoot();
             MvRewritePreprocessor preprocessor = new MvRewritePreprocessor(connectContext, columnRefFactory,
-                    context, logicalTree, requiredColumns);
-            return preprocessor;
+                    context, requiredColumns);
+            return Pair.create(preprocessor, logicalTree);
         } catch (Exception e) {
             return null;
         }
@@ -331,8 +332,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             // query 1
             {
                 String query = "select k1, v1, v2 from t1";
-                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
-                OptExpression logicalTree = preprocessor.getLogicalTree();
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
@@ -355,8 +357,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             // query 2
             {
                 String query = "select t1.k1, t1.v1, t1.v2, t0.v1 as v21 from t1 join t0 on t1.k1=t0.v1";
-                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
-                OptExpression logicalTree = preprocessor.getLogicalTree();
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
@@ -401,8 +404,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             // query 1
             {
                 String query = "select k1, v1, v2 from t1";
-                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
-                OptExpression logicalTree = preprocessor.getLogicalTree();
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
@@ -431,8 +435,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             // query 2
             {
                 String query = "select t1.k1, t1.v1, t1.v2, t0.v1 as v21 from t1 join t0 on t1.k1=t0.v1";
-                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
-                OptExpression logicalTree = preprocessor.getLogicalTree();
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
@@ -545,8 +550,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             // query 1
             {
                 String query = "select k1, v1, v2 from t1 where k1 > 3";
-                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
-                OptExpression logicalTree = preprocessor.getLogicalTree();
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
@@ -596,8 +602,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             // query 1
             {
                 String query = "select k1, v1, v2 from t1 where k1 > 3";
-                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
-                OptExpression logicalTree = preprocessor.getLogicalTree();
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
@@ -680,8 +687,9 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
 
             String query = "select * from view0";
-            MvRewritePreprocessor preprocessor = buildMvProcessor(query);
-            OptExpression logicalTree = preprocessor.getLogicalTree();
+            Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+            MvRewritePreprocessor preprocessor = result.first;
+            OptExpression logicalTree = result.second;
 
             Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
             Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);

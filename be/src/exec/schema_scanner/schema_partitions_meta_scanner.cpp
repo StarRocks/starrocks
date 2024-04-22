@@ -66,9 +66,6 @@ Status SchemaPartitionsMetaScanner::start(RuntimeState* state) {
     if (nullptr != _param->db) {
         auth_info.__set_pattern(*(_param->db));
     }
-    if (nullptr != _param->table) {
-        auth_info.__set_pattern(*(_param->table));
-    }
     if (nullptr != _param->current_user_ident) {
         auth_info.__set_current_user_ident(*(_param->current_user_ident));
     } else {

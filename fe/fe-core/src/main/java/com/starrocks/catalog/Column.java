@@ -490,11 +490,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public static String removeNamePrefix(String colName) {
-        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length());
-        }
-        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
-            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length());
+        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PREFIX.length());
         }
         return colName;
     }
@@ -733,19 +730,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.isSameDefaultValue(other)) {
             return false;
         }
-
-        if (this.getType().isScalarType() && other.getType().isScalarType()) {
-            if (this.getStrLen() != other.getStrLen()) {
-                return false;
-            }
-            if (this.getPrecision() != other.getPrecision()) {
-                return false;
-            }
-            if (this.getScale() != other.getScale()) {
-                return false;
-            }
-        }
-
         if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
             return false;
         }
@@ -755,6 +739,29 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
 
         return comment == null ? other.comment == null : comment.equals(other.getComment());
+    }
+
+    public boolean isSchemaCompatible(Column other) {
+        if (!this.name.equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+        if (!this.getType().equals(other.getType())) {
+            return false;
+        }
+        if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&
+                AggregateType.isNullOrNone(other.getAggregationType())))) {
+            return false;
+        }
+        if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
+            return false;
+        }
+        if (this.isKey != other.isKey()) {
+            return false;
+        }
+        if (this.isAllowNull != other.isAllowNull) {
+            return false;
+        }
+        return true;
     }
 
     @Override

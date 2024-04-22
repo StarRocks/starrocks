@@ -13,8 +13,9 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.google.common.collect.ImmutableSet;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -22,10 +23,29 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
+import java.util.Set;
+
 public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
     public static final DateTruncEquivalent INSTANCE = new DateTruncEquivalent();
 
     public DateTruncEquivalent() {}
+
+    /**
+     * TODO: we can support this later.
+     * Change date_trunc('month', col) to col = '2023-12-01' will get a wrong result.
+     * MV       : select date_trunc('day', col) as dt from t
+     * Query    : select date_trunc('day, col) from t where date_trunc('month', col) = '2023-11-01'
+     */
+    private static Set<BinaryType> SUPPORTED_BINARY_TYPES = ImmutableSet.of(
+            BinaryType.GE,
+            BinaryType.LE,
+            BinaryType.GT,
+            BinaryType.LT
+    );
+
+    public static boolean isSupportedBinaryType(BinaryType binaryType) {
+        return SUPPORTED_BINARY_TYPES.contains(binaryType);
+    }
 
     @Override
     public boolean isEquivalent(ScalarOperator op1, ConstantOperator op2) {
@@ -33,13 +53,7 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
             return false;
         }
         CallOperator func = (CallOperator) op1;
-        if (!func.getFnName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
-            return false;
-        }
-        if (op2.getType().getPrimitiveType() != PrimitiveType.DATETIME) {
-            return false;
-        }
-        if (!(func.getChild(1) instanceof ColumnRefOperator)) {
+        if (!checkDateTrucFunc(func)) {
             return false;
         }
         ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
@@ -48,16 +62,27 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
         return sliced.equals(op2);
     }
 
+    private boolean checkDateTrucFunc(CallOperator func) {
+        if (!func.getFnName().equals(FunctionSet.DATE_TRUNC)) {
+            return false;
+        }
+        // only can rewrite dt = date_trunc('day', col) to dt = date(col)
+        if (!func.getChild(0).isConstant()) {
+            return false;
+        }
+        if (!func.getChild(1).isColumnRef()) {
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public RewriteEquivalentContext prepare(ScalarOperator input) {
         if (input == null || !(input instanceof CallOperator)) {
             return null;
         }
         CallOperator func = (CallOperator) input;
-        if (!func.getFnName().equals(FunctionSet.DATE_TRUNC)) {
-            return null;
-        }
-        if (!func.getChild(1).isColumnRef()) {
+        if (!checkDateTrucFunc(func)) {
             return null;
         }
         return new RewriteEquivalentContext(func.getChild(1), input);

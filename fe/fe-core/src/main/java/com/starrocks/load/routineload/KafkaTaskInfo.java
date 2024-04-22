@@ -39,6 +39,7 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
@@ -129,7 +130,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
-                new ArrayList<>(partitionIdToOffset.keySet()));
+                new ArrayList<>(partitionIdToOffset.keySet()), warehouseId);
         for (Map.Entry<Integer, Long> entry : latestOffsets.entrySet()) {
             kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
         }
@@ -144,7 +145,9 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     return true;
                 } else if (latestOffset < consumeOffset) {
                     throw new RoutineLoadPauseException(
-                            "partition " + partitionId + " offset " + consumeOffset + " has no data");
+                            "there is no data in partition: " + partitionId + " at offset: " + consumeOffset + ". " +
+                                    "you can modify kafka_offsets by alter routine load, then resume the job. " +
+                                    "refer to " + FeConstants.DOCUMENT_ALTER_ROUTINE_LOAD);
                 }
             }
         }
@@ -234,6 +237,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         result.append(",");
         result.append("LatestOffset:").append(gson.toJson(latestPartOffset));
         return result.toString();
+    }
+
+    @Override
+    String dataSourceType() {
+        return "kafka";
     }
 
     public Map<Integer, Long> getLatestOffset() {

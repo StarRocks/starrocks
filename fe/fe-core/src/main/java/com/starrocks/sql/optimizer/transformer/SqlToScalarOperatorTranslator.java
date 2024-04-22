@@ -37,6 +37,7 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.Parameter;
@@ -46,6 +47,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -93,6 +95,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -255,7 +258,7 @@ public final class SqlToScalarOperatorTranslator {
         }
     }
 
-    private static class Visitor extends AstVisitor<ScalarOperator, Context> {
+    private static class Visitor implements AstVisitor<ScalarOperator, Context> {
         private ExpressionMapping expressionMapping;
         private final ColumnRefFactory columnRefFactory;
         private final List<ColumnRefOperator> correlation;
@@ -288,8 +291,7 @@ public final class SqlToScalarOperatorTranslator {
                 return expressionMapping.get(expr);
             }
 
-            return super.visit(node, context);
-
+            return node.accept(this, context);
         }
 
         @Override
@@ -652,6 +654,17 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+        public ScalarOperator visitMatchExpr(MatchExpr node, Context context)
+                throws SemanticException {
+            ScalarOperator[] children = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .toArray(ScalarOperator[]::new);
+
+            return new MatchExprOperator(children); 
+        }
+
+        @Override
         public ScalarOperator visitLiteral(LiteralExpr node, Context context) {
             if (node instanceof NullLiteral) {
                 return ConstantOperator.createNull(node.getType());
@@ -674,6 +687,9 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+                callOperator.setId(columnRefFactory.getNextUniqueId());
+            }
             return callOperator;
         }
 
@@ -743,11 +759,12 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitVariableExpr(VariableExpr node, Context context) {
-            if (node.isNull()) {
-                return ConstantOperator.createNull(node.getType());
-            } else {
-                return new ConstantOperator(node.getValue(), node.getType());
-            }
+            return new ConstantOperator(node.getValue(), node.getType());
+        }
+
+        @Override
+        public ScalarOperator visitUserVariableExpr(UserVariableExpr node, Context context) {
+            return visit(node.getValue(), context);
         }
 
         @Override
@@ -841,7 +858,7 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
         }
 
         @Override

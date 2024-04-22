@@ -12,6 +12,8 @@ StarRocks is ideal for real-time analytics on fresh data. Data can be ingested a
 
 Compatible with MySQL protocols and standard SQL, StarRocks has out-of-the-box support for all major BI tools, such as Tableau and Power BI. StarRocks does not rely on any external components. It is an integrated data analytics platform that allows for high scalability, high availability, and simplified management and maintenance.
 
+[StarRocks](https://github.com/StarRocks/starrocks/tree/main) is licensed under Apache 2.0, available at the StarRocks GitHub repository (see the [StarRocks license](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)). StarRocks (i) links to or calls functions from third party software libraries, the licenses of which are available in the folder [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary); and (ii) incorporates third party software code, the licenses of which are available in the folder [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses).
+
 ## Scenarios
 
 StarRocks meets varied enterprise analytics requirements, including OLAP multi-dimensional analytics, real-time analytics, high-concurrency analytics, customized reporting, ad-hoc queries, and unified analytics.

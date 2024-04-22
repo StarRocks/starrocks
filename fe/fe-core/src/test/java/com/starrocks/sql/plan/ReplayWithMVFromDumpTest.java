@@ -15,6 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -28,8 +30,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Set;
-
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
@@ -40,14 +40,14 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         ReplayFromDumpTestBase.beforeClass();
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
-        new MockUp<MaterializedView>() {
+        new MockUp<MvRefreshArbiter>() {
             /**
-             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
              */
             @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
+            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
+                                                                boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
             }
         };
 
@@ -87,7 +87,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/mock_join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        assertContains(replayPair.second, "table: tbl_mock_001, rollup: tbl_mock_001");
+        // Rewrite OK when enhance rule based mv rewrite.
+        assertContains(replayPair.second, "table: test_mv0, rollup: test_mv0");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -152,7 +153,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
-        assertContains("test_mv2");
+        assertContains(replayPair.second, "test_mv2");
     }
 
     @Test
@@ -160,7 +161,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains("TEST_MV_2");
+        assertContains(replayPair.second, "TEST_MV_2");
     }
 
     @Test
@@ -168,7 +169,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains("TEST_MV_2");
+        assertContains(replayPair.second, "TEST_MV_2");
     }
 
     @Test
@@ -184,7 +185,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains(replayPair.second, "tbl_mock_021");
+        // Rewrite OK since rule based mv is enhanced
+        assertContains(replayPair.second, "test_mv2");
     }
 
     @Test

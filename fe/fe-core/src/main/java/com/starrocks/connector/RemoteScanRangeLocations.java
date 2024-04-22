@@ -24,12 +24,12 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.datacache.DataCacheExprRewriter;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.datacache.DataCacheRule;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.common.ErrorType;
@@ -51,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,7 @@ public class RemoteScanRangeLocations {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = new ArrayList<>();
+    private boolean forceScheduleLocal = false;
 
     public void setup(DescriptorTable descTbl, Table table, HDFSScanNodePredicates scanNodePredicates) {
         Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
@@ -75,30 +77,56 @@ public class RemoteScanRangeLocations {
             partitionInfos.add(partitionInfo);
             descTbl.addReferencedPartitions(table, partitionInfo);
         }
+
+        forceScheduleLocal = false;
+        if (ConnectContext.get() != null) {
+            // ConnectContext sometimes will be nullptr, we need to cover it up
+            forceScheduleLocal = ConnectContext.get().getSessionVariable().getForceScheduleLocal();
+        }
     }
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
-                                       RemoteFileBlockDesc blockDesc, DataCacheOptions dataCacheOptions) {
-        // NOTE: Config.hive_max_split_size should be extracted to a local variable,
-        // because it may be changed before calling 'splitScanRangeLocations'
-        // and after needSplit has been calculated.
-        long splitSize = Config.hive_max_split_size;
-        boolean needSplit = fileDesc.isSplittable() && blockDesc.getLength() > splitSize;
+                                       Optional<RemoteFileBlockDesc> blockDesc, DataCacheOptions dataCacheOptions) {
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null) {
+            sv = connectContext.getSessionVariable();
+        }
+
+        long totalSize = fileDesc.getLength();
+        long offset = 0;
+        if (blockDesc.isPresent()) {
+            // If blockDesc existed, we will split according block desc
+            RemoteFileBlockDesc block = blockDesc.get();
+            totalSize = block.getLength();
+            offset = block.getOffset();
+        }
+
+        // assume we can not split at all.
+        long splitSize = totalSize;
+        if (fileDesc.isSplittable()) {
+            // if splittable, then use max split size.
+            splitSize = sv.getConnectorMaxSplitSize();
+            if (sv.isEnableConnectorSplitIoTasks() && partition.getFormat().isBackendSplittable()) {
+                // if BE can split, use a higher threshold.
+                splitSize = sv.getConnectorHugeFileSize();
+            }
+        }
+        boolean needSplit = (totalSize > splitSize);
         if (needSplit) {
-            splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, splitSize, dataCacheOptions);
+            splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
+                    dataCacheOptions);
         } else {
-            createScanRangeLocationsForSplit(partitionId, partition, fileDesc, blockDesc, blockDesc.getOffset(),
-                    blockDesc.getLength(), dataCacheOptions);
+            createScanRangeLocationsForSplit(partitionId, partition, fileDesc, blockDesc, offset, totalSize,
+                    dataCacheOptions);
         }
     }
 
     private void splitScanRangeLocations(long partitionId, RemoteFileInfo partition,
                                          RemoteFileDesc fileDesc,
-                                         RemoteFileBlockDesc blockDesc,
-                                         long splitSize, DataCacheOptions dataCacheOptions) {
-        long remainingBytes = blockDesc.getLength();
-        long length = blockDesc.getLength();
-        long offset = blockDesc.getOffset();
+                                         Optional<RemoteFileBlockDesc> blockDesc,
+                                         long offset, long length, long splitSize, DataCacheOptions dataCacheOptions) {
+        long remainingBytes = length;
         do {
             if (remainingBytes < 2 * splitSize) {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
@@ -116,7 +144,7 @@ public class RemoteScanRangeLocations {
 
     private void createScanRangeLocationsForSplit(long partitionId, RemoteFileInfo partition,
                                                   RemoteFileDesc fileDesc,
-                                                  RemoteFileBlockDesc blockDesc,
+                                                  Optional<RemoteFileBlockDesc> blockDesc,
                                                   long offset, long length, DataCacheOptions dataCacheOptions) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -142,15 +170,20 @@ public class RemoteScanRangeLocations {
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
 
-        if (blockDesc.getReplicaHostIds().length == 0) {
-            String message = String.format("hdfs file block has no host. file = %s/%s",
-                    partition.getFullPath(), fileDesc.getFileName());
-            throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
-        }
+        if (blockDesc.isPresent()) {
+            if (blockDesc.get().getReplicaHostIds().length == 0) {
+                String message = String.format("hdfs file block has no host. file = %s/%s",
+                        partition.getFullPath(), fileDesc.getFileName());
+                throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
+            }
 
-        for (long hostId : blockDesc.getReplicaHostIds()) {
-            String host = blockDesc.getDataNodeIp(hostId);
-            TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(host, -1));
+            for (long hostId : blockDesc.get().getReplicaHostIds()) {
+                String host = blockDesc.get().getDataNodeIp(hostId);
+                TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(host, -1));
+                scanRangeLocations.addToLocations(scanRangeLocation);
+            }
+        } else {
+            TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
             scanRangeLocations.addToLocations(scanRangeLocation);
         }
 
@@ -249,7 +282,7 @@ public class RemoteScanRangeLocations {
     }
 
     public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
-                                           HDFSScanNodePredicates scanNodePredicates) {
+                                                           HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
 
@@ -284,12 +317,21 @@ public class RemoteScanRangeLocations {
                     if (fileDesc.getLength() == 0) {
                         continue;
                     }
-                    for (RemoteFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                        addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, blockDesc,
+                    if (forceScheduleLocal) {
+                        for (RemoteFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
+                            addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                                    Optional.of(blockDesc),
+                                    dataCacheOptions);
+                            LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
+                                    partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
+                                    blockDesc.getLength());
+                        }
+                    } else {
+                        addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                                Optional.empty(),
                                 dataCacheOptions);
-                        LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
-                                partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
-                                blockDesc.getLength());
+                        LOG.debug("Add scan range success. partition: {}, file: {}, range: {}-{}",
+                                partitions.get(i).getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
                     }
                 }
             }
@@ -327,6 +369,12 @@ public class RemoteScanRangeLocations {
             String message = "Only Hive/Hudi table is supported.";
             throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
         }
+
+        // Previously, the order of the scan range was from front to back, which would cause some probing sql to
+        // encounter very bad cases (scan ranges that meet the predicate conditions are in the later partitions),
+        // making BE have to scan more data to find rows that meet the conditions.
+        // So shuffle scan ranges can naturally disrupt the scan ranges' order to avoid very bad cases.
+        Collections.shuffle(result);
 
         LOG.debug("Get {} scan range locations cost: {} ms",
                 getScanRangeLocationsSize(), (System.currentTimeMillis() - start));

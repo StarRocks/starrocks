@@ -29,6 +29,7 @@ public class StatsConstants {
     public static final int STATISTIC_BATCH_VERSION = 4;
     public static final int STATISTIC_EXTERNAL_VERSION = 5;
     public static final int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
+    public static final int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
     public static final String STATISTICS_DB_NAME = "_statistics_";
@@ -36,6 +37,7 @@ public class StatsConstants {
     public static final String FULL_STATISTICS_TABLE_NAME = "column_statistics";
     public static final String EXTERNAL_FULL_STATISTICS_TABLE_NAME = "external_column_statistics";
     public static final String HISTOGRAM_STATISTICS_TABLE_NAME = "histogram_statistics";
+    public static final String EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME = "external_histogram_statistics";
 
     public static final String INFORMATION_SCHEMA = "information_schema";
 

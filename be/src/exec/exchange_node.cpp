@@ -247,7 +247,8 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
 
 pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
     OpFactories operators;
     if (!_is_merging) {
         auto* query_ctx = context->runtime_state()->query_ctx();

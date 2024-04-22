@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -62,12 +63,21 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionStatus;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
 import junit.framework.AssertionFailedError;
 import mockit.Expectations;
 import mockit.Mock;
@@ -82,6 +92,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 
 import java.net.ServerSocket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -102,19 +113,21 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
-    private static long testBackendId1 = 1000;
-    private static long testBackendId2 = 1001;
-    private static long testBackendId3 = 1002;
+    protected static final String ES_TABLE_NAME = "es_table";
 
-    private static long testReplicaId1 = 2000;
-    private static long testReplicaId2 = 2001;
-    private static long testReplicaId3 = 2002;
+    protected static long testBackendId1 = 1000;
+    protected static long testBackendId2 = 1001;
+    protected static long testBackendId3 = 1002;
+
+    protected static long testReplicaId1 = 2000;
+    protected static long testReplicaId2 = 2001;
+    protected static long testReplicaId3 = 2002;
 
     protected static long testDbId = 100L;
-    private static long testTableId = 200L;
-    private static long testPartitionId = 201L;
+    protected static long testTableId = 200L;
+    protected static long testPartitionId = 201L;
     public static long testIndexId = testTableId; // the base indexid == tableid
-    private static long tabletId = 400L;
+    protected static long tabletId = 400L;
 
     public static long testStartVersion = 12;
     public static int testSchemaHash = 93423942;
@@ -123,8 +136,10 @@ public abstract class StarRocksHttpTestCase {
 
     protected static String URI;
     protected static String BASE_URL;
-
+    protected static final String AUTH_KEY = "Authorization";
     protected String rootAuth = Credentials.basic("root", "");
+
+    protected static ObjectMapper objectMapper = new ObjectMapper();
 
     @Mocked
     private static EditLog editLog;
@@ -256,7 +271,7 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(table);
         OlapTable table1 = newTable(TABLE_NAME + 1);
         db.registerTableUnlocked(table1);
-        EsTable esTable = newEsTable("es_table");
+        EsTable esTable = newEsTable(ES_TABLE_NAME);
         db.registerTableUnlocked(esTable);
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
@@ -294,15 +309,6 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = editLog;
 
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                //minTimes = 0;
-
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                //minTimes = 0;
-
-                globalStateMgr.initDefaultCluster();
-                minTimes = 0;
-
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
@@ -332,13 +338,13 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(table);
         OlapTable table1 = newTable(TABLE_NAME + 1);
         db.registerTableUnlocked(table1);
-        EsTable esTable = newEsTable("es_table");
+        EsTable esTable = newEsTable(ES_TABLE_NAME);
         db.registerTableUnlocked(esTable);
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
 
         LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, new TemporaryTableMgr(), null, null);
 
         new Expectations(globalStateMgr) {
             {
@@ -369,15 +375,6 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                //minTimes = 0;
-
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                //minTimes = 0;
-
-                globalStateMgr.initDefaultCluster();
-                minTimes = 0;
 
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
@@ -447,7 +444,7 @@ public abstract class StarRocksHttpTestCase {
     }
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
@@ -497,7 +494,7 @@ public abstract class StarRocksHttpTestCase {
         doSetUp();
     }
 
-    public void setUpWithCatalog() {
+    public void setUpWithCatalog() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
@@ -572,7 +569,7 @@ public abstract class StarRocksHttpTestCase {
         httpServer.shutDown();
     }
 
-    public void doSetUp() {
+    protected void doSetUp() throws Exception {
 
     }
 
@@ -609,5 +606,26 @@ public abstract class StarRocksHttpTestCase {
             throw assertion;
         }
         throw new AssertionFailedError(noExceptionMessage);
+    }
+
+    protected static void writeResponse(BaseRequest request, BaseResponse response) {
+        writeResponse(request, response, HttpResponseStatus.OK);
+    }
+
+    protected static void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
+        FullHttpResponse responseObj = new DefaultFullHttpResponse(
+                HttpVersion.HTTP_1_1,
+                status,
+                Unpooled.wrappedBuffer(response.getContent().toString().getBytes(StandardCharsets.UTF_8)));
+
+        HttpMethod method = request.getRequest().method();
+        if (!method.equals(HttpMethod.HEAD)) {
+            response.updateHeader(
+                    HttpHeaderNames.CONTENT_LENGTH.toString(),
+                    String.valueOf(responseObj.content().readableBytes())
+            );
+        }
+
+        request.getContext().write(responseObj).addListener(ChannelFutureListener.CLOSE);
     }
 }

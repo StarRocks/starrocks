@@ -41,6 +41,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -55,6 +57,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -136,18 +139,27 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @throws DuplicatedRequestException
      * @throws IllegalTransactionParameterException
      */
+
+
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
                                  TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
-                                 long timeoutSecond)
+                                 long timeoutSecond,
+                                 long warehouseId)
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
         if (Config.disable_load_job) {
-            throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                    "disable_load_job is set to true, all load jobs are rejected");
+        }
+
+        if (Config.metadata_enable_recovery_mode) {
+            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                    "The cluster is under recovery mode, all load jobs are rejected");
         }
 
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
-            throw new AnalysisException(String.format("The cluster is under safe mode state," +
-                    " all load jobs are rejected."));
+            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                    "The cluster is under safe mode state, all load jobs are rejected.");
         }
 
         switch (sourceType) {
@@ -155,7 +167,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second, Config.min_load_timeout_second);
                 break;
             case LAKE_COMPACTION:
-                // skip transaction timeout range check for lake compaction
+            case REPLICATION:
+                // skip transaction timeout range check for lake compaction and replication
                 break;
             default:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
@@ -163,7 +176,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         return dbTransactionMgr.beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId,
-                timeoutSecond);
+                timeoutSecond, warehouseId);
     }
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
@@ -171,6 +184,22 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                  long timeoutSecond)
             throws AnalysisException, LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException {
         return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1, timeoutSecond);
+    }
+
+    public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
+                                 LoadJobSourceType sourceType,
+                                 long timeoutSecond, long warehouseId)
+            throws AnalysisException, LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException {
+        return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1,
+                timeoutSecond, warehouseId);
+    }
+
+    public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
+                                 TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
+                                 long timeoutSecond)
+            throws AnalysisException, LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException {
+        return beginTransaction(dbId, tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
@@ -813,12 +842,18 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
     }
 
+    public boolean hasCommittedTxnOnPartition(long dbId, long tableId, long partitionId) {
+        DatabaseTransactionMgr databaseTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (databaseTransactionMgr == null) {
+            return false;
+        }
+
+        return databaseTransactionMgr.hasCommittedTxnOnPartition(tableId, partitionId);
+    }
+
     @Override
     public Map<String, Long> estimateCount() {
-        long count = 0;
-        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            count += databaseTransactionMgr.getTransactionNum();
-        }
-        return ImmutableMap.of("Transaction", count);
+        return ImmutableMap.of("Txn", (long) getFinishedTransactionNum(),
+                               "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
     }
 }

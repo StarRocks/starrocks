@@ -33,7 +33,7 @@ class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
     LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
-    ~LakePrimaryIndex() = default;
+    ~LakePrimaryIndex() override;
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
@@ -58,6 +58,16 @@ public:
         return nullptr;
     }
 
+    void set_enable_persistent_index(bool enable_persistent_index) {
+        _enable_persistent_index = enable_persistent_index;
+    }
+
+    Status apply_opcompaction(const TabletMetadata& metadata, const TxnLogPB_OpCompaction& op_compaction);
+
+    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
+
+    Status major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log);
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
@@ -67,6 +77,7 @@ private:
     int64_t _data_version = 0;
     // make sure at most 1 thread is read or write primary index
     std::mutex _mutex;
+    bool _enable_persistent_index = false;
 };
 
 } // namespace lake

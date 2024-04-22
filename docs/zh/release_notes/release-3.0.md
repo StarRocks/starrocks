@@ -75,7 +75,7 @@ displayed_sidebar: "Chinese"
 - 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。[#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。[#34627](https://github.com/StarRocks/starrocks/pull/34627)
 - 导入数据异常导致 FE Crash 后无法重启。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
-- Stream Load 导入作业在 **PREPARD** 状态下，同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Stream Load 导入作业在 **PREPARED** 状态下，同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。[#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - 使用 ALTER TABLE 增加 `partition_live_number` 属性没有生效。[#34842](https://github.com/StarRocks/starrocks/pull/34842)
 - ARRAY_DISTINCT 函数偶发 BE Crash。[#36377](https://github.com/StarRocks/starrocks/pull/36377)
@@ -165,7 +165,7 @@ displayed_sidebar: "Chinese"
 - RESTful API `show_data` 对于云原生表的返回信息不正确。[#29473](https://github.com/StarRocks/starrocks/pull/29473)
 - 如果集群为[存算分离架构](https://docs.starrocks.io/zh/docs/3.0/deployment/deploy_shared_data/)，数据存储在 Azure Blob Storage 上，并且已经建表，则回滚到 3.0 时 FE 无法启动。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
 - 向用户赋予 Iceberg Catalog 下某表权限后，该用户查询该表时显示没有权限。[#29173](https://github.com/StarRocks/starrocks/pull/29173)
-- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/HLL/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - 在线修改 FE 动态参数 `max_broker_load_job_concurrency` 不生效。[#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - Refresh 物化视图，同时并发地修改物化视图的刷新策略，有概率会导致 FE 无法启动。[#29691](https://github.com/StarRocks/starrocks/pull/29691)
 - 执行 `select count(distinct(int+double)) from table_name` 会报错 `unknown error`。 [#30054](https://github.com/StarRocks/starrocks/pull/30054)
@@ -346,7 +346,7 @@ displayed_sidebar: "Chinese"
 - 新增半结构化数据分析相关函数：[map_from_arrays](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/map-functions/map_from_arrays/)、[map_apply](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/map-functions/map_apply/)。
 - [array_agg](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_agg/) 支持 ORDER BY。
 - 窗口函数 [lead](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Window_function#使用-lead-窗口函数)、[lag](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Window_function#使用-lag-窗口函数) 支持 IGNORE NULLS。
-- 新增 [BINARY/VARBINARY 数据类型](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BINARY/)，新增 [to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/binary-functions/to_binary/)，[from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/binary-functions/from_binary/) 函数。
+- 新增 [BINARY/VARBINARY 数据类型](https://docs.starrocks.io/zh/docs/sql-reference/data-types/string-type/BINARY/)，新增 [to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/binary-functions/to_binary/)，[from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/binary-functions/from_binary/) 函数。
 - 新增字符串函数 [replace](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/replace/)、[hex_decode_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/hex_decode_binary/)、[hex_decode_string](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/hex_decode_string/)。
 - 新增加密函数 [base64_decode_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/crytographic-functions/base64_decode_binary/)、[base64_decode_string](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/crytographic-functions/base64_decode_string/)。
 - 新增数学函数 [sinh](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/math-functions/sinh/)、[cosh](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/math-functions/cosh/)、[tanh](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/math-functions/tanh/)。

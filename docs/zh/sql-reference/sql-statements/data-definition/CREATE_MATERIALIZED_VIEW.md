@@ -69,7 +69,7 @@ SELECT select_expr[, select_expr ...]
   >
   > - 该参数至少需包含一个单列。
   > - 使用聚合函数创建同步物化视图时，必须指定 GROUP BY 子句，并在 `select_expr` 中指定至少一个 GROUP BY 列。
-  > - 同步物化视图不支持 JOIN、WHERE、以及 GROUP BY 的 HAVING 子句。
+  > - 同步物化视图不支持 JOIN、以及 GROUP BY 的 HAVING 子句。
   > - 从 v3.1 开始，每个同步物化视图支持为基表的每一列使用多个聚合函数，支持形如 `select b, sum(a), min(a) from table group by b` 形式的查询语句。
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
   >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图，你可以为同一复杂表达式设置多个不同别名。
@@ -77,7 +77,7 @@ SELECT select_expr[, select_expr ...]
 
 - WHERE （选填）
 
-  自 v3.2 起，同步物化视图支持通过 WHERE 子句筛选数据。
+  自 v3.1.8 起，同步物化视图支持通过 WHERE 子句筛选数据。
 
 - GROUP BY（选填）
 
@@ -261,13 +261,14 @@ AS
 - `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
-- `resource_group`: 为物化视图刷新任务设置资源组。更多关于资源组信息，请参考[资源隔离](../../../administration/resource_group.md)。
+- `resource_group`: 为物化视图刷新任务设置资源组。更多关于资源组信息，请参考[资源隔离](../../../administration/management/resource_management/resource_group.md)。
 - `query_rewrite_consistency`: 指定当前异步物化视图的查询改写规则。该属性自 v3.2 起支持。有效值：
   - `disable`：禁用基于该异步物化视图进行自动查询改写。
   - `checked`（默认值）：仅在物化视图满足时效性要求时启用自动查询改写，即：
     - 如果未指定 `mv_rewrite_staleness_second`，则只有当物化视图的数据与所有基表中的数据一致时，才可以将其用于查询改写。
     - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最后刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
   - `loose`：直接启用自动查询改写，无需进行一致性检查。
+- `storage_volume`：[如果您使用存算分离集群](../../../deployment/shared_data/shared_data.mdx)，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
   - `true`：启用基于 External Catalog 的物化视图的查询改写。
   - `false`（默认值）：禁用基于 External Catalog 的物化视图的查询改写。

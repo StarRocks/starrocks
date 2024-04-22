@@ -35,37 +35,8 @@ using namespace starrocks;
 class LakeRowsetTest : public TestBase {
 public:
     LakeRowsetTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(DUP_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-        }
-
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -137,7 +108,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_rowset";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };

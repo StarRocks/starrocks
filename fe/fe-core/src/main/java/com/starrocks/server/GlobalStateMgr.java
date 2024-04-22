@@ -41,8 +41,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.CompactionHandler;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -110,6 +112,7 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
+import com.starrocks.consistency.MetaRecoveryDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -163,13 +166,21 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DefaultAuthorizationProvider;
+import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
+import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
@@ -179,11 +190,16 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -205,7 +221,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -300,9 +315,6 @@ public class GlobalStateMgr {
     // for example: OBSERVER transfer to UNKNOWN, then isReady will be set to false, but canRead can still be true
     private final AtomicBoolean canRead = new AtomicBoolean(false);
 
-    // false if default_cluster is not created.
-    private boolean isDefaultClusterCreated = false;
-
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
 
@@ -310,6 +322,10 @@ public class GlobalStateMgr {
     private boolean isDefaultWarehouseCreated = false;
 
     private FrontendNodeType feType;
+
+    // The time when this node becomes leader.
+    private long dominationStartTimeMs;
+
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
 
@@ -441,12 +457,22 @@ public class GlobalStateMgr {
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
-    private final SlotProvider slotProvider = new SlotProvider();
+    private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
+    private final SlotProvider localSlotProvider = new LocalSlotProvider();
 
     private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
     private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
 
     private MemoryUsageTracker memoryUsageTracker;
+
+    private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+    private TemporaryTableMgr temporaryTableMgr;
+
+    private final SqlParser sqlParser;
+    private final Analyzer analyzer;
+    private final Authorizer authorizer;
+    private final DDLStmtExecutor ddlStmtExecutor;
+    private final ShowExecutor showExecutor;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -456,15 +482,12 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo(Integer clusterId) {
+    public TNodesInfo createNodesInfo(long warehouseId) {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = nodeMgr.getOrCreateSystemInfo(clusterId);
-        // use default warehouse
-        Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
-        // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.isSharedDataMode()) {
-            com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
-            for (Long cnId : cluster.getComputeNodeIds()) {
+        SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
+            for (Long cnId : computeNodeIds) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
@@ -516,6 +539,10 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
+    public TemporaryTableMgr getTemporaryTableMgr() {
+        return temporaryTableMgr;
+    }
+
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
     }
@@ -562,7 +589,12 @@ public class GlobalStateMgr {
         this.portConnectivityChecker = new PortConnectivityChecker();
 
         // Alter Job Manager
-        this.alterJobMgr = new AlterJobMgr();
+        // Alter Job Manager
+        this.alterJobMgr = new AlterJobMgr(
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler(),
+                new CompactionHandler());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -594,15 +626,13 @@ public class GlobalStateMgr {
 
         this.metaReplayState = new MetaReplayState();
 
-        this.isDefaultClusterCreated = false;
-
         this.resourceMgr = new ResourceMgr();
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
-        this.authorizationMgr = new AuthorizationMgr(this, null);
+        this.authorizationMgr = new AuthorizationMgr(this, new DefaultAuthorizationProvider());
 
         this.resourceGroupMgr = new ResourceGroupMgr();
 
@@ -649,10 +679,11 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
+        this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
+        this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
 
         this.taskManager = new TaskManager();
@@ -707,9 +738,21 @@ public class GlobalStateMgr {
         });
 
         this.replicationMgr = new ReplicationMgr();
-        nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
+        nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+
+        this.sqlParser = new SqlParser(AstBuilder.getInstance());
+        this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        AccessControlProvider accessControlProvider;
+        if (Config.access_control.equals("ranger")) {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+        } else {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
+        }
+        this.authorizer = new Authorizer(accessControlProvider);
+        this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+        this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
     }
 
     public static void destroyCheckpoint() {
@@ -912,6 +955,26 @@ public class GlobalStateMgr {
         this.lockManager = lockManager;
     }
 
+    public SqlParser getSqlParser() {
+        return sqlParser;
+    }
+
+    public Analyzer getAnalyzer() {
+        return analyzer;
+    }
+
+    public Authorizer getAuthorizer() {
+        return authorizer;
+    }
+
+    public DDLStmtExecutor getDdlStmtExecutor() {
+        return ddlStmtExecutor;
+    }
+
+    public ShowExecutor getShowExecutor() {
+        return showExecutor;
+    }
+
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -1110,6 +1173,7 @@ public class GlobalStateMgr {
         // Set the feType to LEADER before writing edit log, because the feType must be Leader when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
         feType = FrontendNodeType.LEADER;
+        dominationStartTimeMs = System.currentTimeMillis();
 
         try {
             // Log meta_version
@@ -1126,10 +1190,6 @@ public class GlobalStateMgr {
                 Preconditions.checkNotNull(self);
                 // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
                 editLog.logAddFirstFrontend(self);
-            }
-
-            if (!isDefaultClusterCreated) {
-                initDefaultCluster();
             }
 
             // MUST set leader ip before starting checkpoint thread.
@@ -1268,6 +1328,12 @@ public class GlobalStateMgr {
         }
 
         replicationMgr.start();
+
+        if (Config.metadata_enable_recovery_mode) {
+            LOG.info("run system in recovery mode");
+            metaRecoveryDaemon.start();
+        }
+
     }
 
     // start threads that should run on all FE
@@ -1333,9 +1399,8 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
-    public void loadImage(String imageDir) throws IOException, DdlException {
+    public void loadImage(String imageDir) throws IOException {
         Storage storage = new Storage(imageDir);
-        nodeMgr.setClusterId(storage.getClusterID());
         File curFile = storage.getCurrentImageFile();
         if (!curFile.exists()) {
             // image.0 may not exist
@@ -1480,7 +1545,6 @@ public class GlobalStateMgr {
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
-        isDefaultClusterCreated = header.isDefaultClusterCreated();
         LOG.info("finished to replay header from image");
     }
 
@@ -1561,7 +1625,6 @@ public class GlobalStateMgr {
         ImageHeader header = new ImageHeader();
         long id = idGenerator.getBatchEndId();
         header.setBatchEndId(id);
-        header.setDefaultClusterCreated(isDefaultClusterCreated);
         Text.writeString(dos, GsonUtils.GSON.toJson(header));
     }
 
@@ -1764,7 +1827,7 @@ public class GlobalStateMgr {
                 readSucc = true;
 
                 // apply
-                EditLog.loadJournal(this, entity);
+                editLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
@@ -1816,10 +1879,15 @@ public class GlobalStateMgr {
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
+        if (Config.metadata_enable_recovery_mode) {
+            LOG.warn("skip journal load failure because cluster is in recovery mode");
+            return true;
+        }
+
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
-                    LOG.error("skip bad replayed journal id {} because configured {}",
+                    LOG.warn("skip bad replayed journal id {} because configured {}",
                             idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
                 }
@@ -1840,10 +1908,10 @@ public class GlobalStateMgr {
         if (opCode != OperationType.OP_INVALID
                 && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
             if (Config.metadata_journal_ignore_replay_failure) {
-                LOG.error("skip ignorable journal load failure, opCode: {}", opCode);
+                LOG.warn("skip ignorable journal load failure, opCode: {}", opCode);
                 return true;
             } else {
-                LOG.error("the failure of opCode: {} is ignorable, " +
+                LOG.warn("the failure of opCode: {} is ignorable, " +
                         "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
                 return false;
             }
@@ -2106,6 +2174,7 @@ public class GlobalStateMgr {
     @VisibleForTesting
     public void clear() {
         localMetastore.clear();
+        temporaryTableMgr.clear();
     }
 
     public void triggerNewImage() {
@@ -2132,10 +2201,6 @@ public class GlobalStateMgr {
 
     public boolean isNotAlwaysNullResultWithNullParamFunction(String funcName) {
         return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
-    }
-
-    public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
-        this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
@@ -2245,11 +2310,6 @@ public class GlobalStateMgr {
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
-    }
-
-    // TODO [meta-format-change] deprecated
-    public void initDefaultCluster() {
-        localMetastore.initDefaultCluster();
     }
 
     public void initDefaultWarehouse() {
@@ -2400,8 +2460,12 @@ public class GlobalStateMgr {
         return slotManager;
     }
 
-    public SlotProvider getSlotProvider() {
-        return slotProvider;
+    public GlobalSlotProvider getGlobalSlotProvider() {
+        return globalSlotProvider;
+    }
+
+    public SlotProvider getLocalSlotProvider() {
+        return localSlotProvider;
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
@@ -2414,5 +2478,13 @@ public class GlobalStateMgr {
 
     public boolean isInTransferringToLeader() {
         return isInTransferringToLeader;
+    }
+
+    public long getDominationStartTimeMs() {
+        return dominationStartTimeMs;
+    }
+
+    public MetaRecoveryDaemon getMetaRecoveryDaemon() {
+        return metaRecoveryDaemon;
     }
 }

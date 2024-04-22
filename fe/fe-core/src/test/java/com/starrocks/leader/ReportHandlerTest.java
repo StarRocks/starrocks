@@ -32,6 +32,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
@@ -378,11 +380,12 @@ public class ReportHandlerTest {
                 continue;
             }
             OlapTable table = null;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 table = (OlapTable) db.getTable(tabletMeta.getTableId());
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             Partition partition = table.getPartition(tabletMeta.getPartitionId());

@@ -55,11 +55,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.CancelDisableDiskInfo;
@@ -67,12 +67,13 @@ import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.system.Backend.BackendState;
@@ -83,9 +84,6 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -105,12 +103,12 @@ public class SystemInfoService implements GsonPostProcessable {
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
     @SerializedName(value = "be")
-    private volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
+    protected volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
 
     @SerializedName(value = "ce")
-    private volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
+    protected volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
-    private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
+    protected volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
     private final NodeSelector nodeSelector;
@@ -170,12 +168,15 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
 
+        newComputeNode.setWorkerGroupId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        newComputeNode.setWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
     }
 
-    private void setComputeNodeOwner(ComputeNode computeNode) {
+    public void setComputeNodeOwner(ComputeNode computeNode) {
         computeNode.setBackendState(BackendState.using);
     }
 
@@ -196,7 +197,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-    private void checkSameNodeExist(String host, int heartPort) throws DdlException {
+    public void checkSameNodeExist(String host, int heartPort) throws DdlException {
         // check is already exist
         if (getBackendWithHeartbeatPort(host, heartPort) != null) {
             throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
@@ -225,7 +226,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
     }
 
-    private void setBackendOwner(Backend backend) {
+    public void setBackendOwner(Backend backend) {
         backend.setBackendState(BackendState.using);
     }
 
@@ -274,7 +275,8 @@ public class SystemInfoService implements GsonPostProcessable {
             formatSb.append("\nplease execute %d times, to modify the remaining backends\n");
             for (int i = 1; i < candidateBackends.size(); i++) {
                 Backend be = candidateBackends.get(i);
-                formatSb.append(be.getHost()).append(":").append(be.getHeartbeatPort()).append("\n");
+                formatSb.append(NetUtils.getHostPortInAccessibleFormat(be.getHost(), be.getHeartbeatPort())).
+                        append("\n");
             }
             opMessage = String.format(
                     formatSb.toString(), willBeModifiedHost,
@@ -346,7 +348,8 @@ public class SystemInfoService implements GsonPostProcessable {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) == null) {
-                throw new DdlException("compute node does not exists[" + pair.first + ":" + pair.second + "]");
+                throw new DdlException("compute node does not exists[" +
+                        NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
             }
         }
 
@@ -359,7 +362,8 @@ public class SystemInfoService implements GsonPostProcessable {
             throws DdlException {
         ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         if (dropComputeNode == null) {
-            throw new DdlException("compute node does not exists[" + host + ":" + heartbeatPort + "]");
+            throw new DdlException("compute node does not exists[" +
+                    NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
         // update idToComputeNode
@@ -370,11 +374,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // remove worker
         if (RunMode.isSharedDataMode()) {
-            long starletPort = dropComputeNode.getStarletPort();
+            int starletPort = dropComputeNode.getStarletPort();
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
-                String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(dropComputeNode.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, dropComputeNode.getWorkerGroupId());
             }
         }
 
@@ -391,7 +395,8 @@ public class SystemInfoService implements GsonPostProcessable {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) == null) {
-                throw new DdlException("backend does not exists[" + pair.first + ":" + pair.second + "]");
+                throw new DdlException("backend does not exists[" +
+                        NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
             }
         }
 
@@ -410,7 +415,7 @@ public class SystemInfoService implements GsonPostProcessable {
         dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
     }
 
-    private void checkWhenNotForceDrop(Backend droppedBackend) {
+    protected void checkWhenNotForceDrop(Backend droppedBackend) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<Long> tabletIds =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
@@ -452,7 +457,8 @@ public class SystemInfoService implements GsonPostProcessable {
     // final entry of dropping backend
     public void dropBackend(String host, int heartbeatPort, boolean needCheckWithoutForce) throws DdlException {
         if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
-            throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
+            throw new DdlException("backend does not exists[" +
+                    NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
         Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
@@ -477,11 +483,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // remove worker
         if (RunMode.isSharedDataMode()) {
-            long starletPort = droppedBackend.getStarletPort();
+            int starletPort = droppedBackend.getStarletPort();
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
-                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(droppedBackend.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, droppedBackend.getWorkerGroupId());
             }
         }
 
@@ -622,6 +628,12 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.of();
     }
 
+    // only for test
+    public void dropAllComputeNode() {
+        // update idToComputeNodeRef
+        idToComputeNodeRef.clear();
+    }
+
     public Backend getBackend(long backendId) {
         return idToBackendRef.get(backendId);
     }
@@ -696,7 +708,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
         for (ComputeNode computeNode : idToComputeNodeRef.values()) {
-            if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
+            if (NetUtils.isSameIP(computeNode.getHost(), host) && computeNode.getHeartbeatPort() == heartPort) {
                 return computeNode;
             }
         }
@@ -705,7 +717,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public Backend getBackendWithHeartbeatPort(String host, int heartPort) {
         for (Backend backend : idToBackendRef.values()) {
-            if (backend.getHost().equals(host) && backend.getHeartbeatPort() == heartPort) {
+            if (NetUtils.isSameIP(backend.getHost(), host) && backend.getHeartbeatPort() == heartPort) {
                 return backend;
             }
         }
@@ -714,7 +726,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public long getBackendIdWithStarletPort(String host, int starletPort) {
         for (Backend backend : idToBackendRef.values()) {
-            if (backend.getHost().equals(host) && backend.getStarletPort() == starletPort) {
+            if (NetUtils.isSameIP(backend.getHost(), host) && backend.getStarletPort() == starletPort) {
                 return backend.getId();
             }
         }
@@ -723,7 +735,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
         for (ComputeNode cn : idToComputeNodeRef.values()) {
-            if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
+            if (NetUtils.isSameIP(cn.getHost(), host) && cn.getStarletPort() == starletPort) {
                 return cn.getId();
             }
         }
@@ -748,34 +760,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
-
-        Pair<String, String> targetPair;
-        try {
-            targetPair = NetUtils.getIpAndFqdnByHost(host);
-        } catch (UnknownHostException e) {
-            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
-            return null;
-        }
-
-        for (Backend backend : idToBackendRef.values()) {
-            Pair<String, String> curPair;
-            try {
-                curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
-            } catch (UnknownHostException e) {
-                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
-                continue;
-            }
-            // target, cur has same ip
-            boolean hostMatch = targetPair.first.equals(curPair.first);
-            // target, cur has same fqdn and both of them are not equal ""
-            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.isEmpty()) {
-                hostMatch = true;
-            }
-            if (hostMatch && (backend.getBePort() == bePort)) {
-                return backend;
-            }
-        }
-        return null;
+        return getComputeNodeWithBePortCommon(host, bePort, idToBackendRef);
     }
 
     public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
@@ -817,8 +802,37 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
-        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
-            if (computeNode.getHost().equals(host) && computeNode.getBePort() == bePort) {
+        return getComputeNodeWithBePortCommon(host, bePort, idToComputeNodeRef);
+    }
+
+    private <T extends ComputeNode> T getComputeNodeWithBePortCommon(String host, int bePort,
+                                                                     Map<Long, T> nodeRef) {
+        Pair<String, String> targetPair;
+        try {
+            targetPair = NetUtils.getIpAndFqdnByHost(host);
+        } catch (UnknownHostException e) {
+            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+            return null;
+        }
+
+        for (T computeNode : nodeRef.values()) {
+            Pair<String, String> curPair;
+            try {
+                curPair = NetUtils.getIpAndFqdnByHost(computeNode.getHost());
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+                continue;
+            }
+            boolean hostMatch = false;
+            // target, cur has same ip
+            if (NetUtils.isSameIP(targetPair.first, curPair.first)) {
+                hostMatch = true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.equals("")) {
+                hostMatch = true;
+            }
+            if (hostMatch && (computeNode.getBePort() == bePort)) {
                 return computeNode;
             }
         }
@@ -941,8 +955,8 @@ public class SystemInfoService implements GsonPostProcessable {
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (db != null) {
-                    atomicLong.set(newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                    updateReportVersionIncrementally(atomicLong, newReportVersion);
+                    LOG.info("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
                 } else {
                     LOG.warn("failed to update backend report version, db {} does not exist", dbId);
                 }
@@ -952,64 +966,10 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-    public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
-        ImmutableMap<Long, Backend> idToBackend = ImmutableMap.copyOf(idToBackendRef);
-        int backendCount = idToBackend.size();
-        checksum ^= backendCount;
-        dos.writeInt(backendCount);
-        for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
-            long key = entry.getKey();
-            checksum ^= key;
-            dos.writeLong(key);
-            entry.getValue().write(dos);
+    protected synchronized void updateReportVersionIncrementally(AtomicLong currentVersion, long newVersion) {
+        if (currentVersion.get() < newVersion) {
+            currentVersion.set(newVersion);
         }
-        return checksum;
-    }
-
-    public long saveComputeNodes(DataOutputStream dos, long checksum) throws IOException {
-        SerializeData data = new SerializeData();
-        data.computeNodes = Lists.newArrayList(idToComputeNodeRef.values());
-        checksum ^= data.computeNodes.size();
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(dos, s);
-        return checksum;
-    }
-
-    private static class SerializeData {
-        @SerializedName("computeNodes")
-        public List<ComputeNode> computeNodes;
-
-    }
-
-    public long loadBackends(DataInputStream dis, long checksum) throws IOException {
-        int count = dis.readInt();
-        checksum ^= count;
-        for (int i = 0; i < count; i++) {
-            long key = dis.readLong();
-            checksum ^= key;
-            Backend backend = Backend.read(dis);
-            replayAddBackend(backend);
-        }
-        return checksum;
-    }
-
-    public long loadComputeNodes(DataInputStream dis, long checksum) throws IOException {
-        int computeNodeSize = 0;
-        try {
-            String s = Text.readString(dis);
-            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-            if (data != null && data.computeNodes != null) {
-                for (ComputeNode computeNode : data.computeNodes) {
-                    replayAddComputeNode(computeNode);
-                }
-                computeNodeSize = data.computeNodes.size();
-            }
-            checksum ^= computeNodeSize;
-            LOG.info("finished replaying compute node from image");
-        } catch (EOFException e) {
-            LOG.info("no compute node to replay.");
-        }
-        return checksum;
     }
 
     public void clear() {
@@ -1017,20 +977,21 @@ public class SystemInfoService implements GsonPostProcessable {
         this.idToReportVersionRef = ImmutableMap.of();
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
-            throw new AnalysisException("Invalid host port: " + hostPort);
+            throw new SemanticException("Invalid host port: " + hostPort);
         }
 
-        String[] pair = hostPort.split(":");
-        if (pair.length != 2) {
-            throw new AnalysisException("Invalid host port: " + hostPort);
+        String[] hostInfo;
+        try {
+            hostInfo = NetUtils.resolveHostInfoFromHostPort(hostPort);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Invalid host port: " + hostPort, e);
         }
-
-        String host = pair[0];
+        String host = hostInfo[0];
         if (Strings.isNullOrEmpty(host)) {
-            throw new AnalysisException("Host is null");
+            throw new SemanticException("Host is null");
         }
 
         int heartbeatPort;
@@ -1046,17 +1007,17 @@ public class SystemInfoService implements GsonPostProcessable {
             }
 
             // validate port
-            heartbeatPort = Integer.parseInt(pair[1]);
+            heartbeatPort = Integer.parseInt(hostInfo[1]);
 
             if (heartbeatPort <= 0 || heartbeatPort >= 65536) {
-                throw new AnalysisException("Port is out of range: " + heartbeatPort);
+                throw new SemanticException("Port is out of range: " + heartbeatPort);
             }
 
             return new Pair<>(host, heartbeatPort);
         } catch (UnknownHostException e) {
-            throw new AnalysisException("Unknown host: " + e.getMessage());
+            throw new SemanticException("Unknown host: " + e.getMessage());
         } catch (Exception e) {
-            throw new AnalysisException("Encounter unknown exception: " + e.getMessage());
+            throw new SemanticException("Encounter unknown exception: " + e.getMessage());
         }
     }
 
@@ -1089,11 +1050,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // clear map in starosAgent
         if (RunMode.isSharedDataMode()) {
-            long starletPort = cn.getStarletPort();
+            int starletPort = cn.getStarletPort();
             if (starletPort == 0) {
                 return;
             }
-            String workerAddr = cn.getHost() + ":" + starletPort;
+            String workerAddr = NetUtils.getHostPortInAccessibleFormat(cn.getHost(), starletPort);
             GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
         }
     }
@@ -1116,11 +1077,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // clear map in starosAgent
         if (RunMode.isSharedDataMode()) {
-            long starletPort = backend.getStarletPort();
+            int starletPort = backend.getStarletPort();
             if (starletPort == 0) {
                 return;
             }
-            String workerAddr = backend.getHost() + ":" + starletPort;
+            String workerAddr = NetUtils.getHostPortInAccessibleFormat(backend.getHost(), starletPort);
             GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
         }
     }

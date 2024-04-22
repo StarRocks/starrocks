@@ -32,8 +32,7 @@ class ReplicationTxnManager {
 public:
     explicit ReplicationTxnManager(lake::TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
 
-    Status remote_snapshot(const TRemoteSnapshotRequest& request, std::string* src_snapshot_path,
-                           bool* incremental_snapshot);
+    Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
 
     Status replicate_snapshot(const TReplicateSnapshotRequest& request);
 
@@ -46,13 +45,14 @@ private:
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
 
-    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
-                                     const TRemoteSnapshotInfo& src_snapshot_info,
+    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request, const TSnapshotInfo& src_snapshot_info,
                                      const TabletMetadataPtr& tablet_metadata);
 
-    Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
-                               TxnLogPB::OpWrite* op_write,
-                               std::unordered_map<std::string, std::string>* segment_filename_map);
+    static Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
+                                      TxnLogPB::OpWrite* op_write,
+                                      std::unordered_map<std::string, std::string>* segment_filename_map);
+
+    static Status convert_delete_predicate_pb(DeletePredicatePB* delete_predicate);
 
 private:
     lake::TabletManager* _tablet_manager;

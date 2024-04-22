@@ -22,7 +22,11 @@ CREATE ROLE <role_name>
 
 `role_name`: the name of the role. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
-Note that the created role name cannot be the same as [system-defined roles](../../../administration/privilege_overview.md#system-defined-roles): `root`, `cluster_admin`, `db_admin`, `user_admin`, and `public`.
+Note that the created role name cannot be the same as [system-defined roles](../../../administration/user_privs/privilege_overview.md#system-defined-roles): `root`, `cluster_admin`, `db_admin`, `user_admin`, and `public`.
+
+## Limits
+
+By default, a user can have a maximum of 64 roles. You can adjust this setting by using the FE dynamic parameter `privilege_max_total_roles_per_user`. A role can have a maximum of 16 inheritance levels. You can adjust this setting by using the FE dynamic parameter `privilege_max_role_depth`.
 
 ## Examples
 

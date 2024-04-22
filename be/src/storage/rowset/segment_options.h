@@ -66,6 +66,7 @@ public:
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    std::string rowset_path;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
@@ -100,6 +101,8 @@ public:
     TabletSchemaCSPtr tablet_schema = nullptr;
 
     bool asc_hint = true;
+
+    bool prune_column_after_index_filter = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

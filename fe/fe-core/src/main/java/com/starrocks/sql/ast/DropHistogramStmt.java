@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
@@ -23,16 +24,19 @@ import java.util.List;
 
 public class DropHistogramStmt extends StatementBase {
     private final TableName tbl;
-    private final List<String> columnNames;
+    private List<String> columnNames;
+    private final List<Expr> columns;
 
-    public DropHistogramStmt(TableName tbl, List<String> columnNames) {
-        this(tbl, columnNames, NodePosition.ZERO);
+    private boolean isExternal = false;
+
+    public DropHistogramStmt(TableName tbl, List<Expr> columns) {
+        this(tbl, columns, NodePosition.ZERO);
     }
 
-    public DropHistogramStmt(TableName tbl, List<String> columnNames, NodePosition pos) {
+    public DropHistogramStmt(TableName tbl, List<Expr> columns, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
-        this.columnNames = columnNames;
+        this.columns = columns;
     }
 
     public TableName getTableName() {
@@ -43,6 +47,14 @@ public class DropHistogramStmt extends StatementBase {
         return columnNames;
     }
 
+    public void setColumnNames(List<String> columnNames) {
+        this.columnNames = columnNames;
+    }
+
+    public List<Expr> getColumns() {
+        return columns;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropHistogramStatement(this, context);
@@ -51,5 +63,13 @@ public class DropHistogramStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    public boolean isExternal() {
+        return isExternal;
+    }
+
+    public void setExternal(boolean isExternal) {
+        this.isExternal = isExternal;
     }
 }

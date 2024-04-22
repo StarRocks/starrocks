@@ -157,7 +157,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
         columns terminated by ","
         format as "csv"
     )
-    with broker "broker1";
+    WITH BROKER;
     ```
 
   - If you want to include the `__op` field, run the following command:
@@ -171,7 +171,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
         format as "csv"
         set (__op = 'upsert')
     )
-    with broker "broker1";
+    WITH BROKER;
     ```
 
 - Run a Routine Load job.
@@ -306,7 +306,7 @@ Run a load job to delete the record whose `id` is `101` in `example2.csv` from `
       format as "csv"
       set (__op = 'delete')
   )
-  with broker "broker1";  
+  WITH BROKER;  
   ```
 
 - Run a Routine Load job.
@@ -423,7 +423,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
       (id, name, score, temp)
       set (__op=temp)
   )
-  with broker "broker1";
+  WITH BROKER;
   ```
 
 - Run a Routine Load job:
@@ -542,7 +542,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
       format as "csv"
       (id, name)
   )
-  WITH BROKER "broker1"
+  WITH BROKER
   PROPERTIES
   (
       "partial_update" = "true"
@@ -647,7 +647,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
 ### Load data
 
-Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater or equal to their current `version` values.
+Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `version` value in each of the two records is greater or equal to their current `version` values.
 
 - Run a Stream Load job:
 

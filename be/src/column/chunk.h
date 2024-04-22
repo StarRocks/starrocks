@@ -111,6 +111,8 @@ public:
     void update_column(ColumnPtr column, SlotId slot_id);
     void update_column_by_index(ColumnPtr column, size_t idx);
 
+    void append_or_update_column(ColumnPtr column, SlotId slot_id);
+
     void update_rows(const Chunk& src, const uint32_t* indexes);
 
     void append_default();
@@ -243,6 +245,9 @@ public:
             c->materialized_nullable();
         }
     }
+
+    // Unpack and duplicate const columns in the chunk.
+    void unpack_and_duplicate_const_columns();
 
 #ifndef NDEBUG
     // check whether the internal state is consistent, abort the program if check failed.

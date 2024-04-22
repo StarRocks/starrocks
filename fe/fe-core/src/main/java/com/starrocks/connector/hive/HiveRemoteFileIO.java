@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.ObjectStorageUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -69,7 +68,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
-        String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
+        String path = pathKey.getPath();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
             URI uri = new Path(path).toUri();
@@ -188,7 +187,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
             return false;
         }
         String dirName = fileStatus.getPath().getName();
-        return !(dirName.startsWith("."));
+        return !(dirName.startsWith(".") || dirName.startsWith("_"));
     }
 
     protected List<RemoteFileBlockDesc> getRemoteFileBlockDesc(BlockLocation[] blockLocations) throws IOException {

@@ -14,12 +14,17 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TBrokerFileStatus;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -43,6 +48,12 @@ public class TableFunctionTableTest {
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
         properties.put("auto_detect_sample_files", "10");
+        properties.put("csv.column_separator", ",");
+        properties.put("csv.row_delimiter", "\n");
+        properties.put("csv.enclose", "\\");
+        properties.put("csv.escape", "'");
+        properties.put("csv.skip_header", "2");
+        properties.put("csv.trim_space", "true");
         return properties;
     }
 
@@ -139,6 +150,12 @@ public class TableFunctionTableTest {
             Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
             Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
+            Assert.assertEquals("\n", table.getCsvRowDelimiter());
+            Assert.assertEquals(",", table.getCsvColumnSeparator());
+            Assert.assertEquals('\\', table.getCsvEnclose());
+            Assert.assertEquals('\'', table.getCsvEscape());
+            Assert.assertEquals(2, table.getCsvSkipHeader());
+            Assert.assertEquals(true, table.getCsvTrimSpace());
         });
 
         // abnormal case.
@@ -147,5 +164,23 @@ public class TableFunctionTableTest {
             properties.put("auto_detect_sample_files", "not_a_number");
             new TableFunctionTable(properties);
         });
+    }
+
+    @Test
+    public void testNoFilesFound() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            }
+        };
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2");
+        properties.put("format", "parquet");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "No files were found matching the pattern(s) or path(s): " +
+                        "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
+                () -> new TableFunctionTable(properties));
     }
 }

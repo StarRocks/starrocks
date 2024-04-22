@@ -23,6 +23,8 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -160,31 +162,18 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         }
 
         // we will try cast const operator to variable operator
-        if (rightChild.isVariable() && leftChild.isConstantRef()) {
-            Optional<ScalarOperator> op = Utils.tryCastConstant(leftChild, type2);
-            if (op.isPresent()) {
-                predicate.getChildren().set(0, op.get());
-                return predicate;
-            } else if (rightChild.getType().isDateType() && !leftChild.getType().isDateType() &&
-                    Type.canCastTo(leftChild.getType(), rightChild.getType())) {
-                // For like MySQL, convert to date type as much as possible
-                addCastChild(rightChild.getType(), predicate, 0);
-                return predicate;
-            }
-        } else if (leftChild.isVariable() && rightChild.isConstantRef()) {
-            Optional<ScalarOperator> op = Utils.tryCastConstant(rightChild, type1);
-            if (op.isPresent()) {
-                predicate.getChildren().set(1, op.get());
-                return predicate;
-            } else if (leftChild.getType().isDateType() && !rightChild.getType().isDateType() &&
-                    Type.canCastTo(rightChild.getType(), leftChild.getType())) {
-                // For like MySQL, convert to date type as much as possible
-                addCastChild(leftChild.getType(), predicate, 1);
-                return predicate;
+        if ((rightChild.isVariable() && leftChild.isConstantRef()) ||
+                (leftChild.isVariable() && rightChild.isConstantRef())) {
+            int constant = leftChild.isVariable() ? 1 : 0;
+            int variable = 1 - constant;
+            Optional<BinaryPredicateOperator> optional = optimizeConstantAndVariable(predicate, constant, variable);
+            if (optional.isPresent()) {
+                return optional.get();
             }
         }
 
-        Type compatibleType = TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
+        Type compatibleType =
+                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);
@@ -193,6 +182,48 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             addCastChild(compatibleType, predicate, 1);
         }
         return predicate;
+    }
+
+    private Optional<BinaryPredicateOperator> optimizeConstantAndVariable(BinaryPredicateOperator predicate,
+                                                                          int constantIndex, int variableIndex) {
+        ScalarOperator constant = predicate.getChild(constantIndex);
+        ScalarOperator variable = predicate.getChild(variableIndex);
+        Type typeConstant = constant.getType();
+        Type typeVariable = variable.getType();
+
+        boolean checkStringCastToNumber = false;
+        if (typeVariable.isNumericType() && typeConstant.isStringType()) {
+            if (predicate.getBinaryType().isNotRangeComparison()) {
+                String baseType = ConnectContext.get() != null ?
+                        ConnectContext.get().getSessionVariable().getCboEqBaseType() : SessionVariableConstants.VARCHAR;
+                checkStringCastToNumber = SessionVariableConstants.DECIMAL.equals(baseType) ||
+                        SessionVariableConstants.DOUBLE.equals(baseType);
+            } else {
+                // range compare, base type must be double
+                checkStringCastToNumber = true;
+            }
+        }
+
+        // strict check, only support white check
+        if ((typeVariable.isNumericType() && typeConstant.isNumericType()) ||
+                (typeVariable.isNumericType() && typeConstant.isBoolean()) ||
+                (typeVariable.isDateType() && typeConstant.isNumericType()) ||
+                (typeVariable.isDateType() && typeConstant.isStringType()) ||
+                (typeVariable.isBoolean() && typeConstant.isStringType()) ||
+                checkStringCastToNumber) {
+
+            Optional<ScalarOperator> op = Utils.tryCastConstant(constant, variable.getType());
+            if (op.isPresent()) {
+                predicate.getChildren().set(constantIndex, op.get());
+                return Optional.of(predicate);
+            } else if (variable.getType().isDateType() && Type.canCastTo(constant.getType(), variable.getType())) {
+                // For like MySQL, convert to date type as much as possible
+                addCastChild(variable.getType(), predicate, constantIndex);
+                return Optional.of(predicate);
+            }
+        }
+
+        return Optional.empty();
     }
 
     @Override

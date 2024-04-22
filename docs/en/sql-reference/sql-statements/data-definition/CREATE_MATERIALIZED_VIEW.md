@@ -79,7 +79,7 @@ SELECT select_expr[, select_expr ...]
 
 - WHERE (optional)
 
-  From v3.2 onwards, synchronous materialized views support the WHERE clause which can filter rows used for the materialized view.
+  From v3.1.8 onwards, synchronous materialized views support the WHERE clause which can filter rows used for the materialized view.
 
 - GROUP BY (optional)
 
@@ -265,13 +265,14 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `mv_rewrite_staleness_second`: If the materialized view's last refresh is within the time interval specified in this property, this materialized view can be used directly for query rewrite, regardless of whether the data in the base tables changes. If the last refresh is before this time interval, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Unit: Second. This property is supported from v3.0.
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
-- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/resource_group.md).
+- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/management/resource_management/resource_group.md).
 - `query_rewrite_consistency`: The query rewrite rule for the asynchronous materialized views. This property is supported from v3.2. Valid values:
   - `disable`: Disable automatic query rewrite of the asynchronous materialized view.
   - `checked` (Default value): Enable automatic query rewrite only when the materialized view meets the timeliness requirement, which means:
     - If `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables.
     - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last refresh is within the staleness time interval.
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
+- `storage_volume`: The name of the storage volume used to store the asynchronous materialized view you want to create if you are using a [shared-data cluster](../../../deployment/shared_data/shared_data.mdx). This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
   - `true`: Enable query rewrite for external catalog-based materialized views.
   - `false` (Default value): Disable query rewrite for external catalog-based materialized views.

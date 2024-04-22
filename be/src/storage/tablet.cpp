@@ -133,6 +133,8 @@ Status Tablet::_init_once_action() {
                          << ", version=" << version << ", res=" << st;
             return st;
         }
+        // make sure there is no dcg cache when init tablet to avoid potential unconsistent read
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*rowset);
         _rs_version_map[version] = std::move(rowset);
     }
 
@@ -149,6 +151,8 @@ Status Tablet::_init_once_action() {
                 return st;
             }
         }
+        // make sure there is no dcg cache when init tablet to avoid potential unconsistent read
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*rowset);
         _inc_rs_version_map[version] = std::move(rowset);
     }
 
@@ -195,6 +199,8 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         // delete versions from new local tablet_meta
         for (const Version& version : versions_to_delete) {
             new_tablet_meta->delete_rs_meta_by_version(version, nullptr);
+            // version_for_delete_predicate in tablet_meta is already
+            // lock free
             if (new_tablet_meta->version_for_delete_predicate(version)) {
                 new_tablet_meta->remove_delete_predicate_by_version(version);
             }
@@ -836,9 +842,12 @@ Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& 
     return Status::OK();
 }
 
-// TODO(lingbin): what is the difference between version_for_delete_predicate() and
-// version_for_load_deletion()? should at least leave a comment
 bool Tablet::version_for_delete_predicate(const Version& version) {
+    std::shared_lock rlock(get_header_lock());
+    return version_for_delete_predicate_unlocked(version);
+}
+
+bool Tablet::version_for_delete_predicate_unlocked(const Version& version) {
     return _tablet_meta->version_for_delete_predicate(version);
 }
 
@@ -1026,7 +1035,7 @@ void Tablet::calculate_cumulative_point() {
             break;
         }
 
-        bool is_delete = version_for_delete_predicate(rs->version());
+        bool is_delete = version_for_delete_predicate_unlocked(rs->version());
         // break the loop if segments in this rowset is overlapping, or is a singleton and not delete rowset.
         if (rs->is_segments_overlapping() || (rs->is_singleton_delta() && !is_delete)) {
             _cumulative_point = rs->version().first;
@@ -1183,7 +1192,7 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
         delete_flags.reserve(rowsets.size());
         for (auto& rs : rowsets) {
-            delete_flags.push_back(version_for_delete_predicate(rs->version()));
+            delete_flags.push_back(version_for_delete_predicate_unlocked(rs->version()));
         }
         // get snapshot version path json_doc
         _timestamped_version_tracker.get_stale_version_path_json_doc(stale_path_arr);
@@ -1523,7 +1532,7 @@ size_t Tablet::tablet_footprint() {
     }
 }
 
-size_t Tablet::num_rows() {
+size_t Tablet::num_rows() const {
     if (_updates) {
         return _updates->num_rows();
     } else {
@@ -1746,5 +1755,29 @@ TabletSchemaCSPtr Tablet::update_max_version_schema(const TabletSchemaCSPtr& tab
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {
     std::shared_lock rdlock(_schema_lock);
     return *_max_version_schema;
+}
+
+void Tablet::remove_all_delta_column_group_cache() const {
+    // Only use for non-primary key tablet
+    if (_updates != nullptr) {
+        return;
+    }
+
+    std::shared_lock rdlock(_meta_lock);
+    return remove_all_delta_column_group_cache_unlocked();
+}
+
+void Tablet::remove_all_delta_column_group_cache_unlocked() const {
+    // Only use for non-primary key tablet
+    if (_updates != nullptr) {
+        return;
+    }
+
+    for (const auto& version_rowset : _rs_version_map) {
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*version_rowset.second);
+    }
+    for (const auto& inc_version_rowset : _inc_rs_version_map) {
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*inc_version_rowset.second);
+    }
 }
 } // namespace starrocks

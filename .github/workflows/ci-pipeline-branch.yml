@@ -87,7 +87,7 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -128,28 +128,33 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-    outputs:
-      ip: ${{ steps.update-image.outputs.ip }}
-      instance_id: ${{ steps.update-image.outputs.instance_id }}
-      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [ Release, ASAN ]
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Checkout Code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Update Image
+      - name: Update Image (${{ matrix.build_type }})
         id: update-image
+        if: needs.be-checker.outputs.output2  == 'true'
+        env:
+          linux_distro: ${{ matrix.build_type }}
         run: |
-          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-              ./bin/run-pr-update-image.sh
-          fi
+          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-pr-update-image.sh
+
+      - name: Upload Thirdparty Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: THIRDPARTY-RESULT-${{ matrix.build_type }}
+          path: image_cache.info
+          retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -160,9 +165,40 @@ jobs:
           fi
           rm -rf ${{ github.workspace }}/*
 
+  thirdparty-info:
+    runs-on: [ self-hosted, normal ]
+    needs:
+      - thirdparty-update
+    name: Thirdparty Info
+    outputs:
+      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
+    steps:
+      - name: Check Result
+        run: |
+          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
+            echo "::error:: Thirdparty Update Error!"
+            exit 1
+          fi
+
+      - name: Download Thirdparty Artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: THIRDPARTY-RESULT-*
+          path: outputs
+
+      - name: Read Info
+        id: info
+        if: needs.thirdparty-update.result == 'success'
+        run: |
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-update ]
+    needs: [ be-checker, thirdparty-info ]
     timeout-minutes: 180
     name: BE UT
     env:
@@ -182,7 +218,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
@@ -194,18 +230,20 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: BE UT LOG
-          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          path: ${{ steps.run_ut.outputs.BE_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ steps.run_ut.outputs.BE_LOG }}
           rm -rf ${{ github.workspace }}/*
 
   fe-checker:
@@ -263,7 +301,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -287,7 +325,7 @@ jobs:
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: dbelyaev/action-checkstyle@v0.7.5
+        uses: dbelyaev/action-checkstyle@v1.5.6
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -307,7 +345,7 @@ jobs:
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -350,10 +388,16 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven
 
-      - name: Setup thrift
-        uses: dodopizza/setup-thrift@v1
-        with:
-          version: 0.13.0
+      - name: Install Apache Thrift 0.13
+        run: |
+          mkdir -p ./.setup-thrift/oras
+          mkdir -p ./.setup-thrift/thrift
+          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
+          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
+          ln -sf $(pwd)/oras /usr/local/bin/oras
+          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
+          tar zxf ./thrift.v0.13.0.tar.gz -C .
+          ln -sf $(pwd)/thrift /usr/local/bin/thrift
 
       - name: Analyze FE
         env:
@@ -407,11 +451,12 @@ jobs:
 
       - name: Upload log
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -430,7 +475,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
     steps:
       - name: upload info
         if: always()
@@ -440,14 +484,15 @@ jobs:
           echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
+          overwrite: true
 
       - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: head_sha
           path: ./head_sha.txt

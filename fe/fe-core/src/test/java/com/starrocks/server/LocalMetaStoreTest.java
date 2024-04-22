@@ -36,6 +36,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
@@ -197,15 +199,16 @@ public class LocalMetaStoreTest {
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t1");
 
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
-            db.writeLock();
             Map<String, String> properties = Maps.newHashMap();
             LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
             table.setTableProperty(null);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

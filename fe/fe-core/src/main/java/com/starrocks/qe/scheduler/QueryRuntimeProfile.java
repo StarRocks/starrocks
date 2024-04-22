@@ -28,6 +28,8 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.datacache.LoadDataCacheMetrics;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -35,6 +37,7 @@ import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TLoadDataCacheMetrics;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -47,14 +50,18 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class QueryRuntimeProfile {
@@ -75,6 +82,8 @@ public class QueryRuntimeProfile {
      */
     private static final Long MARKED_COUNT_DOWN_VALUE = -1L;
 
+    public static final String LOAD_CHANNEL_PROFILE_NAME = "LoadChannel";
+
     private final JobSpec jobSpec;
 
     private final ConnectContext connectContext;
@@ -89,6 +98,10 @@ public class QueryRuntimeProfile {
 
     private RuntimeProfile queryProfile;
     private final List<RuntimeProfile> fragmentProfiles;
+
+    // The load channel profile is only present if loading to OlapTables.
+    // The hierarchy is LoadChannel -> Channel(BE) -> Index
+    private final Optional<RuntimeProfile> loadChannelProfile;
 
     /**
      * The number of instances of this query.
@@ -120,6 +133,9 @@ public class QueryRuntimeProfile {
     // ------------------------------------------------------------------------------------
     private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
 
+    // Fields for datacache
+    private final DataCacheSelectMetrics dataCacheSelectMetrics = new DataCacheSelectMetrics();
+
     public QueryRuntimeProfile(ConnectContext connectContext,
                                JobSpec jobSpec,
                                int numFragments) {
@@ -132,6 +148,13 @@ public class QueryRuntimeProfile {
             RuntimeProfile profile = new RuntimeProfile("Fragment " + i);
             fragmentProfiles.add(profile);
             queryProfile.addChild(profile);
+        }
+
+        if (jobSpec.hasOlapTableSink()) {
+            loadChannelProfile = Optional.of(new RuntimeProfile(LOAD_CHANNEL_PROFILE_NAME));
+            queryProfile.addChild(loadChannelProfile.get());
+        } else {
+            loadChannelProfile = Optional.empty();
         }
     }
 
@@ -246,6 +269,20 @@ public class QueryRuntimeProfile {
         return queryProfile;
     }
 
+    public void updateLoadChannelProfile(TReportExecStatusParams params) {
+        if (params.isSetLoad_channel_profile() && loadChannelProfile.isPresent()) {
+            loadChannelProfile.get().update(params.load_channel_profile);
+            if (LOG.isDebugEnabled()) {
+                StringBuilder builder = new StringBuilder();
+                loadChannelProfile.get().prettyPrint(builder, "");
+                LOG.debug("Load channel profile for query_id={} after reported by instance_id={}\n{}",
+                        DebugUtil.printId(jobSpec.getQueryId()),
+                        DebugUtil.printId(params.getFragment_instance_id()),
+                        builder);
+            }
+        }
+    }
+
     public void updateProfile(FragmentInstanceExecState execState, TReportExecStatusParams params) {
         if (params.isSetProfile()) {
             profileAlreadyReported = true;
@@ -278,6 +315,7 @@ public class QueryRuntimeProfile {
             profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
             ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
             saveRunningProfile(profilingPlan, profile);
+            LOG.debug("update profile, profilingPlan: {}, profile: {}", profilingPlan, profile);
         }
     }
 
@@ -292,6 +330,15 @@ public class QueryRuntimeProfile {
 
     public void finalizeProfile() {
         fragmentProfiles.forEach(RuntimeProfile::sortChildren);
+    }
+
+    public void updateDataCacheSelectMetrics(long backendId, TLoadDataCacheMetrics tLoadDataCacheMetrics) {
+        LoadDataCacheMetrics loadDataCacheMetrics = LoadDataCacheMetrics.buildFromThrift(tLoadDataCacheMetrics);
+        dataCacheSelectMetrics.updateLoadDataCacheMetrics(backendId, loadDataCacheMetrics);
+    }
+
+    public DataCacheSelectMetrics getDataCacheSelectMetrics() {
+        return dataCacheSelectMetrics;
     }
 
     public void updateLoadInformation(FragmentInstanceExecState execState, TReportExecStatusParams params) {
@@ -318,6 +365,9 @@ public class QueryRuntimeProfile {
         }
         if (params.isSetSink_commit_infos()) {
             sinkCommitInfos.addAll(params.getSink_commit_infos());
+        }
+        if (params.isSetLoad_datacache_metrics()) {
+            updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
         }
     }
 
@@ -522,7 +572,64 @@ public class QueryRuntimeProfile {
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
         processTimer.setValue(System.nanoTime() - start);
 
+        Optional<RuntimeProfile> mergedLoadChannelProfile =  mergeLoadChannelProfile();
+        mergedLoadChannelProfile.ifPresent(newQueryProfile::addChild);
+
         return newQueryProfile;
+    }
+
+    Optional<RuntimeProfile> mergeLoadChannelProfile() {
+        if (loadChannelProfile.isEmpty()) {
+            return Optional.empty();
+        }
+
+        RuntimeProfile originProfile = loadChannelProfile.get();
+        RuntimeProfile mergedProfile = new RuntimeProfile(originProfile.getName());
+
+        mergedProfile.copyAllInfoStringsFrom(originProfile, null);
+        mergedProfile.copyAllCountersFrom(originProfile);
+
+        List<RuntimeProfile> channelProfiles = originProfile.getChildList().stream()
+                .map(pair -> pair.first)
+                .collect(Collectors.toList());
+
+        Counter counter = mergedProfile.addCounter("ChannelNum", TUnit.UNIT, null);
+        counter.setValue(channelProfiles.size());
+
+        String hosts = channelProfiles.stream()
+                               .map(p -> getChannelHost(p.getName()))
+                               .filter(Optional::isPresent)
+                               .map(Optional::get)
+                               .collect(Collectors.joining(","));
+        mergedProfile.addInfoString("BackendAddresses", hosts);
+
+        RuntimeProfile mergedChannelProfile =
+                RuntimeProfile.mergeIsomorphicProfiles(channelProfiles, Collections.emptySet());
+        if (mergedChannelProfile == null) {
+            if (LOG.isDebugEnabled()) {
+                StringBuilder builder = new StringBuilder();
+                originProfile.prettyPrint(builder, "");
+                LOG.debug("Load channel profile is empty after merged, query_id={}, the original profile\n{}",
+                        DebugUtil.printId(jobSpec.getQueryId()), builder);
+            }
+            return Optional.empty();
+        }
+        mergedProfile.copyAllInfoStringsFrom(mergedChannelProfile, null);
+        mergedProfile.copyAllCountersFrom(mergedChannelProfile);
+        mergedChannelProfile.getChildList().forEach(pair -> mergedProfile.addChild(pair.first));
+
+        RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
+
+        return Optional.of(mergedProfile);
+    }
+
+    // The pattern for each channel profile name like "Channel (host=127.0.0.1)"
+    private static final Pattern CHANNEL_NAME_PATTERN = Pattern.compile("^Channel \\(host=(.+)\\)$");
+
+    // Get load channel host from the channel profile name.
+    private static Optional<String> getChannelHost(String channelProfileName) {
+        Matcher matcher = CHANNEL_NAME_PATTERN.matcher(channelProfileName);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
     private List<String> getUnfinishedInstanceIds() {

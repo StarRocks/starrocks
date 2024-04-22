@@ -56,6 +56,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
@@ -69,6 +70,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.statistic.StatisticUtils;
@@ -80,12 +82,14 @@ import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
+import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -171,6 +175,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     @SerializedName("pg")
     protected int progress;
 
+    @SerializedName("warehouseId")
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
     @SerializedName("mc")
     protected String mergeCondition;
     @SerializedName("jo")
@@ -195,7 +202,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
-    private boolean startLoad = false;
+    protected boolean startLoad = false;
 
     // only for log replay
     public LoadJob() {
@@ -229,8 +236,17 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         lock.writeLock().unlock();
     }
 
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
     public long getId() {
         return id;
+    }
+
+    // unit test
+    public void setId(long id) {
+        this.id = id;
     }
 
     public Database getDb() throws MetaNotFoundException {
@@ -284,7 +300,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         idToTasks.clear();
         finishedTaskIds.clear();
-        loadingStatus.setProgress(0);
+        loadingStatus.reset();
     }
 
     public boolean isTimeout() {
@@ -297,6 +313,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    public long getLoadStartTimestamp() {
+        return loadStartTimestamp;
     }
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
@@ -417,6 +437,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
             }
 
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                if (warehouse == null) {
+                    throw new DdlException("Warehouse " + warehouseName + " not exists.");
+                }
+                warehouseId = warehouse.getId();
+            }
+
             if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
                 jsonOptions.stripOuterArray = Boolean.parseBoolean(properties.get(LoadStmt.STRIP_OUTER_ARRAY));
             }
@@ -436,7 +465,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     public void beginTxn()
-            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, BeginTransactionException,
+            RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
     }
 
     /**
@@ -464,12 +494,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         if (state != JobState.PENDING) {
             return;
         }
-        // the limit of job will be restrict when begin txn
-        beginTxn();
-        unprotectedExecuteJob();
-        // update spark load job state from PENDING to ETL when pending task is finished
-        if (jobType != EtlJobType.SPARK) {
-            unprotectedUpdateState(JobState.LOADING);
+        try {
+            // the limit of job will be restrict when begin txn
+            beginTxn();
+            unprotectedExecuteJob();
+            // update spark load job state from PENDING to ETL when pending task is finished
+            if (jobType != EtlJobType.SPARK) {
+                unprotectedUpdateState(JobState.LOADING);
+            }
+        } catch (BeginTransactionException e) {
+            throw new LoadException(e.getMessage());
         }
     }
 
@@ -833,6 +867,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 jobInfo.add("");
             }
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
+            // warehouse
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse != null) {
+                jobInfo.add(warehouse.getName());
+            } else {
+                jobInfo.add("");
+            }
             return jobInfo;
         } finally {
             readUnlock();
@@ -1011,6 +1052,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 99;
             transactionId = txnState.getTransactionId();
             state = JobState.COMMITTED;
+            failMsg = null;
         } finally {
             writeUnlock();
         }
@@ -1110,6 +1152,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 100;
             finishTimestamp = txnState.getFinishTime();
             state = JobState.FINISHED;
+            failMsg = null;
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();

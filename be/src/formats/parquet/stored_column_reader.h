@@ -49,8 +49,6 @@ public:
     // so currently we can't put need_parse_levels into StoredColumnReaderOptions.
     virtual void set_need_parse_levels(bool need_parse_levels) {}
 
-    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) = 0;
-
     virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                               Column* dst) = 0;
 
@@ -81,15 +79,7 @@ public:
     virtual ~StoredColumnReaderImpl() = default;
 
     // Reset internal state and ready for next read_values
-    virtual void reset() = 0;
-
-    // Try to read values that can assemble up to num_rows rows. For example if we want to read
-    // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
-    // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
-    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override {
-        reset();
-        return do_read_records(num_rows, content_type, dst);
-    }
+    virtual void reset_levels() = 0;
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                       Column* dst) override;
@@ -107,27 +97,16 @@ public:
 
     void set_page_num(size_t page_num) override { _reader->set_page_num(page_num); }
 
-    static size_t get_level_to_decode_batch_size(size_t row, size_t num_values_left_in_cur_page, size_t decoded,
-                                                 size_t parsed);
-
     static size_t count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level);
 
 protected:
-    virtual bool page_selected(size_t num_values);
-
-    virtual Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) = 0;
-
-    Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read, Column* dst);
-
     virtual Status _next_page();
     virtual bool _cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read);
-
-    void update_read_context(size_t records_read);
 
     // for RequiredColumn, there is no need to get levels.
     // for RepeatedColumn, there is no possible to get default levels.
     // for OptionalColumn, we will override it.
-    virtual void append_default_levels(size_t row_nums) {}
+    virtual void _append_default_levels(size_t row_nums) {}
 
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;

@@ -84,6 +84,25 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "\"compression\" = \"LZ4\"    \n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `s3` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int(11) NULL COMMENT \"\",    \n" +
+                "  `a1` array<varchar(65533)> NULL COMMENT \"\",    \n" +
+                "  `a2` array<int> NULL COMMENT \"\",    \n" +
+                "  `a3` array<varchar(65533)> NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "DUPLICATE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",       \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"false\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"light_schema_change\" = \"true\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
@@ -468,7 +487,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                     "from (select a1[1] x1, array_max(a2) x2 from s1) y " +
                     "group by x1;";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "is_nullable:true, is_monotonic:true)])]), " +
+            assertContains(plan, "is_nullable:true, is_monotonic:true, is_index_only_filter:false)])]), " +
                     "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B]");
             assertContains(plan, "(type:RANDOM, partition_exprs:[]), " +
                     "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B]");
@@ -499,4 +518,84 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         assertNotContains(plan, "DictDecode");
         assertContains(plan, "<slot 9> : array_slice(5: S_PHONE, -1, 2)");
     }
+
+    @Test
+    public void testArrayPruneSubfield() throws Exception {
+        String sql = "select S_NAME from supplier_nullable where array_length(S_ADDRESS) = 2";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "dict_col=");
+        assertContains(plan, "ColumnAccessPath: [/S_ADDRESS/OFFSET]");
+    }
+
+    @Test
+    public void testUnnestArray() throws Exception {
+        String sql = "select S_ADDRESS[2], col.unnest from supplier_nullable, unnest(S_ADDRESS) col;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT]\n");
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> DictDecode(12: S_ADDRESS, [<place-holder>], 12: S_ADDRESS[2])\n" +
+                "  |  13 <-> [13: unnest, INT, true]");
+
+        sql = "select S_ADDRESS[2], lower(col.unnest) from supplier_nullable, unnest(S_ADDRESS) col;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT]\n");
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> DictDecode(13: S_ADDRESS, [<place-holder>], 13: S_ADDRESS[2])\n" +
+                "  |  11 <-> DictDecode(14: unnest, [lower(<place-holder>)])");
+    }
+
+    @Test
+    public void testMultiUnnestArray() throws Exception {
+        String sql = "select S_ADDRESS[2], unnest.a, unnest.b " +
+                "from supplier_nullable, unnest(S_ADDRESS, S_PHONE) as unnest(a, b) ;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, CHAR(15)]\n");
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> [10: b, CHAR(15), true]\n" +
+                "  |  11 <-> DictDecode(13: S_ADDRESS, [<place-holder>], 13: S_ADDRESS[2])\n" +
+                "  |  14 <-> [14: a, INT, true]");
+
+        sql = "select *" +
+                "from s3, unnest(a1, a2, a3) as unnest(a, b, c) ;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, INT, INT]");
+        assertContains(plan, "  2:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  <dict id 13> : <string id 5>\n" +
+                "  |  <dict id 14> : <string id 6>\n" +
+                "  |  <dict id 15> : <string id 8>");
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    14: DictDefine(12: a1, [<place-holder>])\n" +
+                "    15: DictDefine(13: a3, [<place-holder>])");
+
+        sql = "select *" +
+                "from s3, unnest(a1, a2, array_map(x -> concat(x, 'abc'), a3)) as unnest(a, b, c) ;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  |  10 <-> array_map[(" +
+                "[9, VARCHAR(65533), true] -> concat[([9, VARCHAR(65533), true], 'abc'); " +
+                "args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "DictDecode(15: a3, [<place-holder>])); " +
+                "args: FUNCTION,INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable: true]");
+        assertContains(plan, "dict_col=a1,a3");
+        assertContains(plan, "  2:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, INT, VARCHAR]");
+    }
+
 }

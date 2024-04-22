@@ -40,21 +40,28 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.TestWithFeService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.FixMethodOrder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
@@ -62,6 +69,12 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     @Override
     protected void runBeforeAll() throws Exception {
+        // set some parameters to speedup test
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
         //create database db1
         createDatabase("test");
 
@@ -127,14 +140,15 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_agg");
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process agg add value column schema change
@@ -146,7 +160,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -154,7 +168,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process agg add  key column schema change
@@ -167,7 +181,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Assertions.assertEquals(jobSize, alterJobs.size());
         waitAlterJobDone(alterJobs);
 
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(11, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -175,7 +189,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process agg drop value column schema change
@@ -187,7 +201,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -195,7 +209,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process agg drop key column with replace schema change, expect exception.
@@ -206,17 +220,6 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
 
-        String addRollUpStmtStr = "alter table test.sc_agg add rollup agg_rollup(user_id, max_dwell_time);";
-        AlterTableStmt addRollUpStmt = (AlterTableStmt) parseAndAnalyzeStmt(addRollUpStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addRollUpStmt);
-        // 2. check alter job
-        Map<Long, AlterJobV2> materializedViewAlterJobs = GlobalStateMgr.getCurrentState().getRollupHandler()
-                .getAlterJobsV2();
-        waitAlterJobDone(materializedViewAlterJobs);
-        Assertions.assertEquals(1, materializedViewAlterJobs.size());
-
-        LOG.info("getIndexIdToSchema 2: {}", tbl.getIndexIdToSchema());
-
         //process agg drop value column with rollup schema change
         String dropRollUpValColStmtStr = "alter table test.sc_agg drop column max_dwell_time";
         AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
@@ -225,9 +228,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //check alter job, need create job
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
-        waitAlterJobDone(materializedViewAlterJobs);
 
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -235,17 +237,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
-
-        //process agg add mul value column schema change
-        String addMultiValColStmtStr
-                = "alter table test.sc_agg add column new_v2 int MAX default '0', add column new_v3 int MAX default '1';";
-        AlterTableStmt addMultiValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addMultiValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addMultiValColStmt);
-        jobSize++;
-        //check alter job, do not create job
-        Assertions.assertEquals(jobSize, alterJobs.size());
     }
 
     @Test
@@ -255,14 +248,15 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_uniq");
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(8, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process uniq add value column schema change
@@ -275,7 +269,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -283,7 +277,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process uniq drop val column schema change
@@ -293,7 +287,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         jobSize++;
         //check alter job
         Assertions.assertEquals(jobSize, alterJobs.size());
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(8, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -301,7 +295,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -312,14 +306,15 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_dup");
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process uniq add value column schema change
@@ -332,7 +327,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
 
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(7, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -340,7 +335,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process uniq drop val column schema change
@@ -350,7 +345,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         jobSize++;
         //check alter job
         Assertions.assertEquals(jobSize, alterJobs.size());
-        db.readLock();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
@@ -358,7 +353,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Assertions.assertNotNull(indexMeta);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -408,14 +403,15 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_pk");
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         //process set properties

@@ -37,8 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,7 +56,6 @@ import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class DatabaseTest {
 
@@ -101,24 +98,6 @@ public class DatabaseTest {
     }
 
     @Test
-    public void lockTest() {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Assert.assertFalse(db.tryWriteLock(0, TimeUnit.SECONDS));
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            Assert.assertTrue(db.tryWriteLock(0, TimeUnit.SECONDS));
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
-    }
-
-    @Test
     public void createAndDropPartitionTest() {
         Assert.assertEquals("dbTest", db.getOriginName());
         Assert.assertEquals(dbId, db.getId());
@@ -150,12 +129,6 @@ public class DatabaseTest {
         // drop not exist tableFamily
         db.dropTable("invalid");
         Assert.assertEquals(1, db.getTables().size());
-        db.dropTableWithLock("invalid");
-        Assert.assertEquals(1, db.getTables().size());
-
-        // drop normal
-        db.dropTableWithLock(table.getName());
-        Assert.assertEquals(0, db.getTables().size());
 
         db.registerTableUnlocked(table);
         db.dropTable(table.getName());

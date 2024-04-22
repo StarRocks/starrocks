@@ -135,10 +135,10 @@ public:
         ChunkPtr chunk = std::make_shared<Chunk>();
         for (size_t i = 0; i < ctxs.size(); ++i) {
             auto ctx = ctxs[i];
-            DCHECK(ctx->root()->is_slotref());
+            CHECK(ctx->root()->is_slotref());
             auto ref = ctx->root()->get_column_ref();
             auto col = ColumnHelper::create_column(ctx->root()->type(), nullable[i]);
-            DCHECK(col->accept_mutable(&filler).ok());
+            CHECK(col->accept_mutable(&filler).ok());
             chunk->append_column(std::move(col), ref->slot_id());
         }
         return chunk;
@@ -167,6 +167,20 @@ struct ASyncExecutor {
         return Status::OK();
     }
     static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+
+class BlockHoleOutputStream final : public spill::SpillOutputDataStream {
+public:
+    Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size) override {
+        _write_total_size += total_write_size;
+        return Status::OK();
+    }
+    Status flush() override { return Status::OK(); }
+    bool is_remote() const override { return false; }
+    const size_t total_size() const { return _write_total_size; }
+
+private:
+    size_t _write_total_size{};
 };
 
 using SpillProcessMetrics = spill::SpillProcessMetrics;
@@ -241,6 +255,7 @@ struct SpillerCaller {
     Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
         if (_spiller->_chunk_builder.chunk_schema()->empty()) {
             _spiller->_chunk_builder.chunk_schema()->set_schema(chunk);
+            RETURN_IF_ERROR(_spiller->_serde->prepare());
         }
         auto writer = _spiller->_writer->as<Writer>();
         return writer->template spill<TaskExecutor>(state, chunk, std::forward<MemGuard>(guard));
@@ -395,11 +410,13 @@ TEST_F(SpillTest, unsorted_process) {
         }
         ASSERT_OK(mem_table->done());
         //
+        auto output = std::make_shared<BlockHoleOutputStream>();
         workgroup::YieldContext yield_ctx;
+        yield_ctx.task_context_data = std::make_shared<spill::SpillIOTaskContext>();
         do {
             yield_ctx.time_spent_ns = 0;
             yield_ctx.need_yield = false;
-            ASSERT_OK(mem_table->finalize(yield_ctx));
+            ASSERT_OK(mem_table->finalize(yield_ctx, output));
         } while (yield_ctx.need_yield);
     }
 }

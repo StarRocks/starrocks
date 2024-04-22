@@ -1,9 +1,6 @@
 ---
 displayed_sidebar: "English"
-
 ---
-
-[toc]
 
 # ngram_search
 
@@ -61,8 +58,6 @@ mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",
 1. Currently we only support Ascii encoding.
 
 2. This function is case sensitive.
-
-
 
 # ngram_search_case_insensitive
 

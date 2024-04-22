@@ -101,7 +101,7 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_PERCENTILE:
     case TYPE_JSON:
     case TYPE_VARBINARY:
-        return string_length + sizeof(OLAP_STRING_MAX_LENGTH);
+        return string_length + sizeof(get_olap_string_max_length());
     case TYPE_ARRAY:
         return string_length;
     }
@@ -306,7 +306,6 @@ void TabletSchema::copy_from(const std::shared_ptr<const TabletSchema>& tablet_s
     TabletSchemaPB tablet_schema_pb;
     tablet_schema->to_schema_pb(&tablet_schema_pb);
     _init_from_pb(tablet_schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 void TabletColumn::add_sub_column(const TabletColumn& sub_column) {
@@ -402,16 +401,13 @@ Schema* TabletSchema::schema() const {
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::~TabletSchema() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }
@@ -712,7 +708,7 @@ std::string TabletColumn::debug_string() const {
        << ",default_value=" << (has_default_value() ? default_value() : "N/A")
        << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
        << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
-       << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
+       << ",index_length=" << static_cast<int>(_index_length) << ",is_bf_column=" << is_bf_column()
        << ",has_bitmap_index=" << has_bitmap_index() << ")";
     return ss.str();
 }
@@ -730,9 +726,10 @@ std::string TabletSchema::debug_string() const {
         }
         ss << _cols[i].debug_string();
     }
-    ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
-       << ",num_short_key_columns=" << _num_short_key_columns << ",num_rows_per_row_block=" << _num_rows_per_row_block
-       << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
+    ss << "],keys_type=" << static_cast<int32_t>(_keys_type) << ",num_columns=" << num_columns()
+       << ",num_key_columns=" << _num_key_columns << ",num_short_key_columns=" << _num_short_key_columns
+       << ",num_rows_per_row_block=" << _num_rows_per_row_block << ",next_column_unique_id=" << _next_column_unique_id
+       << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
     return ss.str();
 }
 

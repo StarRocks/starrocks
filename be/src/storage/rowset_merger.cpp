@@ -106,7 +106,8 @@ struct MergeEntry {
             if (encode_schema != nullptr) {
                 // need to encode
                 chunk_pk_column->reset_column();
-                PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
+                RETURN_IF_ERROR(PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(),
+                                                                   chunk_pk_column.get()));
             } else {
                 // just use chunk's first column
                 chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
@@ -338,14 +339,18 @@ private:
             if (res.value().empty()) {
                 entry.segment_itr = new_empty_iterator(schema, _chunk_size);
             } else {
-                entry.segment_itr = std::move(new_heap_merge_iterator(res.value()));
+                if (rowset->rowset_meta()->is_segments_overlapping()) {
+                    entry.segment_itr = std::move(new_heap_merge_iterator(res.value()));
+                } else {
+                    entry.segment_itr = std::move(new_union_iterator(res.value()));
+                }
             }
             if (sort_column) {
                 entry.encode_schema = &schema;
                 entry.chunk_pk_column = sort_column->clone_shared();
                 entry.chunk_pk_column->reserve(_chunk_size);
             }
-            if (rowsets_mask_buffer && res.value().size() > 1) {
+            if (rowsets_mask_buffer && rowset->rowset_meta()->is_segments_overlapping()) {
                 std::unique_ptr<vector<RowSourceMask>> rowset_source_masks = std::make_unique<vector<RowSourceMask>>();
                 rowsets_source_masks.emplace_back(std::move(rowset_source_masks));
                 entry.source_masks = rowsets_source_masks.back().get();
@@ -515,7 +520,11 @@ private:
                 if (segment_iters.empty()) {
                     iterators.emplace_back(new_empty_iterator(schema, _chunk_size));
                 } else {
-                    iterators.emplace_back(new_mask_merge_iterator(segment_iters, rowsets_mask_buffer[j].get()));
+                    if (rowset->rowset_meta()->is_segments_overlapping()) {
+                        iterators.emplace_back(new_mask_merge_iterator(segment_iters, rowsets_mask_buffer[j].get()));
+                    } else {
+                        iterators.emplace_back(new_union_iterator(segment_iters));
+                    }
                 }
             }
 

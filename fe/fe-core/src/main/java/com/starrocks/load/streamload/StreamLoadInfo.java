@@ -25,6 +25,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -38,6 +40,7 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -81,6 +84,7 @@ public class StreamLoadInfo {
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -249,6 +253,14 @@ public class StreamLoadInfo {
         this.logRejectedRecordNum = logRejectedRecordNum;
     }
 
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
             throws UserException {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId, timeout);
@@ -336,6 +348,15 @@ public class StreamLoadInfo {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
                 request.getFileType(), request.getFormatType());
         streamLoadInfo.setOptionalFromTSLPutRequest(request, db);
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getWarehouse() != null) {
+            warehouseName = request.getWarehouse();
+        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new UserException("Warehouse " + warehouseName + " not exist");
+        }
+        streamLoadInfo.setWarehouseId(warehouse.getId());
         return streamLoadInfo;
     }
 
@@ -421,7 +442,7 @@ public class StreamLoadInfo {
         if (request.isSetLog_rejected_record_num()) {
             logRejectedRecordNum = request.getLog_rejected_record_num();
         }
-        
+
         if (request.isSetPartial_update()) {
             partialUpdate = request.isPartial_update();
         }
@@ -483,6 +504,7 @@ public class StreamLoadInfo {
         trimSpace = routineLoadJob.isTrimspace();
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
+        warehouseId = routineLoadJob.getWarehouseId();
     }
 
     // used for stream load

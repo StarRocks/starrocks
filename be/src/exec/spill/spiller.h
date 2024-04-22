@@ -40,6 +40,13 @@
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 
+#define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
+
+#define RETURN_TRUE_IF_SPILL_TASK_ERROR(spiller) \
+    if (!(spiller)->task_status().ok()) {        \
+        return true;                             \
+    }
+
 namespace starrocks::spill {
 
 // some metrics for spill
@@ -105,6 +112,12 @@ public:
     RuntimeProfile::Counter* block_count = nullptr;
     RuntimeProfile::Counter* local_block_count = nullptr;
     RuntimeProfile::Counter* remote_block_count = nullptr;
+
+    // the number of read io count
+    RuntimeProfile::Counter* read_io_count = nullptr;
+    RuntimeProfile::Counter* local_read_io_count = nullptr;
+    RuntimeProfile::Counter* remote_read_io_count = nullptr;
+
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
