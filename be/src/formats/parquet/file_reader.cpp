@@ -274,7 +274,7 @@ Status FileReader::_build_split_tasks() {
         // there could be holes between row groups.
         // but this does not affect our scan range filter logic.
         // because in `_select_row_group`, we check if `start offset of row group` is in this range
-        // so as long as `end_offset > start_offset && end_offset <= start_offset(next_group)`, it should works.
+        // so as long as `end_offset > start_offset && end_offset <= start_offset(next_group)`, it's ok
         if ((i + 1) < row_group_size) {
             const tparquet::RowGroup& next_row_group = _file_metadata->t_metadata().row_groups[i + 1];
             DCHECK(end_offset <= _get_row_group_start_offset(next_row_group));
