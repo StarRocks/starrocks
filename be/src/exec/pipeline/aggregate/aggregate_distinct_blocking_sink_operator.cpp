@@ -68,15 +68,19 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
     {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         bool limit_with_no_agg = _aggregator->limit() != -1;
+        auto size = _aggregator->hash_set_variant().size();
         if (limit_with_no_agg) {
-            auto size = _aggregator->hash_set_variant().size();
-            if (size >= _aggregator->limit()) {
+            if (size >= _aggregator->limit() || (_aggregator->params()->enable_pipeline_share_limit &&
+                                                 _shared_limit_countdown.load(std::memory_order_relaxed) <= 0)) {
                 (void)set_finishing(state);
                 return Status::OK();
             }
         }
         RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
+        if (limit_with_no_agg && _aggregator->params()->enable_pipeline_share_limit) {
+            _shared_limit_countdown.fetch_sub(_aggregator->hash_set_variant().size() - size, std::memory_order_relaxed);
+        }
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
         _aggregator->update_num_input_rows(chunk->num_rows());
