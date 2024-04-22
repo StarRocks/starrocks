@@ -1247,7 +1247,7 @@ public class QueryAnalyzer {
         @Override
         public Expr visitSlot(SlotRef slotRef, Void context) {
             // We treat it as column name rather than alias when table name is specified
-            if (slotRef.getQualifiedName().getParts().size() > 1) {
+            if (slotRef.getTblNameWithoutAnalyzed() != null) {
                 return slotRef;
             }
             // Alias is case-insensitive
