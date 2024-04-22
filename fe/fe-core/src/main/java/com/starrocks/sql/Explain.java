@@ -211,6 +211,9 @@ public class Explain {
                     "/" +
                     totalTabletsNum;
             buildOperatorProperty(sb, partitionAndBucketInfo, context.step);
+            if (scan.getGtid() > 0) {
+                buildOperatorProperty(sb, "gtid: " + scan.getGtid(), context.step);
+            }
             buildCommonProperty(sb, scan, context.step);
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
         }

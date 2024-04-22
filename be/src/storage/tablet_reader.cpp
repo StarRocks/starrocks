@@ -95,7 +95,8 @@ Status TabletReader::prepare() {
     SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
     Status st = Status::OK();
     // Non-empty rowsets indicate that it is captured before creating this TabletReader.
-    if (_rowsets.empty()) {
+    // _use_gtid is used to indicate that the rowsets are captured by gtid.
+    if (_rowsets.empty() && !_use_gtid) {
         std::shared_lock l(_tablet->get_header_lock());
         st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
         if (!st.ok()) {

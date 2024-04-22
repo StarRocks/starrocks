@@ -446,6 +446,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.transaction.GtidGenerator;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -459,6 +460,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -4818,6 +4821,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 sb.append(" ");
             }
             tableRelation.setTemporalClause(sb.toString());
+        }
+
+        if (context.BEFORE() != null) {
+            String ts = ((StringLiteral) visit(context.ts)).getStringValue();
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            try {
+                tableRelation.setGtid(GtidGenerator.getGtid(dateFormat.parse(ts).getTime()));
+            } catch (ParseException e) {
+                tableRelation.setGtid(Long.parseLong(ts));
+            }
         }
 
         return tableRelation;

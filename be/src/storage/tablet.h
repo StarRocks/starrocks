@@ -157,6 +157,8 @@ public:
     [[nodiscard]] Status capture_consistent_rowsets(const Version& spec_version,
                                                     vector<RowsetSharedPtr>* rowsets) const;
 
+    [[nodiscard]] Status capture_consistent_rowsets(const int64_t gtid, vector<RowsetSharedPtr>* rowsets) const;
+
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
     [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
@@ -406,6 +408,9 @@ private:
     // These _stale rowsets are been removed when rowsets' pathVersion is expired,
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
+
+    // gtid -> version
+    std::map<int64_t, int64_t> _gtid_to_version_map;
 
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;

@@ -146,6 +146,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     _rowset_meta_pb->set_num_segments(_num_segment);
     // newly created rowset do not have rowset_id yet, use 0 instead
     _rowset_meta_pb->set_rowset_seg_id(0);
+    _rowset_meta_pb->set_gtid(_context.gtid);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         DCHECK(_delfile_idxes.size() == _num_delfile);

@@ -1188,6 +1188,9 @@ public class DatabaseTransactionMgr {
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
 
+        // update global transaction id
+        transactionState.setGlobalTransactionId(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+
         Iterator<TableCommitInfo> tableCommitInfoIterator = transactionState.getIdToTableCommitInfos().values().iterator();
         while (tableCommitInfoIterator.hasNext()) {
             TableCommitInfo tableCommitInfo = tableCommitInfoIterator.next();
