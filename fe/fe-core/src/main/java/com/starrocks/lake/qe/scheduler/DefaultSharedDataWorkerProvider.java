@@ -63,7 +63,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         @Override
         public DefaultSharedDataWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                                        boolean preferComputeNode,
-                                                                       int numUsedComputeNodes, long warehouseId) {
+                                                                       int numUsedComputeNodes,
+                                                                       String computationFragmentSchedulingPolicy,
+                                                                       long warehouseId) {
 
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
             List<Long> computeNodeIds =

@@ -92,10 +92,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
                                                              int numUsedComputeNodes,
+                                                             String computationFragmentSchedulingPolicy,
                                                              long warehouseId) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseId);
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, computationFragmentSchedulingPolicy, warehouseId);
 
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
@@ -310,13 +311,17 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes,
+                                                                        String computationFragmentSchedulingPolicy,
                                                                         long warehouseId) {
+        //define Node Pool
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+
+        //add CN to Node Pool
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
         if (numUsedComputeNodes <= 0 || numUsedComputeNodes >= idToComputeNode.size()) {
-            return idToComputeNode;
+            computeNodes = new HashMap<>(idToComputeNode);
         } else {
-            Map<Long, ComputeNode> computeNodes = new HashMap<>(numUsedComputeNodes);
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
                         getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
@@ -326,8 +331,26 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 }
                 computeNodes.put(computeNode.getId(), computeNode);
             }
-            return ImmutableMap.copyOf(computeNodes);
         }
+
+        //add BE to Node Pool
+        if (computationFragmentSchedulingPolicy.equals("all_nodes")) {
+            ImmutableMap<Long, ComputeNode> idToBackend
+                    = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+            for (int i = 0; i < idToBackend.size(); i++) {
+                ComputeNode backend =
+                        getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
+                Preconditions.checkNotNull(backend);
+                if (!isWorkerAvailable(backend)) {
+                    continue;
+                }
+                computeNodes.put(backend.getId(), backend);
+            }
+        }
+
+        //return Node Pool
+        return ImmutableMap.copyOf(computeNodes);
+
     }
 
     private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,

@@ -33,13 +33,15 @@ public interface WorkerProvider {
         /**
          * Capture the available workers from {@code systemInfoService}, which are alive and not in the blacklist.
          *
-         * @param systemInfoService   The service which provides all the backend nodes and compute nodes.
-         * @param preferComputeNode   Whether to prefer using compute nodes over backend nodes.
-         * @param numUsedComputeNodes The maximum number of used compute nodes.
+         * @param systemInfoService                   The service which provides all the backend nodes and compute nodes.
+         * @param preferComputeNode                   Whether to prefer using compute nodes over backend nodes.
+         * @param numUsedComputeNodes                 The maximum number of used compute nodes.
+         * @param computationFragmentSchedulingPolicy The schedule policy of backend and compute nodes.
          */
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
+                                               String computationFragmentSchedulingPolicy,
                                                long warehouseId);
     }
 
@@ -53,6 +55,7 @@ public interface WorkerProvider {
 
     /**
      * Select the worker with the given id.
+     *
      * @param workerId The id of the worker to choose.
      * @throws NonRecoverableException if there is no available worker with the given id.
      */

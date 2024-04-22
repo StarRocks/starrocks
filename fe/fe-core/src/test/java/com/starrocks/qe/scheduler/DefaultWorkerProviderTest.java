@@ -123,7 +123,7 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true,
-                            numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            numUsedComputeNodes, "compute_nodes_only", WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -140,6 +140,69 @@ public class DefaultWorkerProviderTest {
                         numAvailableComputeNodes++;
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * The schedule policy is suitable in shared nothing mode.
+     */
+    @Test
+    public void testSelectBackendAndComputeNode() {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getIdToBackend() {
+                return availableId2Backend;
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
+                return availableId2ComputeNode;
+            }
+        };
+
+        DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+        DefaultWorkerProvider workerProvider;
+        List<Integer> numUsedComputeNodesList = ImmutableList.of(-1, 0, 2, 4);
+
+        // test ComputeNode only
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true, numUsedComputeNodes, "compute_nodes_only", WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            for (Long selectedWorkerId : selectedWorkerIdsList) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
+                        availableId2ComputeNode.containsKey(selectedWorkerId));
+            }
+        }
+        // test Backend only
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            false, numUsedComputeNodes, "compute_nodes_only", WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
+            for (Long selectedWorkerId : selectedWorkerIdsList) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
+                        availableId2Backend.containsKey(selectedWorkerId));
+            }
+        }
+        // test Backend and ComputeNode
+        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true, numUsedComputeNodes, "all_nodes", WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+            //test Backend
+            for (int i = 0; i < availableId2Backend.size(); i++) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
+                        availableId2Backend.containsKey(selectedWorkerIdsList.get(i)));
+            }
+            //test ComputeNode
+            for (int i = availableId2Backend.size(); i < selectedWorkerIdsList.size(); i++) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
+                        availableId2ComputeNode.containsKey(selectedWorkerIdsList.get(i)));
             }
         }
     }
