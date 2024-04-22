@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,7 +30,7 @@ public class MockedMetadataMgr extends MetadataMgr {
     private final LocalMetastore localMetastore;
 
     public MockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
     }
 
