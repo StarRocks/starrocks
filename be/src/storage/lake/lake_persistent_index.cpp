@@ -246,6 +246,16 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
     return Status::OK();
 }
 
+Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
+                                    const std::vector<uint32_t>& replace_indexes) {
+    std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
+    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _version.major_number()));
+    if (is_memtable_full()) {
+        return flush_memtable();
+    }
+    return Status::OK();
+}
+
 Status LakePersistentIndex::prepare_merging_iterator(
         const TabletMetadata& metadata, TxnLogPB* txn_log,
         std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,

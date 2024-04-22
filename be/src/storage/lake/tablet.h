@@ -84,7 +84,7 @@ public:
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
-                                                       ThreadPool* flush_pool = nullptr);
+                                                       ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 
     const std::shared_ptr<const TabletSchema> tablet_schema() const override;
 
