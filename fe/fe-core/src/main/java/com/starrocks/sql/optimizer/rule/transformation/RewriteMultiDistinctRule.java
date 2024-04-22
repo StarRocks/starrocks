@@ -179,6 +179,11 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         if (expr.getStatistics() != null) {
             return;
         }
+
+        for (OptExpression child : expr.getInputs()) {
+            calculateStatistics(child, context);
+        }
+
         // Do not calculate statistics for LogicalTreeAnchorOperator
         if (expr.getOp() instanceof LogicalTreeAnchorOperator) {
             return;
