@@ -520,10 +520,10 @@ The commands affected by this variable are as follows:
 ### group_concat_max_len
 
 * **Description**: The maximum length of string returned by the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function.
-**Default**: 1024
-**Min value**: 4
-**Unit**: Characters
-**Data type**: Long
+* **Default**: 1024
+* **Min value**: 4
+* **Unit**: Characters
+* **Data type**: Long
 
 ### hash_join_push_down_right_table
 

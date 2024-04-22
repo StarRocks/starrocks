@@ -151,8 +151,8 @@ SELECT /*+ SET_VAR
 
 * 描述：用于设定大查询的阈值。当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_threshold` 设定的阈值时，则会生成 Profile。
 
-  注意：在 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，引入了 `big_query_profile_second_threshold` 参数，用于设定大查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
-* 默认值：0s
+  NOTE：在 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，引入了 `big_query_profile_second_threshold` 参数，用于设定大查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
+* 默认值：0
 * 单位：秒
 * 类型：String
 * 引入版本：v3.1
@@ -241,7 +241,7 @@ SELECT /*+ SET_VAR
 
 ### enable_materialized_view_union_rewrite
 
-* 描述：是否启用物化视图Union Rewrite： 如果设置为true，则在物化视图的谓词不能满足查询的谓词时，尝试使用UNION ALL进行补偿。
+* 描述：是否启用物化视图 Union Rewrite： 如果设置为true，则在物化视图的谓词不能满足查询的谓词时，尝试使用 UNION ALL 进行补偿。
 * 默认值：true
 * 引入版本：v2.5
 
@@ -344,20 +344,15 @@ SELECT /*+ SET_VAR
 
 ### enable_insert_strict
 
-用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
+* 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
 默认值为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
+* 默认值：true
 
 ### enable_materialized_view_for_insert
 
 * 描述：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
 * 默认值：false，即默认关闭该场景下的物化视图查询改写。
 * 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
-
-### enable_materialized_view_union_rewrite
-
-* 描述：是否开启物化视图 Union 改写。
-* 默认值：true
-* 引入版本：v2.5
 
 ### enable_rule_based_materialized_view_rewrite
 
@@ -567,16 +562,18 @@ SELECT /*+ SET_VAR
 
 ### load_mem_limit
 
-用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `query_mem_limit` 作为导入操作的内存限制。
+* 描述：用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `query_mem_limit` 作为导入操作的内存限制。
 
-这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `query_mem_limit`。否则，INSERT 的查询部分内存限制为 `query_mem_limit`，而导入部分限制为 `load_mem_limit`。
+  这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `query_mem_limit`。否则，INSERT 的查询部分内存限制为 `query_mem_limit`，而导入部分限制为 `load_mem_limit`。
 
-其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
+  其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
+
+* 默认值：0
+* 单位：Byte
 
 ### log_rejected_record_num（3.1 及以后）
 
-指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。
-
+* 描述：指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。取值范围：`0`、`-1`、大于 0 的正整数。
 * 取值为 `0` 表示不记录过滤掉的数据行。
 * 取值为 `-1` 表示记录所有过滤掉的数据行。
 * 取值为大于 0 的正整数（比如 `n`）表示每个 BE 节点上最多可以记录 `n` 条过滤掉的数据行。
