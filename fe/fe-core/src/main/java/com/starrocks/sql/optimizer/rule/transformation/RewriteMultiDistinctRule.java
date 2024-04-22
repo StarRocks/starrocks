@@ -14,8 +14,12 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+>>>>>>> f9748f095d ([BugFix] Fix cherry pick codes conflicts  (#44525))
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -25,6 +29,13 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> f9748f095d ([BugFix] Fix cherry pick codes conflicts  (#44525))
 
 import java.util.HashMap;
 import java.util.List;
@@ -34,10 +45,14 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 
 public class RewriteMultiDistinctRule extends TransformationRule {
+<<<<<<< HEAD
     private static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
             new ImplicitCastRule()
     );
     private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+=======
+    private static final Logger LOG = LogManager.getLogger(RewriteMultiDistinctRule.class);
+>>>>>>> f9748f095d ([BugFix] Fix cherry pick codes conflicts  (#44525))
 
     public RewriteMultiDistinctRule() {
         super(RuleType.TF_REWRITE_MULTI_DISTINCT,
@@ -169,6 +184,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 DEFAULT_TYPE_CAST_RULE);
     }
 
+<<<<<<< HEAD
     private CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
         Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
                 oldFunctionCall.getFunction(), oldFunctionCall.getChild(0).getType());
@@ -176,5 +192,32 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 new CallOperator(
                         FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
                         oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
+=======
+    private void calculateStatistics(OptExpression expr, OptimizerContext context) {
+        // Avoid repeated calculate
+        if (expr.getStatistics() != null) {
+            return;
+        }
+
+        for (OptExpression child : expr.getInputs()) {
+            calculateStatistics(child, context);
+        }
+
+        // Do not calculate statistics for LogicalTreeAnchorOperator
+        if (expr.getOp() instanceof LogicalTreeAnchorOperator) {
+            return;
+        }
+
+        ExpressionContext expressionContext = new ExpressionContext(expr);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
+                expressionContext, context.getColumnRefFactory(), context);
+        try {
+            statisticsCalculator.estimatorStats();
+        } catch (Exception e) {
+            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            return;
+        }
+        expr.setStatistics(expressionContext.getStatistics());
+>>>>>>> f9748f095d ([BugFix] Fix cherry pick codes conflicts  (#44525))
     }
 }
