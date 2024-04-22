@@ -35,6 +35,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +47,7 @@ import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficie
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
 public class RewriteMultiDistinctRule extends TransformationRule {
+    private static final Logger LOG = LogManager.getLogger(RewriteMultiDistinctRule.class);
 
     public RewriteMultiDistinctRule() {
         super(RuleType.TF_REWRITE_MULTI_DISTINCT,
@@ -181,14 +184,15 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             return;
         }
 
-        for (OptExpression child : expr.getInputs()) {
-            calculateStatistics(child, context);
-        }
-
         ExpressionContext expressionContext = new ExpressionContext(expr);
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
                 expressionContext, context.getColumnRefFactory(), context);
-        statisticsCalculator.estimatorStats();
+        try {
+            statisticsCalculator.estimatorStats();
+        } catch (Exception e) {
+            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            return;
+        }
         expr.setStatistics(expressionContext.getStatistics());
     }
 }
