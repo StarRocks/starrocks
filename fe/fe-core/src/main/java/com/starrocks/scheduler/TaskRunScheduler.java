@@ -14,7 +14,9 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
@@ -25,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.function.Consumer;
 
@@ -39,13 +42,16 @@ public class TaskRunScheduler {
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
     private final Map<Long, Queue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
+
     // pending TaskRun Queue, compared by priority and created time
-    private final PriorityBlockingQueue<TaskRun> pendingTaskRunQueue = new PriorityBlockingQueue<>();
+    private final Queue<TaskRun> pendingTaskRunQueue = new PriorityBlockingQueue<>();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
     private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
 
+
+    ////////// pending task run map //////////
     /**
      * Get the count of pending task run
      */
@@ -54,26 +60,22 @@ public class TaskRunScheduler {
     }
 
     /**
-     * Get the count of running task run
-     * @param taskId: task id
+     * Get the pending task run queue
      */
-    public TaskRun getRunningTaskRun(long taskId) {
-        return runningTaskRunMap.get(taskId);
+    public List<TaskRun> getImmPendingTaskRuns() {
+        return ImmutableList.copyOf(pendingTaskRunQueue);
     }
 
     /**
      * @param taskId: task id
      * @return: pending task run queue
      */
-    public Queue<TaskRun> getPendingTaskRunsByTaskId(long taskId) {
-        return pendingTaskRunMap.get(taskId);
-    }
-
-    /**
-     * Get the pending task run queue
-     */
-    public Queue<TaskRun> getPendingTaskRuns() {
-        return pendingTaskRunQueue;
+    public List<TaskRun> getImmPendingTaskRunsByTaskId(long taskId) {
+        Queue<TaskRun> pendingTaskRuns = pendingTaskRunMap.get(taskId);
+        if (pendingTaskRuns == null) {
+            return null;
+        }
+        return ImmutableList.copyOf(pendingTaskRuns);
     }
 
     /**
@@ -95,30 +97,50 @@ public class TaskRunScheduler {
         return true;
     }
 
-    /**
-     * Remove a task run from pending queue
-     * @param taskRun: task run
-     * @return true if remove success, false if remove failed
-     */
-    public boolean removePendingTaskRunFromQueue(TaskRun taskRun) {
+    public void removePendingTaskRun(TaskRun taskRun) {
         if (taskRun == null) {
-            return false;
+            return;
         }
-        return pendingTaskRunQueue.remove(taskRun);
+        LOG.warn("remove pending task run: {}", taskRun);
+
+        if (!pendingTaskRunQueue.remove(taskRun)) {
+            LOG.warn("remove pending task run from queue failed: {}", taskRun);
+        }
+
+        Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskRun.getTaskId());
+        if (!taskRunQueue.remove(taskRun)) {
+            LOG.warn("remove pending task run from pending map failed: {}", taskRun);
+        }
     }
 
-    /**
-     * Return the current running task run map.
-     */
-    public Map<Long, TaskRun> getRunningTaskRunMap() {
-        return runningTaskRunMap;
+    public void removePendingTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        LOG.warn("remove pending task: {}", task);
+
+        Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(task.getId());
+        if (taskRunQueue.isEmpty()) {
+            return;
+        }
+
+        for (TaskRun taskRun : taskRunQueue) {
+            removePendingTaskRun(taskRun);
+        }
     }
 
-    /**
-     * Return the current pendign task run map.
-     */
-    public Map<Long, Queue<TaskRun>> getPendingTaskRunMap() {
-        return pendingTaskRunMap;
+    public TaskRun getTaskRunByQueryId(Long taskId, String queryId) {
+        if (taskId == null || queryId == null) {
+            return null;
+        }
+        Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
+        if (taskRunQueue == null) {
+            return null;
+        }
+        return taskRunQueue.stream()
+                .filter(taskRun -> queryId.equals(taskRun.getStatus().getQueryId()))
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -171,6 +193,48 @@ public class TaskRunScheduler {
         for (TaskRun taskRun : runningTaskRuns) {
             pendingTaskRunQueue.offer(taskRun);
         }
+    }
+
+    public long getTaskIdPendingTaskRunCount(long taskId) {
+        List<TaskRun> pendingTaskRuns = getImmPendingTaskRunsByTaskId(taskId);
+        return  pendingTaskRuns == null ? 0L : pendingTaskRuns.size();
+    }
+
+    //////////// running task run map ////////////
+
+    public void addRunningTaskRun(TaskRun taskRun) {
+        if (taskRun == null) {
+            return;
+        }
+        runningTaskRunMap.put(taskRun.getTaskId(), taskRun);
+    }
+
+    public Set<Long> getImmRunningTaskIds() {
+        return Sets.newHashSet(runningTaskRunMap.keySet());
+    }
+
+    public TaskRun removeRunningTask(long taskId) {
+        return runningTaskRunMap.remove(taskId);
+    }
+
+    public Set<TaskRun> getImmRunningTaskRuns() {
+        return Sets.newHashSet(runningTaskRunMap.values());
+    }
+
+    public boolean isTaskRunning(long taskId) {
+        return runningTaskRunMap.containsKey(taskId);
+    }
+
+    public long getRunningTaskCount() {
+        return runningTaskRunMap.size();
+    }
+
+    /**
+     * Get the count of running task run
+     * @param taskId: task id
+     */
+    public TaskRun getRunningTaskRun(long taskId) {
+        return runningTaskRunMap.get(taskId);
     }
 
     /**

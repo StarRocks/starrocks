@@ -29,7 +29,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-import java.util.Queue;
 import java.util.Set;
 
 public class TaskRunSchedulerTest {
@@ -93,13 +92,13 @@ public class TaskRunSchedulerTest {
             taskRuns.add(taskRun);
             scheduler.addPendingTaskRun(taskRun);
         }
-        Assert.assertTrue(scheduler.getPendingTaskRuns().size() == N);
+        Assert.assertTrue(scheduler.getImmPendingTaskRuns().size() == N);
 
-        Queue<TaskRun> queue = scheduler.getPendingTaskRuns();
+        List<TaskRun> queue = scheduler.getImmPendingTaskRuns();
         Assert.assertEquals(N, queue.size());
 
         for (int i = 0; i < N; i++) {
-            TaskRun taskRun = queue.poll();
+            TaskRun taskRun = queue.get(i);
             Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - i)));
         }
     }
@@ -117,13 +116,13 @@ public class TaskRunSchedulerTest {
             taskRuns.add(taskRun);
             scheduler.addPendingTaskRun(taskRun);
         }
-        Assert.assertTrue(scheduler.getPendingTaskRuns().size() == N);
+        Assert.assertTrue(scheduler.getImmPendingTaskRuns().size() == N);
 
-        Queue<TaskRun> queue = scheduler.getPendingTaskRuns();
+        List<TaskRun> queue = scheduler.getImmPendingTaskRuns();
         Assert.assertEquals(N, queue.size());
 
         for (int i = 0; i < N; i++) {
-            TaskRun taskRun = queue.poll();
+            TaskRun taskRun = queue.get(i);
             Assert.assertTrue(taskRun.equals(taskRuns.get(i)));
         }
     }
@@ -144,7 +143,7 @@ public class TaskRunSchedulerTest {
         scheduler.scheduledPendingTaskRun(taskRun -> {
             Assert.assertTrue(runningTaskRuns.contains(taskRun));
         });
-        Assert.assertTrue(scheduler.getRunningTaskRunMap().size() == Config.task_runs_concurrency);
+        Assert.assertTrue(scheduler.getRunningTaskCount() == Config.task_runs_concurrency);
         Assert.assertTrue(scheduler.getPendingQueueCount() == N - Config.task_runs_concurrency);
         for (int i = 0; i < Config.task_runs_concurrency; i++) {
             Assert.assertTrue(scheduler.getRunnableTaskRun(i).equals(taskRuns.get(i)));
@@ -171,7 +170,7 @@ public class TaskRunSchedulerTest {
             Assert.assertTrue(runningTaskRuns.contains(taskRun));
         });
         // running queue only support one task with same task id
-        Assert.assertTrue(scheduler.getRunningTaskRunMap().size() == 1);
+        Assert.assertTrue(scheduler.getRunningTaskCount() == 1);
         Assert.assertTrue(scheduler.getPendingQueueCount() == 9);
 
         System.out.println(scheduler);

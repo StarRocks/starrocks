@@ -45,7 +45,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
 
 public class TaskManagerTest {
@@ -237,12 +236,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun2);
 
-        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
-        TaskRun taskRun = taskRuns.poll();
-        Assert.assertEquals(10, taskRun.getStatus().getPriority());
-
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId);
+        Assert.assertTrue(taskRuns != null);
+        Assert.assertEquals(1, taskRuns.size());
+        Assert.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
     }
 
     @Test
@@ -274,11 +272,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun2);
         taskRunManager.arrangeTaskRun(taskRun1);
 
-        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
-        TaskRun taskRun = taskRuns.poll();
-        Assert.assertEquals(10, taskRun.getStatus().getPriority());
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId);
+        Assert.assertTrue(taskRuns != null);
+        Assert.assertEquals(1, taskRuns.size());
+        Assert.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
 
     }
 
@@ -311,10 +309,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun2);
 
-        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
-        TaskRun taskRun = taskRuns.poll();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId);
+        Assert.assertTrue(taskRuns != null);
+        Assert.assertEquals(1, taskRuns.size());
+        TaskRun taskRun = taskRuns.get(0);
         Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
@@ -347,10 +346,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun2);
         taskRunManager.arrangeTaskRun(taskRun1);
 
-        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
-        TaskRun taskRun = taskRuns.poll();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId);
+        Assert.assertTrue(taskRuns != null);
+        Assert.assertEquals(1, taskRuns.size());
+        TaskRun taskRun = taskRuns.get(0);
         Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
@@ -392,8 +392,10 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun3);
 
-        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId);
+        Assert.assertTrue(taskRuns != null);
+        Assert.assertEquals(3, taskRuns.size());
     }
 
     @Test
@@ -419,8 +421,8 @@ public class TaskManagerTest {
                 Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
         taskManager.replayUpdateTaskRun(change1);
 
-        Map<Long, TaskRun> runningTaskRunMap = taskManager.getTaskRunManager().getRunningTaskRunMap();
-        Assert.assertEquals(1, runningTaskRunMap.values().size());
+        TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+        Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
 
     }
 
@@ -511,52 +513,53 @@ public class TaskManagerTest {
         result = taskRunManager.submitTaskRun(taskRun2, taskRun2.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
-        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(2, pendingTaskRunMap.get(taskId).size());
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId);
+        Assert.assertTrue(taskRuns != null);
+        Assert.assertEquals(2, taskRunScheduler.getPendingQueueCount());
+        Assert.assertEquals(2, taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId).size());
 
         // If it's a sync refresh, no merge redundant anyway
         TaskRun taskRun3 = makeTaskRun(taskId, task, makeExecuteOption(false, true));
         result = taskRunManager.submitTaskRun(taskRun3, taskRun3.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-
-        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
-
+        Assert.assertEquals(3, taskRunScheduler.getPendingQueueCount());
+        Assert.assertEquals(3, taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId).size());
         // merge it
         TaskRun taskRun4 = makeTaskRun(taskId, task, makeExecuteOption(true, false));
         result = taskRunManager.submitTaskRun(taskRun4, taskRun4.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
-        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
+        Assert.assertEquals(3, taskRunScheduler.getPendingQueueCount());
+        Assert.assertEquals(3, taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId).size());
 
         // no merge it
         TaskRun taskRun5 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun5, taskRun5.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(4, pendingTaskRunMap.get(taskId).size());
+        Assert.assertEquals(4, taskRunScheduler.getPendingQueueCount());
+        Assert.assertEquals(4, taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId).size());
 
         for (int i = 4; i < Config.task_runs_queue_length; i++) {
             TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(false, false));
             result = taskRunManager.submitTaskRun(taskRun, taskRun.getExecuteOption());
             Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-            pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-            Assert.assertEquals(i + 1, pendingTaskRunMap.get(taskId).size());
+            Assert.assertEquals(i + 1, taskRunScheduler.getPendingQueueCount());
+            Assert.assertEquals(i + 1, taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId).size());
         }
         // no assign it: exceed queue's size
         TaskRun taskRun6 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun6, taskRun6.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(Config.task_runs_queue_length, pendingTaskRunMap.get(taskId).size());
+        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
+        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId).size());
 
         // no assign it: exceed queue's size
         TaskRun taskRun7 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun7, taskRun7.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(Config.task_runs_queue_length, pendingTaskRunMap.get(taskId).size());
+        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
+        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId).size());
     }
 
 
