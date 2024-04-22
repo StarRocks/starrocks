@@ -416,7 +416,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
         !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
         _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema = TabletSchema::copy(_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+        _tablet_schema =
+                TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
     } else {
         _tablet_schema = _tablet->tablet_schema();
     }

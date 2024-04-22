@@ -105,7 +105,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             TabletSchemaCSPtr tablet_schema;
             if (request.__isset.columns_desc && !request.columns_desc.empty() &&
                 request.columns_desc[0].col_unique_id >= 0) {
-                tablet_schema = TabletSchema::copy(tablet_var.tablet->tablet_schema(), request.columns_desc);
+                tablet_schema = TabletSchema::copy(*tablet_var.tablet->tablet_schema(), request.columns_desc);
             } else {
                 tablet_schema = tablet_var.tablet->tablet_schema();
             }
@@ -122,7 +122,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
 
     TabletSchemaCSPtr tablet_schema;
     if (request.__isset.columns_desc && !request.columns_desc.empty() && request.columns_desc[0].col_unique_id >= 0) {
-        tablet_schema = TabletSchema::copy(tablet_vars->at(0).tablet->tablet_schema(), request.columns_desc);
+        tablet_schema = TabletSchema::copy(*tablet_vars->at(0).tablet->tablet_schema(), request.columns_desc);
     } else {
         tablet_schema = tablet_vars->at(0).tablet->tablet_schema();
     }
