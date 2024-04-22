@@ -14,7 +14,7 @@ Fixed the following issue:
 
 - The privileges of external tables cannot be found due to incompatibility issues. [#44030](https://github.com/StarRocks/starrocks/pull/44030)
 
-## 3.2.5 (Deprecated)
+## 3.2.5 (Yanked)
 
 Release date: April 12, 2024
 
@@ -60,7 +60,7 @@ Fixed the following issues:
 - CNs crash when the Cross-cluster Data Migration Tool is used to migrate Primary Key tables to a shared-data cluster. [#42260](https://github.com/StarRocks/starrocks/pull/42260)
 - The partition ranges of the external catalog-based asynchronous materialized views are not consecutive. [#41957](https://github.com/StarRocks/starrocks/pull/41957)
 
-## 3.2.4 (Deprecated)
+## 3.2.4 (Yanked)
 
 Release date: March 12, 2024
 
