@@ -113,8 +113,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
-        return normal.listPartitionNames(databaseName, tableName);
+    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+        return normal.listPartitionNames(databaseName, tableName, snapshotId);
     }
 
     @Override
