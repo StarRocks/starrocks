@@ -595,6 +595,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
                 }
 
                 iter_opts.read_file = _shared_buffered_input_stream.get();
+                _column_files[cid] = _shared_buffered_input_stream;
             } else {
                 auto shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(
                         rfile->stream(), _segment->file_name(), file_size);
