@@ -89,13 +89,9 @@ jobs:
               [[ "$GITHUB_REPOSITORY" == 'StarRocks/starrocks' ]] && all_linux=true
             elif [[ "${{ github.event.schedule }}" == "30 0 * * 1-5" ]]; then
               branch=main
-<<<<<<< HEAD
-              all_linux=true
-=======
               if [[ `date +%u` -eq 1 || `date +%u` -eq 4 ]]; then
                 all_linux=true
               fi
->>>>>>> acd0ba76e6 ([Tool] Add issue checker for feature prs (#44542))
             else
               branch=main
             fi
