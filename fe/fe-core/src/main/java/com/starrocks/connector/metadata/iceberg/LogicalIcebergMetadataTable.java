@@ -61,4 +61,8 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                 originTable,
                 MetadataTableType.LOGICAL_ICEBERG_METADATA);
     }
+
+    public List<Column> getPlaceHolderColumns() {
+        return PLACEHOLDER_COLUMNS;
+    }
 }

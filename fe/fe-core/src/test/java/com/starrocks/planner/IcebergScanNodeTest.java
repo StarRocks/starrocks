@@ -20,15 +20,16 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.TableTestBase;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
@@ -37,8 +38,8 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 
-import org.apache.iceberg.DataFile;
-import org.apache.iceberg.DataFiles;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
@@ -133,6 +134,20 @@ public class IcebergScanNodeTest extends TableTestBase {
         Assert.assertEquals(2147473647, hdfsScanRange.delete_column_slot_ids.get(0).intValue());
         Assert.assertEquals(1, hdfsScanRange.delete_column_slot_ids.size());
         Assert.assertEquals(1, eqTupleDesc.getSlots().size());
+    }
+
+    @Test
+    public void testIcebergMetadataScanNode() throws Exception {
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        String sql = "explain select file_path from iceberg_catalog.db.t1$logical_iceberg_metadata;";
+        String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
+        Assert.assertTrue(plan.contains("0:IcebergMetadataScanNode"));
     }
 
     public void testEqualityDeleteWithUnsupportedFormat() throws UserException {
