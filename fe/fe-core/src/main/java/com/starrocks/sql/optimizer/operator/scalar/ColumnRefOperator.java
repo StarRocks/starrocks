@@ -34,14 +34,12 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final int id;
     private final String name;
     private boolean nullable;
-    private boolean isMatchChild;
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isMatchChild = false;
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
@@ -50,7 +48,6 @@ public final class ColumnRefOperator extends ScalarOperator {
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isMatchChild = false;
     }
 
     public int getId() {
@@ -78,14 +75,6 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     public void setNullable(boolean nullable) {
         this.nullable = nullable;
-    }
-
-    public boolean isMatchChild() {
-        return this.isMatchChild;
-    }
-
-    public void setIsMatchChild(boolean isMatchChild) {
-        this.isMatchChild = isMatchChild;
     }
 
     @Override

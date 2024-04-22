@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
@@ -660,9 +661,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-            if (variable.isMatchChild()) {
-                matchChildren.union(variable);
-            }
             // return actual dict-column
             if (allDictColumnRefs.contains(variable)) {
                 return variable;
@@ -748,6 +746,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
+            return merge(visitChildren(operator, context), operator);
+        }
+
+        @Override
+        public ScalarOperator visitMatchExprOperator(MatchExprOperator operator, Void context) {
+            matchChildren.union(operator.getChildren().get(0));
             return merge(visitChildren(operator, context), operator);
         }
     }
