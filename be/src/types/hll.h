@@ -163,9 +163,6 @@ private:
 private:
     void _convert_explicit_to_register();
 
-    // absorb other registers into this registers
-    void _merge_registers(uint8_t* other_registers);
-
     // update one hash value into this registers
     void _update_registers(uint64_t hash_value) {
         // Use the lower bits to index into the number of streams and then
