@@ -111,12 +111,26 @@ Status TabletReader::do_get_next(Chunk* chunk) {
     return Status::OK();
 }
 
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+    return _collect_iter->get_next(chunk, rssid_rowids);
+}
+
 Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     DCHECK(_is_vertical_merge);
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                                 std::vector<uint64_t>* rssid_rowids) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
+    return Status::OK();
+}
+
+>>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
 // TODO: support
 //  1. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
@@ -276,7 +290,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = new_heap_merge_iterator(seg_iters, (keys_type == PRIMARY_KEYS));
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {

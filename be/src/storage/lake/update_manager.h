@@ -94,6 +94,10 @@ public:
                                       const TabletMetadata& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
+    Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                            const TabletMetadata& metadata, const Tablet& tablet,
+                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
+
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
     void unload_primary_index(int64_t tablet_id);
@@ -180,6 +184,9 @@ private:
     PkIndexShard& _get_pk_index_shard(int64_t tabletId) {
         return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
     }
+
+    // decide whether use light publish compaction stategy or not
+    bool _use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

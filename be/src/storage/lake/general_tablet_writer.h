@@ -39,7 +39,16 @@ public:
 
     Status write(const starrocks::Chunk& data) override;
 
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) {
+        return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
+    }
+
     Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) override {
+        return Status::NotSupported("HorizontalGeneralTabletWriter write_columns not support");
+    }
+
+    Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key,
+                         const std::vector<uint64_t>& rssid_rowids) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter write_columns not support");
     }
 
@@ -81,7 +90,16 @@ public:
         return Status::NotSupported("VerticalGeneralTabletWriter write not support");
     }
 
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override {
+        return Status::NotSupported("HorizontalGeneralTabletWriter write not support");
+    }
+
     Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) override;
+
+    Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key,
+                         const std::vector<uint64_t>& rssid_rowids) override {
+        return Status::NotSupported("VerticalGeneralTabletWriter write_columns not support");
+    }
 
     Status flush_del_file(const Column& deletes) override {
         return Status::NotSupported("VerticalGeneralTabletWriter flush_del_file not support");
@@ -98,8 +116,13 @@ public:
 
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
+<<<<<<< HEAD
 private:
     StatusOr<std::unique_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
+=======
+protected:
+    StatusOr<std::shared_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
+>>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
                                                                    bool is_key);
 
     Status flush_columns(std::unique_ptr<SegmentWriter>* segment_writer);
