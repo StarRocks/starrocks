@@ -41,6 +41,8 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteMetaSplit;
+import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.persist.EditLog;
@@ -1223,5 +1225,27 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(PlanMode.DISTRIBUTED.modeName(), PlanMode.fromName("DISTRIBUTED").modeName());
 
         PlanMode.fromName("unknown");
+    }
+
+    @Test
+    public void testGetMetaSpec() {
+        mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableG;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
+                CATALOG_NAME, icebergHiveCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+        SerializedMetaSpec metaSpec = metadata.getSerializedMetaSpec("db", "tg", -1, null);
+        Assert.assertTrue(metaSpec instanceof IcebergMetaSpec);
+        IcebergMetaSpec icebergMetaSpec = metaSpec.cast();
+        List<RemoteMetaSplit> splits = icebergMetaSpec.getSplits();
+        Assert.assertEquals(1, splits.size());
     }
 }
