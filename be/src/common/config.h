@@ -862,7 +862,7 @@ CONF_mBool(s3_use_list_objects_v1, "false");
 
 // Lake
 CONF_mBool(io_coalesce_lake_read_enable, "false");
-CONF_mInt32(lake_small_segment_file_threshold_size, "83886080"); // 10 * 1024 * 1024 * 8 = 10MB
+CONF_mInt32(lake_small_segment_file_threshold_size, "10485760"); // 10 * 1024 * 1024 = 10MB
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
