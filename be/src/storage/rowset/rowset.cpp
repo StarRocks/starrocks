@@ -400,9 +400,9 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
                 const auto& index = (*(_schema->indexes()))[index_id];
                 if (index.index_type() == GIN) {
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
-                            dir, new_rowset_id.to_string(), segment_n, index_id);
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
-                            _rowset_path, rowset_id().to_string(), segment_n, index_id);
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
 
                     RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
                     std::set<std::string> files;
