@@ -1022,7 +1022,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
-        List<String> partitionNames = metadata.listPartitionNames("db", "table");
+        List<String> partitionNames = metadata.listPartitionNames("db", "table", -1);
         Assert.assertEquals(2, partitionNames.size());
         Assert.assertTrue(partitionNames.contains("k2=2"));
         Assert.assertTrue(partitionNames.contains("k2=3"));

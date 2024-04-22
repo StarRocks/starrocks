@@ -91,9 +91,10 @@ public interface ConnectorMetadata {
      *
      * @param databaseName the name of the database
      * @param tableName the name of the table
+     * @param snapshotId table snapshot id, default value is -1
      * @return a list of partition names
      */
-    default List<String> listPartitionNames(String databaseName, String tableName) {
+    default List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         return Lists.newArrayList();
     }
 
