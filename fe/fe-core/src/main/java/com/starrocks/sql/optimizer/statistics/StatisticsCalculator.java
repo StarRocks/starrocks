@@ -69,6 +69,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
@@ -104,6 +105,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
@@ -431,6 +433,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalIcebergMetadataScan(LogicalIcebergMetadataScanOperator node, ExpressionContext context) {
+        return computeMetadataScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalIcebergMetadataScan(PhysicalIcebergMetadataScanOperator node, ExpressionContext context) {
+        return computeMetadataScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeMetadataScanNode(Operator node, ExpressionContext context,
+                                         Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+
         builder.setOutputRowCount(1);
         context.setStatistics(builder.build());
 

@@ -37,6 +37,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -456,6 +457,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             } else {
                 table = ((ViewRelation) tableToBeChecked.getValue()).getView();
             }
+            if (table instanceof MetadataTable) {
+                return;
+            }
+
             if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                 try {
                     Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
