@@ -120,6 +120,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private final List<Integer> scanStringColumns = Lists.newArrayList();
 
+    // operators which are the children of Match operator
+    private final ColumnRefSet matchChildren = new ColumnRefSet();
+
     public DecodeCollector(SessionVariable session) {
         this.sessionVariable = session;
     }
@@ -132,6 +135,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private void initContext(DecodeContext context) {
         // choose the profitable string columns
         for (Integer cid : scanStringColumns) {
+            if (matchChildren.contains(cid)) {
+                continue;
+            }
             if (expressionStringRefCounter.getOrDefault(cid, 0) > 1) {
                 context.allStringColumns.add(cid);
                 continue;
@@ -150,6 +156,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         // resolve depend-on relation:
         // like: b = upper(a), c = lower(b), if we forbidden a, should forbidden b & c too
         for (Integer cid : stringRefToDefineExprMap.keySet()) {
+            if (matchChildren.contains(cid)) {
+                continue;
+            }
             if (context.allStringColumns.contains(cid)) {
                 continue;
             }
@@ -510,6 +519,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 stringExpressions.computeIfAbsent(c, l -> Lists.newArrayList()).addAll(expressions);
             }
         });
+
+        matchChildren.union(dictExpressionCollector.matchChildren);
     }
 
     private void collectProjection(Operator operator, DecodeInfo info) {
@@ -546,6 +557,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     info.outputStringColumns.union(key.getId());
                 }
             });
+            matchChildren.union(dictExpressionCollector.matchChildren);
         }
     }
 
@@ -563,6 +575,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         private final ColumnRefSet allDictColumnRefs;
         private final Map<Integer, List<ScalarOperator>> dictExpressions = Maps.newHashMap();
+
+        private final ColumnRefSet matchChildren = new ColumnRefSet();
 
         public DictExpressionCollector(ColumnRefSet allDictColumnRefs) {
             this.allDictColumnRefs = allDictColumnRefs;
@@ -646,6 +660,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+            if (variable.isMatchChild()) {
+                matchChildren.union(variable);
+            }
             // return actual dict-column
             if (allDictColumnRefs.contains(variable)) {
                 return variable;

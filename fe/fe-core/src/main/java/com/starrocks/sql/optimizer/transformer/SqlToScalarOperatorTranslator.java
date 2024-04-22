@@ -660,7 +660,8 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .toArray(ScalarOperator[]::new);
-
+            ColumnRefOperator colRefOp = (ColumnRefOperator) children[0];
+            colRefOp.setIsMatchChild(true);
             return new MatchExprOperator(children); 
         }
 

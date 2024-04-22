@@ -1153,3 +1153,86 @@ PROPERTIES (
 DROP TABLE t_alter_replicated_storage;
 -- result:
 -- !result
+-- name: test_disable_global_dict_rewrite
+CREATE TABLE `t_disable_global_dict_rewrite` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_disable_global_dict_rewrite VALUES (1, "abc", "bcd"), (2, "cbd", "dbs");
+-- result:
+-- !result
+SELECT * FROM t_disable_global_dict_rewrite;
+-- result:
+1	abc	bcd
+2	cbd	dbs
+-- !result
+SELECT SLEEP(5);
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 = "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 LIKE "%abc%";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 IN ("abc", "ab");
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 = "abc";
+-- result:
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 LIKE "%abc%";
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 IN ("bcd", "ab");
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
+-- result:
+1
+-- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+DROP TABLE t_disable_global_dict_rewrite;
+-- result:
+-- !result
