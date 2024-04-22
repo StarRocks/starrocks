@@ -624,6 +624,8 @@ StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，�
 
 3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
 
+存算分离集群自 v3.3.0 起支持该功能。
+
 语法：
 
 ```sql
