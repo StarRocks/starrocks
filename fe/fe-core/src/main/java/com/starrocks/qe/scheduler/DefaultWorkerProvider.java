@@ -319,7 +319,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         //add CN to Node Pool
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
-        if (numUsedComputeNodes <= 0 || numUsedComputeNodes >= idToComputeNode.size()) {
+        if (numUsedComputeNodes <= 0 || numUsedComputeNodes > idToComputeNode.size()) {
             computeNodes = new HashMap<>(idToComputeNode);
         } else {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
