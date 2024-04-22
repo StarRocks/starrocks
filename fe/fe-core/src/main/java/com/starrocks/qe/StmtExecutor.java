@@ -111,6 +111,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.StatementPlanner;
@@ -165,7 +166,10 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -197,6 +201,7 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -991,6 +996,7 @@ public class StmtExecutor {
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
         boolean isSchedulerExplain = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
+        boolean executeInFe = !isExplainAnalyze & !isSchedulerExplain & canExecuteInFe(context, execPlan.getPhysicalPlan());
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
@@ -999,7 +1005,11 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (parsedStmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
+            String explainString = buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT);
+            if (executeInFe) {
+                explainString = "EXECUTE IN FE\n" + explainString;
+            }
+            handleExplainStmt(explainString);
             return;
         }
         if (context.getQueryDetail() != null) {
@@ -1013,7 +1023,11 @@ public class StmtExecutor {
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
 
-        coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable);
+        if (executeInFe) {
+            coord = new FeExecuteCoordinator(context, execPlan);
+        } else {
+            coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable);
+        }
 
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
@@ -2337,5 +2351,35 @@ public class StmtExecutor {
 
     public List<ByteBuffer> getProxyResultBuffer() {
         return proxyResultBuffer;
+    }
+
+
+    // scenes can execute in FE should meet all these requirements:
+    // 1. enable_constant_execute_in_fe = true
+    // 2. is mysql text protocol
+    // 3. all values are constantOperator
+    private boolean canExecuteInFe(ConnectContext context, OptExpression optExpression) {
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
+            return false;
+        }
+
+        if (context instanceof HttpConnectContext || context.getCommand() == MysqlCommand.COM_STMT_EXECUTE) {
+            return false;
+        }
+
+        if (optExpression.getOp() instanceof PhysicalValuesOperator) {
+            PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpression.getOp();
+            boolean isAllConstants = true;
+            if (valuesOperator.getProjection() != null) {
+                isAllConstants = valuesOperator.getProjection().getColumnRefMap().values().stream()
+                        .allMatch(ScalarOperator::isConstantRef);
+            } else if (CollectionUtils.isNotEmpty(valuesOperator.getRows())) {
+                isAllConstants = valuesOperator.getRows().stream().allMatch(row ->
+                        row.stream().allMatch(ScalarOperator::isConstantRef));
+            }
+
+            return isAllConstants;
+        }
+        return false;
     }
 }
