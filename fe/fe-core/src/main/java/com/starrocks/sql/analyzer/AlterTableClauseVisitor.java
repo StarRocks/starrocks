@@ -43,10 +43,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.util.DynamicPartitionUtil;
-import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.common.util.*;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
@@ -368,7 +365,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
-            List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
+            List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).map(ParseUtil::backquote).collect(Collectors.toList());
 
             for (String column : clause.getSortKeys()) {
                 int idx = columnNames.indexOf(column);
