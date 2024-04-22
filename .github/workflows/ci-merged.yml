@@ -11,6 +11,8 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+env:
+  PR_NUMBER: ${{ github.event.number }}
 
 jobs:
   backport:
@@ -192,6 +194,8 @@ jobs:
       github.base_ref != 'main' && github.event.pull_request.merged == true
     env:
       PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
     steps:
       - name: prepare merge label
         if: >
@@ -235,3 +239,14 @@ jobs:
         run: |
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
           
+  update_feature_issue:
+    runs-on: [ self-hosted, quick ]
+    needs: update_backport_merged_msg
+    if: !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
+    env:
+      VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
+    steps:
+      - name: Update Issue Body & Label
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${VERSION_LABEL}
