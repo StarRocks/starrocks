@@ -195,6 +195,11 @@ public class AgentTaskQueue {
         return res;
     }
 
+    // this is just for unit test
+    public static synchronized Map<Long, AgentTask> getTasks(long backendId, TTaskType type) {
+        return tasks.get(backendId, type);
+    }
+
     public static synchronized List<AgentTask> getDiffTasks(long backendId, Map<TTaskType, Set<Long>> runningTasks) {
         List<AgentTask> diffTasks = new ArrayList<AgentTask>();
         if (!tasks.containsRow(backendId)) {

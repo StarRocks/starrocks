@@ -244,9 +244,10 @@ public class BackupJobPrimaryKeyTest {
         Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
                 ((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum());
-        AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.MAKE_SNAPSHOT, tabletId);
-        Assert.assertTrue(task instanceof SnapshotTask);
-        SnapshotTask snapshotTask = (SnapshotTask) task;
+        List<AgentTask> tasks = UnitTestUtil.getTasksWithRandomBE(backendId, TTaskType.MAKE_SNAPSHOT, tabletId);
+        Assert.assertEquals(1, tasks.size());
+        Assert.assertTrue(tasks.get(0) instanceof SnapshotTask);
+        SnapshotTask snapshotTask = (SnapshotTask) tasks.get(0);
 
         // 2. snapshoting
         job.run();
@@ -275,9 +276,10 @@ public class BackupJobPrimaryKeyTest {
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum());
-        task = AgentTaskQueue.getTask(backendId, TTaskType.UPLOAD, id.get() - 1);
-        Assert.assertTrue(task instanceof UploadTask);
-        UploadTask upTask = (UploadTask) task;
+        tasks = UnitTestUtil.getTasksWithRandomBE(backendId, TTaskType.UPLOAD, id.get() - 1);
+        Assert.assertEquals(1, tasks.size());
+        Assert.assertTrue(tasks.get(0) instanceof UploadTask);
+        UploadTask upTask = (UploadTask) tasks.get(0);
 
         Assert.assertEquals(job.getJobId(), upTask.getJobId());
         Map<String, String> srcToDest = upTask.getSrcToDestPath();
