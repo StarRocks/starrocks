@@ -101,7 +101,7 @@ jobs:
               all_linux=false
             elif [[ "${{ github.event.schedule }}" == "0 0 * * 1-5" ]]; then
               branch=main
-              if [[ `date +%u` -eq 1 ]]; then
+              if [[ `date +%u` -eq 1 || `date +%u` -eq 4 ]]; then
                 all_linux=true
               fi
             else

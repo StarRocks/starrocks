@@ -58,6 +58,12 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-blacklist.sh
 
+      - name: Check Feature Issue
+        id: check_issue
+        run: |
+          cd ci-tool
+          python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
+
   be-checker:
     runs-on: ubuntu-latest
     needs: basic-checker
