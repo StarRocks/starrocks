@@ -529,6 +529,18 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
+bool StorageEngine::enable_light_pk_compaction_publish() {
+    if (!config::enable_light_pk_compaction_publish) {
+        return false;
+    }
+    // Skip light pk compaction if there is no local disk to store temp rows mapper files.
+    auto stores = get_stores<false>();
+    if (stores.empty()) {
+        return false;
+    }
+    return true;
+}
+
 // maybe nullptr if as cn
 DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
     auto stores = get_stores<false>();

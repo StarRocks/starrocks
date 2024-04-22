@@ -437,6 +437,7 @@ set(EXEC_FILES
         ./service/service_be/internal_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
         ./storage/delta_writer_test.cpp
+        ./storage/rows_mapper_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp

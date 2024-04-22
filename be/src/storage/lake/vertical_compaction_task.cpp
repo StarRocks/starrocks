@@ -48,7 +48,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool));
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool,
+                                                     true /** is compaction**/));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -165,11 +166,14 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    std::vector<uint64_t> rssid_rowids;
+    rssid_rowids.reserve(chunk_size);
 
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
     int64 reader_time_ns = 0;
+    const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
@@ -182,7 +186,14 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 #endif
         {
             SCOPED_RAW_TIMER(&reader_time_ns);
-            if (auto st = reader.get_next(chunk.get(), source_masks); st.is_end_of_file()) {
+            auto st = Status::OK();
+            // Collect rssid & rowid only when compact primary key columns
+            if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_key && enable_light_pk_compaction_publish) {
+                st = reader.get_next(chunk.get(), source_masks, &rssid_rowids);
+            } else {
+                st = reader.get_next(chunk.get(), source_masks);
+            }
+            if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
                 return st;
@@ -190,8 +201,13 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         }
 
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
-        RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
+        if (rssid_rowids.empty()) {
+            RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
+        } else {
+            RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key, rssid_rowids));
+        }
         chunk->reset();
+        rssid_rowids.clear();
 
         if (!source_masks->empty()) {
             if (is_key) {

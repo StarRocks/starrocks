@@ -97,6 +97,14 @@ public:
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed) override;
 
+    // batch replace without return old values
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |replace_indexes|: The index of the |keys| array that need to replace.
+    Status replace(size_t n, const Slice* keys, const IndexValue* values,
+                   const std::vector<uint32_t>& replace_indexes) override;
+
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer

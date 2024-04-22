@@ -1293,6 +1293,9 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
 
+// Skip get from pk index when light pk compaction publish is enabled
+CONF_mBool(enable_light_pk_compaction_publish, "true");
+
 // jit LRU cache size for total 32 shards, it will be an auto value if it <=0:
 // mem_limit = system memory or process memory limit if set.
 // if mem_limit < 16 GB, disable JIT.
