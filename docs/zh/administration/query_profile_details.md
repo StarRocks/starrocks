@@ -1360,3 +1360,48 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 ##### LocalExchangePeakMemoryUsage
 
 描述：峰值内存。
+
+#### OlapTableSink Operator
+
+您可以通过 OlapTableSink Operator 了解 INSERT INTO FILES() 和 Broker Load 导入方式的执行信息。此功能自 v3.3.0 起支持。
+
+##### IndexNum
+
+描述：目标表的同步物化视图数。
+
+##### ReplicatedStorage
+
+描述：Single Leader Replication 是否开启。
+
+##### TxnID
+
+描述：导入事务的 ID。
+
+##### RowsRead
+
+描述：从上游算子读取到的数据行数。
+
+##### RowsFiltered
+
+描述：因数据质量过滤掉的数据行数。
+
+##### RowsReturned
+
+描述：最终写入目标表的数据行数。
+
+##### RpcClientSideTime
+
+描述：客户端侧统计的数据写入 RPC 总耗时。
+
+##### RpcServerSideTime
+
+描述：服务器侧统计的数据写入 RPC 总耗时。
+
+##### PrepareDataTime
+
+描述：数据准备阶段的总耗时，包括数据格式转换和数据质量检查。
+
+##### SendDataTime
+
+描述：发送数据的本地耗时，包括数据序列化和压缩的时间，以及将任务提交到发送队列的时间。
+
