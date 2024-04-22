@@ -199,14 +199,14 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
                 "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
                 "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
-                "  |  output columns: 1, 3, 5, 11, 12, 14, 25\n" +
+                "  |  output columns: 1, 3, 5, 11, 12, 14\n" +
                 "  |  cardinality: 37372757"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
                 "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
                 "  |  other predicates: 110: wr_order_number IS NULL\n" +
-                "  |  output columns: 75, 77, 80, 93, 94, 96, 110\n" +
+                "  |  output columns: 75, 77, 80, 93, 94, 96\n" +
                 "  |  cardinality: 7914602"));
     }
 
