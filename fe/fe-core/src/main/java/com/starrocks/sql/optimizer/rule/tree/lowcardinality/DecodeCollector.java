@@ -751,7 +751,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitMatchExprOperator(MatchExprOperator operator, Void context) {
-            matchChildren.union(operator.getChildren().get(0));
+            matchChildren.union((ColumnRefOperator) operator.getChildren().get(0));
             return merge(visitChildren(operator, context), operator);
         }
     }
