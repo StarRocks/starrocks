@@ -339,7 +339,11 @@ public class QueryAnalyzer {
                 } else {
                     r.setPolicyRewritten(true);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
-                    subqueryRelation.setAlias(tableName);
+
+                    // If an alias exists, rewrite the alias into subquery to ensure
+                    // that the original expression can be resolved correctly.
+                    // `select v1 from tbl t` is rewritten as `select t.v1 from (select tbl.v1 from tbl) t`
+                    subqueryRelation.setAlias(resolveTableName);
                     return subqueryRelation;
                 }
             } else {

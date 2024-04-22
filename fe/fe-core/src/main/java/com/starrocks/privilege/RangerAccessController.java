@@ -135,7 +135,7 @@ public abstract class RangerAccessController implements AccessController, Access
         }
     }
 
-    protected boolean hasPermission(RangerAccessResourceImpl resource, UserIdentity user, PrivilegeType privilegeType)
+    public boolean hasPermission(RangerAccessResourceImpl resource, UserIdentity user, PrivilegeType privilegeType)
             throws AccessDeniedException {
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
