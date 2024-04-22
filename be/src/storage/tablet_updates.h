@@ -476,14 +476,11 @@ private:
     std::atomic<bool> _error{false};
     std::string _error_msg;
 
-<<<<<<< HEAD
     ChunkAllocator* _chunk_allocator = nullptr;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;
-=======
     std::atomic<double> _pk_index_write_amp_score{0.0};
->>>>>>> 25afd79a4d ([Enhancement] Improve pk index compaction score calculation strategy (#42803))
 };
 
 } // namespace starrocks

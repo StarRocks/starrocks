@@ -111,13 +111,7 @@ public:
 
     Status on_commited();
 
-<<<<<<< HEAD
-    double get_write_amp_score();
-
     Status major_compaction(Tablet* tablet);
-=======
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
->>>>>>> 25afd79a4d ([Enhancement] Improve pk index compaction score calculation strategy (#42803))
 
     Status abort();
 

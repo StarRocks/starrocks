@@ -900,180 +900,6 @@ Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_ver
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& version_info,
-                                                        const RowsetSharedPtr& rowset) {
-    auto span = Tracer::Instance().start_trace_tablet("apply_column_partial_update_commit", _tablet.tablet_id());
-    auto scoped = trace::Scope(span);
-
-    auto tablet_id = _tablet.tablet_id();
-    uint32_t rowset_id = version_info.deltas[0];
-    auto& version = version_info.version;
-    auto manager = StorageEngine::instance()->update_manager();
-
-    span->SetAttribute("txn_id", rowset->txn_id());
-    span->SetAttribute("version", version.major_number());
-
-    // 1. load updates in rowset, prepare state for generating delta column group later.
-    auto state_entry = manager->update_column_state_cache().get_or_create(
-            strings::Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
-    state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-    // when failure happen, remove state cache and record error msg
-    auto failure_handler = [&](const std::string& str, const Status& st) {
-        std::string msg = strings::Substitute("$0: $1 $2", str, st.to_string(), debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-    };
-    // remove state entry when function end
-    DeferOp state_defer([&]() { manager->update_column_state_cache().remove(state_entry); });
-    auto& state = state_entry->value();
-    auto st = state.load(&_tablet, rowset.get(), manager->mem_tracker());
-    manager->update_column_state_cache().update_object_size(state_entry, state.memory_usage());
-    if (!st.ok()) {
-        failure_handler("apply_column_partial_rowset_commit error: load rowset update state failed", st);
-        return;
-    }
-
-    std::lock_guard lg(_index_lock);
-    // 2. load primary index, using it in finalize step.
-    auto index_entry = manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
-    auto& index = index_entry->value();
-    bool enable_persistent_index = index.enable_persistent_index();
-    // release or remove index entry when function end
-    DeferOp index_defer([&]() {
-        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
-            manager->index_cache().remove(index_entry);
-        } else {
-            manager->index_cache().release(index_entry);
-        }
-    });
-    // empty rowset does not need to load in-memory primary index, so skip it
-    if (rowset->has_data_files() || _tablet.get_enable_persistent_index()) {
-        auto st = index.load(&_tablet);
-        manager->index_cache().update_object_size(index_entry, index.memory_usage());
-        if (!st.ok()) {
-            failure_handler("load primary index failed", st);
-            return;
-        }
-    }
-    PersistentIndexMetaPB index_meta;
-    if (enable_persistent_index) {
-        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), _tablet.tablet_id(), &index_meta);
-        if (!st.ok() && !st.is_not_found()) {
-            failure_handler("get persistent index meta failed", st);
-            return;
-        }
-    }
-
-    vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs;
-    span->AddEvent("gen_delta_column_group");
-    // 3. finalize and generate delta column group
-    st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, manager->mem_tracker(), new_del_vecs, index);
-    if (!st.ok()) {
-        failure_handler("finalize failed", st);
-        return;
-    }
-
-    // 4. write meta and make it apply.
-    {
-        std::lock_guard wl(_lock);
-        if (_edit_version_infos.empty()) {
-            LOG(WARNING) << "tablet deleted when apply rowset commmit tablet:" << tablet_id;
-            return;
-        }
-
-        RowsetMetaPB full_rowset_meta_pb;
-        rowset->rowset_meta()->get_full_meta_pb(&full_rowset_meta_pb);
-        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                    state.delta_column_groups(), new_del_vecs, index_meta,
-                                                    enable_persistent_index, &full_rowset_meta_pb);
-
-        if (!st.ok()) {
-            failure_handler("apply_rowset_commit failed", st);
-            return;
-        }
-        // set cached delta column group
-        for (const auto& dcg : state.delta_column_groups()) {
-            st = manager->set_cached_delta_column_group(_tablet.data_dir()->get_meta(),
-                                                        TabletSegmentId(tablet_id, dcg.first), dcg.second);
-            if (!st.ok()) {
-                failure_handler("set_cached_delta_column_group failed", st);
-                return;
-            }
-        }
-        size_t num_dels = 0;
-        // put delvec in cache
-        TabletSegmentId tsid;
-        tsid.tablet_id = tablet_id;
-        for (auto& delvec_pair : new_del_vecs) {
-            tsid.segment_id = delvec_pair.first;
-            st = manager->set_cached_del_vec(tsid, delvec_pair.second);
-            if (!st.ok()) {
-                failure_handler("set_cached_del_vec failed", st);
-                return;
-            }
-            // try to set empty dcg cache, for improving latency when reading
-            (void)manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
-            num_dels += delvec_pair.second->cardinality();
-        }
-        if (rowset->num_segments() > 0) {
-            // update rowset stats if insert missing rows
-            auto rowset_stats = std::make_unique<RowsetStats>();
-            rowset_stats->num_segments = rowset->num_segments();
-            rowset_stats->num_rows = rowset->num_rows();
-            rowset_stats->num_dels = num_dels;
-            rowset_stats->byte_size = rowset->data_disk_size();
-            rowset_stats->row_size = rowset->total_row_size();
-            rowset_stats->partial_update_by_column = false;
-            _calc_compaction_score(rowset_stats.get());
-
-            std::lock_guard lg(_rowset_stats_lock);
-            _rowset_stats[rowset_id] = std::move(rowset_stats);
-        }
-        // 5. apply memory
-        _next_log_id++;
-        _apply_version_idx++;
-        _apply_version_changed.notify_all();
-    }
-
-    st = index.on_commited();
-    if (!st.ok()) {
-        failure_handler("primary index on_commit failed", st);
-        return;
-    }
-    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
-
-    _update_total_stats(version_info.rowsets, nullptr, nullptr);
-}
-
-Status TabletUpdates::primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
-    auto manager = StorageEngine::instance()->update_manager();
-    std::lock_guard lg(_index_lock);
-    auto index_entry = manager->index_cache().get(_tablet.tablet_id());
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        // release or remove index entry when function end
-        DeferOp index_defer([&]() { manager->index_cache().release(index_entry); });
-        RETURN_IF_ERROR(index.pk_dump(dump, dump_pb));
-    } else {
-        // If index not in cache, build it from meta.
-        PersistentIndexMetaPB index_meta;
-        auto st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), _tablet.tablet_id(), &index_meta);
-        if (!st.ok()) {
-            LOG(ERROR) << "get persistent index meta failed, st " << st;
-            // keep generate dump file
-            return Status::OK();
-        }
-        PersistentIndex index(_tablet.schema_hash_path());
-        RETURN_IF_ERROR(index.load(index_meta));
-        RETURN_IF_ERROR(index.pk_dump(dump, dump_pb));
-    }
-    return Status::OK();
-}
-
->>>>>>> 25afd79a4d ([Enhancement] Improve pk index compaction score calculation strategy (#42803))
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet.tablet_id());
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
@@ -3790,16 +3616,12 @@ Status TabletUpdates::pk_index_major_compaction() {
         }
     });
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-<<<<<<< HEAD
-    return index.major_compaction(&_tablet);
-=======
-    st = index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock());
+    st = index.major_compaction(&_tablet);
     if (st.ok()) {
         // reset score after major compaction finish
         _pk_index_write_amp_score.store(0.0);
     }
     return st;
->>>>>>> 25afd79a4d ([Enhancement] Improve pk index compaction score calculation strategy (#42803))
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
