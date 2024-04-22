@@ -43,8 +43,8 @@ inline StatusOr<T> enhance_error_prompt(StatusOr<T> res) {
     }
 }
 
-inline IndexValue build_index_value(const IndexValueWithVerItemPB& item) {
-    return IndexValue(((uint64_t)item.rssid() << 32 | item.rowid()));
+inline IndexValue build_index_value(const IndexValueWithVerPB& value) {
+    return IndexValue(((uint64_t)value.rssid() << 32 | value.rowid()));
 }
 
 } // namespace starrocks::lake

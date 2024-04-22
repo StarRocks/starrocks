@@ -33,16 +33,16 @@
 namespace starrocks::lake {
 
 Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
-    IndexValueWithVerPB index_value_ver;
+    IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
     }
-    if (index_value_ver.items_size() == 0) {
+    if (index_value_ver.values_size() == 0) {
         return Status::OK();
     }
 
-    auto version = index_value_ver.items(0).version();
-    auto index_value = build_index_value(index_value_ver.items(0));
+    auto version = index_value_ver.values(0).version();
+    auto index_value = build_index_value(index_value_ver.values(0));
     if (_key == key) {
         if (_index_value_vers.empty()) {
             _index_value_vers.emplace_front(version, index_value);
@@ -64,12 +64,12 @@ void KeyValueMerger::flush() {
         return;
     }
 
-    IndexValueWithVerPB index_value_pb;
+    IndexValuesWithVerPB index_value_pb;
     for (const auto& index_value_with_ver : _index_value_vers) {
-        auto* item = index_value_pb.add_items();
-        item->set_version(index_value_with_ver.first);
-        item->set_rssid(index_value_with_ver.second.get_rssid());
-        item->set_rowid(index_value_with_ver.second.get_rowid());
+        auto* value = index_value_pb.add_values();
+        value->set_version(index_value_with_ver.first);
+        value->set_rssid(index_value_with_ver.second.get_rssid());
+        value->set_rowid(index_value_with_ver.second.get_rowid());
     }
     _builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString()));
     _index_value_vers.clear();

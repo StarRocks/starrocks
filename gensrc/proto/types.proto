@@ -171,7 +171,7 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
-message IndexValueWithVerItemPB {
+message IndexValueWithVerPB {
     // will be set after mvcc support
     optional int64 version = 1;
     // rowset id & segment id
@@ -179,8 +179,8 @@ message IndexValueWithVerItemPB {
     optional uint32 rowid = 3;
 }
 
-message IndexValueWithVerPB {
-    repeated IndexValueWithVerItemPB items = 1;
+message IndexValuesWithVerPB {
+    repeated IndexValueWithVerPB values = 1;
 }
 
 message PersistentIndexSstablePB {
