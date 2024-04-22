@@ -90,6 +90,12 @@ public:
 
     int64_t end_version() const { return _rowset_meta_pb->end_version(); }
 
+    bool has_gtid() const { return _rowset_meta_pb->has_gtid(); }
+
+    int64_t gtid() const { return _rowset_meta_pb->gtid(); }
+
+    void set_gtid(int64_t gtid) { _rowset_meta_pb->set_gtid(gtid); }
+
     int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
 
     void set_num_rows(int64_t num_rows) { _rowset_meta_pb->set_num_rows(num_rows); }

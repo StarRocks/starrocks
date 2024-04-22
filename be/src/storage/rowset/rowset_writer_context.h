@@ -90,6 +90,9 @@ public:
 
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+
+    // gtid
+    int64_t gtid = 0;
 };
 
 } // namespace starrocks

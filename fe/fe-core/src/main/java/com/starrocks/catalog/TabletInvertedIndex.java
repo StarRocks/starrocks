@@ -269,6 +269,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
                                             TPartitionVersionInfo versionInfo =
                                                     new TPartitionVersionInfo(tabletMeta.getPartitionId(),
                                                             partitionCommitInfo.getVersion(), 0);
+                                            versionInfo.setGtid(transactionState.getGlobalTransactionId());
                                             Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
                                                     transactionsToPublish.computeIfAbsent(
                                                             transactionState.getDbId(), k -> Maps.newHashMap());

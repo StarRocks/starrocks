@@ -784,6 +784,7 @@ public class PlanFragmentBuilder {
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
+            scanNode.setGtid(node.getGtid());
             currentExecGroup.add(scanNode);
             // set tablet
             try {

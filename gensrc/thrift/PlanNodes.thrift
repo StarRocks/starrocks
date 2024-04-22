@@ -132,6 +132,7 @@ struct TInternalScanRange {
   12: optional bool fill_data_cache = true;
   // used for per-bucket compute optimize
   13: optional i32 bucket_sequence
+  14: optional i64 gtid
 }
 
 enum TFileFormatType {
