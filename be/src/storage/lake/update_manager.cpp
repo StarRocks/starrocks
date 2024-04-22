@@ -19,11 +19,13 @@
 #include "storage/del_vector.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_compaction_state.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
@@ -592,10 +594,62 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
     return num_dels;
 }
 
+bool UpdateManager::_use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id) {
+    // Is config enable ?
+    if (!config::enable_light_pk_compaction_publish) {
+        return false;
+    }
+    // Is rows mapper file exist?
+    auto filename_st = lake_rows_mapper_filename(tablet_id, txn_id);
+    if (!filename_st.ok()) {
+        return false;
+    }
+    return fs::path_exist(filename_st.value());
+}
+
+Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                                       const TabletMetadata& metadata, const Tablet& tablet,
+                                                       IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                       int64_t base_version) {
+    // 1. init some state
+    auto& index = index_entry->value();
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
+    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
+                         tablet_schema);
+    vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
+    // get max rowset id in input rowsets
+    uint32_t max_rowset_id =
+            *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+
+    // 2. update primary index, and generate delete info.
+    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
+            &metadata, &output_rowset, this, builder, &index, txn_id, base_version, &segment_id_to_add_dels, &delvecs);
+    RETURN_IF_ERROR(resolver->execute());
+    // 3. update TabletMeta and write to meta file
+    for (auto&& each : delvecs) {
+        builder->append_delvec(each.second, each.first);
+    }
+    builder->apply_opcompaction(op_compaction, max_rowset_id);
+    RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
+
+    TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
+    TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
+    TRACE_COUNTER_INCREMENT("input_rowsets_size", op_compaction.input_rowsets_size());
+
+    _print_memory_stats();
+
+    return Status::OK();
+}
+
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                                  const TabletMetadata& metadata, const Tablet& tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
+    if (_use_light_publish_primary_compaction(tablet.id(), txn_id)) {
+        return light_publish_primary_compaction(op_compaction, txn_id, metadata, tablet, index_entry, builder,
+                                                base_version);
+    }
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
@@ -827,6 +881,10 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
+    // no need to preload if using light compaction publish
+    if (StorageEngine::instance()->enable_light_pk_compaction_publish()) {
+        return;
+    }
     // no need to preload if output rowset is empty.
     const int segments_size = txnlog.op_compaction().output_rowset().segments_size();
     if (segments_size <= 0) return;
