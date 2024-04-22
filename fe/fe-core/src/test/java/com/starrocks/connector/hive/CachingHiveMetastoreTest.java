@@ -450,4 +450,16 @@ public class CachingHiveMetastoreTest {
             cachingHiveMetastore.addPartitions("db", "table", Lists.newArrayList(hivePartitionWithStats));
         });
     }
+
+    @Test
+    public void testGetCachedName() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        CacheUpdateProcessor processor = new CacheUpdateProcessor(
+                "hive_catalog", cachingHiveMetastore, null, null, false, false);
+        Assert.assertTrue(processor.getCachedTableNames().isEmpty());
+
+        processor = new CacheUpdateProcessor("hive_catalog", metastore, null, null, false, false);
+        Assert.assertTrue(processor.getCachedTableNames().isEmpty());
+    }
 }
