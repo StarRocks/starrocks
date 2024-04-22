@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -26,7 +27,6 @@ import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.InclusiveMetricsEvaluator;
-import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
@@ -140,7 +140,7 @@ public class StarRocksIcebergTableScan
         List<ManifestFile> dataManifests = snapshot.dataManifests(io());
         scanMetrics().totalDataManifests().increment(dataManifests.size());
 
-        List<ManifestFile> matchingDataManifests = filterManifests(dataManifests);
+        List<ManifestFile> matchingDataManifests = IcebergApiConverter.filterManifests(dataManifests, table(), filter());
         int skippedDataManifestsCount = dataManifests.size() - matchingDataManifests.size();
         scanMetrics().skippedDataManifests().increment(skippedDataManifestsCount);
 
@@ -151,20 +151,11 @@ public class StarRocksIcebergTableScan
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
         scanMetrics().totalDeleteManifests().increment(deleteManifests.size());
 
-        List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests);
+        List<ManifestFile> matchingDeleteManifests = IcebergApiConverter.filterManifests(deleteManifests, table(), filter());
         int skippedDeleteManifestsCount = deleteManifests.size() - matchingDeleteManifests.size();
         scanMetrics().skippedDeleteManifests().increment(skippedDeleteManifestsCount);
 
         return matchingDeleteManifests;
-    }
-
-    private List<ManifestFile> filterManifests(List<ManifestFile> manifests) {
-        Map<Integer, ManifestEvaluator> evalCache = specCache(this::newManifestEvaluator);
-
-        return manifests.stream()
-                .filter(manifest -> manifest.hasAddedFiles() || manifest.hasExistingFiles())
-                .filter(manifest -> evalCache.get(manifest.partitionSpecId()).eval(manifest))
-                .collect(Collectors.toList());
     }
 
     private CloseableIterable<FileScanTask> planFileTasksLocally(
@@ -360,11 +351,6 @@ public class StarRocksIcebergTableScan
     private boolean mayHaveEqualityDeletes(Snapshot snapshot) {
         String count = snapshot.summary().get(SnapshotSummary.TOTAL_EQ_DELETES_PROP);
         return count == null || !count.equals("0");
-    }
-
-    private ManifestEvaluator newManifestEvaluator(PartitionSpec spec) {
-        Expression projection = Projections.inclusive(spec, isCaseSensitive()).project(filter());
-        return ManifestEvaluator.forPartitionFilter(projection, spec, isCaseSensitive());
     }
 
     private ResidualEvaluator newResidualEvaluator(PartitionSpec spec) {

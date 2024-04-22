@@ -93,8 +93,6 @@ import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.expressions.ManifestEvaluator;
-import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
@@ -132,6 +130,7 @@ import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.filterManifests;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
@@ -490,30 +489,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits);
     }
 
-    private List<ManifestFile> filterManifests(List<ManifestFile> manifests,
-                                               org.apache.iceberg.Table table, Expression filter) {
-        Map<Integer, ManifestEvaluator> evalCache = specCache(table, filter);
 
-        return manifests.stream()
-                .filter(manifest -> manifest.hasAddedFiles() || manifest.hasExistingFiles())
-                .filter(manifest -> evalCache.get(manifest.partitionSpecId()).eval(manifest))
-                .collect(Collectors.toList());
-    }
-
-    private Map<Integer, ManifestEvaluator> specCache(org.apache.iceberg.Table table, Expression filter) {
-        Map<Integer, ManifestEvaluator> cache = new HashMap<>();
-
-        for (Map.Entry<Integer, PartitionSpec> entry : table.specs().entrySet()) {
-            Integer spedId = entry.getKey();
-            PartitionSpec spec = entry.getValue();
-
-            Expression projection = Projections.inclusive(spec, false).project(filter);
-            ManifestEvaluator evaluator = ManifestEvaluator.forPartitionFilter(projection, spec, false);
-
-            cache.put(spedId, evaluator);
-        }
-        return cache;
-    }
 
     private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
         triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null);
