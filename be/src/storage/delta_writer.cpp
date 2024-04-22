@@ -269,7 +269,7 @@ Status DeltaWriter::_init() {
         auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (is_partial_update_with_sort_key_conflict(_opt.partial_update_mode, writer_context.referenced_column_ids,
-                                                     sort_key_idxes, _tablet_schema->num_key_columns())) {
+                                                     sort_key_idxes, _tablet->tablet_schema().num_key_columns())) {
             _partial_schema_with_sort_key_conflict = true;
         }
         if (!_opt.merge_condition.empty()) {
@@ -368,18 +368,6 @@ void DeltaWriter::_set_state(State state, const Status& st) {
 }
 
 Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
-<<<<<<< HEAD
-    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
-        _opt.slots->back()->col_name() == "__op") {
-        size_t op_column_id = chunk.num_columns() - 1;
-        auto op_column = chunk.get_column_by_index(op_column_id);
-        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
-        for (size_t i = 0; i < chunk.num_rows(); i++) {
-            if (ops[i] == TOpType::UPSERT) {
-                LOG(WARNING) << "table with sort key do not support partial update";
-                return Status::NotSupported("table with sort key do not support partial update");
-            }
-=======
     if (_tablet->updates() != nullptr && _partial_schema_with_sort_key_conflict) {
         bool ok = true;
         if (_opt.slots != nullptr && _opt.slots->back()->col_name() == "__op") {
@@ -393,7 +381,6 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
         if (!ok) {
             LOG(WARNING) << "table with sort key do not support partial update";
             return Status::NotSupported("table with sort key do not support partial update");
->>>>>>> 7bc6c592f1 ([BugFix] fix partial update with sort key conflict check  (#44377))
         }
     }
     return Status::OK();

@@ -400,16 +400,7 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
-<<<<<<< HEAD
-=======
-        ./storage/compaction_parallelization_test.cpp
         ./storage/delta_writer_test.cpp
-        ./storage/lake/persistent_index_memtable_test.cpp
-        ./storage/lake/lake_persistent_index_test.cpp
-        ./storage/lake/replication_txn_manager_test.cpp
-        ./storage/lake/persistent_index_sstable_test.cpp
-        ./block_cache/datacache_utils_test.cpp
->>>>>>> 7bc6c592f1 ([BugFix] fix partial update with sort key conflict check  (#44377))
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
