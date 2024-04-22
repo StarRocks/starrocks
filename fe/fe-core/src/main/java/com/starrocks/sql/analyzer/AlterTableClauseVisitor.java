@@ -369,7 +369,8 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
-            List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).map(ParseUtil::backquote).collect(Collectors.toList());
+            List<String> columnNames = columnDefs.stream().map(col -> ParseUtil.backquote(col.getName()))
+                .collect(Collectors.toList());
 
             for (String column : clause.getSortKeys()) {
                 int idx = columnNames.indexOf(column);
