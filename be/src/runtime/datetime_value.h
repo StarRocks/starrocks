@@ -537,17 +537,17 @@ namespace starrocks::joda {
 struct JodaRuntimeState final : public DateTimeValue {
     const char** valptr;
 
-    bool* date_part_used;
-    bool* time_part_used;
-    bool* frac_part_used;
+    bool date_part_used;
+    bool time_part_used;
+    bool frac_part_used;
 
-    int* halfday;
-    int* weekday;
-    int* yearday;
-    int* week_num;
+    int halfday;
+    int weekday;
+    int yearday;
+    int week_num;
 
-    cctz::time_zone* ctz; // default UTC
-    bool* has_timezone;
+    cctz::time_zone ctz; // default UTC
+    bool has_timezone;
 
 protected:
     friend class JodaFormat;

@@ -152,12 +152,12 @@ bool JodaFormat::prepare(std::string_view format) {
                 if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                *(state->week_num) = int_value;
-                if (*(state->week_num) > 53 || (strict_week_number && *(state->week_num) == 0)) {
+                state->week_num = int_value;
+                if (state->week_num > 53 || (strict_week_number && state->week_num == 0)) {
                     return false;
                 }
                 *(state->valptr) = tmp;
-                *(state->date_part_used) = true;
+                state->date_part_used = true;
                 return true;
             });
             break;
@@ -176,9 +176,9 @@ bool JodaFormat::prepare(std::string_view format) {
                 if (int_value == 0) {
                     int_value = 7;
                 }
-                *(state->weekday) = int_value;
+                state->weekday = int_value;
                 *(state->valptr) = tmp;
-                *(state->date_part_used) = true;
+                state->date_part_used = true;
                 return true;
             });
             break;
@@ -191,8 +191,8 @@ bool JodaFormat::prepare(std::string_view format) {
                         return false;
                     }
                     int_value++;
-                    *(state->weekday) = int_value;
-                    *(state->date_part_used) = true;
+                    state->weekday = int_value;
+                    state->date_part_used = true;
                     return true;
                 });
             } else {
@@ -202,8 +202,8 @@ bool JodaFormat::prepare(std::string_view format) {
                         return false;
                     }
                     int_value++;
-                    *(state->weekday) = int_value;
-                    *(state->date_part_used) = true;
+                    state->weekday = int_value;
+                    state->date_part_used = true;
                     return true;
                 });
             }
@@ -225,7 +225,7 @@ bool JodaFormat::prepare(std::string_view format) {
                 }
                 state->_year = int_value;
                 *(state->valptr) = tmp;
-                *(state->date_part_used) = true;
+                state->date_part_used = true;
                 return true;
             });
             break;
@@ -238,9 +238,9 @@ bool JodaFormat::prepare(std::string_view format) {
                 if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
                     return false;
                 }
-                *(state->yearday) = int_value;
+                state->yearday = int_value;
                 *(state->valptr) = tmp;
-                *(state->date_part_used) = true;
+                state->date_part_used = true;
                 return true;
             });
             break;
@@ -257,7 +257,7 @@ bool JodaFormat::prepare(std::string_view format) {
                     }
                     state->_month = int_value;
                     *(state->valptr) = tmp;
-                    *(state->date_part_used) = true;
+                    state->date_part_used = true;
                     return true;
                 });
             } else if (repeat_count == 3) {
@@ -294,7 +294,7 @@ bool JodaFormat::prepare(std::string_view format) {
                 }
                 state->_day = int_value;
                 *(state->valptr) = tmp;
-                *(state->date_part_used) = true;
+                state->date_part_used = true;
                 return true;
             });
             break;
@@ -307,9 +307,9 @@ bool JodaFormat::prepare(std::string_view format) {
                 }
                 if (toupper(*val) == 'P') {
                     // PM
-                    *(state->halfday) = 12;
+                    state->halfday = 12;
                 }
-                *(state->time_part_used) = true;
+                state->time_part_used = true;
                 *(state->valptr) += 2;
                 return true;
             });
@@ -331,7 +331,7 @@ bool JodaFormat::prepare(std::string_view format) {
                     return false;
                 }
                 state->_hour = int_value;
-                *(state->time_part_used) = true;
+                state->time_part_used = true;
                 *(state->valptr) = tmp;
                 return true;
             });
@@ -354,7 +354,7 @@ bool JodaFormat::prepare(std::string_view format) {
 
                 state->_hour = int_value;
                 *(state->valptr) = tmp;
-                *(state->time_part_used) = true;
+                state->time_part_used = true;
                 return true;
             });
             break;
@@ -369,7 +369,7 @@ bool JodaFormat::prepare(std::string_view format) {
                 }
                 state->_minute = int_value;
                 *(state->valptr) = tmp;
-                *(state->time_part_used) = true;
+                state->time_part_used = true;
                 return true;
             });
             break;
@@ -383,7 +383,7 @@ bool JodaFormat::prepare(std::string_view format) {
                 }
                 state->_second = int_value;
                 *(state->valptr) = tmp;
-                *(state->time_part_used) = true;
+                state->time_part_used = true;
                 return true;
             });
             break;
@@ -403,8 +403,8 @@ bool JodaFormat::prepare(std::string_view format) {
                 }
                 state->_microsecond = int_value;
                 *(state->valptr) = tmp;
-                *(state->time_part_used) = true;
-                *(state->frac_part_used) = true;
+                state->time_part_used = true;
+                state->frac_part_used = true;
                 return true;
             });
             break;
@@ -412,10 +412,10 @@ bool JodaFormat::prepare(std::string_view format) {
         case joda::JodaFormatChar::TIME_ZONE_OFFSET: {
             _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
                 std::string_view tz(*(state->valptr), val_end);
-                if (!TimezoneUtils::find_cctz_time_zone(tz, *(state->ctz))) {
+                if (!TimezoneUtils::find_cctz_time_zone(tz, state->ctz)) {
                     return false;
                 }
-                *(state->has_timezone) = true;
+                state->has_timezone = true;
                 return true;
             });
             break;
@@ -436,19 +436,19 @@ bool JodaFormat::prepare(std::string_view format) {
     }
 
     _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
-        if (*(state->halfday) > 0) {
-            state->_hour = (state->_hour % 12) + *(state->halfday);
+        if (state->halfday > 0) {
+            state->_hour = (state->_hour % 12) + state->halfday;
         }
 
         // Year day
-        if (*(state->yearday) > 0) {
-            uint64_t days = DateTimeValue::calc_daynr(state->_year, 1, 1) + *(state->yearday) - 1;
+        if (state->yearday > 0) {
+            uint64_t days = DateTimeValue::calc_daynr(state->_year, 1, 1) + state->yearday - 1;
             if (!state->get_date_from_daynr(days)) {
                 return false;
             }
         }
         // weekday
-        if (*(state->week_num) >= 0 && *(state->weekday) > 0) {
+        if (state->week_num >= 0 && state->weekday > 0) {
             // Check
             if ((strict_week_number && (strict_week_number_year < 0 || strict_week_number_year_type != sunday_first)) ||
                 (!strict_week_number && strict_week_number_year >= 0)) {
@@ -460,9 +460,9 @@ bool JodaFormat::prepare(std::string_view format) {
             uint8_t weekday_b = DateTimeValue::calc_weekday(days, sunday_first);
 
             if (sunday_first) {
-                days += ((weekday_b == 0) ? 0 : 7) - weekday_b + (*(state->week_num) - 1) * 7 + *(state->weekday) % 7;
+                days += ((weekday_b == 0) ? 0 : 7) - weekday_b + (state->week_num - 1) * 7 + state->weekday % 7;
             } else {
-                days += ((weekday_b <= 3) ? 0 : 7) - weekday_b + (*(state->week_num) - 1) * 7 + *(state->weekday) - 1;
+                days += ((weekday_b <= 3) ? 0 : 7) - weekday_b + (state->week_num - 1) * 7 + state->weekday - 1;
             }
             if (!state->get_date_from_daynr(days)) {
                 return false;
@@ -470,15 +470,15 @@ bool JodaFormat::prepare(std::string_view format) {
         }
 
         // Compute timestamp type
-        if (*(state->frac_part_used)) {
-            if (*(state->date_part_used)) {
+        if (state->frac_part_used) {
+            if (state->date_part_used) {
                 state->_type = TIME_DATETIME;
             } else {
                 state->_type = TIME_TIME;
             }
         } else {
-            if (*(state->date_part_used)) {
-                if (*(state->time_part_used)) {
+            if (state->date_part_used) {
+                if (state->time_part_used) {
                     state->_type = TIME_DATETIME;
                 } else {
                     state->_type = TIME_DATE;
@@ -489,10 +489,10 @@ bool JodaFormat::prepare(std::string_view format) {
         }
 
         // Timezone
-        if (*(state->has_timezone)) {
+        if (state->has_timezone) {
             const auto tp = cctz::convert(cctz::civil_second(state->_year, state->_month, state->_day, state->_hour,
                                                              state->_minute, state->_second),
-                                          *(state->ctz));
+                                          state->ctz);
             int64_t timestamp = tp.time_since_epoch().count();
             if (!state->from_unixtime(timestamp, TimezoneUtils::local_time_zone())) {
                 return false;
@@ -513,31 +513,21 @@ bool JodaFormat::parse(std::string_view str, DateTimeValue* output) {
     const char* val = str.data();
     const char* val_end = str.data() + str.length();
 
-    bool date_part_used = false;
-    bool time_part_used = false;
-    bool frac_part_used = false;
-
-    int halfday = 0;
-    int weekday = -1;
-    int yearday = -1;
-    int week_num = -1;
-
-    cctz::time_zone ctz; // default UTC
-    bool has_timezone = false;
-
-    JodaRuntimeState state{.valptr = &val,
-                           .date_part_used = &date_part_used,
-                           .time_part_used = &time_part_used,
-                           .frac_part_used = &frac_part_used,
-                           .halfday = &halfday,
-                           .weekday = &weekday,
-                           .yearday = &yearday,
-                           .week_num = &week_num,
-                           .ctz = &ctz,
-                           .has_timezone = &has_timezone};
+    JodaRuntimeState state{
+            .valptr = &val,
+            .date_part_used = false,
+            .time_part_used = false,
+            .frac_part_used = false,
+            .halfday = 0,
+            .weekday = -1,
+            .yearday = -1,
+            .week_num = -1,
+            .has_timezone = false,
+    };
     state._year = 2000;
     state._month = 1;
     state._day = 1;
+
     for (auto& p : _token_parsers) {
         if (!p(&state, val_end)) {
             return false;
