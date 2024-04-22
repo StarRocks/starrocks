@@ -85,7 +85,7 @@ public:
     // SharedBufferedStream will override the function,
     // If io_coalesce_lake_read_enable set to true, it will be called to release the buffer for saving memory
     // when column_iterator get eos.
-    virtual void release() {};
+    virtual void release(){};
 
 protected:
     std::string _filename = "";
