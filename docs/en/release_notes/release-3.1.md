@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
-## 3.1.10 (Deprecated)
+## 3.1.10 (Yanked)
 
 :::tip
 
