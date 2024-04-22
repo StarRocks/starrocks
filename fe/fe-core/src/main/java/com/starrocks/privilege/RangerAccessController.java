@@ -135,7 +135,7 @@ public abstract class RangerAccessController extends ExternalAccessController im
         }
     }
 
-    protected void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, PrivilegeType privilegeType)
+    public void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, PrivilegeType privilegeType)
             throws AccessDeniedException {
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
