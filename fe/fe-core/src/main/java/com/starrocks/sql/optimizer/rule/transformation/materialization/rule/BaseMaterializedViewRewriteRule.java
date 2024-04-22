@@ -227,6 +227,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             IMaterializedViewMetricsEntity mvEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
             mvEntity.increaseQueryMatchedCount(1L);
+            // mark: query has been rewritten by mv success.
+            context.getQueryMaterializationContext().markRewriteSuccess(true);
 
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();
