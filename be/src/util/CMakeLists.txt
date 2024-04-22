@@ -40,6 +40,7 @@ set(UTIL_FILES
   hash_util.hpp
   json_util.cpp
   json.cpp
+  json_flattener.cpp
   json_converter.cpp
   starrocks_metrics.cpp
   mem_info.cpp

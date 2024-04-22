@@ -21,6 +21,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "column/column.h"
@@ -33,9 +34,10 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
+#include "runtime/types.h"
 #include "storage/rowset/column_writer.h"
 #include "types/logical_type.h"
-#include "util/json_util.h"
+#include "util/json_flattener.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -80,6 +82,7 @@ private:
 
     std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
     std::vector<std::string> _flat_paths;
+    std::vector<LogicalType> _flat_types;
     std::vector<ColumnPtr> _flat_columns;
 };
 
@@ -101,88 +104,11 @@ Status FlatJsonColumnWriter::append(const Column& column) {
 }
 
 void FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
-    DCHECK(_flat_paths.empty());
-    DCHECK(!json_datas.empty());
+    JsonFlattener flattener;
+    flattener.derived_paths(json_datas);
 
-    size_t total_rows = 0;
-    size_t null_count = 0;
-
-    for (auto& column : json_datas) {
-        DCHECK(!column->is_constant());
-
-        total_rows += column->size();
-        if (column->only_null() || column->empty()) {
-            null_count += column->size();
-            continue;
-        } else if (column->is_nullable()) {
-            auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            null_count += nullable_column->null_count();
-        }
-    }
-
-    // more than half of null
-    if (null_count > total_rows * config::json_flat_null_factor) {
-        VLOG(8) << "flat json, null_count[" << null_count << "], row[" << total_rows
-                << "], null_factor: " << config::json_flat_null_factor;
-        return;
-    }
-
-    // extract common keys
-    std::unordered_map<std::string, uint64_t> hit_maps;
-    for (size_t k = 0; k < json_datas.size(); k++) {
-        size_t row_count = json_datas[k]->size();
-
-        ColumnViewer<TYPE_JSON> viewer(json_datas[k]);
-        for (size_t i = 0; i < row_count; ++i) {
-            if (viewer.is_null(i)) {
-                continue;
-            }
-
-            JsonValue* json = viewer.value(i);
-            auto vslice = json->to_vslice();
-
-            if (vslice.isNull()) {
-                continue;
-            }
-
-            if (vslice.isNone() || !vslice.isObject() || vslice.isEmptyObject()) {
-                VLOG(8) << "flat json, row isn't object, can't be flatten";
-                return;
-            }
-
-            std::vector<std::string> keys = arangodb::velocypack::Collection::keys(json->to_vslice());
-            for (auto& sr : keys) {
-                hit_maps[sr]++;
-            }
-        }
-    }
-
-    if (hit_maps.size() <= config::json_flat_internal_column_min_limit) {
-        VLOG(8) << "flat json, internal column too less: " << hit_maps.size()
-                << ", at least: " << config::json_flat_internal_column_min_limit;
-        return;
-    }
-
-    // sort by hit
-    std::vector<pair<std::string, std::uint64_t>> top_hits(hit_maps.begin(), hit_maps.end());
-    std::sort(top_hits.begin(), top_hits.end(),
-              [](const pair<std::string, std::uint64_t>& a, const pair<std::string, std::uint64_t>& b) {
-                  return a.second > b.second;
-              });
-
-    for (int i = 0; i < top_hits.size() && i < config::json_flat_column_max; i++) {
-        const auto& [name, hit] = top_hits[i];
-        // check sparsity
-        if (hit >= total_rows * config::json_flat_sparsity_factor) {
-            if (name.find('.') != std::string::npos) {
-                // add escape
-                _flat_paths.emplace_back(fmt::format("\"{}\"", name));
-            } else {
-                _flat_paths.emplace_back(name);
-            }
-        }
-        VLOG(8) << "flat json[" << name << "], hit[" << hit << "], row[" << total_rows << "]";
-    }
+    _flat_paths = flattener.get_flat_paths();
+    _flat_types = flattener.get_flat_types();
 
     if (_flat_paths.empty()) {
         return;
@@ -190,13 +116,11 @@ void FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
 
     // extract flat column
     for (size_t i = 0; i < _flat_paths.size(); i++) {
-        _flat_columns.emplace_back(NullableColumn::create(JsonColumn::create(), NullColumn::create()));
+        _flat_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(_flat_types[i]), true));
     }
 
-    JsonFlater flater(_flat_paths);
-
     for (auto& col : json_datas) {
-        flater.flatten(col.get(), &_flat_columns);
+        flattener.flatten(col.get(), &_flat_columns);
     }
 
     // recode null column in 1st
@@ -218,6 +142,7 @@ void FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
 
         _flat_columns.insert(_flat_columns.begin(), nulls);
         _flat_paths.insert(_flat_paths.begin(), "nulls");
+        _flat_types.insert(_flat_types.begin(), LogicalType::TYPE_TINYINT);
     }
 }
 
@@ -260,16 +185,32 @@ Status FlatJsonColumnWriter::finish() {
             opts.meta = _json_meta->add_children_columns();
             opts.meta->set_column_id(i);
             opts.meta->set_unique_id(i);
-            opts.meta->set_type(LogicalType::TYPE_JSON);
-            opts.meta->set_length(get_type_info(LogicalType::TYPE_JSON)->size());
+            opts.meta->set_type(_flat_types[i]);
+            if (_flat_types[i] == TYPE_VARCHAR) {
+                opts.meta->set_length(config::olap_string_max_length);
+            } else {
+                DCHECK_NE(_flat_types[i], TYPE_CHAR);
+                // set length for non-string type (e.g. int, double, date, etc.
+                opts.meta->set_length(get_type_info(_flat_types[i])->size());
+            }
             opts.meta->set_is_nullable(true);
             opts.meta->set_encoding(DEFAULT_ENCODING);
             opts.meta->set_compression(_json_meta->compression());
-            opts.meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
-            opts.meta->set_name(_flat_paths[i]);
+
+            if (_flat_types[i] == LogicalType::TYPE_JSON) {
+                opts.meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
+            }
+
+            if (_flat_paths[i].find('.') != std::string::npos) {
+                // add escape
+                opts.meta->set_name(fmt::format("\"{}\"", _flat_paths[i]));
+            } else {
+                opts.meta->set_name(_flat_paths[i]);
+            }
+
             opts.need_flat = false;
 
-            TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, LogicalType::TYPE_JSON, true);
+            TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);
             ASSIGN_OR_RETURN(auto fw, ColumnWriter::create(opts, &col, _wfile));
             _flat_writers.emplace_back(std::move(fw));
 
