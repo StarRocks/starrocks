@@ -199,6 +199,34 @@ public class SelectUsingAliasTest extends PlanTestBase {
                 "GROUP BY test.test_all_type.t1a, test.test_all_type.t1c", false);
     }
 
+    @Test
+    public void testAmbiguous() {
+        // test duplicate alias but not ambiguous
+        String sql = "select v1 as v, v2 as v from t0";
+        testSqlRewrite(sql, "SELECT v1 AS v, v2 AS v\nFROM test.t0");
+
+        // test duplicate alias and ambiguous in order by
+        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
+                () -> getFragmentPlan("select v1 as v, v2 as v from t0 order by v"));
+
+        // test duplicate alias and ambiguous in group by
+        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
+                () -> getFragmentPlan("select v1 as v, v2 as v from t0 group by v"));
+
+        // test duplicate alias and ambiguous in function
+        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
+                () -> getFragmentPlan("select v1 as v, v2 as v, concat(trim(v),',') from t0"));
+
+        // test duplicate alias and ambiguous in function
+        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
+                () -> getFragmentPlan("select trim(v1) as v, trim(v2) as v, concat(trim(v),',') from t0"));
+
+        // test normal alias not ambiguous
+        sql = "select trim(v1) as v, concat(v,',') from t0";
+        testSqlRewrite(sql, "SELECT trim(v1) AS v, concat(trim(v1), ',') AS concat(trim(test.t0.v1), ',')\n" +
+                "FROM test.t0");
+    }
+
     private void testSqlRewrite(String sql, String expected) {
         testSqlRewrite(sql, expected, true);
     }

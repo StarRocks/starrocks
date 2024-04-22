@@ -1226,6 +1226,7 @@ public class QueryAnalyzer {
     // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1 where a != 'x'
     private static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
         private final Map<String, Expr> aliases = new HashMap<>();
+        private final Set<String> aliasesMaybeAmbiguous = new HashSet<>();
         private final Map<String, Expr> resolvedAliases = new HashMap<>();
         private final LinkedList<String> resolvingAlias = new LinkedList<>();
         private final Scope sourceScope;
@@ -1254,7 +1255,12 @@ public class QueryAnalyzer {
             String ref = slotRef.getColumnName().toLowerCase();
             Expr e = aliases.get(ref);
             // Ignore slot rewrite if the `slotRef` is not in alias map
-            if (e == null || ref.equals(resolvingAlias.peekLast())) {
+            if (e == null) {
+                return slotRef;
+            }
+            // If alias is same with table column name where this alias is defined, we directly use table column name.
+            // eg: DATE(pt) as pt
+            if (ref.equals(resolvingAlias.peekLast())) {
                 return slotRef;
             }
             // If alias is same with table column name, we directly use table column name.
@@ -1264,6 +1270,10 @@ public class QueryAnalyzer {
             if (sourceScope.tryResolveField(slotRef).isPresent() &&
                     !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
                 return slotRef;
+            }
+            // Referring to a duplicated alias is ambiguous
+            if (aliasesMaybeAmbiguous.contains(ref)) {
+                throw new SemanticException("Column " + ref + " is ambiguous", slotRef.getPos());
             }
             // Use short circuit to avoid duplicated resolving of same alias
             if (resolvedAliases.containsKey(ref)) {
@@ -1295,7 +1305,12 @@ public class QueryAnalyzer {
                     continue;
                 }
                 // Alias is case-insensitive
-                aliases.put(alias.toLowerCase(), item.getExpr());
+                Expr lastAssociatedExpr = aliases.putIfAbsent(alias.toLowerCase(), item.getExpr());
+                if (lastAssociatedExpr != null) {
+                    // Duplicate alias is allowed, eg: select a.v1 as v, a.v2 as v from t0 a,
+                    // But it should not be ambiguous, eg: select a.v1 as v, a.v2 as v from t0 a order by v
+                    aliasesMaybeAmbiguous.add(alias.toLowerCase());
+                }
             }
             if (aliases.isEmpty()) {
                 return null;
@@ -1313,7 +1328,7 @@ public class QueryAnalyzer {
                 resolvingAlias.add(alias);
                 // Can't use computeIfAbsent here due to resolvedAliases is also modified in `visitSlot`,
                 // otherwise `ConcurrentModificationException` will be thrown
-                Expr rewrittenExpr = resolvedAliases.containsKey(alias)
+                Expr rewrittenExpr = resolvedAliases.containsKey(alias) && !aliasesMaybeAmbiguous.contains(alias)
                         ? resolvedAliases.get(alias) : visit(item.getExpr());
                 resolvedAliases.putIfAbsent(alias, rewrittenExpr);
                 item.setExpr(rewrittenExpr);
