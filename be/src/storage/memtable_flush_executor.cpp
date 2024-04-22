@@ -144,6 +144,20 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
             .build(&_flush_pool);
 }
 
+// Used in shared-data mode
+Status MemTableFlushExecutor::init_for_lake_table(const std::vector<DataDir*>& data_dirs) {
+    int threads = config::lake_flush_thread_num_per_store;
+    if (threads <= 0) {
+        threads = CpuInfo::num_cores() * 2;
+    }
+    int data_dir_num = static_cast<int>(data_dirs.size());
+    int max_threads = data_dir_num * threads;
+    return ThreadPoolBuilder("lake_memtable_flush") // mem table flush
+            .set_min_threads(0)
+            .set_max_threads(max_threads)
+            .build(&_flush_pool);
+}
+
 Status MemTableFlushExecutor::update_max_threads(int max_threads) {
     if (_flush_pool != nullptr) {
         return _flush_pool->update_max_threads(max_threads);

@@ -133,6 +133,8 @@ public:
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
 
+    Status init_for_lake_table(const std::vector<DataDir*>& data_dirs);
+
     // dynamic update max threads num
     Status update_max_threads(int max_threads);
 
