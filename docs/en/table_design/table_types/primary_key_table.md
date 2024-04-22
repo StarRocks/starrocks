@@ -13,8 +13,10 @@ The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL cons
 
 :::info
 
-- Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified seperately. As such, table creation flexibility is improved.
-- Since v3.1, StarRocks's shared-data mode supports Primary Key tables. Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
+- Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified separately. As such, table creation flexibility is improved.
+- Since v3.1, StarRocks shared-data clusters support creating Primary Key tables. 
+  - Since v3.1.4, persistent indexes can be created and stored in **local disks**.
+  - Since v3.3.0, persistent indexes can be created and stored in **object storages**.
 
 :::
 
