@@ -289,6 +289,7 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
         _tablet_schema = std::move(res).value();
         return Status::OK();
     } else if (res.status().is_not_found()) {
+        LOG(WARNING) << "No schema file of id=" << _schema_id << " for tablet=" << _tablet_id;
         // schema file does not exist, fetch tablet schema from tablet metadata
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         return Status::OK();

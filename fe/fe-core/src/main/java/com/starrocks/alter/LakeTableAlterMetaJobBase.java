@@ -114,8 +114,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         this.jobState = JobState.RUNNING;
     }
 
-    protected abstract TabletMetadataUpdateAgentTask createTask(MaterializedIndex index, long nodeId,
-                                                                Set<Long> tablets);
+    protected abstract TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
+            MaterializedIndex index, long nodeId, Set<Long> tablets);
 
     protected abstract void updateCatalog(Database db, LakeTable table);
 
@@ -324,7 +324,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         batchTask = new AgentBatchTask();
         for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
-            TabletMetadataUpdateAgentTask task = createTask(index, kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = createTask(partition, index, kv.getKey(), kv.getValue());
             Preconditions.checkState(task != null, "task is null");
             task.setLatch(countDownLatch);
             task.setTxnId(watershedTxnId);
