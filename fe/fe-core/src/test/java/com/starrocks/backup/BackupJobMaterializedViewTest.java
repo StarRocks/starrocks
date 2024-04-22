@@ -69,17 +69,16 @@ public class BackupJobMaterializedViewTest {
     private BackupJob job;
     private Database db;
 
-    private long dbId = 11;
-    private long tblId = 12;
-    private long partId = 13;
-    private long idxId = 14;
-    private long tabletId = 15;
-    private long backendId = 10000;
-    private long version = 16;
-
-    private long repoId = 30000;
-    private AtomicLong id = new AtomicLong(50000);
-    private static final String MV_LABEL = "mv_label";
+    private long dbId = 110;
+    private long tblId = 120;
+    private long partId = 130;
+    private long idxId = 140;
+    private long tabletId = 150;
+    private long backendId = 11000;
+    private long version = 160;
+    private long repoId = 30001;
+    private AtomicLong id = new AtomicLong(50001);
+    private static final String MV_LABEL = "test_mv_backup_label";
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -299,7 +298,7 @@ public class BackupJobMaterializedViewTest {
         Assert.assertEquals(job.getJobId(), upTask.getJobId());
         Map<String, String> srcToDest = upTask.getSrcToDestPath();
         Assert.assertEquals(1, srcToDest.size());
-        String dest = srcToDest.get(snapshotPath + "/" + (tabletId + 1) + "/" + 0);
+        String dest = srcToDest.get(snapshotPath + "/" + tabletId  + "/" + 0);
         Assert.assertNotNull(dest);
 
         // 5. uploading
