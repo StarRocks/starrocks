@@ -774,7 +774,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_5` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -790,7 +790,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_6` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -806,7 +806,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_7` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -822,7 +822,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 -- name: test_clone_for_gin
 set low_cardinality_optimize_v2 = false;
