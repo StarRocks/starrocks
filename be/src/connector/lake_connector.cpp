@@ -69,6 +69,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     cm.key_column_names = &thrift_lake_scan_node.sort_key_column_names;
     cm.runtime_filters = _runtime_filters;
     cm.runtime_state = state;
+    cm.driver_sequence = runtime_bloom_filter_eval_context.driver_sequence;
 
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;
