@@ -1368,7 +1368,7 @@ Description: Peak memory usage.
 OlapTableSink is the operator that profiles data loading with INSERT INTO FILES() and Broker Load. This feature is supported from v3.3.0 onwards.
 
 :::tip
-- An excessive difference between the Max and Min values of the PushChunkNum metric of OlapTableSink indicates data skewness in the upstream operators, which may lead to a bottleneck in loading performance.
+- An excessive difference between the Max and Min values of the PushChunkNum metric of OlapTableSink indicates data skew in the upstream operators, which may lead to a bottleneck in loading performance.
 - RpcClientSideTime equals RpcServerSideTime plus network transmission time plus RPC framework processing time. If there is a significant difference between RpcClientSideTime and RpcServerSideTime, consider enabling compression to reduce transmission time.
 :::
 
@@ -1406,7 +1406,7 @@ Description: Total RPC time consumption for loading recorded by the server side.
 
 ##### PrepareDataTime
 
-Description: Total time consumption for the data preparation phase, including the data format conversion and the data quality check.
+Description: Total time consumption for the data preparation phase, including data format conversion and data quality check.
 
 ##### SendDataTime
 
