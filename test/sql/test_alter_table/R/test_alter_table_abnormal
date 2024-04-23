@@ -281,7 +281,8 @@ ALTER TABLE site_access1 DROP COLUMN site_id;
 -- result:
 E: (1064, 'Distribution column[site_id] cannot be dropped. index[site_access1]')
 -- !result
-CREATE TABLE site_access2 (    
+-- name: test_alter_key_buckets
+CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
 	`city_code` VARCHAR(100),
 	`from`  VARCHAR(32) DEFAULT '',
@@ -292,7 +293,7 @@ DISTRIBUTED BY HASH(`city_code`) BUCKETS 10
 PROPERTIES('replication_num'='1');
 -- result:
 -- !result
-ALTER TABLE site_access2 BY HASH(user_name) BUCKETS 20;
+ALTER TABLE demo2_alter_0 BY HASH(user_name) BUCKETS 20;
 -- result:
 -- !result
 
