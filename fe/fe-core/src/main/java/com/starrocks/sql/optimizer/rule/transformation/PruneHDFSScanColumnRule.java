@@ -60,7 +60,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
     public static final PruneHDFSScanColumnRule TABLE_FUNCTION_TABLE_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
 
-    public static final PruneHDFSScanColumnRule METADATA_SCAN =
+    public static final PruneHDFSScanColumnRule ICEBERG_METADATA_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
 
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {
