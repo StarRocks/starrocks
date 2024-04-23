@@ -32,6 +32,7 @@
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/scoped_updater.h"
 
 namespace starrocks::lake {
 
@@ -926,67 +927,68 @@ TEST_F(LakeIOCoalesceTest, test_normal) {
     _tablet_metadata->set_version(2);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    // test reader
-    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
-    config::io_coalesce_lake_read_enable = true;
-    config::lake_small_segment_file_threshold_size = 100 * 1024 * 1024; // 100MB
+    {
+        // test reader
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        SCOPED_UPDATE(bool, config::io_coalesce_lake_read_enable, true);
+        SCOPED_UPDATE(int32, config::lake_small_segment_file_threshold_size, 104857600); // 100MB
 
-    ASSERT_OK(reader->prepare());
-    TabletReaderParams params;
-    ASSERT_OK(reader->open(params));
+        ASSERT_OK(reader->prepare());
+        TabletReaderParams params;
+        ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
-    for (int j = 0; j < 2; ++j) {
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        for (int j = 0; j < 2; ++j) {
+            read_chunk_ptr->reset();
+            ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
+            ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
+            for (int i = 0, sz = k0.size(); i < sz; i++) {
+                EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
+                EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
+            }
+            for (int i = 0, sz = k1.size(); i < sz; i++) {
+                EXPECT_EQ(k1[i], read_chunk_ptr->get(k0.size() + i)[0].get_int32());
+                EXPECT_EQ(v1[i], read_chunk_ptr->get(k0.size() + i)[1].get_int32());
+            }
+        }
+
         read_chunk_ptr->reset();
-        ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
-        ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
-        for (int i = 0, sz = k0.size(); i < sz; i++) {
-            EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
-            EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
-        }
-        for (int i = 0, sz = k1.size(); i < sz; i++) {
-            EXPECT_EQ(k1[i], read_chunk_ptr->get(k0.size() + i)[0].get_int32());
-            EXPECT_EQ(v1[i], read_chunk_ptr->get(k0.size() + i)[1].get_int32());
-        }
+        ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+
+        reader->close();
     }
 
-    read_chunk_ptr->reset();
-    ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+    {
+        // test reader
+        // config::lake_small_segment_file_threshold_size is set to 1
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        SCOPED_UPDATE(bool, config::io_coalesce_lake_read_enable, true);
+        SCOPED_UPDATE(int32, config::lake_small_segment_file_threshold_size, 1);
 
-    reader->close();
+        ASSERT_OK(reader->prepare());
+        TabletReaderParams params;
+        ASSERT_OK(reader->open(params));
 
-    // test reader
-    // config::lake_small_segment_file_threshold_size is set to 1
-    auto reader2 = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
-    config::io_coalesce_lake_read_enable = true;
-    config::lake_small_segment_file_threshold_size = 1;
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        for (int j = 0; j < 2; ++j) {
+            read_chunk_ptr->reset();
+            ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
+            ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
+            for (int i = 0, sz = k0.size(); i < sz; i++) {
+                EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
+                EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
+            }
+            for (int i = 0, sz = k1.size(); i < sz; i++) {
+                EXPECT_EQ(k1[i], read_chunk_ptr->get(k0.size() + i)[0].get_int32());
+                EXPECT_EQ(v1[i], read_chunk_ptr->get(k0.size() + i)[1].get_int32());
+            }
+        }
 
-    ASSERT_OK(reader2->prepare());
-    ASSERT_OK(reader2->open(params));
-
-    read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
-    for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
-        ASSERT_OK(reader2->get_next(read_chunk_ptr.get()));
-        ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
-        for (int i = 0, sz = k0.size(); i < sz; i++) {
-            EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
-            EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
-        }
-        for (int i = 0, sz = k1.size(); i < sz; i++) {
-            EXPECT_EQ(k1[i], read_chunk_ptr->get(k0.size() + i)[0].get_int32());
-            EXPECT_EQ(v1[i], read_chunk_ptr->get(k0.size() + i)[1].get_int32());
-        }
+        ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+
+        reader->close();
     }
-
-    read_chunk_ptr->reset();
-    ASSERT_TRUE(reader2->get_next(read_chunk_ptr.get()).is_end_of_file());
-
-    reader->close();
-
-    // reset config
-    config::io_coalesce_lake_read_enable = false;
-    config::lake_small_segment_file_threshold_size = 10485760;
 }
 
 } // namespace starrocks::lake
