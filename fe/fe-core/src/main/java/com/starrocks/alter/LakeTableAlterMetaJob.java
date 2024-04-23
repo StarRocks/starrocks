@@ -23,15 +23,12 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
 
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 
 public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
@@ -58,9 +55,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @Override
     protected void updateCatalog(Database db, LakeTable table) {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
-            Map<String, String> tempProperties = new HashMap<>();
-            tempProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, String.valueOf(metaValue));
-            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, table, tempProperties, metaType);
+            table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                    String.valueOf(metaValue));
+            table.getTableProperty().buildEnablePersistentIndex();
         }
     }
 
