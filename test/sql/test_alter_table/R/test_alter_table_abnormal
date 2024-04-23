@@ -284,8 +284,8 @@ E: (1064, 'Distribution column[site_id] cannot be dropped. index[site_access1]')
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
-	`city_code` VARCHAR(100),
-	`from`  VARCHAR(32) DEFAULT '',
+    `city_code` VARCHAR(100),
+    `from`  VARCHAR(32) DEFAULT '',
     `pv` BIGINT DEFAULT '0'
 )
 PRIMARY KEY(`user_name`)
