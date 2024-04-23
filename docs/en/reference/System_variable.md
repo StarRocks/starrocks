@@ -244,7 +244,7 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Whether to enable materialized view union rewrite or not. If true, try to use union all compensate when materialized view predicates cannot satisfy the query's predicates.
 * **Default**: true
-* * **Introduced in**: v2.5
+* **Introduced in**: v2.5
 
 ### follower_query_forward_mode
 
