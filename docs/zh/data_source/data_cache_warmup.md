@@ -29,12 +29,12 @@ FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 
 参数说明：
 
-- `column_name`：要拉取的列。也可以不指定，使用 `*` 来拉取表中的所有列。
+- `column_name`：要拉取的列。也可以不指定，使用 `*` 来拉取表中所有列。
 - `catalog_name`：远端 Catalog 名称。如果已经通过 SET CATALOG 切换到远端 Catalog 下，也可以不填。
 - `db_name`：远端数据库名称。如果已经切换到远端数据库下，也可以不填。
 - `table_name`：远端表名称。
 - `boolean_expression`: WHERE 中指定的过滤条件。
-- `PROPERTIES`：当前仅支持设置 `verbose` 属性，返回详细的预热指标。
+- `PROPERTIES`：当前仅支持设置 `verbose` 属性，用于返回详细的预热指标。
 
 `CACHE_SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
 
@@ -148,7 +148,9 @@ DROP TASK <task_name>
    可以提交一个周期性执行的 `CACHE SELECT`，指定每天早上 7 点开始执行。
 
    ```sql
-   mysql> submit task BI schedule START('2024-02-03 07:00:00') EVERY(interval 1 day) AS cache select * from lineitem where l_shipdate='1994-10-28';
+   mysql> submit task BI schedule START('2024-02-03 07:00:00') EVERY(interval 1 day)
+   AS cache select * from hive_catalog.test_db.lineitem
+   where l_shipdate='1994-10-28';
    +--------------+-----------+
    | TaskName     | Status    |
    +--------------+-----------+
@@ -164,7 +166,8 @@ DROP TASK <task_name>
    以下示例中，同时指定了预热的 DOP 和资源组，以此减少预热对系统正常查询的影响。
 
    ```sql
-   mysql> submit task cache_select properties("pipeline_dop"="1", "resource_group"="warmup") schedule EVERY(interval 1 day) AS cache select * from lineitem;
+   mysql> submit task cache_select properties("pipeline_dop"="1", "resource_group"="warmup") schedule EVERY(interval 1 day)
+   AS cache select * from hive_catalog.test_db.lineitem;
    +--------------+-----------+
    | TaskName     | Status    |
    +--------------+-----------+
