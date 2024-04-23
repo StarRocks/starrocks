@@ -1378,7 +1378,7 @@ Description: Number of the synchronous materialized views created for the destin
 
 ##### ReplicatedStorage
 
-Description: Whether is Single Leader Replication is enabled.
+Description: Whether Single Leader Replication is enabled.
 
 ##### TxnID
 
