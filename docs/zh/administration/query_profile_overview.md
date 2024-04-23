@@ -6,6 +6,8 @@ displayed_sidebar: "Chinese"
 
 本文介绍如何查看并分析 Query Profile。Query Profile 记录了查询中涉及的所有工作节点的执行信息。您可以通过 Query Profile 快速识别影响 StarRocks 集群查询性能的瓶颈。
 
+自 v3.3.0 起，StarRocks 支持为 INSERT INTO FILES() 和 Broker Load 导入方式提供 Query Profile。相关指标详情，请参考 [OlapTableSink Operator](./query_profile_details.md#olaptablesink-operator)。
+
 ## 启用 Query Profile
 
 您可以通过将变量 `enable_profile` 设置为 `true` 以启用 Query Profile：

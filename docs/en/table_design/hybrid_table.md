@@ -111,7 +111,7 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
    SHOW VARIABLES LIKE '%enable_short_circuit%';
    ```
 
-   If the short circuiting for queries is not enabled, run the `SET enable_short_circuit = true;` command to set the variable [`enable_short_circuit`](../reference/System_variable.md#enable_short_circuit-323-and-later)  to `true`.
+   If the short circuiting for queries is not enabled, run the `SET enable_short_circuit = true;` command to set the variable [`enable_short_circuit`](../reference/System_variable.md) to `true`.
 
 2. Query data. If the query meets the criteria that conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the shortcut.
 

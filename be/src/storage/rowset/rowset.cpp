@@ -261,7 +261,7 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
-        // When creating segment iterators for compaction, we don't provide rowid_range_option and predicates_for_zone_map,
+        // When creating segment iterators for compaction, we don't provide rowid_range_option and pred_tree_for_zone_map,
         // So here we don't need to consider the following two situation:
         //
         // if (options.rowid_range_option != nullptr) {
