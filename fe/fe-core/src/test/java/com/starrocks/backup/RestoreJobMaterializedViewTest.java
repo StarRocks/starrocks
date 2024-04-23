@@ -89,13 +89,18 @@ public class RestoreJobMaterializedViewTest {
 
     private Database db;
 
-    private String label = "test_mv_label";
+    private long dbId = 111;
+    private long tblId = 121;
+    private long partId = 131;
+    private long idxId = 141;
+    private long tabletId = 151;
+    private long backendId = 100001;
+    private long version = 161;
+    private long repoId = 30001;
+    private AtomicLong id = new AtomicLong(50001);
+    private String label = "test_mv_restore_label";
 
     private static final int ID_SIZE = 10000;
-
-    private AtomicLong id = new AtomicLong(50000);
-
-    private long repoId = 30000;
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -141,14 +146,6 @@ public class RestoreJobMaterializedViewTest {
             new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
-
-    private long dbId = 11;
-    private long tblId = 12;
-    private long partId = 13;
-    private long idxId = 14;
-    private long tabletId = 15;
-    private long backendId = 10000;
-    private long version = 16;
 
     private Object[] arrayIds;
     private void setUpMocker() {
