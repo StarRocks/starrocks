@@ -34,15 +34,21 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -63,6 +69,9 @@ public class MetadataViewerTest {
 
     @Mocked
     private SystemInfoService infoService;
+
+    @Mocked
+    private ConnectContext connectContext;
 
     private static Database db;
 
@@ -136,6 +145,31 @@ public class MetadataViewerTest {
         List<List<String>> result = (List<List<String>>) getTabletDistributionMethod.invoke(null, args);
         Assert.assertEquals(3, result.size());
         System.out.println(result);
+    }
+
+    @Test
+    public void testGetTabletDistributionForSharedDataMode()
+            throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
+                minTimes = 0;
+                result = ImmutableMap.of(10003L, new ComputeNode(), 10004L, new ComputeNode(), 10005L,
+                        new ComputeNode());
+            }
+        };
+
+        Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, null};
+        List<List<String>> result = (List<List<String>>) getTabletDistributionMethod.invoke(null, args);
+        Assert.assertEquals(3, result.size());
     }
 
 }
