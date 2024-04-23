@@ -96,6 +96,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -523,7 +524,9 @@ public class DefaultCoordinator extends Coordinator {
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
             jobSpec.getQueryOptions().setEnable_profile(true);
-            List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
+            Collection<FragmentInstance> fragmentInstances = executionDAG.getInstances();
+            List<Long> relatedBackendIds =
+                    fragmentInstances.stream().map(FragmentInstance::getWorkerId).collect(Collectors.toList());
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(
                     jobSpec.getLoadJobId(), jobSpec.getQueryId(), executionDAG.getInstanceIds(), relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()),
