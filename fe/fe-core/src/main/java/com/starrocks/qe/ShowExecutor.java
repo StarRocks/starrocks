@@ -1706,6 +1706,7 @@ public class ShowExecutor {
                                 PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
                     }
                     Boolean hideIpPort = privResult.second;
+                    statement.setTable(table);
 
                     OlapTable olapTable = (OlapTable) table;
                     long sizeLimit = -1;

@@ -183,7 +183,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
                 connectorMetadata.createView(null);
                 connectorMetadata.alterView(null);
-                connectorMetadata.truncateTable(null);
+                connectorMetadata.truncateTable(null, null);
                 connectorMetadata.alterTableComment(null, null, null);
                 connectorMetadata.finishSink("test_db", "test_tbl", null);
                 connectorMetadata.abortSink("test_db", "test_tbl", null);
@@ -220,7 +220,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
         catalogConnectorMetadata.createView(null);
         catalogConnectorMetadata.alterView(null);
-        catalogConnectorMetadata.truncateTable(null);
+        catalogConnectorMetadata.truncateTable(null, null);
         catalogConnectorMetadata.alterTableComment(null, null, null);
         catalogConnectorMetadata.finishSink("test_db", "test_tbl", null);
         catalogConnectorMetadata.abortSink("test_db", "test_tbl", null);
