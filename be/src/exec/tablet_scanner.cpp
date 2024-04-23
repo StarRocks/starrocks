@@ -165,6 +165,9 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
+    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool, _pred_tree));
+
     for (const auto& [_, col_nodes] : _pred_tree.root().col_children_map()) {
         for (const auto& col_node : col_nodes) {
             _predicates.add(col_node.col_pred());
@@ -172,9 +175,6 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     }
     // TODO(liuzihe): support OR predicate.
     DCHECK(_pred_tree.root().compound_children().empty());
-
-    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
-    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool, _predicates));
 
     // Range
     for (auto key_range : *key_ranges) {
