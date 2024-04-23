@@ -1365,6 +1365,11 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 您可以通过 OlapTableSink Operator 了解 INSERT INTO FILES() 和 Broker Load 导入方式的执行信息。此功能自 v3.3.0 起支持。
 
+:::tip
+- 如果 OlapTableSink 的 PushChunkNum 指标的 Max 值和 Min 值之间存在显著差异，则表明上游算子产生的数据存在数据倾斜，可能导致写入性能瓶颈。
+- RpcClientSideTime 等于 RpcServerSideTime 加上网络传输时间和 RPC 框架处理时间。如果 RpcClientSideTime 和 RpcServerSideTime 之间存在显著差异，请考虑启用压缩以减少传输时间。
+:::
+
 ##### IndexNum
 
 描述：目标表的同步物化视图数。
