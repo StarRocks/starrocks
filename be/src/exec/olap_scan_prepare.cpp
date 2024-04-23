@@ -244,18 +244,16 @@ StatusOr<ExprContext*> ExprContextContainer::expr_context(ObjectPool* obj_pool, 
 
 template <ExprContainer E, CompoundNodeType Type>
 ChunkPredicateBuilder<E, Type>::ChunkPredicateBuilder(const OlapScanConjunctsManagerOptions& opts, std::vector<E> exprs,
-                                                      bool allow_partial_normalized)
-        : _opts(opts),
-          _exprs(std::move(exprs)),
-          _allow_partial_normalized(allow_partial_normalized),
-          _normalized_exprs(_exprs.size()) {}
+                                                      bool is_root_builder)
+        : _opts(opts), _exprs(std::move(exprs)), _is_root_builder(is_root_builder), _normalized_exprs(_exprs.size()) {}
 
 template <ExprContainer E, CompoundNodeType Type>
 StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     RETURN_IF_ERROR(normalize_expressions());
     RETURN_IF_ERROR(build_olap_filters());
 
-    if (_allow_partial_normalized) {
+    // Only the root builder builds scan keys.
+    if (_is_root_builder) {
         RETURN_IF_ERROR(build_scan_keys(_opts.scan_keys_unlimited, _opts.max_scan_key_num));
     }
 
@@ -265,9 +263,10 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     }
 
     ASSIGN_OR_RETURN(auto normalized, _normalize_compound_predicates());
-    if (_allow_partial_normalized) {
+    if (_is_root_builder) {
         return normalized;
     }
+    // Non-root builder return true only when all the child predicates are normalized.
     return normalized && !SIMD::contain_zero(_normalized_exprs);
 }
 
@@ -280,7 +279,7 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicates() 
         }
 
         ASSIGN_OR_RETURN(const bool normalized, _normalize_compound_predicate(_exprs[i].root()));
-        if (!normalized && !_allow_partial_normalized) {
+        if (!normalized && !_is_root_builder) {
             return false;
         }
         _normalized_exprs[i] = normalized;

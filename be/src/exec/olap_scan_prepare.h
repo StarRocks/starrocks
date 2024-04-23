@@ -75,8 +75,7 @@ concept ExprContainer = std::is_same_v<E, RawExprContainer> || std::is_same_v<E,
 template <ExprContainer E, CompoundNodeType Type>
 class ChunkPredicateBuilder {
 public:
-    ChunkPredicateBuilder(const OlapScanConjunctsManagerOptions& opts, std::vector<E> exprs,
-                          bool allow_partial_normalized);
+    ChunkPredicateBuilder(const OlapScanConjunctsManagerOptions& opts, std::vector<E> exprs, bool is_root_builder);
 
     StatusOr<bool> parse_conjuncts();
 
@@ -92,7 +91,7 @@ public:
 private:
     const OlapScanConjunctsManagerOptions& _opts;
     const std::vector<E> _exprs;
-    const bool _allow_partial_normalized;
+    const bool _is_root_builder;
 
     using ChunkPredicateBuilderVar = std::variant<ChunkPredicateBuilder<RawExprContainer, CompoundNodeType::AND>,
                                                   ChunkPredicateBuilder<RawExprContainer, CompoundNodeType::OR>>;
