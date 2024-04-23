@@ -117,6 +117,6 @@ PROPERTIES('replication_num'='1');
 
 ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
 
-function: wait_optimize_table_finish();
+function: wait_optimize_table_finish()
 
 
