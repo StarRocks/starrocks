@@ -125,7 +125,7 @@ public class TaskRunScheduler {
         LOG.info("remove pending task: {}", task);
 
         Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(task.getId());
-        if (taskRunQueue.isEmpty()) {
+        if (taskRunQueue == null || taskRunQueue.isEmpty()) {
             return;
         }
 
