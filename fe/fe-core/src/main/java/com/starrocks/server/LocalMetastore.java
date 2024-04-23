@@ -2389,7 +2389,7 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
                 null, properties,
-                com.starrocks.lake.Utils.getWorkerGroupByWarehouseId(warehouseManager, warehouseId));
+                com.starrocks.lake.Utils.getFirstWorkerGroupByWarehouseId(warehouseManager, warehouseId));
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);

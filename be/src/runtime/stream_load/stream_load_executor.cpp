@@ -167,7 +167,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.label = ctx->label;
-    request.__set_backend(BackendOptions::get_localBackend());
+    request.backend_id = get_backend_id();
 
     // set timestamp
     request.__set_timestamp(GetCurrentTimeMicros());

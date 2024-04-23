@@ -849,8 +849,8 @@ struct TLoadTxnBeginRequest {
     11: optional Types.TUniqueId request_id
     
     // begin from 101, in case of conflict with other's change
-    101: optional string warehouse
-    102: optional Types.TBackend backend
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
 }
 
 struct TLoadTxnBeginResult {
@@ -918,8 +918,8 @@ struct TStreamLoadPutRequest {
     55: optional Types.TPartialUpdateMode partial_update_mode
 
     // begin from 101, in case of conflict with other's change
-    101: optional string warehouse  // deprecated, because it needs client to pass warehouse name
-    102: optional Types.TBackend backend
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
 }
 
 struct TStreamLoadPutResult {
@@ -1358,7 +1358,9 @@ struct TImmutablePartitionRequest {
     2: optional i64 db_id
     3: optional i64 table_id
     4: optional list<i64> partition_ids
-    5: optional Types.TBackend backend
+
+    // begin from 101, in case of conflict with other's change
+    101: optional i64 backend_id
 }
 
 struct TImmutablePartitionResult {

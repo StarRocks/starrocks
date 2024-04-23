@@ -22,6 +22,7 @@ import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public abstract class Warehouse implements Writable {
     @SerializedName(value = "name")
@@ -55,7 +56,5 @@ public abstract class Warehouse implements Writable {
         Text.writeString(out, json);
     }
 
-    public long getWorkerGroupId() {
-        return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-    }
+    public abstract List<Long> getWorkerGroupIds();
 }

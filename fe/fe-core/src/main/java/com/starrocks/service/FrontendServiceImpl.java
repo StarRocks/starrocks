@@ -165,7 +165,6 @@ import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAuthenticateParams;
-import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
@@ -1265,9 +1264,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        if (request.getBackend() != null) {
+        if (request.isSetBackend_id()) {
             SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            warehouseId = Utils.getWarehouseIdFromBackend(systemInfo, request.getBackend());
+            warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, request.getBackend_id());
         } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
             // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
             String warehouseName = request.getWarehouse();
@@ -1963,7 +1962,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throws UserException {
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
-        TBackend tBackend = request.getBackend();
 
         TImmutablePartitionResult result = new TImmutablePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
@@ -2002,7 +2000,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Set<Long> updatePartitionIds = Sets.newHashSet();
 
         SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        long warehouseId = Utils.getWarehouseIdFromBackend(systemInfo, tBackend);
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, request.getBackend_id());
+        }
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {

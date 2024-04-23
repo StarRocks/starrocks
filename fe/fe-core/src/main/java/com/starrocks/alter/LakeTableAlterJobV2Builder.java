@@ -117,7 +117,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
         return GlobalStateMgr.getCurrentState().getStarOSAgent()
                 .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
-                        properties, Utils.getWorkerGroupByWarehouseId(warehouseManager, warehouseId));
+                        properties, Utils.getFirstWorkerGroupByWarehouseId(warehouseManager, warehouseId));
     }
 
 }
