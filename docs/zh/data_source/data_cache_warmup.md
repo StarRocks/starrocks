@@ -10,16 +10,16 @@ displayed_sidebar: "Chinese"
 
 Data Cache 预热和 [Data Cache](./data_cache.md) 特性的区别：
 
-- Data Cache 是一个被动填充 cache 的过程，相当于在查询的时候，顺便把数据写入 cache，以便后续查询使用。
+- Data Cache 是一个被动填充 cache 的过程，相当于在查询时，顺便把数据写入 cache，以便后续查询使用。
 - Data Cache 预热是一个主动填充 cache 的过程，提前将想要查询的数据放到 cache 里，是基于 Data Cache 的扩展。
 
 该特性从 3.3 版本开始支持。
 
 ## 实现方式
 
-StarRocks 提供了 `CACHE SELECT` 语法来实现 Data Cache 预热。使用 `CACHE SELECT` 之前，需要确保已经开启 [Data Cache](./data_cache.md) 特性。
+StarRocks 提供 `CACHE SELECT` 语法来实现 Data Cache 预热。使用 `CACHE SELECT` 之前，需要确保已经开启 Data Cache 特性。
 
-`CACHE SELECT` 的语法如下：
+`CACHE SELECT` 语法如下：
 
 ```sql
 CACHE SELECT <column_name> [, ...]
@@ -27,12 +27,12 @@ FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 [PROPERTIES("verbose"="true")]
 ```
 :::tip
-上述语法是从 `default_catalog` 来载入远端数据的语法。您也可以通过 `SET CATALOG <catalog_name>` 切换到目标 catalog下，然后对目标表进行数据拉取。
+上述语法是从 `default_catalog` 载入远端数据的语法。您也可以通过 `SET CATALOG <catalog_name>` 切换到目标 catalog 下，然后对目标表进行数据拉取。
 :::
 
-`CACHE_SELECT` 是一个同步的过程，且一次只能对一个表进行预热。执行成功后，会返回一些 CACHE 的指标。
+`CACHE_SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回一些 Cache 的指标。
 
-以下示例载入外表 cusotomer 的所有数据：
+以下示例载入外表 `customer` 的所有数据：
 
 ```sql
 mysql> cache select * from customer;
@@ -130,7 +130,7 @@ mysql> select * from default_catalog.information_schema.task_runs;
 ### 删除任务
 
 ```sql
-DROP TASK <task_name>;
+DROP TASK <task_name>
 ```
 
 ## CACHE SELECT 最佳实践
@@ -172,7 +172,7 @@ DROP TASK <task_name>;
 * 需要开启 Data Cache 特性，且拥有对目标 catalog/database/table 的 SELECT 权限。
 * `CACHE SELECT` 支持存算分离和存算一体架构的外表查询，支持预热远端的 TEXT, ORC, Parquet 文件。
 * `CACHE SELECT` 只支持对单表进行预热，不支持 `ORDER BY`，`LIMIT`，`GROUP BY` 等算子。
-* 目前 CACHE SELECT 的实现是采用 `INSERT INTO BLACKHOLE()` 的方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销是差不多的。这一块后续会做出改进，提升 `CACHE SELECT` 的性能。
+* 目前 `CACHE SELECT` 的实现是采用 `INSERT INTO BLACKHOLE()` 的方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销是差不多的。这一块后续会做出改进，提升 `CACHE SELECT` 的性能。
 * `CACHE SELECT` 预热的数据不会保证一定不被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以自行通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
 
 ## Data Cache 预热后续展望
