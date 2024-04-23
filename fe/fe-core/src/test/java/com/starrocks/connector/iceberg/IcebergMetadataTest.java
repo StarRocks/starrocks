@@ -1193,7 +1193,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 new Column("k5", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", columns, mockedNativeTableH, Maps.newHashMap());
-        Assert.assertEquals(0, IcebergMetadata.getIcebergMetricsConfig(icebergTable).size());
+        Assert.assertEquals(0, IcebergMetadata.traceIcebergMetricsConfig(mockedNativeTableH).size());
         Map<String, String> icebergProperties = Maps.newHashMap();
         icebergProperties.put("write.metadata.metrics.column.k1", "none");
         icebergProperties.put("write.metadata.metrics.column.k2", "counts");
@@ -1203,7 +1203,7 @@ public class IcebergMetadataTest extends TableTestBase {
         UpdateProperties updateProperties = mockedNativeTableH.updateProperties();
         icebergProperties.forEach(updateProperties::set);
         updateProperties.commit();
-        Map<String, MetricsModes.MetricsMode> actual2 = IcebergMetadata.getIcebergMetricsConfig(icebergTable);
+        Map<String, MetricsModes.MetricsMode> actual2 = IcebergMetadata.traceIcebergMetricsConfig(mockedNativeTableH);
         Assert.assertEquals(4, actual2.size());
         Map<String, MetricsModes.MetricsMode> expected2 = Maps.newHashMap();
         expected2.put("k1", MetricsModes.None.get());

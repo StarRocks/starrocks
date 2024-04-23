@@ -1910,7 +1910,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableIcebergColumnStatistics = false;
 
     @VarAttr(name = PLAN_MODE)
-    private String planMode = PlanMode.AUTO.modeName();
+    private String planMode = PlanMode.LOCAL.modeName();
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;

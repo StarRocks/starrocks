@@ -541,23 +541,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshotId, predicate);
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        traceIcebergMetricsConfig(nativeTbl);
         Types.StructType schema = nativeTbl.schema().asStruct();
-
-        Map<String, MetricsModes.MetricsMode> fieldToMetricsMode = getIcebergMetricsConfig(icebergTable);
-        if (!fieldToMetricsMode.isEmpty()) {
-            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".write_metrics_mode_default",
-                    DEFAULT_WRITE_METRICS_MODE_DEFAULT);
-            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.size",
-                    String.valueOf(fieldToMetricsMode.size()));
-            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.columns",
-                    fieldToMetricsMode.toString());
-        }
 
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
-        TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(PlanMode.AUTO))
+        TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(planMode()))
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);
@@ -687,19 +678,28 @@ public class IcebergMetadata implements ConnectorMetadata {
      * upper_bounds are persisted.
      * </p>
      */
-    public static Map<String, MetricsModes.MetricsMode> getIcebergMetricsConfig(IcebergTable table) {
+    public static Map<String, MetricsModes.MetricsMode> traceIcebergMetricsConfig(org.apache.iceberg.Table table) {
         MetricsModes.MetricsMode defaultMode = MetricsModes.fromString(DEFAULT_WRITE_METRICS_MODE_DEFAULT);
-        MetricsConfig metricsConf = MetricsConfig.forTable(table.getNativeTable());
-        Map<String, MetricsModes.MetricsMode> filedToMetricsMode = Maps.newHashMap();
-        for (Types.NestedField field : table.getNativeTable().schema().columns()) {
+        MetricsConfig metricsConf = MetricsConfig.forTable(table);
+        Map<String, MetricsModes.MetricsMode> fieldToMetricsMode = Maps.newHashMap();
+        for (Types.NestedField field : table.schema().columns()) {
             MetricsModes.MetricsMode mode = metricsConf.columnMode(field.name());
             // To reduce printing, only print specific metrics that are not in the
             // DEFAULT_WRITE_METRICS_MODE_DEFAULT: truncate(16) mode
             if (!mode.equals(defaultMode)) {
-                filedToMetricsMode.put(field.name(), mode);
+                fieldToMetricsMode.put(field.name(), mode);
             }
         }
-        return filedToMetricsMode;
+
+        if (!fieldToMetricsMode.isEmpty()) {
+            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + table + ".write_metrics_mode_default",
+                    DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + table + ".non-default.size",
+                    String.valueOf(fieldToMetricsMode.size()));
+            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + table + ".non-default.columns",
+                    fieldToMetricsMode.toString());
+        }
+        return fieldToMetricsMode;
     }
 
     @Override
@@ -950,6 +950,18 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         return true;
+    }
+
+    private PlanMode planMode() {
+        if (ConnectContext.get() == null) {
+            return PlanMode.LOCAL;
+        }
+
+        if (ConnectContext.get().getSessionVariable() == null) {
+            return PlanMode.LOCAL;
+        }
+
+        return PlanMode.fromName(ConnectContext.get().getSessionVariable().getPlanMode());
     }
 
     private boolean enablePruneManifest() {
