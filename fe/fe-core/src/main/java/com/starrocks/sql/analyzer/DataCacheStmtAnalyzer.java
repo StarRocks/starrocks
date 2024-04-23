@@ -137,8 +137,7 @@ public class DataCacheStmtAnalyzer {
             }
 
             Map<String, String> properties = statement.getProperties();
-            boolean isVerbose = Boolean.parseBoolean(properties.getOrDefault("verbose", "false"));
-            statement.setVerbose(isVerbose);
+            statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault("verbose", "false")));
             // todo analyze ttl, priority later
 
             return null;
