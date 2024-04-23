@@ -28,12 +28,12 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 ## Usage notes
 
-- The file formats of Iceberg that StarRocks supports are Parquet and ORC:
+Take note of the following points when you use StarRocks to query data from Iceberg:
 
-  - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
-  - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
-
-- Iceberg catalogs support v1 tables. Additionally, Iceberg catalogs support ORC-formatted v2 tables from StarRocks v3.0 onwards and support Parquet-formatted v2 tables from StarRocks v3.1 onwards.
+| **File format** | **Compression format**                                   | **Iceberg table version**                                           |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet         | SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION      | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.1 onwards in which queries on these v2 tables support position deletes. In v3.1.10, v3.2.5, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
+| ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.0 onwards in which queries on these v2 tables support position deletes. In v3.1.8, v3.2.3, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
 
 ## Integration preparation
 
