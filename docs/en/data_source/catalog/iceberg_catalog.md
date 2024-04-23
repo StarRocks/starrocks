@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "English"
-toc_max_heading_level: 3
+toc_max_heading_level: 5
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -104,7 +104,8 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
-    StorageCredentialParams
+    StorageCredentialParams,
+    MetadataUpdateParams
 )
 ```
 
@@ -205,17 +206,17 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 ###### aws.glue.use_instance_profile
 
 Required: Yes
-Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
+Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
 
 ###### aws.glue.iam_role_arn
 
 Required: No
-Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. 
+Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter.
 
 ###### aws.glue.region
 
 Required: Yes
-Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. 
+Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`.
 
 ###### aws.glue.access_key
 
@@ -337,12 +338,12 @@ Description:  Specifies whether to enable the instance profile-based authenticat
 ###### aws.s3.iam_role_arn
 
 Required: No
-Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. 
+Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter.
 
 ###### aws.s3.region
 
 Required: Yes
-Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`. 
+Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`.
 
 ###### aws.s3.access_key
 
@@ -585,6 +586,15 @@ Description: The service account that you want to impersonate.
 </Tabs>
 
 ---
+
+#### MetadataUpdateParams
+
+A set of parameters about how StarRocks caches the metadata of Hive. This parameter set is optional.
+
+Currently, this parameter set contains only one parameter, `enable_iceberg_metadata_cache`, which specifies whether to cache pointers and partition names for Iceberg tables. This parameter is supported from v3.2.1 onwards:
+
+- From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used.
+- In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 
 ### Examples
 
@@ -1355,9 +1365,3 @@ Description: The amount of time after which a cache entry on disk expires counti
 Unit: Bytes
 Default value: `8388608`, equivalent to 8 MB
 Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
-
-### Configure Iceberg table pointer and partition name caching
-
-You can use the session variable [`enable_iceberg_metadata_cache`](../../reference/System_variable.md) to specify whether to cache pointers and partition names for Iceberg tables. This variable is supported from v3.2.1 onwards.
-
-From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
