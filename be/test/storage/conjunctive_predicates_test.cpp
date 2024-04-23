@@ -371,29 +371,33 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     opts.enable_column_expr_predicate = false;
 
     OlapScanConjunctsManager cm(std::move(opts));
+    ASSERT_OK(cm.parse_conjuncts());
 
-    ASSERT_OK(cm.parse_conjuncts(true, 1));
+    PredicateParser parser(tablet_schema);
+    ColumnPredicatePtrs col_preds_owner;
+    auto status_or_pred_tree = cm.get_predicate_tree(&parser, col_preds_owner);
+    ASSERT_OK(status_or_pred_tree);
+    auto& pred_tree = status_or_pred_tree.value();
+
     // col >= false will be elimated
     if (ltype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
-        ASSERT_EQ(0, cm.olap_filters.size());
+        ASSERT_TRUE(pred_tree.empty());
         return;
-    } else {
-        ASSERT_EQ(1, cm.olap_filters.size());
     }
-    ASSERT_EQ(1, cm.column_value_ranges.size());
-    ASSERT_EQ(1, cm.column_value_ranges.count(slot->col_name()));
 
-    {
-        PredicateParser pp(tablet_schema);
-        std::unique_ptr<ColumnPredicate> predicate(pp.parse_thrift_cond(cm.olap_filters[0]));
-        ASSERT_TRUE(!!predicate);
+    ASSERT_EQ(1, pred_tree.size());
+    const auto& root = pred_tree.root();
+    ASSERT_TRUE(root.compound_children().empty());
+    ASSERT_EQ(1, root.col_children_map().size());
 
-        // BOOLEAN is special, col <= false will be convert to col = false
-        if (ltype == TYPE_BOOLEAN && op == TExprOpcode::LE) {
-            ASSERT_EQ(TExprOpcode::EQ, convert_predicate_type_to_thrift(predicate->type()));
-        } else {
-            ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
-        }
+    const auto* predicate = root.col_children_map().find(0)->second[0].col_pred();
+    ASSERT_TRUE(predicate != nullptr);
+
+    // BOOLEAN is special, col <= false will be convert to col = false
+    if (ltype == TYPE_BOOLEAN && op == TExprOpcode::LE) {
+        ASSERT_EQ(TExprOpcode::EQ, convert_predicate_type_to_thrift(predicate->type()));
+    } else {
+        ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
     }
 }
 
