@@ -1557,13 +1557,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        if (desc.interval() != null) {
-            var intervalLiteral = (IntervalLiteral) visit(desc.interval());
+        if (desc.taskInterval() != null) {
+            var intervalLiteral = (IntervalLiteral) visit(desc.taskInterval());
             if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
                 String exprSql = intervalLiteral.getValue().toSql();
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
-                        createPos(desc.interval()));
-
+                        createPos(desc.taskInterval()));
             }
 
             long period = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
@@ -1572,8 +1571,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
                         intervalLiteral.getUnitIdentifier().getDescription());
             } catch (DdlException e) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(intervalLiteral.toString(),
-                        "INTERVAL "), createPos(desc.interval()));
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(
+                        intervalLiteral.getUnitIdentifier().getDescription(),
+                        "INTERVAL "), createPos(desc.taskInterval()));
             }
             schedule.setPeriod(period);
             schedule.setTimeUnit(timeUnit);
@@ -6616,9 +6616,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitTaskInterval(StarRocksParser.TaskIntervalContext context) {
+        return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from),
+                createPos(context));
+    }
+
+    @Override
     public ParseNode visitInterval(StarRocksParser.IntervalContext context) {
         return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTaskUnitIdentifier(StarRocksParser.TaskUnitIdentifierContext context) {
+        return new UnitIdentifier(context.getText(), createPos(context));
     }
 
     @Override
