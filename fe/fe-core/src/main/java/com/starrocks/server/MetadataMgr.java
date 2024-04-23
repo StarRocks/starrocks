@@ -50,6 +50,7 @@ import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
@@ -689,6 +690,20 @@ public class MetadataMgr {
             }
         }
         return partitions.build();
+    }
+
+    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName,
+                                                    long snapshotId, String serializedPredicate) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+            } catch (Exception e) {
+                LOG.error("Failed to get remote meta splits on catalog [{}], table [{}.{}]", catalogName, dbName, tableName, e);
+                throw e;
+            }
+        }
+        return null;
     }
 
     public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item, Tracers tracers) {

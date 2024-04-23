@@ -156,6 +156,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                    long snapshotId, String serializedPredicate) {
+        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+    }
+
+    @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return normal.getPartitions(table, partitionNames);
     }

@@ -158,6 +158,20 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
+    /**
+     * Get table meta serialized specification
+     * @param dbName
+     * @param tableName
+     * @param snapshotId
+     * @param serializedPredicate serialized predicate string of lake format expression
+     * @return table meta serialized specification
+     */
+    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                     long snapshotId, String serializedPredicate) {
+        return null;
+    }
+
+
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
