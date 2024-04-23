@@ -300,6 +300,36 @@ public class SubmitTaskStmtTest {
             Assert.assertEquals("Getting analyzing error. Detail message: schedule interval is too small, " +
                             "the minimum value is 10 SECONDS.",
                     connectContext.getState().getErrorMessage());
+
+            // year
+            Exception e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1 year) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+                            "Detail message: Unexpected input 'year', " +
+                            "the most similar input is {'DAY', 'HOUR', 'SECOND', 'MINUTE'}.",
+                    e.getMessage());
+
+            // week
+            e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1 week) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+                            "Detail message: Unexpected input 'week', " +
+                            "the most similar input is {'SECOND', 'DAY', 'HOUR', 'MINUTE'}.",
+                    e.getMessage());
+
+            // syntax error
+            e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 47. " +
+                            "Detail message: Unexpected input ')', " +
+                            "the most similar input is {'DAY', 'HOUR', 'MINUTE', 'SECOND'}.",
+                    e.getMessage());
         }
     }
 }
