@@ -87,7 +87,7 @@ public:
     // return false only ranges of shared_buffer is the whole file.
     bool can_release() override {
         if (_map.empty() || _map.size() != 1) return true;
-        return _file_size == _map.begin()->second->size;
+        return _file_size != _map.begin()->second->size;
     }
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
