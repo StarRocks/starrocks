@@ -121,6 +121,7 @@ bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMo
                                                            const std::vector<int32_t>& referenced_column_ids,
                                                            const std::vector<ColumnId>& sort_key_idxes,
                                                            size_t num_key_columns) {
+    // In the current implementation, UNKNOWN_MODE and AUTO_MODE can be considered as ROW_MODE
     if (partial_update_mode == PartialUpdateMode::ROW_MODE || partial_update_mode == PartialUpdateMode::AUTO_MODE ||
         partial_update_mode == PartialUpdateMode::UNKNOWN_MODE ||
         partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
