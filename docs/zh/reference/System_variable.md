@@ -406,17 +406,13 @@ SELECT /*+ SET_VAR
 * 类型：Boolean
 * 引入版本：v2.5.6、v3.0.8、v3.1.4、v3.2.0
 
-<<<<<<< HEAD
-默认值：`false`，表示使用原来的机制，即每次查询会从多个副本中选择一个。
-=======
 ### enable_scan_datacache
->>>>>>> 8c465df25a ([Doc] format system variables (#44546))
 
 * 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
 * 默认值：false
 * 引入版本：v2.5
 
-### enable_populate_datacache（2.5 及以后）
+### enable_populate_datacache
 
 * 描述：StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。默认值为 `true`。如果只想读取，不进行缓存，可以将该参数设置为 `false`。在 3.2 之前各版本中，对应变量为 `enable_populate_block_cache`。
 * 默认值：true
