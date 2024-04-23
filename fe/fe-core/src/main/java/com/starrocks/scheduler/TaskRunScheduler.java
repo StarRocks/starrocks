@@ -17,7 +17,6 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
