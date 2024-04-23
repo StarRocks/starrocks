@@ -58,7 +58,6 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.roaringbitmap.RoaringBitmap;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -334,16 +333,31 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
         if (joinOp.isLeftAntiJoin() || joinOp.isLeftOuterJoin()) {
-            sides = ImmutableList.of(0, 1);
+            sides = ImmutableList.of(0);
         } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
             sides = ImmutableList.of(1);
         } else if (joinOp.isInnerJoin() || joinOp.isSemiJoin() || joinOp.isCrossJoin()) {
-            sides = ImmutableList.of(0);
+            sides = ImmutableList.of(0, 1);
         }
 
         boolean result = false;
+        Optional<List<List<Expr>>> optCandidatePartitionByExprs =
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+        if (optCandidatePartitionByExprs.isEmpty()) {
+            return Optional.of(false);
+        }
+        List<List<Expr>> candidatePartitionByExprs = optCandidatePartitionByExprs.get();
         for (Integer side : sides) {
-            result = pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, side);
+            if (candidatePartitionByExprs.isEmpty()) {
+                result = getChild(side).pushDownRuntimeFilters(context, probeExpr, Lists.newArrayList());
+            } else {
+                for (List<Expr> partByExprs : candidatePartitionByExprs) {
+                    result = getChild(side).pushDownRuntimeFilters(context, probeExpr, partByExprs);
+                    if (result) {
+                        break;
+                    }
+                }
+            }
             if (result) {
                 break;
             }
