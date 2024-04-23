@@ -35,6 +35,7 @@ public class HiveScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalHiveScanOperator scan = (LogicalHiveScanOperator) input.getOp();
         PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan);
+        physicalHiveScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalHiveScan);
         return Lists.newArrayList(result);
     }

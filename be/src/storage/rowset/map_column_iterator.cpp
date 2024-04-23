@@ -57,6 +57,10 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
             _access_keys |= true;
         }
 
+        if (p->is_value()) {
+            _access_values |= true;
+        }
+
         if (p->is_all() || p->is_index()) {
             _access_values |= true;
             _access_keys |= true;

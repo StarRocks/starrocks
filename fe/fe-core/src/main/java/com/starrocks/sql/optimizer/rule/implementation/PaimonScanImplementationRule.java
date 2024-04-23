@@ -35,6 +35,7 @@ public class PaimonScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalPaimonScanOperator scan = (LogicalPaimonScanOperator) input.getOp();
         PhysicalPaimonScanOperator physicalPaimonScan = new PhysicalPaimonScanOperator(scan);
+        physicalPaimonScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalPaimonScan);
         return Lists.newArrayList(result);
     }
