@@ -14,6 +14,7 @@
 package com.starrocks.privilege.ranger;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
@@ -21,7 +22,15 @@ import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.NativeAccessControl;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -32,10 +41,16 @@ import org.apache.ranger.plugin.service.RangerBasePlugin;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
+import java.util.HashMap;
 import java.util.List;
 
 public class RangerInterfaceTest {
+
+    ConnectContext connectContext;
+    StarRocksAssert starRocksAssert;
 
     @Before
     public void setUp() throws Exception {
@@ -43,6 +58,21 @@ public class RangerInterfaceTest {
             {
             }
         };
+
+        UtFrameUtils.createMinStarRocksCluster();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("db").useDatabase("db").withTable("CREATE TABLE `t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
+                "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
     }
 
     @Test
@@ -98,5 +128,22 @@ public class RangerInterfaceTest {
         accessControlProvider.setAccessControl("hive", new NativeAccessControl());
         Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
                 instanceof NativeAccessControl);
+    }
+
+    @Test
+    public void testRewriteWithAlias() throws Exception {
+        Expr e = SqlParser.parseSqlToExpr("v4+1", new ConnectContext().getSessionVariable().getSqlMode());
+        HashMap<String, Expr> exprHashMap = new HashMap<>();
+        exprHashMap.put("v4", e);
+
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic.when(() -> Authorizer.getColumnMaskingPolicy(Mockito.any(),
+                    Mockito.any(), Mockito.any())).thenReturn(exprHashMap);
+
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser("select * from t1 t", connectContext);
+            QueryStatement queryStatement = (QueryStatement) stmt;
+
+            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+        }
     }
 }
