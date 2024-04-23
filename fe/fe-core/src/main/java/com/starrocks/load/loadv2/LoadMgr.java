@@ -65,6 +65,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
@@ -239,7 +240,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
                                 long createTimestamp, long estimateScanRows,
                                 int estimateFileNum, long estimateFileSize,
                                 TLoadJobType type, long timeout,
-                                long warehouseId, boolean isStatisticsJob)
+                                long warehouseId, boolean isStatisticsJob,
+                                Coordinator coordinator)
             throws UserException {
 
         // get db id
@@ -252,7 +254,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(
                     label, db.getId(), tableId, createTimestamp, type, timeout, warehouseId,
-                    isStatisticsJob);
+                    isStatisticsJob, coordinator);
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
         } else {

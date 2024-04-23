@@ -47,11 +47,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -78,6 +78,7 @@ public class InsertLoadJob extends LoadJob {
     private long tableId;
     private long estimateScanRow = 0;
     private TLoadJobType loadType;
+    private Coordinator coordinator;
 
     @SerializedName("isj")
     private boolean isStatisticsJob;
@@ -91,7 +92,7 @@ public class InsertLoadJob extends LoadJob {
 
     public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
                          TLoadJobType type, long timeout, long warehouseId,
-                         boolean isStatisticsJob) {
+                         boolean isStatisticsJob, Coordinator coordinator) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -102,11 +103,12 @@ public class InsertLoadJob extends LoadJob {
         this.timeoutSecond = timeout;
         this.warehouseId = warehouseId;
         this.isStatisticsJob = isStatisticsJob;
+        this.coordinator = coordinator;
     }
 
     @VisibleForTesting
     InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, String failMsg,
-                  String trackingUrl) throws MetaNotFoundException {
+                  String trackingUrl, Coordinator coordinator) throws MetaNotFoundException {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -126,6 +128,7 @@ public class InsertLoadJob extends LoadJob {
         this.loadingStatus.setTrackingUrl(trackingUrl);
         this.loadType = TLoadJobType.INSERT_QUERY;
         this.isStatisticsJob = false;
+        this.coordinator = coordinator;
     }
 
     @Override
@@ -147,6 +150,7 @@ public class InsertLoadJob extends LoadJob {
             }
             this.authorizationInfo = gatherAuthInfo();
             this.loadingStatus.setTrackingUrl(trackingUrl);
+            this.coordinator = null;
         } finally {
             writeUnlock();
         }
@@ -250,12 +254,12 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     protected List<TabletCommitInfo> getTabletCommitInfos() {
-        throw new RuntimeException(new NotImplementedException("Not implemented"));
+        return Coordinator.getCommitInfos(coordinator);
     }
 
     @Override
     protected List<TabletFailInfo> getTabletFailInfos() {
-        throw new RuntimeException(new NotImplementedException("Not implemented"));
+        return Coordinator.getFailInfos(coordinator);
     }
 
     @Override

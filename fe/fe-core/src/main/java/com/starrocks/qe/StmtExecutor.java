@@ -2023,7 +2023,8 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         context.getCurrentWarehouseId(),
-                        context.isStatisticsJob());
+                        context.isStatisticsJob(),
+                        coord);
             }
 
             coord.setLoadJobId(jobId);

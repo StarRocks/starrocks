@@ -96,7 +96,7 @@ public class LoadMgrTest {
         };
 
         loadManager = new LoadMgr(new LoadJobScheduler());
-        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
+        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
         File file = serializeToFile(loadManager);
@@ -128,7 +128,7 @@ public class LoadMgrTest {
         };
 
         loadManager = new LoadMgr(new LoadJobScheduler());
-        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
+        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
         //make job1 don't serialize
@@ -166,7 +166,7 @@ public class LoadMgrTest {
 
         // 1. serialize 1 job to file
         loadManager = new LoadMgr(new LoadJobScheduler());
-        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
+        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
         File file = serializeToFile(loadManager);
 
@@ -221,7 +221,7 @@ public class LoadMgrTest {
         long currentTimeMs = System.currentTimeMillis();
 
         // finished insert job
-        LoadJob job0 = new InsertLoadJob("job0", 0L, 1L, currentTimeMs - 101000, "", "");
+        LoadJob job0 = new InsertLoadJob("job0", 0L, 1L, currentTimeMs - 101000, "", "", null);
         job0.id = 10;
         job0.finishTimestamp = currentTimeMs - 101000;
         Deencapsulation.invoke(loadManager, "addLoadJob", job0);
@@ -327,7 +327,7 @@ public class LoadMgrTest {
         };
 
         LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
-        LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "");
+        LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "", null);
         loadJob1.id = 1L;
         loadManager.replayCreateLoadJob(loadJob1);
 
@@ -356,7 +356,7 @@ public class LoadMgrTest {
     @Test
     public void testGetLoadJobsByDb(@Mocked GlobalStateMgr globalStateMgr) throws MetaNotFoundException {
         LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
-        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
+        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadMgr, "addLoadJob", job1);
         Assert.assertTrue(loadMgr.getLoadJobsByDb(2L, "job1", true).isEmpty());
         Assert.assertEquals(1, loadMgr.getLoadJobsByDb(1L, "job1", true).size());
