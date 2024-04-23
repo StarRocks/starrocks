@@ -409,15 +409,9 @@ bool JodaFormat::prepare(std::string_view format) {
             break;
         case joda::JodaFormatChar::TIME_ZONE:
         case joda::JodaFormatChar::TIME_ZONE_OFFSET: {
-<<<<<<< HEAD
-            _token_parsers.emplace_back([&]() {
-                std::string_view tz(val, val_end - val);
-                if (!TimezoneUtils::find_cctz_time_zone(tz, ctz)) {
-=======
             _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
                 std::string_view tz(*(state->valptr), val_end);
                 if (!TimezoneUtils::find_cctz_time_zone(tz, state->ctz)) {
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                     return false;
                 }
                 state->has_timezone = true;
@@ -2461,13 +2455,8 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::T10: {
             //  - / , . ; :	Punctuation characters are ignored
             auto ignored_char = *ptr;
-<<<<<<< HEAD
-            _token_parsers.emplace_back([&, repeat_count, ignored_char]() {
-                if (*val != ignored_char) {
-=======
             _token_parsers.emplace_back([&, ignored_char](TeradataRuntimeState* state, const char* val_end) {
                 if (**(state->valptr) != ignored_char) {
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                     return false;
                 }
                 *(state->valptr) += 1;
@@ -2480,12 +2469,8 @@ bool TeradataFormat::prepare(std::string_view format) {
             if (repeat_count != 2) {
                 return false;
             }
-<<<<<<< HEAD
-            _token_parsers.emplace_back([&, repeat_count]() {
-=======
             _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
                 const char* val = *(state->valptr);
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
@@ -2511,11 +2496,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 }
                 ++next_ch_ptr;
             }
-<<<<<<< HEAD
-            _token_parsers.emplace_back([&, repeat_count]() {
-=======
             _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                 int64_t int_value = 0;
                 const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(2, val_end - val);
@@ -2578,12 +2559,8 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::M: {
             if (repeat_count == 2) {
                 // mm
-<<<<<<< HEAD
-                _token_parsers.emplace_back([&, repeat_count]() {
-=======
                 _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
                     const char* val = *(state->valptr);
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
@@ -2601,12 +2578,8 @@ bool TeradataFormat::prepare(std::string_view format) {
                 ptr++;
 
                 // mi
-<<<<<<< HEAD
-                _token_parsers.emplace_back([&, repeat_count]() {
-=======
                 _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
                     const char* val = *(state->valptr);
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
@@ -2626,11 +2599,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 return false;
             }
             // ss
-<<<<<<< HEAD
-            _token_parsers.emplace_back([&, repeat_count]() {
-=======
             _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                 int64_t int_value = 0;
                 const char* val = *(state->valptr);
                 const char* tmp = val + std::min<int>(2, val_end - val);
@@ -2646,12 +2615,8 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::Y: {
             // yy
             if (repeat_count == 2) {
-<<<<<<< HEAD
-                _token_parsers.emplace_back([&, repeat_count]() {
-=======
                 _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
                     const char* val = *(state->valptr);
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
@@ -2664,12 +2629,8 @@ bool TeradataFormat::prepare(std::string_view format) {
                 });
             } else if (repeat_count == 4) {
                 // yyyy
-<<<<<<< HEAD
-                _token_parsers.emplace_back([&, repeat_count]() {
-=======
                 _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
                     const char* val = *(state->valptr);
->>>>>>> bc982d9036 ([BugFix] Fix str_to_jodatime/to_tera_date function bug  (#44267))
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(4, val_end - val);
                     if (!str_to_int64(*(state->valptr), &tmp, &int_value)) {
