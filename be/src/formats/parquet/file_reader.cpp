@@ -47,6 +47,35 @@ struct SplitContext : public HdfsSplitContext {
     }
 };
 
+static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) {
+    int64_t offset = column.data_page_offset;
+    if (column.__isset.index_page_offset) {
+        offset = std::min(offset, column.index_page_offset);
+    }
+    if (column.__isset.dictionary_page_offset) {
+        offset = std::min(offset, column.dictionary_page_offset);
+    }
+    return offset;
+}
+
+static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group) {
+    if (row_group.__isset.file_offset) {
+        return row_group.file_offset;
+    }
+    const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
+    return _get_column_start_offset(first_column);
+}
+
+static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
+    // following computation is not correct. `total_compressed_size` means compressed size of all columns
+    // but between columns there could be holes, which means end offset inaccurate.
+    // if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
+    //     return row_group.file_offset + row_group.total_compressed_size;
+    // }
+    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
+    return _get_column_start_offset(last_column) + last_column.total_compressed_size;
+}
+
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                        io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
@@ -241,9 +270,14 @@ Status FileReader::_build_split_tasks() {
         int64_t start_offset = _get_row_group_start_offset(row_group);
         int64_t end_offset = _get_row_group_end_offset(row_group);
 #ifndef NDEBUG
+        DCHECK(start_offset < end_offset);
+        // there could be holes between row groups.
+        // but this does not affect our scan range filter logic.
+        // because in `_select_row_group`, we check if `start offset of row group` is in this range
+        // so as long as `end_offset > start_offset && end_offset <= start_offset(next_group)`, it's ok
         if ((i + 1) < row_group_size) {
             const tparquet::RowGroup& next_row_group = _file_metadata->t_metadata().row_groups[i + 1];
-            DCHECK_EQ(end_offset, _get_row_group_start_offset(next_row_group));
+            DCHECK(end_offset <= _get_row_group_start_offset(next_row_group));
         }
 #endif
         auto split_ctx = std::make_unique<SplitContext>();
@@ -297,22 +331,6 @@ StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::vector<char>& f
                 metadata_length));
     }
     return metadata_length;
-}
-
-int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_group) {
-    if (row_group.__isset.file_offset) {
-        return row_group.file_offset;
-    }
-    const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
-    return first_column.data_page_offset;
-}
-
-int64_t FileReader::_get_row_group_end_offset(const tparquet::RowGroup& row_group) {
-    if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
-        return row_group.file_offset + row_group.total_compressed_size;
-    }
-    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
-    return last_column.data_page_offset + last_column.total_compressed_size;
 }
 
 StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
