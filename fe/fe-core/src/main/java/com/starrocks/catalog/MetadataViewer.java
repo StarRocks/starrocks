@@ -42,14 +42,9 @@ import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.qe.ConnectContext;
->>>>>>> b75a3f9357 ([BugFix] Fix `admin show replica distribution` not work correctly with CN deployment in shared-data mode  (#44005))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -201,11 +196,6 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-<<<<<<< HEAD
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-
-=======
->>>>>>> b75a3f9357 ([BugFix] Fix `admin show replica distribution` not work correctly with CN deployment in shared-data mode  (#44005))
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
@@ -283,12 +273,12 @@ public class MetadataViewer {
         List<Long> allComputeNodeIds = Lists.newArrayList();
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
             List<Long> computeNodeIs =
-                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                    Lists.newArrayList(GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse().keySet());
             if (computeNodeIs.isEmpty()) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getFullName());
             }
             allComputeNodeIds.addAll(computeNodeIs);
         } else {
