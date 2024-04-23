@@ -468,6 +468,9 @@ public class StmtExecutor {
 
             if (parsedStmt.isExplain()) {
                 context.setExplainLevel(parsedStmt.getExplainLevel());
+            } else {
+                // reset the explain level to avoid the previous explain level affect the current query.
+                context.setExplainLevel(null);
             }
 
             // execPlan is the output of new planner

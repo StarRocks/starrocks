@@ -27,6 +27,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -242,6 +244,9 @@ public class TextMatchBasedRewriteRule extends Rule {
                 // do: text match based mv rewrite
                 OptExpression rewritten = doTextMatchBasedRewrite(context, mvPlanContext, mv, input);
                 if (rewritten != null) {
+                    IMaterializedViewMetricsEntity mvEntity =
+                            MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
+                    mvEntity.increaseQueryTextBasedMatchedCount(1L);
                     OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: {}", REWRITE_SUCCESS);
                     return rewritten;
                 }
