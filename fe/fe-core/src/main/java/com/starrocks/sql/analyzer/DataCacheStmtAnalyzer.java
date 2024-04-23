@@ -136,6 +136,11 @@ public class DataCacheStmtAnalyzer {
                 throw new SemanticException("Currently cache select is only supported in external catalog");
             }
 
+            Map<String, String> properties = statement.getProperties();
+            boolean isVerbose = Boolean.parseBoolean(properties.getOrDefault("verbose", "false"));
+            statement.setVerbose(isVerbose);
+            // todo analyze ttl, priority later
+
             return null;
         }
     }
