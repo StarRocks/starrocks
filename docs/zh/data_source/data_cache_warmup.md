@@ -26,16 +26,22 @@ CACHE SELECT <column_name> [, ...]
 FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 [PROPERTIES("verbose"="true")]
 ```
-:::tip
-上述语法是从 `default_catalog` 载入远端数据的语法。您也可以通过 `SET CATALOG <catalog_name>` 切换到目标 catalog 下，然后对目标表进行数据拉取。
-:::
 
-`CACHE_SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回一些 Cache 的指标。
+参数说明：
 
-以下示例载入外表 `customer` 的所有数据：
+- `column_name`：要拉取的列。也可以不指定，使用 `*` 来拉取表中的所有列。
+- `catalog_name`：远端 Catalog 名称。如果已经通过 SET CATALOG 切换到远端 Catalog 下，也可以不填。
+- `db_name`：远端数据库名称。如果已经切换到远端数据库下，也可以不填。
+- `table_name`：远端表名称。
+- `boolean_expression`: WHERE 中指定的过滤条件。
+- `PROPERTIES`：当前仅支持设置 `verbose` 属性，返回详细的预热指标。
+
+`CACHE_SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
+
+以下示例载入外表 `lineitem` 的所有数据：
 
 ```sql
-mysql> cache select * from customer;
+mysql> cache select * from hive_catalog.test_db.lineitem;
 +---------+---------------------+------------------+----------------------+-------------------+
 | STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
 +---------+---------------------+------------------+----------------------+-------------------+
@@ -50,10 +56,10 @@ mysql> cache select * from customer;
 - `AVG_WRITE_CACHE_TIME`：每一个文件写入 Data Cache 的平均耗时。
 - `TOTAL_CACHE_USAGE`：本次预热执行完成后 Data Cache 的空间使用率，可以根据这个指标评估 Data Cache 的空间是否充足。
 
-您也可以通过指定谓词和分区进行更加细粒度的预热，以减少 Data Cache 的占用，比如下面这个 case：
+您也可以通过指定列名和谓词进行更细粒度的预热，以减少 Data Cache 的占用，比如下面这个 case：
 
 ```sql
-mysql> cache select l_orderkey from lineitem where l_shipdate='1994-10-28';
+mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipdate='1994-10-28';
 +---------+---------------------+------------------+----------------------+-------------------+
 | STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
 +---------+---------------------+------------------+----------------------+-------------------+
@@ -65,7 +71,7 @@ mysql> cache select l_orderkey from lineitem where l_shipdate='1994-10-28';
 默认情况下，`CACHE SELECT` 返回的指标是一个合并后的指标，您可以在 `CACHE SELECT` 末尾添加 `PROPERTIES("verbose"="true")` 获得更加详细的指标。
 
 ```sql
-mysql> cache select * from lineitem properties("verbose"="true");
+mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="true");
 +--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
 | BE_IP        | STATUS  | ALREADY_CACHED_SIZE | AVG_READ_CACHE_TIME | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
 +--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
@@ -76,7 +82,7 @@ mysql> cache select * from lineitem properties("verbose"="true");
 3 rows in set (42.87 sec)
 ```
 
-verbose 模式下，会返回每个 BE 的详细预热情况。同时会多返回一个指标：
+`verbose` 模式下，会返回每个 BE 的详细预热情况。同时会多返回一个指标：
 
 `AVG_READ_CACHE_TIME`：表示每一个文件在 Data Cache 里的平均查找耗时。
 
@@ -88,7 +94,7 @@ CACHE SELECT 可以和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipu
 
 ```sql
 mysql> submit task always_cache schedule every(interval 5 minute) as cache select l_orderkey
-from lineitem
+from hive_catalog.test_db.lineitem
 where l_shipdate='1994-10-28';
 +--------------+-----------+
 | TaskName     | Status    |
@@ -169,12 +175,12 @@ DROP TASK <task_name>
 
 ## 使用限制和说明
 
-* 需要开启 Data Cache 特性，且拥有对目标 catalog/database/table 的 SELECT 权限。
+* 需要开启 Data Cache 特性，且拥有对目标表的 SELECT 权限。
 * `CACHE SELECT` 支持存算分离和存算一体架构的外表查询，支持预热远端的 TEXT, ORC, Parquet 文件。
 * `CACHE SELECT` 只支持对单表进行预热，不支持 `ORDER BY`，`LIMIT`，`GROUP BY` 等算子。
-* 目前 `CACHE SELECT` 的实现是采用 `INSERT INTO BLACKHOLE()` 的方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销是差不多的。这一块后续会做出改进，提升 `CACHE SELECT` 的性能。
+* 目前 `CACHE SELECT` 的实现是采用 `INSERT INTO BLACKHOLE()` 的方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销差不多。后续会做出改进，提升 `CACHE SELECT` 的性能。
 * `CACHE SELECT` 预热的数据不会保证一定不被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以自行通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
 
 ## Data Cache 预热后续展望
 
-后续 StarRocks 将会引入自适应的 Data Cache 预热，尽可能保证在用户日常查询的过程中，能有更高的缓存命中率。
+后续 StarRocks 将会引入自适应的 Data Cache 预热，尽可能保证在用户日常查询的过程中，能获得更高的缓存命中率。
