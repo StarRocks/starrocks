@@ -1113,14 +1113,46 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-The following table describes the FE configuration items that you can use to configure your Iceberg metadata caching mechanism.
+FE configuration items that you can use to configure your Iceberg metadata caching mechanism:
 
-| **Configuration item**                           | **Unit** | **Default value**                                    | **Description**                                              |
-| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
-| enable_iceberg_metadata_disk_cache               | N/A      | `false`                                              | Specifies whether to enable the disk cache.                  |
-| iceberg_metadata_cache_disk_path                 | N/A      | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | The save path of cached metadata files on disk.              |
-| iceberg_metadata_disk_cache_capacity             | Bytes    | `2147483648`, equivalent to 2 GB                     | The maximum size of cached metadata allowed on disk.         |
-| iceberg_metadata_memory_cache_capacity           | Bytes    | `536870912`, equivalent to 512 MB                    | The maximum size of cached metadata allowed in memory.       |
-| iceberg_metadata_memory_cache_expiration_seconds | Seconds  | `86500`                                              | The amount of time after which a cache entry in memory expires counting from its last access. |
-| iceberg_metadata_disk_cache_expiration_seconds   | Seconds  | `604800`, equivalent to one week                     | The amount of time after which a cache entry on disk expires counting from its last access. |
-| iceberg_metadata_cache_max_entry_size            | Bytes    | `8388608`, equivalent to 8 MB                        | The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage. |
+##### enable_iceberg_metadata_disk_cache
+
+Unit: N/A
+Default value: `false`
+Description: Specifies whether to enable the disk cache.
+
+##### iceberg_metadata_cache_disk_path
+
+Unit: N/A
+Default value: `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"`
+Description: The save path of cached metadata files on disk.
+
+##### iceberg_metadata_disk_cache_capacity
+
+Unit: Bytes
+Default value: `2147483648`, equivalent to 2 GB
+Description: The maximum size of cached metadata allowed on disk.
+
+##### iceberg_metadata_memory_cache_capacity
+
+Unit: Bytes
+Default value: `536870912`, equivalent to 512 MB
+Description: The maximum size of cached metadata allowed in memory.
+
+##### iceberg_metadata_memory_cache_expiration_seconds
+
+Unit: Seconds  
+Default value: `86500`
+Description: The amount of time after which a cache entry in memory expires counting from its last access.
+
+##### iceberg_metadata_disk_cache_expiration_seconds
+
+Unit: Seconds  
+Default value: `604800`, equivalent to one week
+Description: The amount of time after which a cache entry on disk expires counting from its last access.
+
+##### iceberg_metadata_cache_max_entry_size
+
+Unit: Bytes
+Default value: `8388608`, equivalent to 8 MB
+Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
