@@ -73,7 +73,7 @@ public class LogAction extends WebBaseAction {
             Tuple3<String, String[], String[]> configs = Log4jConfig.updateLogging(null, null, null);
             if (!Strings.isNullOrEmpty(addVerboseName)) {
                 addVerboseName = addVerboseName.trim();
-                List<String> verboseNames = Lists.newArrayList(configs.getV1());
+                List<String> verboseNames = Lists.newArrayList(configs.getV2());
                 if (!verboseNames.contains(addVerboseName)) {
                     verboseNames.add(addVerboseName);
                     configs = Log4jConfig.updateLogging(null, verboseNames.toArray(new String[0]),
