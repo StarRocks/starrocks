@@ -20,13 +20,9 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.UserException;
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.TableTestBase;
-import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -38,11 +34,6 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 
-import mockit.Mock;
-import mockit.MockUp;
-import org.apache.iceberg.DeleteFile;
-import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.FileMetadata;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -134,49 +125,5 @@ public class IcebergScanNodeTest extends TableTestBase {
         Assert.assertEquals(2147473647, hdfsScanRange.delete_column_slot_ids.get(0).intValue());
         Assert.assertEquals(1, hdfsScanRange.delete_column_slot_ids.size());
         Assert.assertEquals(1, eqTupleDesc.getSlots().size());
-    }
-
-    @Test
-    public void testIcebergMetadataScanNode() throws Exception {
-        new MockUp<IcebergMetadata>() {
-            @Mock
-            public Database getDb(String dbName) {
-                return new Database(1, "db");
-            }
-        };
-
-        String sql = "explain select file_path from iceberg_catalog.db.t1$logical_iceberg_metadata;";
-        String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan.contains("0:IcebergMetadataScanNode"));
-    }
-
-    public void testEqualityDeleteWithUnsupportedFormat() throws UserException {
-        List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", "", columns, mockedNativeTableA, Maps.newHashMap());
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
-        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        TupleDescriptor eqTupleDesc = descTable.createTupleDescriptor("eqTuple");
-        tupleDesc.setTable(icebergTable);
-        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode", eqTupleDesc);
-
-        // Equality delete files.
-        DeleteFile FILE_A2_DELETES_PARQUET =
-                FileMetadata.deleteFileBuilder(SPEC_A)
-                        .ofEqualityDeletes(1)
-                        .withPath("/path/to/data-a2-deletes.parquet")
-                        .withFormat(FileFormat.PARQUET)
-                        .withFileSizeInBytes(10)
-                        .withPartitionPath("data_bucket=0")
-                        .withRecordCount(1)
-                        .build();
-
-        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        // FILE_A_DELETES = positionalDelete / FILE_A2_DELETES = equalityDelete
-        mockedNativeTableA.newRowDelta().addDeletes(FILE_A_DELETES).addDeletes(FILE_A2_DELETES_PARQUET).commit();
-        mockedNativeTableC.refresh();
-
-        Assert.assertThrows(StarRocksConnectorException.class, () -> scanNode.setupScanRangeLocations(descTable));
     }
 }

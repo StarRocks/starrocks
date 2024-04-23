@@ -277,7 +277,6 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
                 PruneHDFSScanColumnRule.PAIMON_SCAN,
                 PruneHDFSScanColumnRule.ODPS_SCAN,
-                PruneHDFSScanColumnRule.ICEBERG_METADATA_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
