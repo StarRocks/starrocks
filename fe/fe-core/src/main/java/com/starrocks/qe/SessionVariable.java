@@ -3644,16 +3644,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableConnectorSplitIoTasks = v;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean isEnablePredicateMoveAround() {
-        return enablePredicateMoveAround;
-    }
-
-    public void setEnablePredicateMoveAround(boolean enablePredicateMoveAround) {
-        this.enablePredicateMoveAround = enablePredicateMoveAround;
-    }
-
     public boolean isEnableConstantExecuteInFE() {
         return enableConstantExecuteInFE;
     }
@@ -3662,7 +3652,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableConstantExecuteInFE = enableConstantExecuteInFE;
     }
 
->>>>>>> 917c007612 ([Feature] support fe executes all constant query (#44206))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
