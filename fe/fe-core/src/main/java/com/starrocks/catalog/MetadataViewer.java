@@ -42,12 +42,20 @@ import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b75a3f9357 ([BugFix] Fix `admin show replica distribution` not work correctly with CN deployment in shared-data mode  (#44005))
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -193,8 +201,11 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
 
+=======
+>>>>>>> b75a3f9357 ([BugFix] Fix `admin show replica distribution` not work correctly with CN deployment in shared-data mode  (#44005))
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
@@ -228,7 +239,7 @@ public class MetadataViewer {
             // backend id -> replica count
             Map<Long, Integer> countMap = Maps.newHashMap();
             // init map
-            List<Long> beIds = infoService.getBackendIds(false);
+            List<Long> beIds = getAllComputeNodeIds();
             for (long beId : beIds) {
                 countMap.put(beId, 0);
             }
@@ -265,6 +276,26 @@ public class MetadataViewer {
         }
 
         return result;
+    }
+
+    private static List<Long> getAllComputeNodeIds() throws DdlException {
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> allComputeNodeIds = Lists.newArrayList();
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIs =
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+            allComputeNodeIds.addAll(computeNodeIs);
+        } else {
+            allComputeNodeIds = infoService.getBackendIds(false);
+
+        }
+        return allComputeNodeIds;
     }
 
     private static String graph(int num, int totalNum, int mod) {
