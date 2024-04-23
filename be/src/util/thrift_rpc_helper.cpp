@@ -90,19 +90,21 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         return status;
     }
 
-    // Try 2 times.
     for (int i = 0; i < 2; i++) {
         status = rpc_impl(callback, client, address);
-        if (status.ok()) return status;
-
-        LOG(WARNING) << status << ", tried times: " << i + 1;
-
+        if (status.ok()) {
+            return Status::OK();
+        }
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
         // reopen failure will disable this connection to prevent it from being used again.
-        RETURN_IF_ERROR_WITH_WARN(client.reopen(timeout_ms),
-                                  fmt::format("client reopen failed, address={}:{}", ip, port));
+        auto st = client.reopen(timeout_ms);
+        if (!st.ok()) {
+            LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << status.message();
+            break;
+        }
     }
-    return Status::OK();
+    LOG(WARNING) << status;
+    return status;
 }
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
