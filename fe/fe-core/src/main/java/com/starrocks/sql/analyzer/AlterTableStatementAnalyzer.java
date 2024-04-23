@@ -40,7 +40,10 @@ public class AlterTableStatementAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
 
-        Table table = MetaUtils.getTable(context, tbl);
+        Table table = MetaUtils.getSessionAwareTable(context, null, tbl);
+        if (table.isTemporaryTable()) {
+            throw new SemanticException("temporary table doesn't support alter table statement");
+        }
         if (table instanceof MaterializedView && alterClauseList != null) {
             for (AlterClause alterClause : alterClauseList) {
                 if (!indexCluase(alterClause)) {

@@ -89,6 +89,9 @@ public class BackupRestoreAnalyzer {
                                         "`Config.enable_backup_materialized_view=false`", tbl.getName());
                         continue;
                     }
+                    if (tbl.isTemporaryTable()) {
+                        continue;
+                    }
                     TableName tableName = new TableName(dbName, tbl.getName());
                     TableRef tableRef = new TableRef(tableName, null, null);
                     tableRefs.add(tableRef);

@@ -1047,8 +1047,7 @@ public class StmtExecutor {
         if (queryStmt instanceof QueryStatement) {
             isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
             if (isOutfileQuery) {
-                Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(queryStmt);
-                boolean hasTemporaryTable = tables.values().stream().anyMatch(t -> t.isTemporaryTable());
+                boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStmt);
                 if (hasTemporaryTable) {
                     throw new SemanticException("temporary table doesn't support select outfile statement");
                 }
@@ -1129,7 +1128,7 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getTable(context, analyzeStmt.getTableName());
+        Table table = MetaUtils.getSessionAwareTable(context, db, analyzeStmt.getTableName());
         if (StatisticUtils.isEmptyTable(table)) {
             return;
         }

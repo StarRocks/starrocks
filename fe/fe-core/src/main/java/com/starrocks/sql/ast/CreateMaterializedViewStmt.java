@@ -290,6 +290,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
         }
 
+        boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
+        if (hasTemporaryTable) {
+            throw new SemanticException(("Materialized view can't base on temporary table"));
+        }
+
         // forbid explain query
         if (queryStatement.isExplain()) {
             throw new IllegalArgumentException("Creating materialized view does not support explain query");
