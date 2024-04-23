@@ -101,7 +101,7 @@ public:
 
     std::string debug_string() const;
 
-    using PredicateBaseNodeHelper<PredicateColumnNode>::evaluate;
+    using PredicateNodeFactory<PredicateColumnNode>::evaluate;
 
 private:
     const ColumnPredicate* _col_pred;
@@ -161,7 +161,7 @@ public:
     template <typename Vistor>
     void partition_move(Vistor&& cond, PredicateAndNode* true_pred_tree, PredicateAndNode* false_pred_tree);
 
-    using PredicateBaseNodeHelper<PredicateCompoundNode>::evaluate;
+    using PredicateNodeFactory<PredicateCompoundNode>::evaluate;
 
 private:
     PredicateColumnNodeMap _col_children_map;
