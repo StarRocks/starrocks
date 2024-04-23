@@ -82,10 +82,13 @@ public:
 
     virtual bool is_cache_hit() const { return false; };
 
-    // SharedBufferedStream will override the function,
+    // SharedBufferedStream will override the two function,
     // If io_coalesce_lake_read_enable set to true, it will be called to release the buffer for saving memory
     // when column_iterator get eos.
     virtual void release(){};
+    // If can_release() return false, release() should't be called,
+    // for the buffer is still be used.
+    virtual bool can_release() { return true; };
 
 protected:
     std::string _filename = "";

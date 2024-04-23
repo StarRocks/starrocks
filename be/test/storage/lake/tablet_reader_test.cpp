@@ -929,7 +929,7 @@ TEST_F(LakeIOCoalesceTest, test_normal) {
     // test reader
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     config::io_coalesce_lake_read_enable = true;
-    config::lake_small_segment_file_threshold_size = 100 * 1024 * 1024 * 8; // 100MB
+    config::lake_small_segment_file_threshold_size = 100 * 1024 * 1024; // 100MB
 
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
@@ -983,6 +983,10 @@ TEST_F(LakeIOCoalesceTest, test_normal) {
     ASSERT_TRUE(reader2->get_next(read_chunk_ptr.get()).is_end_of_file());
 
     reader->close();
+
+    // reset config
+    config::io_coalesce_lake_read_enable = false;
+    config::lake_small_segment_file_threshold_size = 10485760;
 }
 
 } // namespace starrocks::lake
