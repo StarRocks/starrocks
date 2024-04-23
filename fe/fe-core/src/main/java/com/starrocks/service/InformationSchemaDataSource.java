@@ -199,17 +199,13 @@ public class InformationSchemaDataSource {
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
-        if (partitionInfo.isRangePartition()) {
-            int idx = 0;
-            for (Column column : partitionInfo.getPartitionColumns()) {
-                if (idx != 0) {
-                    partitionKeySb.append(", ");
-                }
-                partitionKeySb.append("`").append(column.getName()).append("`");
-                idx++;
+        int idx = 0;
+        for (Column column : partitionInfo.getPartitionColumns()) {
+            if (idx != 0) {
+                partitionKeySb.append(", ");
             }
-        } else {
-            partitionKeySb.append(DEFAULT_EMPTY_STRING);
+            partitionKeySb.append("`").append(column.getName()).append("`");
+            idx++;
         }
 
         // PRIMARY KEYS
