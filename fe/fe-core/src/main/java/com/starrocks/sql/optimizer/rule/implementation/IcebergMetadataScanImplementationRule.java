@@ -25,9 +25,9 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class MetadataScanImplementationRule extends ImplementationRule {
-    public MetadataScanImplementationRule() {
-        super(RuleType.IMP_METADATA_LSCAN_TO_PSCAN,
+public class IcebergMetadataScanImplementationRule extends ImplementationRule {
+    public IcebergMetadataScanImplementationRule() {
+        super(RuleType.IMP_ICEBERG_METADATA_LSCAN_TO_PSCAN,
                 Pattern.create(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN));
     }
 
