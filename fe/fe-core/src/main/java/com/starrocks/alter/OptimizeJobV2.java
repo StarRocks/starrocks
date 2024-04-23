@@ -39,6 +39,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -259,7 +260,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         }
             );
             tableCoumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
-                    .map(Column::getName).collect(Collectors.toList());
+                    .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
