@@ -189,8 +189,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Int
 * **Introduced in**: v3.1.9, v3.2.5
 
-<<<<<<< HEAD
-=======
 ### enable_sync_materialized_view_rewrite
 
 * **Description**: Whether to enable synchronized materialized view rewrite or not.
@@ -230,12 +228,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 4
 * **Introduced in**: v3.2.5, v3.3.0
 
-### enable_force_rule_based_mv_rewrite
-
-* **Description**: Whether to rewrite input query in optimizer's RBO phase even for queries with multi tables.
-* **Default**: true
-* **Introduced in**: v3.3.0
-
 ### enable_view_based_mv_rewrite
 
 * **Description**: Whether to enable view based rewrite or not. If true, treat logical view as unified node to rewrite rather than inlining it to be better for rewrite.
@@ -262,7 +254,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v2.5
 
->>>>>>> 8c465df25a ([Doc] format system variables (#44546))
 ### character_set_database (global)
 
 * **Data type**: StringThe character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
