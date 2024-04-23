@@ -23,13 +23,12 @@ Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支�
 
 ## 使用说明
 
-- StarRocks 查询 Iceberg 数据时，支持 Parquet 和 ORC 文件格式，其中：
+StarRocks 查询 Iceberg 数据时，注意以下几点：
 
-  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
-  - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
-
-- Iceberg Catalog 支持查询 v1 表数据。自 3.0 版本起支持查询 ORC 格式的 v2 表数据，自 3.1 版本起支持查询 Parquet 格式的 v2 表数据。
-- 自 3.3 版本起，Iceberg Catalog 支持 V2 表（ORC 或 Parquet 格式）查询包含 Equality Delete 操作。
+| **文件格式** | **压缩格式**                                   | **Iceberg 表版本**                                           |
+| ------------ | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet      | SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION      | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.1 版本起支持 position-delete，自3.1.10+、3.2.5+、3.3 版本起支持 equality-delete。</li></ul> |
+| ORC          | ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.0 版本起支持 position-delete，自3.1.8+、3.2.3+、3.3 版本起支持 equality-delete。</li></ul> |
 
 ## 准备工作
 
