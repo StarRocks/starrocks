@@ -274,9 +274,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
-    auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
-                                                                     &rs_opts.predicates_for_zone_map));
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(
+            ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree, pred_tree_for_zone_map));
+    rs_opts.predicates_for_zone_map = pred_tree_for_zone_map.get_immediate_column_predicate_map();
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
