@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 5
 ---
 
 # Iceberg catalog
@@ -77,7 +78,8 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
-    StorageCredentialParams
+    StorageCredentialParams,
+    MetadataUpdateParams
 )
 ```
 
@@ -478,6 +480,15 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
     | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
     | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
     | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
+
+#### MetadataUpdateParams
+
+指定元数据缓存策略的一组参数。此组参数为可选。
+
+当前仅包含 `enable_iceberg_metadata_cache` 一个参数，用于指定是否缓存 Iceberg 表指针和分区名相关的数据。该参数自 3.2.1 版本起支持：
+
+- 在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。
+- 自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 
 ### 示例
 
@@ -1141,9 +1152,3 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
-
-## 配置 Iceberg 表指针和分区名缓存
-
-您可以通过系统变量 [`enable_iceberg_metadata_cache`](../../reference/System_variable.md#enable_iceberg_metadata_cache321-及以后) 指定是否缓存 Iceberg 表指针和分区名相关的数据。该变量自 3.2.1 版本起支持。
-
-在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
