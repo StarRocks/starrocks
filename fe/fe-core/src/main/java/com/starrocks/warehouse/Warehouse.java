@@ -17,7 +17,6 @@ package com.starrocks.warehouse;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;

@@ -14,14 +14,14 @@
 
 package com.starrocks.warehouse;
 
-import com.starrocks.lake.StarOSAgent;
-
 import com.google.common.collect.ImmutableList;
+import com.starrocks.lake.StarOSAgent;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class DefaultWarehouse extends Warehouse {
+
     private static final List<Long> WORKER_GROUP_ID_LIST;
 
     public DefaultWarehouse(long id, String name) {

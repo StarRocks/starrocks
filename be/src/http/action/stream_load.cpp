@@ -422,7 +422,10 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.formatType = ctx->format;
-    request.backend_id = get_backend_id();
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.backend_id = backend_id.value();
+    }
 
     request.__set_loadId(ctx->id.to_thrift());
     if (ctx->use_streaming) {

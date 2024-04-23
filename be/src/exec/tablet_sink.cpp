@@ -444,10 +444,13 @@ Status OlapTableSink::_update_immutable_partition(const std::set<int64_t>& parti
     request.__set_txn_id(_txn_id);
     request.__set_db_id(_vectorized_partition->db_id());
     request.__set_table_id(_vectorized_partition->table_id());
-    request.__set_backend_id(get_backend_id());
     request.__isset.partition_ids = true;
     for (auto partition_id : partition_ids_to_be_updated) {
         request.partition_ids.push_back(partition_id);
+    }
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
     }
 
     RETURN_IF_ERROR(_vectorized_partition->remove_partitions(request.partition_ids));
