@@ -287,13 +287,13 @@ CREATE TABLE demo2_alter_0 (
 	`city_code` VARCHAR(100),
 	`from`  VARCHAR(32) DEFAULT '',
     `pv` BIGINT DEFAULT '0'
-)ENGINE=OLAP
+)
 PRIMARY KEY(`user_name`)
 DISTRIBUTED BY HASH(`city_code`) BUCKETS 10
 PROPERTIES('replication_num'='1');
 -- result:
 -- !result
-ALTER TABLE demo2_alter_0 BY HASH(`city_code`) BUCKETS 20;
+ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`city_code`) BUCKETS 20;
 -- result:
 -- !result
 
