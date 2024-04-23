@@ -1113,19 +1113,8 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-The following table describes the FE configuration items that you can use to configure your Iceberg metadata caching mechanism.
+FE configuration items that you can use to configure your Iceberg metadata caching mechanism:
 
-<<<<<<< HEAD
-| **Configuration item**                           | **Unit** | **Default value**                                    | **Description**                                              |
-| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
-| enable_iceberg_metadata_disk_cache               | N/A      | `false`                                              | Specifies whether to enable the disk cache.                  |
-| iceberg_metadata_cache_disk_path                 | N/A      | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | The save path of cached metadata files on disk.              |
-| iceberg_metadata_disk_cache_capacity             | Bytes    | `2147483648`, equivalent to 2 GB                     | The maximum size of cached metadata allowed on disk.         |
-| iceberg_metadata_memory_cache_capacity           | Bytes    | `536870912`, equivalent to 512 MB                    | The maximum size of cached metadata allowed in memory.       |
-| iceberg_metadata_memory_cache_expiration_seconds | Seconds  | `86500`                                              | The amount of time after which a cache entry in memory expires counting from its last access. |
-| iceberg_metadata_disk_cache_expiration_seconds   | Seconds  | `604800`, equivalent to one week                     | The amount of time after which a cache entry on disk expires counting from its last access. |
-| iceberg_metadata_cache_max_entry_size            | Bytes    | `8388608`, equivalent to 8 MB                        | The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage. |
-=======
 ##### enable_iceberg_metadata_disk_cache
 
 Unit: N/A
@@ -1167,10 +1156,3 @@ Description: The amount of time after which a cache entry on disk expires counti
 Unit: Bytes
 Default value: `8388608`, equivalent to 8 MB
 Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
-
-### Configure Iceberg table pointer and partition name caching
-
-You can use the session variable [`enable_iceberg_metadata_cache`](../../reference/System_variable.md) to specify whether to cache pointers and partition names for Iceberg tables. This variable is supported from v3.2.1 onwards.
-
-From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
