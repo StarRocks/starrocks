@@ -239,7 +239,7 @@ jobs:
         run: |
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
 
-  prepare_version_label_for_main_feature:
+  update_version_label_for_main_feature:
     runs-on: [ self-hosted, quick ]
     if: >
       github.base_ref == 'main' && github.event.pull_request.merged == true &&
@@ -274,12 +274,12 @@ jobs:
     runs-on: [ self-hosted, quick ]
     needs:
       - update_backport_merged_msg
-      - prepare_version_label_for_main_feature
+      - update_version_label_for_main_feature
     if: >
       always() && !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
     env:
       BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
-      MAIN_VERSION_LABEL: ${{ needs.prepare_version_label_for_main_feature.outputs.VERSION_LABEL }}
+      MAIN_VERSION_LABEL: ${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
 
     steps:
       - name: Update Issue Body & Label(main)
