@@ -410,7 +410,8 @@ bool JodaFormat::prepare(std::string_view format) {
         case joda::JodaFormatChar::TIME_ZONE:
         case joda::JodaFormatChar::TIME_ZONE_OFFSET: {
             _token_parsers.emplace_back([&](JodaRuntimeState* state, const char* val_end) {
-                std::string_view tz(*(state->valptr), val_end);
+                const char* val = *(state->valptr);
+                std::string_view tz(val, val_end - val);
                 if (!TimezoneUtils::find_cctz_time_zone(tz, state->ctz)) {
                     return false;
                 }
