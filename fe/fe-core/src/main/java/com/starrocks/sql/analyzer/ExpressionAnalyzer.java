@@ -1706,6 +1706,9 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getSessionId().toString());
             }
             return null;
         }

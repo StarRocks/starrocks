@@ -98,3 +98,20 @@ select * from `t` into outfile "oss://${oss_bucket}/test_temporary_table/${uuid0
 drop temporary table `a`.`b`.`c`;
 drop temporary table `b`.`c`;
 drop temporary table `c`;
+
+-- name: test_drop_rename_db
+create database temp_table_test_${uuid0};
+use temp_table_test_${uuid0};
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+insert into `t` values (1,1,1),(2,2,2);
+select * from `t` order by 1,2,3;
+alter database temp_table_test_${uuid0} rename temp_table_test_${uuid0}_new;
+
+select * from temp_table_test_${uuid0}.t order by 1,2,3;
+select * from temp_table_test_${uuid0}_new.t order by 1,2,3;
+drop database temp_table_test_${uuid0}_new;
+drop database temp_table_test_${uuid0}_new force;
