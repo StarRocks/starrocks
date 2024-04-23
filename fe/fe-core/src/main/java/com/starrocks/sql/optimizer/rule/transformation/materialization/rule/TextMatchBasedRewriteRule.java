@@ -27,12 +27,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DebugUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
->>>>>>> 092d855880 ([BugFix] Add materialized view metrics about text based rewrite (#43918))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
