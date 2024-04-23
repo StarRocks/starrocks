@@ -359,12 +359,18 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
     auto tablet_schema = TabletSchema::create(create_tablet_schema(ltype));
 
-    OlapScanConjunctsManager cm;
-    cm.conjunct_ctxs_ptr = &conjunct_ctxs;
-    cm.tuple_desc = tuple_desc;
-    cm.obj_pool = &_pool;
-    cm.key_column_names = &key_column_names;
-    cm.runtime_filters = _pool.add(new RuntimeFilterProbeCollector());
+    OlapScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &conjunct_ctxs;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = &_pool;
+    opts.key_column_names = &key_column_names;
+    opts.runtime_filters = _pool.add(new RuntimeFilterProbeCollector());
+    opts.runtime_state = &_runtime_state;
+    opts.scan_keys_unlimited = true;
+    opts.max_scan_key_num = 1;
+    opts.enable_column_expr_predicate = false;
+
+    OlapScanConjunctsManager cm(std::move(opts));
 
     ASSERT_OK(cm.parse_conjuncts(true, 1));
     // col >= false will be elimated
