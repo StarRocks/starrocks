@@ -157,22 +157,12 @@ SELECT /*+ SET_VAR
 * 类型：String
 * 引入版本：v3.1
 
-<<<<<<< HEAD
-=======
-### catalog（3.2.4 及以后）
-
-* 描述：用于指定当前会话所在的 Catalog。
-* 默认值：default_catalog
-* 类型：String
-* 引入版本：v3.2.4
-
 ### cbo_decimal_cast_string_strict
 
 * 描述：用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。
 * 默认值：true
 * 引入版本：v2.5.14
 
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### cbo_enable_low_cardinality_optimize
 
 * 描述：是否开启低基数全局字典优化。开启后，查询 STRING 列时查询速度会有 3 倍左右提升。
@@ -218,18 +208,6 @@ SELECT /*+ SET_VAR
 * 单位：毫秒
 * 类型：Long
 
-### enable_materialized_view_text_match_rewrite
-
-* 描述：是否启用基于文本的物化视图重写。如果设置为true，则优化器将比较查询和创建的物化视图，如果物化视图的定义查询AST树与输入查询或其子查询相同，则将进行重写。
-* 默认值：true
-* 引入版本：v3.2.5, v3.3.0
-
-### materialized_view_subuqery_text_match_max_count
-
-* 描述：指定检查一个查询中，递归匹配子查询与定义的物化视图匹配的最大次数。
-* 默认值：4
-* 引入版本：v3.2.5, v3.3.0
-
 ### enable_view_based_mv_rewrite
 
 * 描述：是否启用基于视图的重写。如果设置为true，则将逻辑视图视为统一节点进行重写，而不是内联它，以便更好地进行重写。
@@ -266,24 +244,11 @@ SELECT /*+ SET_VAR
 * 类型：Int
 * 引入版本：v2.5
 
-<<<<<<< HEAD
-### count_distinct_column_buckets（2.5 及以后）
-
-group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。默认值：1024。
-=======
-### connector_sink_compression_codec
-
-* 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。
-* 默认值：uncompressed
-* 类型：String
-* 引入版本：v3.2.3
-
 ### count_distinct_column_buckets
 
 * 描述：group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。
 * 默认值：1024
 * 引入版本：v2.5
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 
 ### default_rowset_type (global)
 
@@ -340,14 +305,6 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
-### enable_iceberg_metadata_cache
-
-<<<<<<< HEAD
-=======
-* 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
-* 引入版本：v3.2.1
-
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### enable_insert_strict
 
 * 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
@@ -366,20 +323,7 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 * 默认值：true
 * 引入版本：v2.5
 
-### enable_short_circuit
-
-<<<<<<< HEAD
-是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
-
-### enable_spill（3.0 及以后）
-=======
-* 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当表为[行列混存表](../table_design/hybrid_table.md)，并且[查询满足条件](../table_design/hybrid_table.md#查询数据)
-（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径，直接查询按行存储的数据。
-* 默认值：false
-* 引入版本：v3.2.3
-
 ### enable_spill
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 
 * 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
 * 默认值：false
@@ -424,17 +368,6 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 * 类型：Boolean
 * 引入版本：v2.5.6、v3.0.8、v3.1.4、v3.2.0
 
-<<<<<<< HEAD
-默认值：`false`，表示使用原来的机制，即每次查询会从多个副本中选择一个。自 2.5.6、3.0.8、3.1.4 版本起，StarRocks 支持该参数。
-
-### enable_scan_block_cache（2.5 及以后）
-
-是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。
-
-### enable_populate_block_cache（2.5 及以后）
-
-StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。
-=======
 ### enable_scan_datacache
 
 * 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
@@ -498,15 +431,6 @@ StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。�
 * 默认值：false
 * 引入版本：v3.1
 
-<<<<<<< HEAD
-=======
-### enable_write_hive_external_table
-
-* 描述：是否开启往 Hive 的 External Table 写数据的功能。
-* 默认值：false
-* 引入版本：v3.2
-
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### event_scheduler
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
@@ -879,15 +803,12 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 用于兼容 MySQL 客户端。无实际作用。
 
-<<<<<<< HEAD
-=======
 ### statistic_collect_parallel
 
 * 描述：用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快采集任务的执行速度。
 * 默认值：1
 * 类型：Int
 
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### storage_engine
 
 指定系统使用的存储引擎。StarRocks 支持的引擎类型包括：
@@ -917,21 +838,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
 
-<<<<<<< HEAD
-=======
-### trace_log_mode
-
-* 描述：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
-  * `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
-  * `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
-
-  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
-
-* 默认值：`command`
-* 类型：String
-* 引入版本：v3.2.0
-
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### transaction_read_only
 
 * 描述：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。该变量用于指定事务访问模式。取值 `ON` 表示只读。取值 `OFF` 表示可读可写。
