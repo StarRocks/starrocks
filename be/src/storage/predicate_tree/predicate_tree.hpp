@@ -171,8 +171,9 @@ inline Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate(CompoundNod
 
     if (!node_ctx.and_context.has_value()) {
         auto& ctx = node_ctx.and_context.emplace();
-        ctx.non_vec_children.reserve(_col_children_map.size());
-        ctx.vec_children.reserve(num_children());
+        const auto num_total_children = num_children();
+        ctx.non_vec_children.reserve(num_total_children);
+        ctx.vec_children.reserve(num_total_children);
 
         for (const auto& [_, col_children] : _col_children_map) {
             for (const auto& child : col_children) {
