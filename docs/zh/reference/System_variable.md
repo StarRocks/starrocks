@@ -188,8 +188,6 @@ SELECT /*+ SET_VAR
 * 类型：Int
 * 引入版本：v3.1.9, v3.2.5
 
-<<<<<<< HEAD
-=======
 ### enable_sync_materialized_view_rewrite
 
 * 描述：是否启用同步物化视图自动改写。
@@ -229,12 +227,6 @@ SELECT /*+ SET_VAR
 * 默认值：4
 * 引入版本：v3.2.5, v3.3.0
 
-### enable_force_rule_based_mv_rewrite
-
-* 描述：在优化器的RBO阶段(rule based optimization)是否开启多表查询的输入查询: 开启后，可以让改写更加鲁棒，但如果不能命中也可能增加优化耗时。
-* 默认值：true
-* 引入版本：v3.3
-
 ### enable_view_based_mv_rewrite
 
 * 描述：是否启用基于视图的重写。如果设置为true，则将逻辑视图视为统一节点进行重写，而不是内联它，以便更好地进行重写。
@@ -258,7 +250,6 @@ SELECT /*+ SET_VAR
 * 类型：String
 * 引入版本：v2.5
 
->>>>>>> 8c465df25a ([Doc] format system variables (#44546))
 ### character_set_database（global）
 
 * 描述：StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码（`utf8`）。
