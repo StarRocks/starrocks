@@ -154,6 +154,10 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         fileContentCache.invalidate(path);
     }
 
+    public FileIO getWrappedIO() {
+        return wrappedIO;
+    }
+
     @Override
     public Map<String, String> properties() {
         return wrappedIO.properties();
