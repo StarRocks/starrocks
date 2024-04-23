@@ -17,6 +17,7 @@
 #include <butil/time.h> // NOLINT
 
 #include "fs/fs.h"
+#include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
@@ -47,10 +48,12 @@ Status PersistentIndexSstable::build_sstable(
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf);
     for (const auto& [k, v] : map) {
-        IndexValueWithVerPB index_value_pb;
+        IndexValuesWithVerPB index_value_pb;
         for (const auto& index_value_with_ver : v) {
-            index_value_pb.add_versions(index_value_with_ver.first);
-            index_value_pb.add_values(index_value_with_ver.second.get_value());
+            auto* value = index_value_pb.add_values();
+            value->set_version(index_value_with_ver.first);
+            value->set_rssid(index_value_with_ver.second.get_rssid());
+            value->set_rowid(index_value_with_ver.second.get_rowid());
         }
         builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
     }
@@ -75,19 +78,21 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             ++i;
             continue;
         }
-        IndexValueWithVerPB index_value_with_ver_pb;
+        IndexValuesWithVerPB index_value_with_ver_pb;
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
-        if (version < 0 && index_value_with_ver_pb.values_size() > 0) {
-            values[key_index] = IndexValue(index_value_with_ver_pb.values(0));
-            found_key_indexes->insert(key_index);
-        } else {
-            for (size_t j = 0; j < index_value_with_ver_pb.versions_size(); ++j) {
-                if (index_value_with_ver_pb.versions(j) == version) {
-                    values[key_index] = IndexValue(index_value_with_ver_pb.values(j));
-                    found_key_indexes->insert(key_index);
-                    break;
+        if (index_value_with_ver_pb.values_size() > 0) {
+            if (version < 0) {
+                values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
+                found_key_indexes->insert(key_index);
+            } else {
+                for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                    if (index_value_with_ver_pb.values(j).version() == version) {
+                        values[key_index] = build_index_value(index_value_with_ver_pb.values(j));
+                        found_key_indexes->insert(key_index);
+                        break;
+                    }
                 }
             }
         }

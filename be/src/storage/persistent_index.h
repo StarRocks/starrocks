@@ -114,6 +114,8 @@ struct IndexValue {
     explicit IndexValue(const uint64_t val) { UNALIGNED_STORE64(v, val); }
 
     uint64_t get_value() const { return UNALIGNED_LOAD64(v); }
+    uint32_t get_rssid() const { return (uint32_t)(get_value() >> 32); }
+    uint32_t get_rowid() const { return (uint32_t)(get_value() & 0xFFFFFFFF); }
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };

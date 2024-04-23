@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "storage/persistent_index.h"
 
 namespace starrocks::lake {
 
@@ -40,6 +41,10 @@ inline StatusOr<T> enhance_error_prompt(StatusOr<T> res) {
     } else {
         return res.status().clone_and_append(kNotFoundPrompt);
     }
+}
+
+inline IndexValue build_index_value(const IndexValueWithVerPB& value) {
+    return IndexValue(((uint64_t)value.rssid() << 32 | value.rowid()));
 }
 
 } // namespace starrocks::lake
