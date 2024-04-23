@@ -1,0 +1,246 @@
+[
+  {
+    "after": {
+      "f_bool": true,
+      "f_tinyint": 127,
+      "f_smallint": 32767,
+      "f_int": 2147483647,
+      "f_bigint": 9223372036854775807,
+      "f_float": 3.14,
+      "f_double": 3.14,
+      "f_varchar": "starrocks",
+      "f_date": "2021-12-09",
+      "f_datetime": "2021-12-09 10:00:00",
+      "f_array": [
+        1,
+        3,
+        5
+      ],
+      "f_decimal": "1234565789012345678901234567.123456789",
+      "f_char": "starrocks",
+      "f_time": "10:00:00",
+      "f_nestarray": [
+        [
+          {
+            "k1": 1,
+            "k2": 2
+          },
+          {
+            "k3": 3
+          }
+        ],
+        [
+          {
+            "k1": 4,
+            "k2": 5
+          },
+          {
+            "k3": 6
+          }
+        ]
+      ],
+      "f_object": {
+        "n1": {
+          "n2": {
+            "n3": 1.1
+          }
+        }
+      }
+    },
+    "before": null,
+    "op": "c",
+    "source": {
+      "version": "1.0.0",
+      "connector": "mysql",
+      "name": "mysql-source",
+      "ts_ms": 1639027200000,
+      "snapshot": "false",
+      "db": "test",
+      "table": "test",
+      "server_id": 0,
+      "file": "mysql-bin.000003",
+      "pos": 123,
+      "row": 0,
+      "thread": 0,
+      "query": null
+    }
+  },
+  {
+    "before": {
+      "f_bool": true,
+      "f_tinyint": 127,
+      "f_smallint": 32767,
+      "f_int": 2147483647,
+      "f_bigint": 9223372036854775807,
+      "f_float": 3.14,
+      "f_double": 3.14,
+      "f_varchar": "starrocks",
+      "f_date": "2021-12-09",
+      "f_datetime": "2021-12-09 10:00:00",
+      "f_array": [
+        1,
+        3,
+        5
+      ],
+      "f_decimal": "1234565789012345678901234567.123456789",
+      "f_char": "starrocks",
+      "f_time": "10:00:00",
+      "f_nestarray": [
+        [
+          {
+            "k1": 1,
+            "k2": 2
+          },
+          {
+            "k3": 3
+          }
+        ],
+        [
+          {
+            "k1": 4,
+            "k2": 5
+          },
+          {
+            "k3": 6
+          }
+        ]
+      ],
+      "f_object": {
+        "n1": {
+          "n2": {
+            "n3": 1.1
+          }
+        }
+      }
+    },
+    "after": {
+      "f_bool": true,
+      "f_tinyint": 127,
+      "f_smallint": 32767,
+      "f_int": 2147483647,
+      "f_bigint": 9223372036854775807,
+      "f_float": 3.14,
+      "f_double": 3.14,
+      "f_varchar": "starrocks",
+      "f_date": "2021-12-09",
+      "f_datetime": "2021-12-09 10:00:00",
+      "f_array": [
+        1,
+        3,
+        5
+      ],
+      "f_decimal": "1234565789012345678901234567.123456789",
+      "f_char": "starrocks",
+      "f_time": "10:00:00",
+      "f_nestarray": [
+        [
+          {
+            "k1": 1,
+            "k2": 2
+          },
+          {
+            "k3": 3
+          }
+        ],
+        [
+          {
+            "k1": 4,
+            "k2": 5
+          },
+          {
+            "k3": 6
+          }
+        ]
+      ],
+      "f_object": {
+        "n1": {
+          "n2": {
+            "n3": 1.1
+          }
+        }
+      }
+    },
+    "op": "u",
+    "source": {
+      "version": "1.0.0",
+      "connector": "mysql",
+      "name": "mysql-source",
+      "ts_ms": 1639027200000,
+      "snapshot": "false",
+      "db": "test",
+      "table": "test",
+      "server_id": 0,
+      "file": "mysql-bin.000003",
+      "pos": 123,
+      "row": 0,
+      "thread": 0,
+      "query": null
+    }
+  },
+  {
+    "before": {
+      "f_bool": true,
+      "f_tinyint": 127,
+      "f_smallint": 32767,
+      "f_int": 2147483647,
+      "f_bigint": 9223372036854775807,
+      "f_float": 3.14,
+      "f_double": 3.14,
+      "f_varchar": "starrocks",
+      "f_date": "2021-12-09",
+      "f_datetime": "2021-12-09 10:00:00",
+      "f_array": [
+        1,
+        3,
+        5
+      ],
+      "f_decimal": "1234565789012345678901234567.123456789",
+      "f_char": "starrocks",
+      "f_time": "10:00:00",
+      "f_nestarray": [
+        [
+          {
+            "k1": 1,
+            "k2": 2
+          },
+          {
+            "k3": 3
+          }
+        ],
+        [
+          {
+            "k1": 4,
+            "k2": 5
+          },
+          {
+            "k3": 6
+          }
+        ]
+      ],
+      "f_object": {
+        "n1": {
+          "n2": {
+            "n3": 1.1
+          }
+        }
+      }
+    },
+    "after": null,
+    "op": "d",
+    "source": {
+      "version": "1.0.0",
+      "connector": "mysql",
+      "name": "mysql-source",
+      "ts_ms": 1639027200000,
+      "snapshot": "false",
+      "db": "test",
+      "table": "test",
+      "server_id": 0,
+      "file": "mysql-bin.000003",
+      "pos": 123,
+      "row": 0,
+      "thread": 0,
+      "query": null
+    }
+  }
+]

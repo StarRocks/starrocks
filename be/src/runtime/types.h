@@ -109,6 +109,12 @@ struct TypeDescriptor {
         res.len = kJsonDefaultSize;
         return res;
     }
+    static TypeDescriptor create_tinyint_type() {
+        TypeDescriptor res;
+        res.type = TYPE_TINYINT;
+        res.len = 1;
+        return res;
+    }
 
     static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
