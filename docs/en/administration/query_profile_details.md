@@ -1362,3 +1362,52 @@ Description: Number of shuffles. This metric is only valid when `Type` is `Parti
 ##### LocalExchangePeakMemoryUsage
 
 Description: Peak memory usage.
+
+#### OlapTableSink Operator
+
+OlapTableSink is the operator that profiles data loading with INSERT INTO FILES() and Broker Load. This feature is supported from v3.3.0 onwards.
+
+:::tip
+- An excessive difference between the Max and Min values of the PushChunkNum metric of OlapTableSink indicates data skew in the upstream operators, which may lead to a bottleneck in loading performance.
+- RpcClientSideTime equals RpcServerSideTime plus network transmission time plus RPC framework processing time. If there is a significant difference between RpcClientSideTime and RpcServerSideTime, consider enabling compression to reduce transmission time.
+:::
+
+##### IndexNum
+
+Description: Number of the synchronous materialized views created for the destination table.
+
+##### ReplicatedStorage
+
+Description: Whether Single Leader Replication is enabled.
+
+##### TxnID
+
+Description: ID of the loading transaction.
+
+##### RowsRead
+
+Description: Number of rows read from upstream operators.
+
+##### RowsFiltered
+
+Description: Number of rows filtered out due to inadequate data quality.
+
+##### RowsReturned
+
+Description: Number of rows written to the destination table.
+
+##### RpcClientSideTime
+
+Description: Total RPC time consumption for loading recorded by the client side.
+
+##### RpcServerSideTime
+
+Description: Total RPC time consumption for loading recorded by the server side.
+
+##### PrepareDataTime
+
+Description: Total time consumption for the data preparation phase, including data format conversion and data quality check.
+
+##### SendDataTime
+
+Description: Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue.
