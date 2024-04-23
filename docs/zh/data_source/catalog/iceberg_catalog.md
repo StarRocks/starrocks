@@ -1141,3 +1141,12 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
+<<<<<<< HEAD
+=======
+
+## 配置 Iceberg 表指针和分区名缓存
+
+您可以通过系统变量 [`enable_iceberg_metadata_cache`](../../reference/System_variable.md) 指定是否缓存 Iceberg 表指针和分区名相关的数据。该变量自 3.2.1 版本起支持。
+
+在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
+>>>>>>> 8c465df25a ([Doc] format system variables (#44546))
