@@ -238,16 +238,58 @@ jobs:
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
         run: |
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
-          
-  update_feature_issue:
+
+  prepare_version_label_for_main_feature:
     runs-on: [ self-hosted, quick ]
-    needs: update_backport_merged_msg
     if: >
-      !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
+      github.base_ref == 'main' && github.event.pull_request.merged == true &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      startsWith(github.event.pull_request.title, '[Feature]')
     env:
-      VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
     steps:
-      - name: Update Issue Body & Label
+      - name: prepare version label
+        id: prepare_version_label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
-          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${VERSION_LABEL}
+          version=$(./scripts/get_next_release_tag.sh)
+          version_label="version:${version}"
+          echo "LABEL=${version_label}" >> $GITHUB_OUTPUT
+          gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
+
+      - name: add version label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+        run: |
+          gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
+
+  update_feature_issue:
+    runs-on: [ self-hosted, quick ]
+    needs:
+      - update_backport_merged_msg
+      - prepare_version_label_for_main_feature
+    if: >
+      always() && !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
+    env:
+      BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
+      MAIN_VERSION_LABEL: ${{ needs.prepare_version_label_for_main_feature.outputs.VERSION_LABEL }}
+
+    steps:
+      - name: Update Issue Body & Label(main)
+        if: github.base_ref == 'main' && env.MAIN_VERSION_LABEL != ''
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${MAIN_VERSION_LABEL}
+
+      - name: Update Issue Body & Label(branch)
+        if: always() && github.base_ref != 'main' && env.BRANCH_VERSION_LABEL != ''
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/get_pr_issue.py update_issue ${GITHUB_REPOSITORY} ${PR_NUMBER} ${BRANCH_VERSION_LABEL}

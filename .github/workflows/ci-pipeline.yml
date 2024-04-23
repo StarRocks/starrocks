@@ -173,6 +173,7 @@ jobs:
           path: image_cache.info
           retention-days: 1
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Clean ENV
         if: always() && needs.be-checker.outputs.thirdparty_filter == 'true'
