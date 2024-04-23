@@ -158,13 +158,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1
 
-### catalog
-
-* **Description**: Used to specify the catalog to which the session belongs.
-* **Default**: default_catalog
-* **Data type**: String
-* **Introduced in**: v3.2.4
-
 ### cbo_decimal_cast_string_strict
 
 * **Description**: Controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string.
@@ -216,18 +209,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: ms
 * **Introduced in**: v3.1.9, v3.2.5
 
-### enable_materialized_view_text_match_rewrite
-
-* **Description**: Whether to enable text based materialized view rewrite or not. If true, optimizer will compare query and created materialized views, it will be rewritten if the materialized view's define query ast tree is the same with the input query or its subquery.
-* **Default**: true
-* **Introduced in**: v3.2.5, v3.3.0
-
-### materialized_view_subuqery_text_match_max_count
-
-* **Description**: Specifies the maximum number of checking whether one query's subquery is matched with the defined materialized views.
-* **Default**: 4
-* **Introduced in**: v3.2.5, v3.3.0
-
 ### enable_view_based_mv_rewrite
 
 * **Description**: Whether to enable view based rewrite or not. If true, treat logical view as unified node to rewrite rather than inlining it to be better for rewrite.
@@ -267,25 +248,11 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Int
 * **Introduced in**: v2.5
 
-### connector_sink_compression_codec
-
-<<<<<<< HEAD
-### count_distinct_column_buckets (2.5 and later)
-
-The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`. Default value: 1024.
-=======
-* **Description**: Specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files().
-* **Valid values**: `uncompressed`, `snappy`, `lz4`, `zstd`, and `gzip`.
-* **Default**: uncompressed
-* **Data type**: String
-* **Introduced in**: v3.2.3
-
 ### count_distinct_column_buckets
 
 * **Description**: The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`.
 * **Default**: 1024
 * **Introduced in**: v2.5
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 
 ### default_rowset_type (global)
 
@@ -342,15 +309,6 @@ Default value: `true`.
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
-### enable_iceberg_metadata_cache
-
-<<<<<<< HEAD
-Default value: false, which means this feature is disabled.
-=======
-* **Description**: Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
-* **Introduced in**: v3.2.1
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
-
 ### enable_insert_strict
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
@@ -367,23 +325,11 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Data type**: Boolean
 * **Introduced in**: v2.5
 
-### enable_short_circuit
-
-* **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the table uses hybrid row-column storage and the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit to directly query the data stored in the row-by-row fashion.
-* **Default**: false
-* **Introduced in**: v3.2.3
-
-<<<<<<< HEAD
-### enable_spill (3.0 and later)
-
-Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
-=======
 ### enable_spill
 
 * **Description**: Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
 * **Default**: false
 * **Introduced in**: v3.0
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 
 ### enable_strict_order_by
 
@@ -423,18 +369,6 @@ Whether to enable intermediate result spilling. Default: `false`. If it is set t
   In scenarios where the table to query has a large number of tablets, this feature significantly improves query performance because the meta information and data of the tablet can be cached in memory more quickly.
 
   However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
-
-<<<<<<< HEAD
-Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, and 3.1.4.
-
-### enable_scan_block_cache (2.5 and later)
-
-Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md).
-
-### enable_populate_block_cache (2.5 and later)
-
-Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
-=======
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
 
@@ -449,7 +383,6 @@ Specifies whether to cache data blocks read from external storage systems in Sta
 * **Description**: Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5. In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true
 * **Introduced in**: v2.5
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 
 ### enable_tablet_internal_parallel
 
@@ -497,15 +430,6 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * If this feature is disabled, only Local RF works.
 * If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
 
-<<<<<<< HEAD
-=======
-### enable_write_hive_external_table
-
-* **Description**: Whether to allow for sinking data to external tables of Hive.
-* **Default**: false
-* **Introduced in**: v3.2
-
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### event_scheduler
 
 Used for MySQL client compatibility. No practical usage.
@@ -690,9 +614,6 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 * **Default**: 0
 * **Data type**: Int
 
-<<<<<<< HEAD
-### query_cache_entry_max_bytes (2.5 and later)
-=======
 ### pipeline_profile_level
 
 * **Description**: Controls the level of the query profile. A query profile often has five layers: Fragment, FragmentInstance, Pipeline, PipelineDriver, and Operator. Different levels provide different details of the profile:
@@ -703,7 +624,6 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 * **Default**: 1
 * **Data type**: Int
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 
 ### query_cache_entry_max_bytes
 
@@ -866,15 +786,12 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
-<<<<<<< HEAD
-=======
 ### statistic_collect_parallel
 
 * **Description**: Used to adjust the parallelism of statistics collection tasks that can run on BEs. Default value: 1. You can increase this value to speed up collection tasks.
 * **Default**: 1
 * **Data type**: Int
 
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### storage_engine
 
 The types of engines supported by StarRocks:
@@ -904,21 +821,6 @@ Used to display the time zone of the current system. Cannot be changed.
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
 
-<<<<<<< HEAD
-=======
-### trace_log_mode
-
-* **Description**: Used to control where to output the logs of query trace profiles. Valid values:
-  * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
-  * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
-
-  For more information on query trace profile, see [Query Trace Profile](../developers/trace-tools/query_trace_profile.md).
-
-* **Default**: `command`
-* **Data type**: String
-* **Introduced in**: v3.2.0
-
->>>>>>> d7322a1a38 ([Doc] format system variables (backport #44546) (#44579))
 ### transaction_read_only
 
 * **Description**: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
