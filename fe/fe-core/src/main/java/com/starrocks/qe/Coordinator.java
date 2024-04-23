@@ -698,7 +698,9 @@ public class Coordinator {
 
         } else {
             // This is a load process.
-            this.queryOptions.setEnable_profile(true);
+            if (!coordinatorPreprocessor.isUsePipeline()) {
+                this.queryOptions.setEnable_profile(true);
+            }
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = Lists.newArrayList(coordinatorPreprocessor.getAddressToBackendID().values());
