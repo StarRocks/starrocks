@@ -1075,6 +1075,19 @@ public class StmtExecutor {
         coord.setExecPlan(execPlan);
 
         RowBatch batch;
+<<<<<<< HEAD
+=======
+        boolean isOutfileQuery = false;
+        if (queryStmt instanceof QueryStatement) {
+            isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
+            if (isOutfileQuery) {
+                boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStmt);
+                if (hasTemporaryTable) {
+                    throw new SemanticException("temporary table doesn't support select outfile statement");
+                }
+            }
+        }
+>>>>>>> 5918650613 ([Feature] temporary table(part-3): Table related commands adapt to temporary tables (#44147))
 
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan);
@@ -1150,7 +1163,7 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getTable(context, analyzeStmt.getTableName());
+        Table table = MetaUtils.getSessionAwareTable(context, db, analyzeStmt.getTableName());
         if (StatisticUtils.isEmptyTable(table)) {
             return;
         }
