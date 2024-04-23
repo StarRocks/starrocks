@@ -223,7 +223,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         });
                     }
 
-                    instance.paddingScanRanges();
+                    instance.paddingScanRanges(logicalDop);
                 }
             });
         });
@@ -283,7 +283,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                             instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
                         }
-                        instance.paddingScanRanges();
+                        instance.paddingScanRanges(logicalDop);
                     }
                 }
             });

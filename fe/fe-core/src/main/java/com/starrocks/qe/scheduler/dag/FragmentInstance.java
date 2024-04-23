@@ -287,9 +287,9 @@ public class FragmentInstance {
                 .computeIfAbsent(driverSeq, k -> new ArrayList<>()).addAll(scanRanges);
     }
 
-    public void paddingScanRanges() {
+    public void paddingScanRanges(int logicalDop) {
         node2DriverSeqToScanRanges.forEach((scanId, driverSeqToScanRanges) -> {
-            for (int driverSeq = 0; driverSeq < pipelineDop; driverSeq++) {
+            for (int driverSeq = 0; driverSeq < logicalDop; driverSeq++) {
                 driverSeqToScanRanges.computeIfAbsent(driverSeq, k -> new ArrayList<>());
             }
         });
