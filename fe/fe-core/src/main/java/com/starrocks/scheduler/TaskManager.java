@@ -175,7 +175,7 @@ public class TaskManager implements MemoryTrackable {
         }
         try {
             // clear pending task runs
-            List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRuns();
+            List<TaskRun> taskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
             for (TaskRun taskRun : taskRuns) {
                 taskRun.getStatus().setErrorMessage("Fe abort the task");
                 taskRun.getStatus().setErrorCode(-1);
@@ -191,7 +191,7 @@ public class TaskManager implements MemoryTrackable {
             }
 
             // clear running task runs
-            Set<Long> runningTaskIds = taskRunScheduler.getImmRunningTaskIds();
+            Set<Long> runningTaskIds = taskRunScheduler.getCopiedRunningTaskIds();
             for (Long taskId : runningTaskIds) {
                 TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
                 taskRun.getStatus().setErrorMessage("Fe abort the task");
@@ -646,14 +646,14 @@ public class TaskManager implements MemoryTrackable {
     public List<TaskRunStatus> showTaskRunStatus(String dbName) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
         // pending task runs
-        List<TaskRun> pendingTaskRuns = taskRunScheduler.getImmPendingTaskRuns();
+        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
                 .map(TaskRun::getStatus)
                 .filter(t -> isShowTaskRunStatus(t, dbName))
                 .forEach(taskRunList::add);
 
         // running task runs
-        Set<TaskRun> runningTaskRuns = taskRunScheduler.getImmRunningTaskRuns();
+        Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
         runningTaskRuns.stream()
                 .map(TaskRun::getStatus)
                 .filter(t -> isShowTaskRunStatus(t, dbName))
@@ -678,7 +678,7 @@ public class TaskManager implements MemoryTrackable {
         Map<String, List<TaskRunStatus>> mvNameRunStatusMap = Maps.newHashMap();
 
         // pending task runs
-        List<TaskRun> pendingTaskRuns = taskRunScheduler.getImmPendingTaskRuns();
+        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
                 .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                 .map(TaskRun::getStatus)
@@ -696,7 +696,7 @@ public class TaskManager implements MemoryTrackable {
                         .computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList())
                         .add(task));
 
-        taskRunScheduler.getImmRunningTaskRuns().stream()
+        taskRunScheduler.getCopiedRunningTaskRuns().stream()
                 .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                 .map(TaskRun::getStatus)
                 .filter(u -> dbName == null || u != null && u.getDbName().equals(dbName))

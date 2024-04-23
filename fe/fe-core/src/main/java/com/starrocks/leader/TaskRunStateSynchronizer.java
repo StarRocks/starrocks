@@ -42,7 +42,7 @@ public class TaskRunStateSynchronizer extends FrontendDaemon {
         runningTaskRunProgressMap = new HashMap<>();
         taskRunScheduler = taskRunManager.getTaskRunScheduler();
 
-        Set<TaskRun> runningTaskRuns = taskRunScheduler.getImmRunningTaskRuns();
+        Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
         for (TaskRun taskRun : runningTaskRuns) {
             runningTaskRunProgressMap.put(taskRun.getTaskId(), taskRun.getStatus().getProgress());
         }
@@ -50,7 +50,7 @@ public class TaskRunStateSynchronizer extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        Set<TaskRun> runningTaskRuns = taskRunScheduler.getImmRunningTaskRuns();
+        Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
         Map<Long, Integer> jobProgressMap = new HashMap<>();
         for (TaskRun taskRun : runningTaskRuns) {
             Long taskId = taskRun.getTaskId();

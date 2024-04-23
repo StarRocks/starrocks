@@ -102,9 +102,9 @@ public class TaskRunSchedulerTest {
             taskRuns.add(taskRun);
             scheduler.addPendingTaskRun(taskRun);
         }
-        Assert.assertTrue(scheduler.getImmPendingTaskRuns().size() == N);
+        Assert.assertTrue(scheduler.getCopiedPendingTaskRuns().size() == N);
 
-        List<TaskRun> queue = scheduler.getImmPendingTaskRuns();
+        List<TaskRun> queue = scheduler.getCopiedPendingTaskRuns();
         Assert.assertEquals(N, queue.size());
 
         for (int i = 0; i < N; i++) {
@@ -126,9 +126,9 @@ public class TaskRunSchedulerTest {
             taskRuns.add(taskRun);
             scheduler.addPendingTaskRun(taskRun);
         }
-        Assert.assertTrue(scheduler.getImmPendingTaskRuns().size() == N);
+        Assert.assertTrue(scheduler.getCopiedPendingTaskRuns().size() == N);
 
-        List<TaskRun> queue = scheduler.getImmPendingTaskRuns();
+        List<TaskRun> queue = scheduler.getCopiedPendingTaskRuns();
         Assert.assertEquals(N, queue.size());
 
         for (int i = 0; i < N; i++) {

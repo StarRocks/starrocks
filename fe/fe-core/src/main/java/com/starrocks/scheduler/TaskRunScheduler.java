@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.JsonObject;
@@ -62,7 +63,7 @@ public class TaskRunScheduler {
     /**
      * Get the pending task run queue
      */
-    public List<TaskRun> getImmPendingTaskRuns() {
+    public List<TaskRun> getCopiedPendingTaskRuns() {
         return ImmutableList.copyOf(pendingTaskRunQueue);
     }
 
@@ -70,7 +71,7 @@ public class TaskRunScheduler {
      * @param taskId: task id
      * @return: pending task run queue
      */
-    public List<TaskRun> getImmPendingTaskRunsByTaskId(long taskId) {
+    public List<TaskRun> getCopiedPendingTaskRunsByTaskId(long taskId) {
         Queue<TaskRun> pendingTaskRuns = pendingTaskRunMap.get(taskId);
         if (pendingTaskRuns == null) {
             return null;
@@ -113,7 +114,7 @@ public class TaskRunScheduler {
 
         }
         if (taskRunQueue.isEmpty()) {
-            LOG.warn("remove pending task run from pending map: {}", taskRun);
+            LOG.info("remove pending task run from pending map: {}", taskRun);
             pendingTaskRunMap.remove(taskRun.getTaskId());
         }
     }
@@ -122,7 +123,7 @@ public class TaskRunScheduler {
         if (task == null) {
             return;
         }
-        LOG.warn("remove pending task: {}", task);
+        LOG.info("remove pending task: {}", task);
 
         Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(task.getId());
         if (taskRunQueue.isEmpty()) {
@@ -201,7 +202,7 @@ public class TaskRunScheduler {
     }
 
     public long getTaskIdPendingTaskRunCount(long taskId) {
-        List<TaskRun> pendingTaskRuns = getImmPendingTaskRunsByTaskId(taskId);
+        List<TaskRun> pendingTaskRuns = getCopiedPendingTaskRunsByTaskId(taskId);
         return  pendingTaskRuns == null ? 0L : pendingTaskRuns.size();
     }
 
@@ -214,16 +215,16 @@ public class TaskRunScheduler {
         runningTaskRunMap.put(taskRun.getTaskId(), taskRun);
     }
 
-    public Set<Long> getImmRunningTaskIds() {
-        return Sets.newHashSet(runningTaskRunMap.keySet());
+    public Set<Long> getCopiedRunningTaskIds() {
+        return ImmutableSet.copyOf(runningTaskRunMap.keySet());
     }
 
     public TaskRun removeRunningTask(long taskId) {
         return runningTaskRunMap.remove(taskId);
     }
 
-    public Set<TaskRun> getImmRunningTaskRuns() {
-        return Sets.newHashSet(runningTaskRunMap.values());
+    public Set<TaskRun> getCopiedRunningTaskRuns() {
+        return ImmutableSet.copyOf(runningTaskRunMap.values());
     }
 
     public boolean isTaskRunning(long taskId) {

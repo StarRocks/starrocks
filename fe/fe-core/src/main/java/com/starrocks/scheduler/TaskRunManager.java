@@ -101,7 +101,7 @@ public class TaskRunManager implements MemoryTrackable {
         }
         try {
             long taskId = taskRun.getTaskId();
-            List<TaskRun> taskRuns = taskRunScheduler.getImmPendingTaskRunsByTaskId(taskId);
+            List<TaskRun> taskRuns = taskRunScheduler.getCopiedPendingTaskRunsByTaskId(taskId);
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
@@ -175,7 +175,7 @@ public class TaskRunManager implements MemoryTrackable {
 
     // check if a running TaskRun is complete and remove it from running TaskRun map
     public void checkRunningTaskRun() {
-        Set<Long> runningTaskIds = taskRunScheduler.getImmRunningTaskIds();
+        Set<Long> runningTaskIds = taskRunScheduler.getCopiedRunningTaskIds();
         for (Long taskId : runningTaskIds) {
             TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
             if (taskRun == null) {
