@@ -293,7 +293,7 @@ DISTRIBUTED BY HASH(`city_code`) BUCKETS 10
 PROPERTIES('replication_num'='1');
 -- result:
 -- !result
-ALTER TABLE demo2_alter_0 BY HASH(user_name) BUCKETS 20;
+ALTER TABLE demo2_alter_0 BY HASH(`city_code`) BUCKETS 20;
 -- result:
 -- !result
 
