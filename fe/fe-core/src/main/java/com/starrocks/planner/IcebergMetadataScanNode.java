@@ -15,24 +15,127 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.UserException;
+import com.starrocks.connector.RemoteMetaSplit;
+import com.starrocks.connector.iceberg.IcebergMetaSpec;
+import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.THdfsScanNode;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.hadoop.shaded.com.google.common.base.Strings;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class IcebergMetadataScanNode extends ScanNode {
+    private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanNode.class);
+    private final LogicalIcebergMetadataTable table;
+    private String icebergPredicate = "";
 
-    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final List<TScanRangeLocations> result = new ArrayList<>();
+    private String temporalClause;
+    private String serializedTable;
+
+    public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, String temporalClause) {
         super(id, desc, planNodeName);
+        this.table = (LogicalIcebergMetadataTable) desc.getTable();
+        this.temporalClause = temporalClause;
     }
 
-    @Override
-    protected void toThrift(TPlanNode msg) {
+    public void preProcessIcebergPredicate(String icebergPredicate) {
+        this.icebergPredicate = icebergPredicate;
+    }
 
+    public HDFSScanNodePredicates getScanNodePredicates() {
+        return scanNodePredicates;
     }
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return null;
+        return result;
     }
+
+    public void setupScanRangeLocations() throws UserException {
+        String catalogName = table.getCatalogName();
+        String originDbName = table.getOriginDb();
+        String originTableName = table.getOriginTable();
+
+        long snapshotId = -1;
+        // TODO(stephen): parse version by AstBuilder
+        if (!Strings.isNullOrEmpty(temporalClause)) {
+            String kw = "for version as of";
+            temporalClause = temporalClause.substring(kw.length()).trim();
+            snapshotId = Long.parseLong(temporalClause);
+        }
+
+
+        IcebergMetaSpec serializedMetaSpec = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getSerializedMetaSpec(catalogName, originDbName, originTableName, snapshotId, icebergPredicate).cast();
+
+        this.serializedTable = serializedMetaSpec.getTable();
+
+        serializedMetaSpec.getSplits().forEach(this::addSplitScanRangeLocations);
+    }
+
+    private void addSplitScanRangeLocations(RemoteMetaSplit split) {
+        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+        THdfsScanRange hdfsScanRange = new THdfsScanRange();
+        hdfsScanRange.setUse_iceberg_jni_metadata_reader(true);
+
+        hdfsScanRange.setSerialized_split(split.getSerializeSplit());
+        hdfsScanRange.setFile_length(split.length());
+        hdfsScanRange.setLength(split.length());
+
+        // for distributed scheduler
+        hdfsScanRange.setFull_path(split.path());
+        hdfsScanRange.setOffset(0);
+
+        TScanRange scanRange = new TScanRange();
+        scanRange.setHdfs_scan_range(hdfsScanRange);
+        scanRangeLocations.setScan_range(scanRange);
+
+        TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+        scanRangeLocations.addToLocations(scanRangeLocation);
+
+        result.add(scanRangeLocations);
+    }
+
+    @Override
+    protected void toThrift(TPlanNode msg) {
+        msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
+        THdfsScanNode tHdfsScanNode = new THdfsScanNode();
+        tHdfsScanNode.setTuple_id(desc.getId().asInt());
+        tHdfsScanNode.setCan_use_min_max_count_opt(false);
+
+        String explainString = getExplainString(conjuncts);
+        LOG.info("Explain string: " + explainString);
+        tHdfsScanNode.setSql_predicates(explainString);
+
+        tHdfsScanNode.setSerialized_table(serializedTable);
+        tHdfsScanNode.setSerialized_predicate(icebergPredicate);
+
+        msg.hdfs_scan_node = tHdfsScanNode;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
+
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return true;
+    }
+
 }
