@@ -218,7 +218,7 @@ public class InformationSchemaDataSource {
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
-        tableConfigInfo.setPartition_key(partitionKeySb.toString());
+        tableConfigInfo.setPartition_key(partitionKeySb.length() > 0 ? partitionKeySb.toString() : DEFAULT_EMPTY_STRING);
 
         // Distribution info
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
