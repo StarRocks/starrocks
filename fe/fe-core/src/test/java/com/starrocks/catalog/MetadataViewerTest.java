@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.backup.CatalogMocker;
@@ -43,6 +44,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -158,19 +160,10 @@ public class MetadataViewerTest {
 
         new Expectations() {
             {
-                ConnectContext.get();
+                GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
                 minTimes = 0;
-                result = connectContext;
-
-                long warehouseId = 10000L;
-
-                connectContext.getCurrentWarehouseId();
-                minTimes = 0;
-                result = warehouseId;
-
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-                minTimes = 0;
-                result = Lists.newArrayList(10003L, 10004L, 10005L);
+                result = ImmutableMap.of(10003L, new ComputeNode(), 10004L, new ComputeNode(), 10005L,
+                        new ComputeNode());
             }
         };
 
