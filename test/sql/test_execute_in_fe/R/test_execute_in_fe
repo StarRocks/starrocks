@@ -1,0 +1,89 @@
+-- name: test_execute_in_fe
+set enable_constant_execute_in_fe = true;
+-- result:
+-- !result
+select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
+1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
+cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
+timediff('2028-01-01 11:25:36', '2000-11-21 12:12:12'), timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';
+-- result:
+1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	237647:13:24	-237647:13:24	4V	b'\xaa\xbb\xcc\x11'
+-- !result
+select 1 as a union all select 2 union all select 1000000000;
+-- result:
+1
+2
+1000000000
+-- !result
+select @@character_set_results AS character_set_results;
+-- result:
+utf8
+-- !result
+select cast(10000000 as float), cast(1000000000000000 as double);
+-- result:
+10000000.0	1000000000000000.0
+-- !result
+select cast(0.00001 as float), cast(0.00001 as double);
+-- result:
+1e-05	1e-05
+-- !result
+function: assert_explain_contains("SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@sql_mode, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout", "EXECUTE IN FE")
+-- result:
+None
+-- !result
+SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout;
+-- result:
+1	utf8	utf8	utf8	utf8	utf8_general_ci	utf8_general_ci		3600	/starrocks/share/english/	Apache License 2.0	0	33554432	60	0	1048576	0	Asia/Shanghai	Asia/Shanghai	REPEATABLE-READ	28800
+-- !result
+select cast(100 as time);
+-- result:
+0:01:00
+-- !result
+select cast(1.123 as time);
+-- result:
+0:00:01
+-- !result
+set enable_constant_execute_in_fe = false;
+-- result:
+-- !result
+select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),
+1000000000000, 1+1, 100 * 100, 'abc', "中文", '"abc"', "'abc'", '\'abc\\', "\"abc\\", cast(1.123000000 as decimalv2),
+cast(1.123 as decimal(10, 7)), date '2021-01-01', datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',
+timediff('2028-01-01 11:25:36', '2000-11-21 12:12:12'), timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';
+-- result:
+1	-1	1.23456	1.123	1.123	10	100	1000000000000	2	10000	abc	中文	"abc"	'abc'	'abc\	"abc\	1.123	1.1230000	2021-01-01	2021-01-01 00:00:00	2021-01-01 00:00:00.123456	237647:13:24	-237647:13:24	4V	b'\xaa\xbb\xcc\x11'
+-- !result
+function: assert_explain_not_contains("SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@sql_mode, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout", "EXECUTE IN FE")
+-- result:
+None
+-- !result
+SELECT @@session.auto_increment_increment, @@character_set_client, @@character_set_connection, @@character_set_results, @@character_set_server, @@collation_server, @@collation_connection, @@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, @@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout;
+-- result:
+1	utf8	utf8	utf8	utf8	utf8_general_ci	utf8_general_ci		3600	/starrocks/share/english/	Apache License 2.0	0	33554432	60	0	1048576	0	Asia/Shanghai	Asia/Shanghai	REPEATABLE-READ	28800
+-- !result
+select 1 as a union all select 2 union all select 1000000000;
+-- result:
+1
+2
+1000000000
+-- !result
+select @@character_set_results AS character_set_results;
+-- result:
+utf8
+-- !result
+select cast(10000000 as float), cast(1000000000000000 as double);
+-- result:
+10000000.0	1000000000000000.0
+-- !result
+select cast(0.00001 as float), cast(0.00001 as double);
+-- result:
+1e-05	1e-05
+-- !result
+select cast(100 as time);
+-- result:
+0:01:00
+-- !result
+select cast(1.123 as time);
+-- result:
+0:00:01
+-- !result
