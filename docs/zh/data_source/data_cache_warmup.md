@@ -36,7 +36,9 @@ FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 - `boolean_expression`: WHERE 中指定的过滤条件。
 - `PROPERTIES`：当前仅支持设置 `verbose` 属性，用于返回详细的预热指标。
 
-`CACHE_SELECT` 是一个同步过程，命令执行完成就会返回结果，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
+`CACHE_SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
+
+### 预热远端表所有数据
 
 以下示例拉取外表 `lineitem` 中的所有数据：
 
@@ -58,6 +60,8 @@ mysql> cache select * from hive_catalog.test_db.lineitem;
 - `AVG_WRITE_CACHE_TIME`：每一个文件写入 Data Cache 的平均耗时。
 - `TOTAL_CACHE_USAGE`：本次预热执行完成后 Data Cache 的空间使用率，可以根据这个指标评估 Data Cache 的空间是否充足。
 
+### 根据过滤条件预热指定列
+
 您也可以通过指定列名和谓词进行更细粒度的预热，以减少 Data Cache 的占用，比如下面这个 case：
 
 ```sql
@@ -70,7 +74,9 @@ mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipda
 1 row in set (2 min 17.06 sec)
 ```
 
-默认情况下，`CACHE SELECT` 返回的指标是一个合并后的指标，您可以在 `CACHE SELECT` 末尾添加 `PROPERTIES("verbose"="true")` 获得更加详细的指标。
+### verbose 模式预热
+
+默认情况下，`CACHE SELECT` 返回的指标是一个合并后的指标，您可以在 `CACHE SELECT` 末尾添加 `PROPERTIES("verbose"="true")` 获得各个 BE 上更加详细的指标。
 
 ```sql
 mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="true");
@@ -180,11 +186,11 @@ DROP TASK <task_name>
 
 ## 使用限制和说明
 
-* 需要开启 Data Cache 特性，且拥有对目标表的 SELECT 权限。
-* `CACHE SELECT` 支持存算分离和存算一体架构的外表查询，支持预热远端的 TEXT, ORC, Parquet 文件。
-* `CACHE SELECT` 只支持对单表进行预热，不支持 `ORDER BY`，`LIMIT`，`GROUP BY` 等算子。
-* 目前 `CACHE SELECT` 的实现是采用 `INSERT INTO BLACKHOLE()` 的方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销差不多。后续会做出改进，提升 `CACHE SELECT` 的性能。
-* `CACHE SELECT` 预热的数据不会保证一定不被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以自行通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
+- 需要开启 Data Cache 特性，且拥有对目标表的 SELECT 权限。
+- `CACHE SELECT` 只支持对单表进行预热，不支持 `ORDER BY`，`LIMIT`，`GROUP BY` 等算子。
+- `CACHE SELECT` 支持存算分离和存算一体架构的外表查询，支持预热远端的 TEXT, ORC, Parquet 文件。
+- `CACHE SELECT` 预热的数据不会保证一定不被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
+- 目前 `CACHE SELECT` 的实现采用 `INSERT INTO BLACKHOLE()` 方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销差不多。后续会做出改进，提升 `CACHE SELECT` 性能。
 
 ## Data Cache 预热后续展望
 
