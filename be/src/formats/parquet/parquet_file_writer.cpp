@@ -40,72 +40,42 @@
 
 namespace starrocks::formats {
 
-std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
+Status ParquetFileWriter::write(ChunkPtr chunk) {
     if (_rowgroup_writer == nullptr) {
         _rowgroup_writer = std::make_unique<parquet::ChunkWriter>(_writer->AppendBufferedRowGroup(), _type_descs,
                                                                   _schema, _eval_func);
     }
-    if (auto status = _rowgroup_writer->write(chunk.get()); !status.ok()) {
-        return make_ready_future(std::move(status));
-    }
+
+    RETURN_IF_ERROR(_rowgroup_writer->write(chunk.get()));
+
     if (_rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
         return _flush_row_group();
     }
-    return make_ready_future(Status::OK());
+
+    return Status::OK();
 }
 
-std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
-    auto promise = std::make_shared<std::promise<FileWriter::CommitResult>>();
-    std::future<FileWriter::CommitResult> future = promise->get_future();
+FileWriter::CommitResult ParquetFileWriter::commit() {
+    FileWriter::CommitResult result{
+            .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
+    try {
+        _writer->Close();
+    } catch (const ::parquet::ParquetStatusException& e) {
+        result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
+    }
 
-    auto task = [writer = _writer, output_stream = _output_stream, p = promise,
-                 has_field_id = _writer_options->column_ids.has_value(), rollback = _rollback_action,
-                 location = _location, state = _runtime_state, execution_state = _execution_state] {
-#ifndef BE_TEST
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-        CurrentThread::current().set_query_id(state->query_id());
-        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
-#endif
-        {
-            // commit until all rowgroup flushing tasks have been done
-            std::unique_lock lock(execution_state->mu);
-            execution_state->cv.wait(lock, [&]() { return !execution_state->has_unfinished_task; });
-        }
+    if (auto status = _output_stream->Close(); !status.ok()) {
+        result.io_status.update(
+                Status::IOError(fmt::format("{}: {}", "close output stream error", status.message())));
+    }
 
-        FileWriter::CommitResult result{
-                .io_status = Status::OK(), .format = PARQUET, .location = location, .rollback_action = rollback};
-        try {
-            writer->Close();
-        } catch (const ::parquet::ParquetStatusException& e) {
-            result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
-        }
-
-        if (auto status = output_stream->Close(); !status.ok()) {
-            result.io_status.update(
-                    Status::IOError(fmt::format("{}: {}", "close output stream error", status.message())));
-        }
-
-        if (result.io_status.ok()) {
-            result.file_statistics = _statistics(writer->metadata().get(), has_field_id);
-            result.file_statistics.file_size = output_stream->Tell().MoveValueUnsafe();
-        }
-
-        p->set_value(result);
-    };
-
-    if (_executors) {
-        bool ok = _executors->try_offer(task);
-        if (!ok) {
-            Status exception = Status::ResourceBusy("submit close file task fails");
-            LOG(WARNING) << exception;
-            promise->set_value(FileWriter::CommitResult{.io_status = exception, .rollback_action = _rollback_action});
-        }
-    } else {
-        task();
+    if (result.io_status.ok()) {
+        result.file_statistics = _statistics(_writer->metadata().get(), _writer_options->column_ids.has_value());
+        result.file_statistics.file_size = _output_stream->Tell().MoveValueUnsafe();
     }
 
     _writer = nullptr;
-    return future;
+    return result;
 }
 
 int64_t ParquetFileWriter::get_written_bytes() {
@@ -116,52 +86,18 @@ int64_t ParquetFileWriter::get_written_bytes() {
     return n;
 }
 
-std::future<Status> ParquetFileWriter::_flush_row_group() {
+Status ParquetFileWriter::_flush_row_group() {
     DCHECK(_rowgroup_writer != nullptr);
-    auto promise = std::make_shared<std::promise<Status>>();
-    std::future<Status> future = promise->get_future();
-
-    auto task = [rowgroup_writer = _rowgroup_writer, p = promise, state = _runtime_state,
-                 execution_state = _execution_state] {
-#ifndef BE_TEST
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-        CurrentThread::current().set_query_id(state->query_id());
-        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
-#endif
-        try {
-            rowgroup_writer->close();
-            p->set_value(Status::OK());
-        } catch (const ::parquet::ParquetStatusException& e) {
-            Status exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
-            LOG(WARNING) << exception;
-            p->set_value(exception);
-        }
-
-        {
-            std::lock_guard lock(execution_state->mu);
-            execution_state->has_unfinished_task = false;
-            execution_state->cv.notify_one();
-        }
-    };
-
-    {
-        std::lock_guard lock(_execution_state->mu);
-        _execution_state->has_unfinished_task = true;
-    }
-
-    if (_executors) {
-        bool ok = _executors->try_offer(task);
-        if (!ok) {
-            Status exception = Status::ResourceBusy("submit close file task fails");
-            LOG(WARNING) << exception;
-            promise->set_value(exception);
-        }
-    } else {
-        task();
+    try {
+        _rowgroup_writer->close();
+    } catch (const ::parquet::ParquetStatusException& e) {
+        Status exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
+        LOG(WARNING) << exception;
+        return exception;
     }
 
     _rowgroup_writer = nullptr;
-    return future;
+    return Status::OK();
 }
 
 #define MERGE_STATS_CASE(ParquetType)                                                                              \
@@ -269,7 +205,7 @@ FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileM
 }
 
 ParquetFileWriter::ParquetFileWriter(
-        const std::string& location, std::unique_ptr<parquet::ParquetOutputStream> output_stream,
+        const std::string& location, std::shared_ptr<arrow::io::OutputStream> output_stream,
         const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
         std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators, TCompressionType::type compression_type,
         const std::shared_ptr<ParquetWriterOptions>& writer_options, const std::function<void()> rollback_action,
@@ -521,6 +457,24 @@ StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std
     return std::make_shared<ParquetFileWriter>(path, std::move(output_stream), _column_names, types,
                                                std::move(column_evaluators), _compression_type, _parsed_options,
                                                rollback_action, _executors, _runtime_state);
+}
+
+StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const string &path) const {
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
+    auto rollback_action = [fs = _fs, path = path]() {
+        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
+    };
+    auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
+    auto types = ColumnEvaluator::types(_column_evaluators);
+    auto async_output_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file));
+    auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
+    auto writer = std::make_unique<ParquetFileWriter>(path, async_output_stream.get(), _column_names, types,
+                                               std::move(column_evaluators), _compression_type, _parsed_options,
+                                               rollback_action, _executors, _runtime_state);
+    return WriterAndStream{
+        .writer = std::move(writer),
+        .stream = std::move(async_output_stream),
+    };
 }
 
 } // namespace starrocks::formats

@@ -18,6 +18,7 @@
 
 #include "common/logging.h"
 #include "connector/connector_chunk_sink.h"
+#include "connector/utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "fs/fs.h"
@@ -28,7 +29,7 @@ class ConnectorSinkOperator final : public Operator {
 public:
     ConnectorSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
                           const int32_t driver_sequence,
-                          std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
+                          std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink, std::unique_ptr<connector::IOStatusPoller> _io_poller,
                           FragmentContext* fragment_context);
 
     ~ConnectorSinkOperator() override = default;
@@ -54,18 +55,8 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    void _enqueue_futures(connector::ConnectorChunkSink::Futures futures);
-
     std::unique_ptr<connector::ConnectorChunkSink> _connector_chunk_sink;
-
-    // connector sink operator manages two future queue
-    // 1. if any add_chunk_futures is not ready, the operator cannot accept more chunks
-    // 2. if commit_file_futures is ready, the operator can still accept more chunks
-    mutable std::queue<std::future<Status>> _add_chunk_future_queue;
-    mutable std::queue<std::future<formats::FileWriter::CommitResult>> _commit_file_future_queue;
-
-    // actions which need to be executed if fragment is cancelled
-    mutable std::queue<std::function<void()>> _rollback_actions;
+    std::unique_ptr<connector::IOStatusPoller> _io_poller;
 
     bool _no_more_input = false;
     bool _is_cancelled = false;

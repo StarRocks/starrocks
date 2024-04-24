@@ -47,7 +47,7 @@ Status FileChunkSink::init() {
 }
 
 // requires that input chunk belongs to a single partition (see LocalKeyPartitionExchange)
-StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
+Status FileChunkSink::add(ChunkPtr chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
@@ -55,25 +55,49 @@ StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
                                                                             _partition_column_evaluators, chunk.get()));
     }
 
-    return HiveUtils::hive_style_partitioning_write_chunk(chunk, partitioned, partition, _max_file_size,
-                                                          _file_writer_factory.get(), _location_provider.get(),
-                                                          _partition_writers);
-}
-
-ConnectorChunkSink::Futures FileChunkSink::finish() {
-    Futures futures;
-    for (auto& [_, writer] : _partition_writers) {
-        auto f = writer->commit();
-        futures.commit_file_futures.push_back(std::move(f));
+    auto it = _partition_writers.find(partition);
+    if (it != _partition_writers.end()) {
+        auto* writer = it->second.writer.get();
+        if (writer->get_written_bytes() >= _max_file_size) {
+            callback_on_success(writer->commit());
+            _pending_streams.push_back(std::move(it->second.stream));
+            _partition_writers.erase(it);
+            auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
+            ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
+            auto* new_writer =  new_writer_and_stream.writer.get();
+            auto* new_stream = new_writer_and_stream.stream.get();
+            RETURN_IF_ERROR(new_writer->init());
+            RETURN_IF_ERROR(new_writer->write(chunk));
+            _partition_writers.emplace(partition, std::move(new_writer_and_stream));
+            _io_poller->enqueue(new_stream->io_status());
+        } else {
+            RETURN_IF_ERROR(writer->write(chunk));
+        }
+    } else {
+        auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
+        ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
+        auto* new_writer = new_writer_and_stream.writer.get();
+        auto* new_stream = new_writer_and_stream.stream.get();
+        RETURN_IF_ERROR(new_writer->init());
+        RETURN_IF_ERROR(new_writer->write(chunk));
+        _partition_writers.emplace(partition, std::move(new_writer_and_stream));
+        _io_poller->enqueue(new_stream->io_status());
     }
-    return futures;
+
+    return Status::OK();
 }
 
-std::function<void(const formats::FileWriter::CommitResult& result)> FileChunkSink::callback_on_success() {
-    return [state = _state](const formats::FileWriter::CommitResult& result) {
-        DCHECK(result.io_status.ok());
-        state->update_num_rows_load_sink(result.file_statistics.record_count);
-    };
+Status FileChunkSink::finish() {
+    for (auto& [_, writer_and_stream] : _partition_writers) {
+        callback_on_success(writer_and_stream.writer->commit());
+        _pending_streams.push_back(std::move(writer_and_stream.stream));
+    }
+    return Status::OK();
+}
+
+void FileChunkSink::callback_on_success(const formats::FileWriter::CommitResult& result) {
+    DCHECK(result.io_status.ok());
+    _state->update_num_rows_load_sink(result.file_statistics.record_count);
 }
 
 StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(
@@ -91,14 +115,14 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
                 std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
                 std::nullopt, ctx->executor, runtime_state);
-    } else if (boost::iequals(ctx->format, formats::ORC)) {
-        file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
-    } else if (boost::iequals(ctx->format, formats::CSV)) {
-        file_writer_factory = std::make_unique<formats::CSVFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
+//    } else if (boost::iequals(ctx->format, formats::ORC)) {
+//        file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
+//                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
+//                ctx->executor, runtime_state);
+//    } else if (boost::iequals(ctx->format, formats::CSV)) {
+//        file_writer_factory = std::make_unique<formats::CSVFileWriterFactory>(
+//                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
+//                ctx->executor, runtime_state);
     } else {
         file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
     }

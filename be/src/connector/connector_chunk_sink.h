@@ -28,25 +28,24 @@
 
 namespace starrocks::connector {
 
+class IOStatusPoller;
+
 class ConnectorChunkSink {
 public:
-    // If any of the `add_chunk_futures` is not ready, the chunk sink cannot accept more chunks.
-    // The chunk sink can still accept chunks if some `add_chunk_futures` is ready or not.
-    struct Futures {
-        std::vector<std::future<Status>> add_chunk_futures;
-        std::vector<std::future<formats::FileWriter::CommitResult>> commit_file_futures;
-    };
-
     virtual ~ConnectorChunkSink() = default;
 
     virtual Status init() = 0;
 
-    virtual StatusOr<Futures> add(ChunkPtr chunk) = 0;
+    virtual Status add(ChunkPtr chunk) = 0;
 
-    virtual Futures finish() = 0;
+    virtual Status finish() = 0;
 
-    // callback function on commit file succeed.
-    virtual std::function<void(const formats::FileWriter::CommitResult& result)> callback_on_success() = 0;
+    void set_io_poller(IOStatusPoller* poller) {
+        _io_poller = poller;
+    }
+
+protected:
+    IOStatusPoller* _io_poller;
 };
 
 struct ConnectorChunkSinkContext {

@@ -44,11 +44,11 @@ public:
 
     Status init() override;
 
-    StatusOr<Futures> add(ChunkPtr chunk) override;
+    Status add(ChunkPtr chunk) override;
 
-    Futures finish() override;
+    Status finish() override;
 
-    std::function<void(const formats::FileWriter::CommitResult& result)> callback_on_success() override;
+    void callback_on_success(const formats::FileWriter::CommitResult& result);
 
 private:
     const std::vector<std::string> _partition_column_names;
@@ -58,7 +58,8 @@ private:
     const int64_t _max_file_size;
     RuntimeState* _state;
 
-    std::map<std::string, std::shared_ptr<formats::FileWriter>> _partition_writers;
+    std::map<std::string, formats::WriterAndStream> _partition_writers;
+    std::vector<std::unique_ptr<io::AsyncFlushOutputStream>> _pending_streams;
 
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 };

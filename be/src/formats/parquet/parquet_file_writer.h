@@ -56,7 +56,7 @@ struct ParquetWriterOptions : FileWriterOptions {
 
 class ParquetFileWriter final : public FileWriter {
 public:
-    ParquetFileWriter(const std::string& location, std::unique_ptr<parquet::ParquetOutputStream> output_stream,
+    ParquetFileWriter(const std::string& location, std::shared_ptr<arrow::io::OutputStream> output_stream,
                       const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type,
@@ -70,9 +70,9 @@ public:
 
     int64_t get_written_bytes() override;
 
-    std::future<Status> write(ChunkPtr chunk) override;
+    Status write(ChunkPtr chunk) override;
 
-    std::future<CommitResult> commit() override;
+    CommitResult commit() override;
 
 private:
     static StatusOr<::parquet::Compression::type> _convert_compression_type(TCompressionType::type type);
@@ -88,13 +88,13 @@ private:
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 
-    std::future<Status> _flush_row_group();
+    Status _flush_row_group();
 
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
 
     const std::string _location;
-    std::shared_ptr<parquet::ParquetOutputStream> _output_stream;
+    std::shared_ptr<arrow::io::OutputStream> _output_stream;
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _type_descs;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
@@ -107,14 +107,6 @@ private:
     const std::function<void()> _rollback_action;
     PriorityThreadPool* _executors = nullptr;
     RuntimeState* _runtime_state = nullptr;
-
-    struct ExecutionState {
-        std::mutex mu;
-        std::condition_variable cv;
-        bool has_unfinished_task = false;
-    };
-
-    std::shared_ptr<ExecutionState> _execution_state = std::make_shared<ExecutionState>();
 };
 
 class ParquetFileWriterFactory : public FileWriterFactory {
@@ -129,6 +121,8 @@ public:
     Status init() override;
 
     StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override;
+
+    StatusOr<WriterAndStream> createAsync(const std::string& path) const override;
 
 private:
     std::shared_ptr<FileSystem> _fs;

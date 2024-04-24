@@ -35,6 +35,7 @@
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
+#include "io/async_flush_output_stream.h"
 
 namespace starrocks::parquet {
 
@@ -69,6 +70,27 @@ private:
         WRITEN = 3,
     };
     HEADER_STATE _header_state = INITED;
+};
+
+class AsyncParquetOutputStream : public arrow::io::OutputStream {
+public:
+    AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream);
+
+    ~AsyncParquetOutputStream() override;
+
+    arrow::Status Write(const void* data, int64_t nbytes) override;
+
+    arrow::Status Write(const std::shared_ptr<arrow::Buffer>& data) override;
+
+    arrow::Status Close() override;
+
+    arrow::Result<int64_t> Tell() const override;
+
+    bool closed() const override { return _is_closed; };
+
+private:
+    io::AsyncFlushOutputStream* _stream;
+    bool _is_closed = false;
 };
 
 struct ParquetBuilderOptions {

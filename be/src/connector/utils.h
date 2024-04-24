@@ -16,6 +16,8 @@
 
 #include <string>
 #include <vector>
+#include <queue>
+#include <future>
 
 #include "common/statusor.h"
 #include "connector_chunk_sink.h"
@@ -23,7 +25,9 @@
 #include "fmt/format.h"
 #include "formats/column_evaluator.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "fs/fs.h"
 #include "runtime/types.h"
+#include "formats/utils.h"
 
 namespace starrocks::connector {
 
@@ -38,11 +42,6 @@ public:
     static StatusOr<std::string> make_partition_name_nullable(
             const std::vector<std::string>& column_names,
             const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
-
-    static StatusOr<ConnectorChunkSink::Futures> hive_style_partitioning_write_chunk(
-            const ChunkPtr& chunk, bool partitioned, const std::string& partition, int64_t max_file_size,
-            const formats::FileWriterFactory* file_writer_factory, LocationProvider* location_provider,
-            std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers);
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
@@ -105,6 +104,37 @@ private:
     const std::string _file_name_suffix;
     int _index = 0;
     std::map<std::string, int> _partition2index;
+};
+
+class IOStatusPoller {
+public:
+    IOStatusPoller() = default;
+
+    DISALLOW_COPY(IOStatusPoller);
+
+    void enqueue(std::future<Status>&& f) {
+        _io_status_queue.push(std::move(f));
+    }
+
+    // return a pair of
+    // 1. io status
+    // 2. bool indicates if all io finished
+    std::pair<Status, bool> poll() {
+        Status status;
+        while (!_io_status_queue.empty()) {
+            auto& f = _io_status_queue.front();
+            if (!is_ready(f)) {
+                break;
+            }
+            status.update(f.get());
+            _io_status_queue.pop();
+        }
+
+        return {status, _io_status_queue.empty()};
+    }
+
+private:
+    std::queue<std::future<Status>> _io_status_queue;
 };
 
 } // namespace starrocks::connector
