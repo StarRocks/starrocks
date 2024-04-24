@@ -24,7 +24,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -132,11 +131,7 @@ public class AdminStmtAnalyzer {
             }
             adminShowReplicaStatusStmt.setDbName(dbName);
 
-            try {
-                CatalogUtils.checkIsLakeTable(dbName, tblName);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage(), pos);
-            }
+            CatalogUtils.checkIsLakeTable(dbName, tblName);
 
             List<String> partitions = Lists.newArrayList();
             PartitionNames partitionNames = adminShowReplicaStatusStmt.getTblRef().getPartitionNames();

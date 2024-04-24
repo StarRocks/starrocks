@@ -15,6 +15,7 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
@@ -22,11 +23,14 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -260,5 +264,22 @@ public class MetaUtils {
         return copiedTable;
     }
 
-
+    public static boolean isPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+        Database db = stateMgr.getDb(dbId);
+        if (db == null) {
+            return false;
+        }
+        // lake table or lake materialized view
+        OlapTable table = (OlapTable) db.getTable(tableId);
+        if (table == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            return table.getPhysicalPartition(partitionId) != null;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
 }
