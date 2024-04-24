@@ -29,9 +29,9 @@ protected:
     ~ThriftRpcHelperTest() override {}
 };
 
-TEST_F(ThriftRpcHelperTest, rpc_impl) {
+TEST_F(ThriftRpcHelperTest, fe_rpc_impl) {
     {
-        auto addr = make_network_address("127.0.0.1", 8030);
+        auto addr = make_network_address("127.0.0.1", 9020);
         FrontendServiceConnection client;
         auto st = ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
                 [](FrontendServiceConnection& client) {
@@ -42,11 +42,11 @@ TEST_F(ThriftRpcHelperTest, rpc_impl) {
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
         EXPECT_EQ(
                 "Rpc error: FE RPC response parsing failure, address=TNetworkAddress(hostname=127.0.0.1, "
-                "port=8030).The FE may be busy, please retry later",
+                "port=9020).The FE may be busy, please retry later",
                 st.to_string());
     }
     {
-        auto addr = make_network_address("127.0.0.1", 8030);
+        auto addr = make_network_address("127.0.0.1", 9020);
         FrontendServiceConnection client;
         auto st = ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
                 [](FrontendServiceConnection& client) {
@@ -56,13 +56,13 @@ TEST_F(ThriftRpcHelperTest, rpc_impl) {
                 client, addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
         EXPECT_EQ(
-                "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8030), reason=message "
+                "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=9020), reason=message "
                 "size limit",
                 st.to_string());
     }
 
     {
-        auto addr = make_network_address("127.0.0.1", 8030);
+        auto addr = make_network_address("127.0.0.1", 9020);
         FrontendServiceConnection client;
         auto st = ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
                 [](FrontendServiceConnection& client) {
@@ -71,12 +71,12 @@ TEST_F(ThriftRpcHelperTest, rpc_impl) {
                 },
                 client, addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
-        EXPECT_EQ("Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8030), reason=timeout",
+        EXPECT_EQ("Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=9020), reason=timeout",
                   st.to_string());
     }
 
     {
-        auto addr = make_network_address("127.0.0.1", 8030);
+        auto addr = make_network_address("127.0.0.1", 9020);
         FrontendServiceConnection client;
         auto st = ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
                 [](FrontendServiceConnection& client) {
@@ -86,20 +86,48 @@ TEST_F(ThriftRpcHelperTest, rpc_impl) {
                 client, addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
         EXPECT_EQ(
-                "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8030), reason=corrupted "
+                "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=9020), reason=corrupted "
                 "data",
                 st.to_string());
     }
 
     {
-        auto addr = make_network_address("127.0.0.1", 8030);
+        auto addr = make_network_address("127.0.0.1", 9020);
         FrontendServiceConnection client;
         auto st = ThriftRpcHelper::rpc_impl<FrontendServiceClient>(
                 [](FrontendServiceConnection& client) { throw apache::thrift::TException("some error"); }, client,
                 addr);
         EXPECT_STATUS(Status::ThriftRpcError(""), st);
         EXPECT_EQ(
-                "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8030), "
+                "Rpc error: FE RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=9020), "
+                "reason=some error",
+                st.to_string());
+    }
+}
+
+TEST_F(ThriftRpcHelperTest, be_cn_rpc_impl) {
+    {
+        auto addr = make_network_address("127.0.0.1", 8060);
+        BackendServiceConnection client;
+        auto st = ThriftRpcHelper::rpc_impl<BackendServiceClient>(
+                [](BackendServiceConnection& client) { throw apache::thrift::TException("some error"); }, client, addr);
+        EXPECT_STATUS(Status::ThriftRpcError(""), st);
+        EXPECT_EQ(
+                "Rpc error: BE/CN RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8060), "
+                "reason=some error",
+                st.to_string());
+    }
+}
+
+TEST_F(ThriftRpcHelperTest, broker_rpc_impl) {
+    {
+        auto addr = make_network_address("127.0.0.1", 8060);
+        BrokerServiceConnection client;
+        auto st = ThriftRpcHelper::rpc_impl<TFileBrokerServiceClient>(
+                [](BrokerServiceConnection& client) { throw apache::thrift::TException("some error"); }, client, addr);
+        EXPECT_STATUS(Status::ThriftRpcError(""), st);
+        EXPECT_EQ(
+                "Rpc error: Broker RPC failure, address=TNetworkAddress(hostname=127.0.0.1, port=8060), "
                 "reason=some error",
                 st.to_string());
     }

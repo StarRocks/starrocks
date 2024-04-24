@@ -59,8 +59,9 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
 }
 
-template <typename T>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<T>&)> callback, ClientConnection<T>& client,
+template <>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+                                 ClientConnection<FrontendServiceClient>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
     try {
@@ -79,6 +80,36 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<T>&)> callb
     return Status::ThriftRpcError(ss.str());
 }
 
+template <>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<BackendServiceClient>&)> callback,
+                                 ClientConnection<BackendServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "BE/CN RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
+template <>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback,
+                                 ClientConnection<TFileBrokerServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "Broker RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
@@ -90,20 +121,21 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         return status;
     }
 
+    //  try 2 times.
     for (int i = 0; i < 2; i++) {
         status = rpc_impl(callback, client, address);
         if (status.ok()) {
             return Status::OK();
         }
+        LOG(WARNING) << status;
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
         // reopen failure will disable this connection to prevent it from being used again.
         auto st = client.reopen(timeout_ms);
         if (!st.ok()) {
-            LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << status.message();
+            LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << st.message();
             break;
         }
     }
-    LOG(WARNING) << status;
     return status;
 }
 
