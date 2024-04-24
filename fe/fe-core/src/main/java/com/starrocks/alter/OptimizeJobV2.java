@@ -230,7 +230,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         List<String> tmpPartitionNames;
         List<String> partitionNames = Lists.newArrayList();
         List<Long> partitionLastVersion = Lists.newArrayList();
-        List<String> tableCoumnNames = Lists.newArrayList();
+        List<String> tableColumnNames = Lists.newArrayList();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -258,7 +258,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     .mapToLong(PhysicalPartition::getVisibleVersion).sum());
                         }
             );
-            tableCoumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
+            tableColumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
                     .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
             locker.unLockDatabase(db, LockType.READ);
@@ -269,7 +269,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + tableName + " TEMPORARY PARTITION ("
-                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableCoumnNames)
+                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableColumnNames)
                     + " from " + tableName + " partition (" + partitionName + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
