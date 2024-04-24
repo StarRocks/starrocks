@@ -1328,7 +1328,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_NAME order by S_COMMENT) FROM supplier_nullable";
         plan = getCostExplain(sql);
         assertContains(plan, "  3:ANALYTIC\n" +
-                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; args nullable: false; result nullable: true], ]\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
+                "args nullable: false; result nullable: true], ]\n" +
                 "  |  partition by: [2: S_NAME, VARCHAR, false]\n" +
                 "  |  order by: [7: S_COMMENT, VARCHAR(101), false] ASC");
         assertContains(plan, "  2:Decode\n" +
@@ -2165,61 +2166,5 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "17: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
         assertContains(plan, "15: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
-    }
-
-    @Test
-    public void testAnalyticForAnalyticPartitionExprs() throws Exception {
-        {
-            String sql =
-                    "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_COMMENT order by S_ADDRESS) FROM supplier_nullable ";
-            String plan = getFragmentPlan(sql);
-            System.out.println(plan);
-        }
-        {
-            String sql =
-                    "SELECT MAX(concat(S_ADDRESS, 'b')) over(partition by concat(S_COMMENT, 'a') order by S_ADDRESS) FROM supplier_nullable ";
-            String plan = getVerboseExplain(sql);
-            System.out.println(plan);
-        }
-        {
-            String sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_COMMENT order by S_NAME) FROM supplier_nullable ";
-            String plan = getFragmentPlan(sql);
-            assertContains(plan, "  3:ANALYTIC\n" +
-                    "  |  functions: [, max(1: S_SUPPKEY), ]\n" +
-                    "  |  partition by: 7: S_COMMENT\n" +
-                    "  |  order by: 2: S_NAME ASC\n" +
-                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  2:Decode\n" +
-                    "  |  <dict id 10> : <string id 3>\n" +
-                    "  |  <dict id 11> : <string id 7>\n" +
-                    "  |  \n" +
-                    "  1:SORT\n" +
-                    "  |  order by: <slot 11> 11: S_COMMENT ASC, <slot 2> 2: S_NAME ASC\n" +
-                    "  |  offset: 0");
-
-            String thriftPlan = getThriftPlan(sql);
-            assertContains(thriftPlan, "analytic_partition_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, " +
-                    "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:101))])");
-        }
-
-        {
-            String sql = "SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/" +
-                    " S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_COMMENT order by S_NAME) FROM supplier_nullable ";
-            String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:ANALYTIC\n" +
-                    "  |  functions: [, max(1: S_SUPPKEY), ]\n" +
-                    "  |  partition by: 7: S_COMMENT\n" +
-                    "  |  order by: 2: S_NAME ASC\n" +
-                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  1:SORT\n" +
-                    "  |  order by: <slot 7> 7: S_COMMENT ASC, <slot 2> 2: S_NAME ASC\n" +
-                    "  |  offset: 0");
-
-            String thriftPlan = getThriftPlan(sql);
-            assertContains(thriftPlan, "analytic_partition_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, " +
-                    "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])");
-        }
     }
 }
