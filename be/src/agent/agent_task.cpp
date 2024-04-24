@@ -277,7 +277,8 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
     if (agent_task_req->isset.recv_time) {
         int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
         if (time_elapsed > config::report_task_interval_seconds * 20) {
-            error_msg = "task elapsed " + std::to_string(time_elapsed) + " seconds since it is inserted to queue, it is timeout";
+            error_msg = "task elapsed " + std::to_string(time_elapsed) +
+                        " seconds since it is inserted to queue, it is timeout";
             LOG(WARNING) << error_msg;
             is_task_timeout = true;
         }
