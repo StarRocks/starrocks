@@ -11,7 +11,7 @@ create table tbl_csv_file2 (
     col_4 string not null
 ) PROPERTIES ( "replication_num" = "1");
 
-CREATE ROUTINE LOAD testherbavro on herbavro 
+CREATE ROUTINE LOAD rl_commit_offset on tbl_csv_file2
 COLUMNS TERMINATED BY '|',
 COLUMNS (col_0, col_1, col_2, col_3, col_4)
 PROPERTIES (
@@ -25,4 +25,4 @@ FROM KAFKA (
 
 SELECT sleep(30);
 
-SHOW ROUTINE LOAD FOR testherbavro\G;
+SHOW ROUTINE LOAD FOR rl_commit_offset;

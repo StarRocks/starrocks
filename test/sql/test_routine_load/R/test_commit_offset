@@ -17,7 +17,7 @@ create table tbl_csv_file2 (
 -- result:
 -- !result
 
-CREATE ROUTINE LOAD testherbavro on herbavro 
+CREATE ROUTINE LOAD rl_commit_offset on tbl_csv_file2
 COLUMNS TERMINATED BY '|',
 COLUMNS (col_0, col_1, col_2, col_3, col_4)
 PROPERTIES (
@@ -36,7 +36,7 @@ SELECT sleep(30);
 1
 -- !result
 
-SHOW ROUTINE LOAD FOR testherbavro;
+SHOW ROUTINE LOAD FOR rl_commit_offset;
 -- result:
-[REGEX].*Progress: {"0":"1"}.*
+[REGEX].*{"0":"1713497961406"}.*
 -- !result
