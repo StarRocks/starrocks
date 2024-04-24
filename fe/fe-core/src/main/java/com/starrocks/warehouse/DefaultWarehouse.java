@@ -29,9 +29,7 @@ public class DefaultWarehouse extends Warehouse {
     }
 
     static {
-        List<Long> workerGroupIdList = new ArrayList<>();
-        workerGroupIdList.add(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-        WORKER_GROUP_ID_LIST = ImmutableList.copyOf(workerGroupIdList);
+        WORKER_GROUP_ID_LIST = ImmutableList.of(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
     }
 
     @Override
