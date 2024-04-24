@@ -87,6 +87,7 @@ public class StreamLoadInfo {
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
+
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
         this.txnId = txnId;
