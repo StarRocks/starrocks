@@ -38,6 +38,7 @@ import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,14 +74,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 continue;
             }
 
-            List<Table> tables;
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                tables = db.getTables().stream().filter(Table::isCloudNativeTableOrMaterializedView)
-                        .collect(Collectors.toList());
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
+            List<Table> tables = new ArrayList<>();
+            for (Table table : db.getTables()) {
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    tables.add(table);
+                }
             }
 
             for (Table table : tables) {
@@ -96,7 +94,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
         try {
             partitions = table.getPhysicalPartitions().stream()
                     .filter(p -> p.getVisibleVersionTime() > staleTime)
@@ -105,7 +103,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                             p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
                     .collect(Collectors.toList());
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
         }
 
         for (PhysicalPartition partition : partitions) {
@@ -132,7 +130,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
             tablets = partition.getBaseIndex().getTablets();
             visibleVersion = partition.getVisibleVersion();
@@ -141,7 +139,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         for (Tablet tablet : tablets) {
