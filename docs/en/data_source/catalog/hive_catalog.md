@@ -1019,7 +1019,7 @@ The following table describes a few key properties.
 | **Property**      | **Description**                                              |
 | ----------------- | ------------------------------------------------------------ |
 | location          | The file path in which you want to create the managed table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
-| file_format       | The file format of the managed table. Supported file formats are Parquet, ORC, and CSV. ORC and Textfile file formats are supported from v3.3 onwards. Valid values: `parquet`, `orc`, and `textfile`. Default value: `parquet`. |
+| file_format       | The file format of the managed table. Supported file formats are Parquet, ORC, and Textfile. ORC and Textfile formats are supported from v3.3 onwards. Valid values: `parquet`, `orc`, and `textfile`. Default value: `parquet`. |
 | compression_codec | The compression algorithm used for the managed table. Valid values:<ul><li>For Parquet and ORC: `uncompressed`, `snappy`, `lz4`, `zstd`, and `gzip`</li><li>For Textfile: `uncompressed`</li></ul>Default value: `gzip`. |
 
 ### Examples
@@ -1058,16 +1058,16 @@ The following DDLs use the default file format Parquet as an example.
 
 ## Sink data to a Hive table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Hive table (currently only Parquet-formatted Hive tables are supported).
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Hive table.
 
 This feature is supported since v3.2 in which version data can be sunk only to Parquet-formatted Hive tables. From v3.3 onwards, StarRocks also supports sinking data to ORC- and Textfile-formatted Hive tables.
 
-Sinking data to external tables is disabled by default. To sink data to external tables, you must set the [system variable `ENABLE_WRITE_HIVE_EXTERNAL_TABLE`](../../reference/System_variable.md) to `true`.
+Note that sinking data to external tables is disabled by default. To sink data to external tables, you must set the [system variable `ENABLE_WRITE_HIVE_EXTERNAL_TABLE`](../../reference/System_variable.md) to `true`.
 
 :::note
 
 - You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-- You can use the session variable [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data into Hive tables.
+- You can use the session variable [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
 
 :::
 

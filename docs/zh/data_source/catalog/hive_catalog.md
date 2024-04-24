@@ -9,7 +9,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 
 - 无需手动建表，通过 Hive Catalog 直接查询 Hive 内的数据。
 - 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式（3.2 版本及以上）、以及 ORC 或 Text File 格式（3.3 版本及以上）的 Hive 表中。
+- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式（3.2 版本及以上）、以及 ORC 或 Textfile 格式（3.3 版本及以上）的 Hive 表中。
 
 为保证正常访问 Hive 内的数据，StarRocks 集群必须能够访问 Hive 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
@@ -1067,7 +1067,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Hive 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。
+同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中。
 
 本功能自 3.2 版本起开始支持，彼时只支持写入到 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持写入到 ORC 及 Textfile 格式的 Hive 表。
 
