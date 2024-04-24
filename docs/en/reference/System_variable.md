@@ -375,6 +375,12 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Default**: false
 * **Introduced in**: v3.0
 
+### enable_spill_to_remote_storage
+
+* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Default**: false
+* **Introduced in**: v3.3.0
+
 ### enable_strict_order_by
 
 * **Description**: Used to check whether the column name referenced in ORDER BY is ambiguous. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries.
@@ -798,6 +804,12 @@ The execution mode of intermediate result spilling. Valid values:
 * `force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.
 
 This variable takes effect only when the variable `enable_spill` is set to `true`.
+
+### spill_storage_volume
+
+* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Default**: Empty string
+* **Introduced in**: v3.3.0
 
 ### SQL_AUTO_IS_NULL
 
