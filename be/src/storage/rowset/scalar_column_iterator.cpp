@@ -207,9 +207,7 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
                 // try release sharedBufferedStream advance
-                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce && _opts.read_file->can_release()) {
-                    _opts.read_file->release();
-                }
+                _opts.read_file->try_release();
             }
         }
 
@@ -246,10 +244,8 @@ Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
-                // release shareBufferStream
-                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
-                    _opts.read_file->release();
-                }
+                // try release sharedBufferedStream
+                _opts.read_file->try_release();
                 break;
             }
             end_ord = _page->first_ordinal() + _page->num_rows();

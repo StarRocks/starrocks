@@ -592,6 +592,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
                     // read the entire file at once by set range{0, file_size}
                     std::vector<io::SharedBufferedInputStream::IORange> ranges = {{0, file_size}};
                     RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
+                } else {
+                    _shared_buffered_input_stream->increase_hold_count();
                 }
 
                 iter_opts.read_file = _shared_buffered_input_stream.get();

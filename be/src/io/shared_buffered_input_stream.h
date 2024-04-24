@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <atomic>
 
 #include "common/status.h"
 #include "io/seekable_input_stream.h"
@@ -79,16 +80,10 @@ public:
 
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
     void release_to_offset(int64_t offset);
-    void release() override;
+    void release();
+    void try_release() override;
+    void increase_hold_count();
 
-    // If the range of IO Coalease is limited between a single column in shared data,
-    // we can release the buffer in advance when column_iterator get eos.
-    // If it is the entire file (lake_small_segment_file_threshold_size > file_size), it cannot be released in advance.
-    // return false only ranges of shared_buffer is the whole file.
-    bool can_release() override {
-        if (_map.empty() || _map.size() != 1) return true;
-        return _file_size != _map.begin()->second->size;
-    }
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
 
@@ -129,6 +124,9 @@ private:
     int64_t _direct_io_timer = 0;
     int64_t _align_size = 0;
     int64_t _estimated_mem_usage = 0;
+
+    // indicates the number of objects hold the shared_buffered_stream
+    std::atomic<int32_t> hold_count = 1;
 };
 
 } // namespace starrocks::io
