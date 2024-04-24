@@ -237,7 +237,7 @@ void SharedBufferedInputStream::release() {
 }
 
 void SharedBufferedInputStream::try_release() {
-    if (hold_count.fetch_sub(1) == 1) {
+    if (hold_count.fetch_sub(1) == 0) {
         _map.clear();
     }
 }
