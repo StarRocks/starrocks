@@ -521,8 +521,24 @@ public class StmtExecutor {
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
                             context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
                         }
+
+                        // no need to execute http query dump request in BE
+                        if (context.isHTTPQueryDump) {
+                            return;
+                        }
                     }
+
+                    LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
                     execPlanBuildByNewPlanner = true;
+                } else {
+                    // no need to execute http query dump request in BE
+                    if (context.isHTTPQueryDump) {
+                        return;
+                    }
+
+                    context.setIsForward(true);
+                    forwardToLeader();
+                    return;
                 }
             } catch (SemanticException e) {
                 dumpException(e);
@@ -535,18 +551,6 @@ public class StmtExecutor {
                     LOG.warn("New planner error: " + originStmt.originStmt, e);
                     throw e;
                 }
-            }
-
-            // no need to execute http query dump request in BE
-            if (context.isHTTPQueryDump) {
-                return;
-            }
-            if (isForwardToLeader()) {
-                context.setIsForward(true);
-                forwardToLeader();
-                return;
-            } else {
-                LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
 
             if (parsedStmt instanceof QueryStatement) {
