@@ -27,6 +27,9 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     private final Map<String, String> properties;
 
+    // Set after DataCacheAnalyzer analyze properties
+    private boolean isVerbose = false;
+    // TODO Support priority, ttl later
 
     public DataCacheSelectStatement(InsertStmt insertStmt, Map<String, String> properties, NodePosition pos) {
         super(pos);
@@ -42,6 +45,14 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public void setVerbose(boolean verbose) {
+        isVerbose = verbose;
+    }
+
+    public boolean isVerbose() {
+        return isVerbose;
     }
 
     @Override

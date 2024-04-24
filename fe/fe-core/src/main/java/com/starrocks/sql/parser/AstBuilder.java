@@ -3244,7 +3244,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (ctx.properties() != null) {
             List<Property> propertyList = visit(ctx.properties().property(), Property.class);
             for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
+                // ignore case sensitive
+                properties.put(property.getKey().toLowerCase(), property.getValue().toLowerCase());
             }
         }
 
