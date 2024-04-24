@@ -1233,7 +1233,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  <dict id 20> : <string id 16>");
         assertContains(plan, "  2:SORT\n" +
                 "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC\n" +
-                "  |  analytic partition by: [20, INT, false] ");
+                "  |  analytic partition by: [20, INT, false]");
         assertContains(plan, "  1:PARTITION-TOP-N\n" +
                 "  |  partition by: [20: L_COMMENT, INT, false] ");
         assertContains(plan, "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC");
@@ -1269,7 +1269,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  <dict id 19> : <string id 16>");
         assertContains(plan, "  2:SORT\n" +
                 "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false] ");
+                "  |  analytic partition by: [19, INT, false]");
         assertContains(plan, "  1:PARTITION-TOP-N\n" +
                 "  |  type: RANK\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] \n" +
@@ -1288,7 +1288,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  <dict id 19> : <string id 16>");
         assertContains(plan, "  2:SORT\n" +
                 "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false] [15: L_SHIPMODE, VARCHAR, false] ");
+                "  |  analytic partition by: [19, INT, false], [15: L_SHIPMODE, VARCHAR, false]");
         assertContains(plan, "  1:PARTITION-TOP-N\n" +
                 "  |  type: RANK\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] , [15: L_SHIPMODE, CHAR, false] \n" +
@@ -1309,7 +1309,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  <dict id 11> : <string id 7>");
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: [11, INT, false] ASC, [2, VARCHAR, false] ASC\n" +
-                "  |  analytic partition by: [11, INT, false] ");
+                "  |  analytic partition by: [11, INT, false]");
 
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by concat(S_COMMENT, 'a') order by S_NAME) FROM supplier_nullable";
         plan = getCostExplain(sql);
@@ -1322,7 +1322,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  <dict id 20> : <string id 17>");
         assertContains(plan, "  2:SORT\n" +
                 "  |  order by: [20, INT, true] ASC, [2, VARCHAR, false] ASC\n" +
-                "  |  analytic partition by: [20, INT, true] ");
+                "  |  analytic partition by: [20, INT, true]");
 
         // partition column is not dict column
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_NAME order by S_COMMENT) FROM supplier_nullable";
@@ -1337,7 +1337,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  <dict id 11> : <string id 7>");
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: [2, VARCHAR, false] ASC, [11, INT, false] ASC\n" +
-                "  |  analytic partition by: [2: S_NAME, VARCHAR, false] ");
+                "  |  analytic partition by: [2: S_NAME, VARCHAR, false]");
 
         // there is not DecodeNode
         sql = "SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/" +
@@ -1350,7 +1350,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: [7, VARCHAR, false] ASC, [2, VARCHAR, false] ASC\n" +
-                "  |  analytic partition by: [7: S_COMMENT, VARCHAR, false] ");
+                "  |  analytic partition by: [7: S_COMMENT, VARCHAR, false]");
 
     }
 

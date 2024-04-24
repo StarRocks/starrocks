@@ -291,11 +291,17 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
         if (!analyticPartitionExprs.isEmpty()) {
             output.append(detailPrefix).append("analytic partition by: ");
+            start = true;
             for (Expr expr : analyticPartitionExprs) {
-                if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    output.append(expr.toSql()).append(" ");
+                if (start) {
+                    start = false;
                 } else {
-                    output.append(expr.explain()).append(" ");
+                    output.append(", ");
+                }
+                if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                    output.append(expr.toSql());
+                } else {
+                    output.append(expr.explain());
                 }
             }
             output.append("\n");
