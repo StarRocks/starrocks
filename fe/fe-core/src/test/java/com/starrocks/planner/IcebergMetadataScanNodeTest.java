@@ -15,10 +15,12 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
@@ -113,5 +115,32 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         String sql = "explain select file_path from iceberg_catalog.db.tc$logical_iceberg_metadata " +
                 "for version as of " + "123456777" + ";";
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second;
+    }
+
+    @Test
+    public void testIcebergMetadataScanNodeScheduler() throws Exception {
+        mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableC.refresh();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableC;
+            }
+        };
+
+        String sql = "explain scheduler select file_path from iceberg_catalog.db.tc$logical_iceberg_metadata";
+        Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql);
+        List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
+                .get(new PlanNodeId(0)).getScanRangeLocations(100);
+        Assert.assertEquals(2, scanRangeLocations.size());
     }
 }
