@@ -204,12 +204,12 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
 在分区列的数据类型方面。在 3.3.0 之前，Range 分区仅支持分区列为日期和整数类型。自 3.3.0 起，新增支持分区列为时间戳和字符串类型。在显式定义的分区与分区列值范围的映射关系时，需要先使用函数将时间戳类型或字符串的分区列值转成日期类型，然后按转换后的日期划分分区。
 
-:::info
+  :::info
 
-- 如果分区列是时间戳，则划分分区时，需要使用 from_unixtime 或者 from_unixtime_ms 函数将时间戳转换为日期类型后，再进行划分。并且使用 from_unixtime 函数时，分区列仅支持 INT 和 BIGINT 类型，使用 from_unixtime_ms 函数时，分区列仅支持为 BIGINT 类型。
-- 如果分区列是字符串（STRING、VARCHAR、CHAR类型），则划分分区时，需要使用 str2date 函数将表示日期的字符串转换为日期类型，再进行划分并且仅支持分区列仅支持。
+  - 如果分区列是时间戳，则划分分区时，需要使用 from_unixtime 或者 from_unixtime_ms 函数将时间戳转换为日期类型后，再进行划分。并且使用 from_unixtime 函数时，分区列仅支持 INT 和 BIGINT 类型，使用 from_unixtime_ms 函数时，分区列仅支持为 BIGINT 类型。
+  - 如果分区列是字符串（STRING、VARCHAR、CHAR类型），则划分分区时，需要使用 str2date 函数将表示日期的字符串转换为日期类型，再进行划分。
 
-:::
+  :::
 
 **手动创建分区**
 
@@ -254,8 +254,10 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
     ```
 
 - 分区列为时间戳和字符串类型（自 3.3.0 起支持）
+  
+  在显式定义的分区与分区列值范围的映射关系时，需要先使用函数将时间戳类型或字符串的分区列值转成日期类型，然后按转换后的日期划分分区。
 
-  <Tabs groupId="partitoning manually">
+  <Tabs groupId="manual partitioning">
   <TabItem value="example1" label="分区列为时间戳" default>
 
   ```SQL
@@ -330,7 +332,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
     当分区列为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
 
-  <Tabs groupId="partitoning manually">
+  <Tabs groupId="batch partitioning(date)">
   <TabItem value="example1" label="分区日期间隔相同" default>
 
     如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
@@ -409,7 +411,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
     >
     > START、END 所指定的分区列的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
 
-  <Tabs groupId="partitoning manually">
+  <Tabs groupId="batch partitioning(integer)">
   <TabItem value="example1" label="分区数值间隔相同" default>
 
     如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
@@ -467,7 +469,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
 - 分区列为时间戳和字符串类型（自 3.3.0 起支持）
 
-  <Tabs groupId="partitoning manually">
+  <Tabs groupId="batch partitioning(timestamp and string)">
   <TabItem value="example1" label="分区列为时间戳" default>
 
   ```SQL
