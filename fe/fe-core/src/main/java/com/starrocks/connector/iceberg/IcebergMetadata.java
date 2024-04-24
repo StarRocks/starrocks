@@ -131,6 +131,7 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.filterManifests;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.mayHaveEqualityDeletes;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
@@ -485,8 +486,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         String serializedTable = SerializationUtil.serializeToBase64(new SerializableTable(nativeTable, fileIO));
+        boolean loadColumnStats = enableCollectColumnStatistics() ||
+                (!deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot));
 
-        return new IcebergMetaSpec(serializedTable, remoteMetaSplits);
+        return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
     }
 
     private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {

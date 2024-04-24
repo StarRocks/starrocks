@@ -1072,6 +1072,9 @@ struct THdfsScanNode {
 
     // serialized lake format predicate for data skipping
     19: optional string serialized_predicate;
+
+    // if load column statistics for metadata table scan
+    20: optional bool load_column_stats;
 }
 
 struct TProjectNode {
