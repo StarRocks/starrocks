@@ -10,9 +10,9 @@ StarRocks v3.3 introduces the Data Cache Warmup feature, which is an enhancement
 
 ## How it works
 
-StarRocks provides the `CACHE SELECT` syntax to implement Data Cache Warmup. Before using `CACHE SELECT`, make sure that the Data Cache feature has been enabled.
+StarRocks provides the CACHE SELECT syntax to implement Data Cache Warmup. Before using CACHE SELECT, make sure that the Data Cache feature has been enabled.
 
-Syntax of `CACHE SELECT`:
+Syntax of CACHE SELECT:
 
 ```sql
 CACHE SELECT <column_name> [, ...]
@@ -29,7 +29,7 @@ Parameters:
 - `boolean_expression`: The filter condition.
 - `PROPERTIES`: Currently, only the `verbose` property is supported. It is used to return detailed warmup metrics.
 
-`CACHE_SELECT` is a synchronous process and it can warm up only one table at a time. Upon successful execution, it will return cache-related metrics.
+CACHE_SELECT is a synchronous process and it can warm up only one table at a time. Upon successful execution, it will return cache-related metrics.
 
 ### Warm up all data in the remote table
 
@@ -69,7 +69,7 @@ mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipda
 
 ### Warm up in verbose mode
 
-By default, the metrics returned by `CACHE SELECT` are metrics combined on multiple BEs. You can append `PROPERTIES("verbose"="true")` at the end of `CACHE SELECT` to obtain detailed metrics of each BE.
+By default, the metrics returned by `CACHE SELECT` are metrics combined on multiple BEs. You can append `PROPERTIES("verbose"="true")` at the end of CACHE SELECT to obtain detailed metrics of each BE.
 
 ```plaintext
 mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="true");
@@ -89,7 +89,7 @@ In verbose mode,  an extra metric will be returned:
 
 ## Periodic scheduling of CACHE SELECT tasks
 
-You can use `CACHE SELECT` with [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) to achieve periodic warmup. For example, the following case warms up the `lineitem` table every 5 minutes:
+You can use CACHE SELECT with [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) to achieve periodic warmup. For example, the following case warms up the `lineitem` table every 5 minutes:
 
 ```plaintext
 mysql> submit task always_cache schedule every(interval 5 minute) as cache select l_orderkey
