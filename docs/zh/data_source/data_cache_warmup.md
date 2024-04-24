@@ -42,7 +42,7 @@ FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 
 以下示例拉取外表 `lineitem` 中的所有数据：
 
-```sql
+```plaintext
 mysql> cache select * from hive_catalog.test_db.lineitem;
 +---------+---------------------+------------------+----------------------+-------------------+
 | STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
@@ -64,7 +64,7 @@ mysql> cache select * from hive_catalog.test_db.lineitem;
 
 您也可以通过指定列名和谓词进行更细粒度的预热，以减少 Data Cache 的占用，比如下面这个 case：
 
-```sql
+```plaintext
 mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipdate='1994-10-28';
 +---------+---------------------+------------------+----------------------+-------------------+
 | STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
@@ -78,7 +78,7 @@ mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipda
 
 默认情况下，`CACHE SELECT` 返回的指标是一个合并后的指标，您可以在 `CACHE SELECT` 末尾添加 `PROPERTIES("verbose"="true")` 获得各个 BE 上更加详细的指标。
 
-```sql
+```plaintext
 mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="true");
 +--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
 | BE_IP        | STATUS  | ALREADY_CACHED_SIZE | AVG_READ_CACHE_TIME | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
@@ -100,7 +100,7 @@ CACHE SELECT 可以和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipu
 
 比如下面这个例子，每隔 5 分钟对 `lineitem` 表进行一次预热：
 
-```sql
+```plaintext
 mysql> submit task always_cache schedule every(interval 5 minute) as cache select l_orderkey
 from hive_catalog.test_db.lineitem
 where l_shipdate='1994-10-28';
@@ -116,7 +116,7 @@ where l_shipdate='1994-10-28';
 
 ### 查看已经创建的任务
 
-```sql
+```plaintext
 mysql> select * from default_catalog.information_schema.tasks;
 +--------------+---------------------+-----------------------------------------------------+---------------+------------------------------+---------------------------------------------------------------------+---------------------+------------+
 | TASK_NAME    | CREATE_TIME         | SCHEDULE                                            | CATALOG       | DATABASE                     | DEFINITION                                                          | EXPIRE_TIME         | PROPERTIES |
@@ -128,7 +128,7 @@ mysql> select * from default_catalog.information_schema.tasks;
 
 ### 查看任务的执行历史
 
-```sql
+```plaintext
 mysql> select * from default_catalog.information_schema.task_runs;
 +--------------------------------------+--------------+---------------------+---------------------+---------+---------------+------------------------------+---------------------------------------------------------------------+---------------------+------------+---------------+----------+------------------------------------------------------------------------------------------------------------------------+------------+
 | QUERY_ID                             | TASK_NAME    | CREATE_TIME         | FINISH_TIME         | STATE   | CATALOG       | DATABASE                     | DEFINITION                                                          | EXPIRE_TIME         | ERROR_CODE | ERROR_MESSAGE | PROGRESS | EXTRA_MESSAGE                                                                                                          | PROPERTIES |
