@@ -758,11 +758,6 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     @Override
-    public int getSlotSize() {
-        return type.getSlotSize();
-    }
-
-    @Override
     public int getTypeSize() {
         return type.getTypeSize();
     }

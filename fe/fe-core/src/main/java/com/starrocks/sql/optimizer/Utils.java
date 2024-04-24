@@ -503,7 +503,7 @@ public class Utils {
         }
 
         Optional<ConstantOperator> result = ((ConstantOperator) op).castToStrictly(descType);
-        if (!result.isPresent()) {
+        if (result.isEmpty()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("invalid value: {} to type {}", op, descType);
             }
@@ -538,8 +538,7 @@ public class Utils {
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
-        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType) ||
-                !Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
             return Optional.empty();
         }
 
@@ -548,7 +547,16 @@ public class Utils {
         }
 
         Optional<ConstantOperator> result = rhs.castTo(childType);
-        return result.isPresent() ? Optional.of(result.get()) : Optional.empty();
+        if (result.isEmpty()) {
+            return Optional.empty();
+        }
+        if (Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+            return Optional.of(result.get());
+        } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
+            // check lossless
+            return Optional.of(result.get());
+        }
+        return Optional.empty();
     }
 
     public static ScalarOperator transTrue2Null(ScalarOperator predicates) {
