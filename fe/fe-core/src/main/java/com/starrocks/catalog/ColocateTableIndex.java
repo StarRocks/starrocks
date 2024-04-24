@@ -78,6 +78,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 /**
@@ -161,7 +162,7 @@ public class ColocateTableIndex implements Writable {
     // lake group, in memory
     private final Set<GroupId> lakeGroups = Sets.newHashSet();
 
-    private final transient FairReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final transient ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     public ColocateTableIndex() {
 

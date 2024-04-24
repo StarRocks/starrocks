@@ -26,6 +26,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConnectorTblMetaInfoMgr {
     private static final Logger LOG = LogManager.getLogger(ConnectorTblMetaInfoMgr.class);
@@ -33,7 +34,7 @@ public class ConnectorTblMetaInfoMgr {
     // catalogName -> dbName -> tableIdentifier -> ConnectorTableInfo
     private final Table<String, String, Map<String, ConnectorTableInfo>> connectorTableMetaInfos;
 
-    private final FairReentrantReadWriteLock lock;
+    private final ReentrantReadWriteLock lock;
 
     public ConnectorTblMetaInfoMgr() {
         connectorTableMetaInfos = TreeBasedTable.create(Ordering.natural(), String.CASE_INSENSITIVE_ORDER);

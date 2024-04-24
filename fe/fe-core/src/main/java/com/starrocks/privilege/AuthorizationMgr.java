@@ -64,6 +64,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthorizationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthorizationMgr.class);
@@ -97,8 +98,8 @@ public class AuthorizationMgr {
                         }
                     });
 
-    private final FairReentrantReadWriteLock userLock;
-    private final FairReentrantReadWriteLock roleLock;
+    private final ReentrantReadWriteLock userLock;
+    private final ReentrantReadWriteLock roleLock;
 
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;

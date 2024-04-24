@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
@@ -106,9 +107,9 @@ public class AuthenticationMgr {
 
     // resolve hostname to ip
     private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
-    private final FairReentrantReadWriteLock hostnameToIpLock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock hostnameToIpLock = new FairReentrantReadWriteLock();
 
-    private final FairReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
