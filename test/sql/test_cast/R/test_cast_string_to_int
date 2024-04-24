@@ -1,0 +1,41 @@
+-- name: test_cast_string_to_int
+select cast('-' as tinyint);
+-- result:
+None
+-- !result
+select cast('+' as tinyint);
+-- result:
+None
+-- !result
+select cast('-' as smallint);
+-- result:
+None
+-- !result
+select cast('+' as smallint);
+-- result:
+None
+-- !result
+select cast('-' as int);
+-- result:
+None
+-- !result
+select cast('+' as int);
+-- result:
+None
+-- !result
+select cast('-' as bigint);
+-- result:
+None
+-- !result
+select cast('+' as bigint);
+-- result:
+None
+-- !result
+select cast('-' as largeint);
+-- result:
+None
+-- !result
+select cast('+' as largeint);
+-- result:
+None
+-- !result
