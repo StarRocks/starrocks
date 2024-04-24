@@ -59,11 +59,13 @@ static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) 
 }
 
 static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group) {
-    if (row_group.__isset.file_offset) {
-        return row_group.file_offset;
-    }
     const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
-    return _get_column_start_offset(first_column);
+    int64_t offset = _get_column_start_offset(first_column);
+
+    if (row_group.__isset.file_offset) {
+        offset = std::min(offset, row_group.file_offset);
+    }
+    return offset;
 }
 
 static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
