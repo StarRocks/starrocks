@@ -26,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
@@ -128,12 +129,11 @@ public class DataCacheStmtAnalyzer {
             // Analyze query sql is valid
             Analyzer.analyze(queryStatement, context);
 
-            // Only Support external table now
             SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
             TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
             TableName tableName = tableRelation.getResolveTableName();
-            if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                throw new SemanticException("Currently cache select is only supported in external catalog");
+            if (CatalogMgr.isInternalCatalog(tableName.getCatalog()) && RunMode.isSharedNothingMode()) {
+                throw new SemanticException("Currently cache select is not supported in local olap table");
             }
 
             return null;
