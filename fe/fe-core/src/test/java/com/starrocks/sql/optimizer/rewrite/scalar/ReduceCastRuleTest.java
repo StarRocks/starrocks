@@ -33,6 +33,7 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -158,9 +159,6 @@ public class ReduceCastRuleTest {
         Type[][] typeListList = new Type[][] {
                 {Type.TINYINT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(13, 9)},
                 {Type.INT, Type.SMALLINT, ScalarType.createDecimalV3NarrowestType(9, 0)},
-                {ScalarType.createDecimalV3NarrowestType(6, 0), Type.SMALLINT, Type.BIGINT},
-                {ScalarType.createDecimalV3NarrowestType(19, 0), Type.BIGINT, Type.LARGEINT},
-                {ScalarType.createDecimalV3NarrowestType(10, 0), Type.TINYINT, Type.INT},
         };
 
         ScalarOperatorRewriteRule reduceCastRule = new ReduceCastRule();
@@ -173,7 +171,24 @@ public class ReduceCastRuleTest {
                     BinaryType.GE, binPredLhs, binPredRhs);
             ScalarOperator result = reduceCastRule.apply(binPred, null);
             result = foldConstantsRule.apply(result, null);
-            Assert.assertTrue(!(result instanceof ConstantOperator));
+            Assert.assertFalse(Arrays.toString(types), result instanceof ConstantOperator);
+        }
+
+        typeListList = new Type[][] {
+                {ScalarType.createDecimalV3NarrowestType(6, 0), Type.SMALLINT, Type.BIGINT},
+                {ScalarType.createDecimalV3NarrowestType(19, 0), Type.BIGINT, Type.LARGEINT},
+                {ScalarType.createDecimalV3NarrowestType(10, 0), Type.TINYINT, Type.INT},
+        };
+
+        for (Type[] types : typeListList) {
+            ScalarOperator binPredRhs = createConstOperatorFromType(types[0]);
+            ScalarOperator castChild = createConstOperatorFromType(types[1]);
+            CastOperator binPredLhs = new CastOperator(types[2], castChild);
+            BinaryPredicateOperator binPred = new BinaryPredicateOperator(
+                    BinaryType.GE, binPredLhs, binPredRhs);
+            ScalarOperator result = reduceCastRule.apply(binPred, null);
+            result = foldConstantsRule.apply(result, null);
+            Assert.assertTrue(Arrays.toString(types), result instanceof ConstantOperator);
         }
     }
 
