@@ -18,6 +18,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
+import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -34,13 +35,16 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterator;
+import org.apache.iceberg.util.ByteBuffers;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 
@@ -115,6 +119,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
         this.predicateInfo = params.get("serialized_predicate");
         this.serializedTable = params.get("serialized_table");
         this.manifestBean = params.get("split_info");
+        this.loadColumnStats = Boolean.parseBoolean(params.get("load_column_stats"));
         this.classLoader = this.getClass().getClassLoader();
         System.setProperty("software.amazon.awssdk.http.service.impl",
                 "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
@@ -203,6 +208,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
     private void initSerializer() {
         this.kryo = new Kryo();
         this.kryo.register(CommonMetadataBean.class);
+        this.kryo.register(IcebergMetricsBean.class);
         UnmodifiableCollectionsSerializer.registerSerializers(kryo);
         this.stream = new ByteArrayOutputStream();
         this.output = new Output(stream);
@@ -236,8 +242,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
             case "data_sequence_number":
                 return file.dataSequenceNumber();
             case "column_stats":
-                // TODO(stephen): support metrics
-                return null;
+                return getIcebergMetrics(file);
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
         }
@@ -261,6 +266,40 @@ public class IcebergMetadataScanner extends ConnectorScanner {
         }
 
         return stream.toByteArray();
+    }
+
+    private byte[] getIcebergMetrics(ContentFile<?> file) {
+        if (!loadColumnStats) {
+            return null;
+        }
+
+        stream.reset();
+        IcebergMetricsBean bean = new IcebergMetricsBean();
+        bean.setColumnSizes(file.columnSizes());
+        bean.setValueCounts(file.valueCounts());
+        bean.setNullValueCounts(file.nullValueCounts());
+        bean.setNanValueCounts(file.nanValueCounts());
+        if (file.lowerBounds() != null) {
+            bean.setLowerBounds(convertByteBufferMap(file.lowerBounds()));
+        }
+        if (file.upperBounds() != null) {
+            bean.setUpperBounds(convertByteBufferMap(file.upperBounds()));
+        }
+
+        try {
+            kryo.writeObject(output, bean);
+        } finally {
+            output.close();
+        }
+
+        return stream.toByteArray();
+    }
+
+    private Map<Integer, byte[]> convertByteBufferMap(Map<Integer, ByteBuffer> byteBufferMap) {
+        return byteBufferMap.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> ByteBuffers.toByteArray(entry.getValue())));
     }
 
     private void parseRequiredTypes() {
