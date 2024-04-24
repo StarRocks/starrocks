@@ -269,8 +269,12 @@ Status FileReader::_build_split_tasks() {
         }
         int64_t start_offset = _get_row_group_start_offset(row_group);
         int64_t end_offset = _get_row_group_end_offset(row_group);
+        if (start_offset >= end_offset) {
+            LOG(INFO) << "row group " << i << " is empty. start = " << start_offset << ", end = " << end_offset;
+            continue;
+        }
 #ifndef NDEBUG
-        DCHECK(start_offset < end_offset);
+        DCHECK(start_offset < end_offset) << "start = " << start_offset << ", end = " << end_offset;
         // there could be holes between row groups.
         // but this does not affect our scan range filter logic.
         // because in `_select_row_group`, we check if `start offset of row group` is in this range
