@@ -28,6 +28,7 @@ import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -164,7 +165,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                return taskManager.getTaskRunManager().getPendingTaskRunCount(taskId);
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+                return taskRunScheduler.getTaskIdPendingTaskRunCount(taskId);
             }
         };
         metrics.add(counterRefreshPendingJobs);
@@ -182,7 +184,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                if (taskManager.getTaskRunManager().containsTaskInRunningTaskRunMap(taskId)) {
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunManager().getTaskRunScheduler();
+                if (taskRunScheduler.isTaskRunning(taskId)) {
                     return 1L;
                 } else {
                     return 0L;
