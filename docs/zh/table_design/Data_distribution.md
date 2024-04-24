@@ -328,7 +328,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
 - 分区列为日期类型
 
-    当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
+    当分区列为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
 
   <Tabs groupId="partitoning manually">
   <TabItem value="example1" label="分区日期间隔相同" default>
@@ -403,7 +403,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
 - 分区列为数值类型
 
-    当分区键为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
+    当分区列为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
 
     > **说明**
     >
