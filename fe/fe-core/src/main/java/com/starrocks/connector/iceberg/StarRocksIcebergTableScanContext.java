@@ -24,6 +24,7 @@ public class StarRocksIcebergTableScanContext {
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
+    private boolean onlyReadCache;
 
     public StarRocksIcebergTableScanContext() {
     }
@@ -52,4 +53,11 @@ public class StarRocksIcebergTableScanContext {
         this.deleteFileCache = deleteFileCache;
     }
 
+    public boolean isOnlyReadCache() {
+        return onlyReadCache;
+    }
+
+    public void setOnlyReadCache(boolean onlyReadCache) {
+        this.onlyReadCache = onlyReadCache;
+    }
 }

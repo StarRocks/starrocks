@@ -172,7 +172,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
+    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         updatePartitionInfo(databaseName, tableName);
         return new ArrayList<>(this.partitionInfos.keySet());
     }

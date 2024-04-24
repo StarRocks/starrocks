@@ -17,6 +17,7 @@ package org.apache.iceberg;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
@@ -26,6 +27,7 @@ import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.metrics.MetricsReporter;
 import org.apache.iceberg.metrics.ScanMetricsUtil;
 import org.apache.iceberg.util.ParallelIterable;
@@ -33,6 +35,7 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,7 @@ public class StarRocksIcebergTableScan
     private DeleteFileIndex deleteFileIndex;
     private final boolean dataFileCacheWithMetrics;
     private final StarRocksIcebergTableScanContext scanContext;
+    private boolean onlyReadCache;
 
     public static TableScanContext newTableScanContext(Table table) {
         if (table instanceof BaseTable) {
@@ -79,6 +83,7 @@ public class StarRocksIcebergTableScan
         this.dataFileCache = scanContext.getDataFileCache();
         this.deleteFileCache = scanContext.getDeleteFileCache();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
+        this.onlyReadCache = scanContext.isOnlyReadCache();
     }
 
     @Override
@@ -217,7 +222,9 @@ public class StarRocksIcebergTableScan
                 dataManifestWithCache.add(manifestFile);
                 scanMetrics().scannedDataManifests().increment();
             } else {
-                dataFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
+                if (!onlyReadCache) {
+                    dataFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
+                }
                 dataManifestWithoutCache.add(manifestFile);
             }
         }
@@ -281,6 +288,21 @@ public class StarRocksIcebergTableScan
         }
 
         return manifestGroup.planFiles();
+    }
+
+    public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
+        manifestFiles.forEach(manifestFile -> dataFileCache.put(manifestFile.path(), Sets.newHashSet()));
+        this.deleteFileIndex = DeleteFileIndex.builderFor(new ArrayList<>()).build();
+
+        try (CloseableIterable<FileScanTask> fileScanTaskIterable = planFileTasks(manifestFiles, new ArrayList<>());
+                CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator()) {
+            while (fileScanTaskIterator.hasNext()) {
+                fileScanTaskIterator.next();
+            }
+        } catch (IOException e) {
+            LOG.error("Failed to refresh data file cache", e);
+            throw new StarRocksConnectorException("Failed to refresh manifest cache", e);
+        }
     }
 
     private FileScanTask toFileScanTask(DataFile dataFile) {

@@ -40,6 +40,7 @@ public class IcebergCatalogProperties {
 
     // internal config
     public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
+    public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
 
     private final Map<String, String> properties;
     private IcebergCatalogType catalogType;
@@ -51,6 +52,7 @@ public class IcebergCatalogProperties {
     private boolean icebergManifestCacheWithColumnStatistics;
     private long icebergTableCacheTtlSec;
     private long icebergManifestCacheMaxNum;
+    private long refreshIcebergManifestMinLength;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -83,6 +85,8 @@ public class IcebergCatalogProperties {
         this.icebergManifestCacheMaxNum = PropertyUtil.propertyAsLong(properties, ICEBERG_MANIFEST_CACHE_MAX_NUM, 100000);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
                 properties, ICEBERG_MANIFEST_CACHE_WITH_METRICS, false);
+        this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
+                2 * 1024 * 1024);
     }
 
     private void initThreadPoolNum() {
@@ -134,5 +138,9 @@ public class IcebergCatalogProperties {
 
     public long getIcebergManifestCacheMaxNum() {
         return icebergManifestCacheMaxNum;
+    }
+
+    public long getRefreshIcebergManifestMinLength() {
+        return refreshIcebergManifestMinLength;
     }
 }
