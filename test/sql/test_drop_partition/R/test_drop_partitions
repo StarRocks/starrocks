@@ -10,12 +10,15 @@ PARTITION p20240405 VALUES [('2024-04-05'), ('2024-04-06'))
 )
 DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:
+[]
 -- !result
 INSERT INTO t0 VALUES('2024-04-01', 0),('2024-04-02', 1),('2024-04-03', 2),('2024-04-04', 3),('2024-04-05', 4);
 -- result:
+[]
 -- !result
 ALTER TABLE t0 DROP PARTITIONS IF EXISTS START("2024-04-01") END("2024-04-03") EVERY (INTERVAL 1 DAY);
 -- result:
+[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -25,9 +28,11 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 RECOVER PARTITION p20240401 FROM t0;
 -- result:
+[]
 -- !result
 RECOVER PARTITION p20240402 FROM t0;
 -- result:
+[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -39,6 +44,7 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 INSERT INTO t0 VALUES('2024-04-01', 10);
 -- result:
+[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -51,6 +57,7 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 ALTER TABLE t0 DROP PARTITIONS IF EXISTS START("2024-04-01") END("2024-04-03") EVERY (INTERVAL 1 DAY) FORCE;
 -- result:
+[]
 -- !result
 SELECT * FROM t0 ORDER BY k1;
 -- result:
@@ -74,8 +81,9 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 ALTER TABLE t0 DROP PARTITIONS IF EXISTS START("2024-04-07") END("2024-04-10") EVERY (INTERVAL 1 DAY) ;
 -- result:
+[]
 -- !result
 ALTER TABLE t0 DROP PARTITIONS START("2024-04-07") END("2024-04-10") EVERY (INTERVAL 1 DAY) ;
 -- result:
-E: (1507, "Error in list of partitions to [p20240407, p20240408, p20240409]")
+E: (1507, 'Error in list of partitions to [p20240407, p20240408, p20240409]')
 -- !result
