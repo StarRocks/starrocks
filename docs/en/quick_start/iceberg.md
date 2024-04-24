@@ -44,7 +44,7 @@ Frontend nodes are responsible for metadata management, client connection manage
 
 ### BE
 
-Backend (BE) nodes are responsible for both data storage and executing query plans in shared-nothing deployments. When an external catalog (like the Iceberg catalog used in this guide) is used, the BE nodes can cache external data to accelerate queries.
+Backend (BE) nodes are responsible for both data storage and executing query plans in shared-nothing deployments. When an external catalog (like the Iceberg catalog used in this guide) is used, the BE nodes can cache the data from the external catalog to accelerate queries.
 
 ---
 
