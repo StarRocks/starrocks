@@ -145,6 +145,50 @@ insert into blackhole() select BE_ID from information_schema.be_bvars l join t0 
 select c0,c1 in (select c1 from t1 where c0 = 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
 select c0,c1 = (select c1 from t1 where c0 = 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
 select c0,c1 = (select c1 from t1 where c0 != 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
+-- tablet prune (prune left table)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+-- tablet prune (prune right table)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+-- CTE with tablet prune 
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l left join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l right join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l full join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+-- CTE with tablet prune
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l left join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l right join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l full join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
 -- spill case
 set enable_spill=true;
 select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;

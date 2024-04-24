@@ -14,6 +14,7 @@
 
 #include "exec/hash_join_node.h"
 
+#include <glog/logging.h>
 #include <runtime/runtime_state.h>
 
 #include <memory>
@@ -537,6 +538,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             DCHECK(!runtime_filter_build_desc->has_remote_targets());
             runtime_filter_build_desc->set_num_colocate_partition(num_right_partitions);
         }
+        size_t num_left_partition = context->source_operator(lhs_operators)->degree_of_parallelism();
+        DCHECK_EQ(num_left_partition, num_right_partitions);
         context->fragment_context()->runtime_filter_hub()->add_holder(_id, num_right_partitions);
     } else {
         context->fragment_context()->runtime_filter_hub()->add_holder(_id);
