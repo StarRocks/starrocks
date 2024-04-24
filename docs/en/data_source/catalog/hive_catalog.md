@@ -1020,7 +1020,7 @@ The following table describes a few key properties.
 | ----------------- | ------------------------------------------------------------ |
 | location          | The file path in which you want to create the managed table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
 | file_format       | The file format of the managed table. Supported file formats are Parquet, ORC, and Textfile. ORC and Textfile formats are supported from v3.3 onwards. Valid values: `parquet`, `orc`, and `textfile`. Default value: `parquet`. |
-| compression_codec | The compression algorithm used for the managed table. Valid values:<ul><li>For Parquet and ORC: `uncompressed`, `snappy`, `lz4`, `zstd`, and `gzip`</li><li>For Textfile: `uncompressed`</li></ul>Default value: `gzip`. |
+| compression_codec | The compression algorithm used for the managed table. This property is deprecated in v3.3 and later. The compression algorithm used for sinking data to Hive tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec). |
 
 ### Examples
 

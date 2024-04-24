@@ -1029,7 +1029,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Managed Table 所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Managed Table 的文件格式。当前支持 Parquet、ORC、Textfile 文件格式，其中 ORC 和 Textfile 文件格式自 3.3 版本起支持。取值范围：`parquet`、`orc`、`textfile`。默认值：`parquet`。 |
-| compression_codec | Managed Table 的压缩格式。取值范围如下：<ul><li>Parquet 和 ORC：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`</li><li>Textfile：`uncompressed`</li></ul>默认值：`gzip`。 |
+| compression_codec | Managed Table 的压缩格式。该参数自 3.3 版本起弃用。写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) 控制。 |
 
 ### 示例
 
