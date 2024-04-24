@@ -103,3 +103,20 @@ show create table t;
 
 alter table t partitions(p202006,p202008) distributed by random;
 show create table t;
+
+-- name: test_alter_key_buckets
+CREATE TABLE demo2_alter_0 (    
+    `user_name` VARCHAR(32) DEFAULT '',
+    `city_code` VARCHAR(100),
+    `from`  VARCHAR(32) DEFAULT '',
+    `pv` BIGINT DEFAULT '0'
+)
+PRIMARY KEY(`user_name`)
+DISTRIBUTED BY HASH(`user_name`) BUCKETS 5
+PROPERTIES('replication_num'='1');
+
+ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
+
+function: wait_optimize_table_finish()
+
+
