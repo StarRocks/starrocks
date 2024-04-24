@@ -291,8 +291,7 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
         }
         finish_task(finish_task_request);
     } else {
-        // FE will always wait for task to be finished, for report_task_worker won't work when node as compute node,
-        // so task should be reported to FE even if timeout.
+        // Response should be reported to FE even if timeout.
         TFinishTaskRequest finish_task_request;
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_task_type(agent_task_req->task_type);
