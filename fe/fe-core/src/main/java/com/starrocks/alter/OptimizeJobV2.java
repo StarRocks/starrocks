@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -36,6 +35,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -232,7 +232,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         List<String> tmpPartitionNames;
         List<String> partitionNames = Lists.newArrayList();
         List<Long> partitionLastVersion = Lists.newArrayList();
-        List<String> tableCoumnNames = Lists.newArrayList();
+        List<String> tableColumnNames = Lists.newArrayList();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -260,8 +260,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     .mapToLong(PhysicalPartition::getVisibleVersion).sum());
                         }
             );
-            tableCoumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
-                    .map(Column::getName).collect(Collectors.toList());
+            tableColumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
+                    .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -271,7 +271,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + tableName + " TEMPORARY PARTITION ("
-                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableCoumnNames)
+                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableColumnNames)
                     + " from " + tableName + " partition (" + partitionName + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
