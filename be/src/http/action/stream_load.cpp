@@ -425,6 +425,8 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     auto backend_id = get_backend_id();
     if (backend_id.has_value()) {
         request.backend_id = backend_id.value();
+    } else {
+        request.backend_id = -1;
     }
 
     request.__set_loadId(ctx->id.to_thrift());
