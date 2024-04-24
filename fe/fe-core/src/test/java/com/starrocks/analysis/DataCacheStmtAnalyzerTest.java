@@ -122,4 +122,11 @@ public class DataCacheStmtAnalyzerTest {
         analyzeFail("cache select * from default_catalog.test.t0",
                 "Currently cache select is only supported in external catalog");
     }
+
+    @Test
+    public void testCacheSelectProperties() {
+        DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"verBose\"=\"true\")");
+        Assert.assertTrue(stmt.isVerbose());
+    }
 }

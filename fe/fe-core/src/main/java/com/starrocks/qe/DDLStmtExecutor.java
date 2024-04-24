@@ -1031,11 +1031,8 @@ public class DDLStmtExecutor {
                 errorMsg = e.getMessage();
             }
 
-            Map<String, String> properties = statement.getProperties();
-            boolean verbose = Boolean.parseBoolean(properties.getOrDefault("verbose", "false"));
-
             if (metrics.isPresent()) {
-                return metrics.get().getShowResultSet(verbose);
+                return metrics.get().getShowResultSet(statement.isVerbose());
             } else {
                 List<List<String>> rows = Lists.newArrayList();
                 List<String> row = Lists.newArrayList();
