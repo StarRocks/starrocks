@@ -80,12 +80,7 @@ public class StreamLoadInfo {
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
-<<<<<<< HEAD
-    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
-=======
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
-    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
->>>>>>> a8278d0536 ([BugFix] fix partial update row mode check (#44598))
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
