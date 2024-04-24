@@ -177,9 +177,13 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnBeginResult result;
 #ifndef BE_TEST
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, &result](FrontendServiceConnection& client) { client->loadTxnBegin(result, request); }));
+            [&request, &result](FrontendServiceConnection& client) { client->loadTxnBegin(result, request); });
+    if (!st.ok()) {
+        LOG(WARNING) << "begin transaction failed, errmsg=" << st.message() << ctx->brief();
+        return st.clone_and_prepend(fmt::format("begin transaction [{}] failed", ctx->txn_id));
+    }
 #else
     result = k_stream_load_begin_result;
 #endif
@@ -189,7 +193,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
         if (result.__isset.job_status) {
             ctx->existing_job_status = result.job_status;
         }
-        return status;
+        return status.clone_and_prepend(fmt::format("begin transaction [{}] failed", ctx->txn_id));
     }
     ctx->txn_id = result.txnId;
     ctx->need_rollback = true;
@@ -245,7 +249,8 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         } else if (st.is_time_out()) {
             if (++retry > 1) {
                 ctx->need_rollback = true;
-                return st;
+                return st.clone_and_prepend(fmt::format(
+                        "commit transaction [{}] failed, the transaction will be rolled back", request.txnId));
             }
             LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
             if (ctx->load_deadline_sec > 0) {
@@ -253,7 +258,8 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
             }
         } else {
             ctx->need_rollback = true;
-            return st;
+            return st.clone_and_prepend(
+                    fmt::format("commit transaction [{}] failed, the transaction will be rolled back", request.txnId));
         }
     }
 }
@@ -261,10 +267,15 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
 Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, TLoadTxnCommitResult* result) {
     TNetworkAddress master_addr = get_master_address();
 #ifndef BE_TEST
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(*result, request); },
-            rpc_timeout_ms));
+            rpc_timeout_ms);
+    if (!st.ok()) {
+        LOG(WARNING) << "commit transaction failed, errmsg=" << st << ", txn_id: " << request.txnId;
+        return st.clone_and_prepend(fmt::format("commit transaction [{}] failed", request.txnId));
+    }
+
 #else
     *result = k_stream_load_commit_result;
 #endif
@@ -287,7 +298,7 @@ StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::str
             [&request, &result](FrontendServiceConnection& client) { client->getLoadTxnStatus(result, request); },
             config::txn_commit_rpc_timeout_ms);
     if (!st.ok()) {
-        return st;
+        return st.clone_and_prepend(fmt::format("get transaction [{}] status failed", txn_id));
     } else {
         return result.status;
     }
@@ -341,10 +352,14 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnCommitResult result;
 #ifndef BE_TEST
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnPrepare(result, request); },
-            rpc_timeout_ms));
+            rpc_timeout_ms);
+    if (!st.ok()) {
+        LOG(WARNING) << "prepare transaction failed, errmsg=" << st << "ctx: " << ctx->brief();
+        return st.clone_and_prepend(fmt::format("prepare transaction [{}] failed", request.txnId));
+    }
 #else
     result = k_stream_load_commit_result;
 #endif
@@ -353,7 +368,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     Status status(result.status);
     if (!status.ok()) {
         LOG(WARNING) << "prepare transaction failed, errmsg=" << status.message() << ctx->brief();
-        return status;
+        return status.clone_and_prepend(fmt::format("prepare transaction [{}] failed", request.txnId));
     }
     // commit success, set need_rollback to false
     ctx->need_rollback = false;
@@ -389,10 +404,10 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnRollback(result, request); });
     if (!rpc_st.ok()) {
         LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.message() << ctx->brief();
-        return rpc_st;
+        return rpc_st.clone_and_prepend(fmt::format("rollback transaction [{}] failed", request.txnId));
     }
     if (result.status.status_code != TStatusCode::TXN_NOT_EXISTS) {
-        return result.status;
+        return Status(result.status).clone_and_prepend(fmt::format("rollback transaction [{}] failed", request.txnId));
     }
 #else
     result = k_stream_load_rollback_result;
