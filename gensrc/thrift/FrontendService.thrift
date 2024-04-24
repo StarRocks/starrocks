@@ -1442,6 +1442,8 @@ struct TGetTablesInfoResponse {
 
 struct TGetTemporaryTablesInfoRequest {
     1: optional TAuthInfo auth_info
+    // only for no predicate and limit parameter is set
+    2: optional i64 limit
 }
 
 struct TGetTemporaryTablesInfoResponse {

@@ -14,8 +14,6 @@
 
 #include "exec/schema_scanner.h"
 
-#include <protocol/TDebugProtocol.h>
-
 #include "column/type_traits.h"
 #include "exec/schema_scanner/schema_be_bvars_scanner.h"
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"

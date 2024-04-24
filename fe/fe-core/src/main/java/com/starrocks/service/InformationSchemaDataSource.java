@@ -502,7 +502,9 @@ public class InformationSchemaDataSource {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    tableMap.forEach((sessionId, tableId) -> {
+                    for (Map.Entry<UUID, Long> entry : tableMap.entrySet()) {
+                        UUID sessionId = entry.getKey();
+                        Long tableId = entry.getValue();
                         Table table = db.getTable(tableId);
                         if (table != null) {
                             TTableInfo info = new TTableInfo();
@@ -531,8 +533,14 @@ public class InformationSchemaDataSource {
                             info.setTable_id(table.getId());
                             genNormalTableInfo(table, info);
                             tableInfos.add(info);
+                            if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                                break;
+                            }
                         }
-                    });
+                    }
+                    if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                        break;
+                    }
                 } finally {
                     locker.unLockDatabase(db, LockType.READ);
                 }

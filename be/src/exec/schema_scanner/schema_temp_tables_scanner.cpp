@@ -78,6 +78,9 @@ Status SchemaTempTablesScanner::start(RuntimeState* state) {
 
     TGetTemporaryTablesInfoRequest request;
     request.__set_auth_info(auth_info);
+    if (_param->limit > 0) {
+        request.__set_limit(_param->limit);
+    }
     if (nullptr != _param->ip && 0 != _param->port) {
         int timeout_ms = state->query_options().query_timeout * 1000;
         RETURN_IF_ERROR(SchemaHelper::get_temporary_tables_info(*(_param->ip), _param->port, request,
