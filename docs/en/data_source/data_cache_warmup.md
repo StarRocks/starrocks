@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Data cache warmup
 
-Some data lake analytics scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) testing. Loading remote data into local data cache can avoid the need to fetch the same data multiple times, significantly speeding up query execution and minimizing resource usage.
+Some data lake analytics scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) performance testing. Loading remote data into local data cache can avoid the need to fetch the same data multiple times, significantly speeding up query execution and minimizing resource usage.
 
 StarRocks v3.3 introduces the Data Cache Warmup feature, which is an enhancement to [Data Cache](./data_cache.md). Data Cache is a process of passively populating the cache, in which data is written to the cache during data querying. Data Cache Warmup, however, is an active process of populating the cache. It proactively fetching the desired data from remote storage in advance.
 
@@ -138,10 +138,36 @@ The `EXTRA_MESSAGE` field records metrics of CACHE SELECT.
 DROP TASK <task_name>
 ```
 
-## Use cases of CACHE SELECT
+## Use cases
 
+1. During PoC performance testing, if you want to assess StarRocks' performance without interference from external storage systems, you can use the CACHE_SELECT statement to load the data of the table to test into the data cache in advance.
 
+2. The business team need to view BI reports at 8 a.m. every morning. To ensure a relatively stable query performance, you can schedule a CACHE SELECT task to start running at 7 a.m. each day.
 
+   ```sql
+   mysql> submit task BI schedule START('2024-02-03 07:00:00') EVERY(interval 1 day)
+   AS cache select * from hive_catalog.test_db.lineitem
+   where l_shipdate='1994-10-28';
+   +--------------+-----------+
+   | TaskName     | Status    |
+   +--------------+-----------+
+   | BI           | SUBMITTED |
+   +--------------+-----------+
+   1 row in set (0.03 sec)
+   ```
+
+3. To minimize system resource consumption during warmup, you can specify session variables in the SUBMIT TASK statement. For example, you can designate a resource group for the CACHE SELECT task and adjust the Degree of Parallelism (DOP) to reduce the impact of warmup on regular queries.
+
+   ```sql
+   mysql> submit task cache_select properties("pipeline_dop"="1", "resource_group"="warmup") schedule EVERY(interval 1 day)
+   AS cache select * from hive_catalog.test_db.lineitem;
+   +--------------+-----------+
+   | TaskName     | Status    |
+   +--------------+-----------+
+   | cache_select | SUBMITTED |
+   +--------------+-----------+
+   1 row in set (0.03 sec)
+   ```
 
 ## Limits and usage notes
 
@@ -150,8 +176,7 @@ DROP TASK <task_name>
 - CACHE SELECT can be used in both shared-nothing and shared-data clusters.
 - CACHE SELECT can warm up remote TEXT, ORC, Parquet files.
 - The data warmed up by CACHE SELECT may not retained in cache forever. The cached data may still be evicted based on the LRU rule of the Data Cache feature. You can check the remaining capacity of the data cache by using `SHOW BACKENDS\G` to assess whether LRU eviction may occur.
-- Currently, the implementation of CACHE SELECT uses the INSERT INTO BLACKHOLE() approach, which warms up the table following the normal query process. Therefore, the performance overhead of CACHE SELECT is similar to that of regular queries. Improvements will be made in the future to enhance the performance of CACHE SELECT.
-
+- Currently, the implementation of CACHE SELECT uses the INSERT INTO BLACKHOLE() approach, which warms up the table following the normal query process. Therefore, the performance overhead of CACHE SELECT is similar to that of regular queries. Improvements will be made in the future to enhance the performance.
 
 ## What to expect in later versions
 
