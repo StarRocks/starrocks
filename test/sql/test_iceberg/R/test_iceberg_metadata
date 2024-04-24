@@ -27,6 +27,18 @@ select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uui
 -- result:
 2
 -- !result
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$logical_iceberg_metadata where column_stats is null;
+-- result:
+2
+-- !result
+set enable_iceberg_column_statistics=true;
+-- result:
+[]
+-- !result
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$logical_iceberg_metadata where column_stats is null;
+-- result:
+0
+-- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:
 []
