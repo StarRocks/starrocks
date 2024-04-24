@@ -632,4 +632,24 @@ std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOpti
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
+// ---------------iceberg metadata jni scanner------------------
+std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+    ;
+
+    const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(options.hive_table);
+    std::map<std::string, std::string> jni_scanner_params;
+
+    jni_scanner_params["required_fields"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
+    jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
+
+    jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
+    jni_scanner_params["split_info"] = scan_range.serialized_split;
+
+    const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
+
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
 } // namespace starrocks

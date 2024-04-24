@@ -37,7 +37,6 @@ public class MetadataTable extends Table {
     protected static final List<Column> PLACEHOLDER_COLUMNS = ImmutableList.<Column>builder()
             .add(new Column("predicate", ScalarType.STRING, true))
             .build();
-
     public MetadataTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
                          String originDb, String originTable, MetadataTableType metadataTableType) {
         super(id, name, type, baseSchema);

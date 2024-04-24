@@ -14,18 +14,26 @@
 
 package com.starrocks.connector.metadata.iceberg;
 
+import com.google.common.base.Joiner;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.thrift.THdfsTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Type.ARRAY_BIGINT;
 import static com.starrocks.catalog.Type.ARRAY_INT;
+import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
 public class LogicalIcebergMetadataTable extends MetadataTable {
     public static final String ICEBERG_LOGICAL_METADATA_TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";
@@ -64,5 +72,31 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
 
     public List<Column> getPlaceHolderColumns() {
         return PLACEHOLDER_COLUMNS;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.LOGICAL_ICEBERG_METADATA_TABLE,
+                fullSchema.size() - PLACEHOLDER_COLUMNS.size(), 0, getName(), METADATA_DB_NAME);
+        THdfsTable hdfsTable = new THdfsTable();
+        List<Column> columns = fullSchema.stream()
+                .filter(c -> !PLACEHOLDER_COLUMNS.contains(c))
+                .collect(Collectors.toList());
+
+        hdfsTable.setColumns(columns.stream().map(Column::toThrift).collect(Collectors.toList()));
+        hdfsTable.setPartition_columnsIsSet(false);
+
+        String columnNames = Joiner.on(',').join(columns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toList()));
+        hdfsTable.setHive_column_names(columnNames);
+
+        String columnTypes = Joiner.on(',').join(columns.stream()
+                .map(x -> ColumnTypeConverter.toHiveType(x.getType()))
+                .collect(Collectors.toList()));
+        hdfsTable.setHive_column_types(columnTypes);
+
+        tTableDescriptor.setHdfsTable(hdfsTable);
+        return tTableDescriptor;
     }
 }
