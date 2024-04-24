@@ -1338,7 +1338,7 @@ public class IcebergMetadataTest extends TableTestBase {
         long snapshotId = mockedNativeTableC.currentSnapshot().snapshotId();
         MetadataCollectJob collectJob = new IcebergMetadataCollectJob("iceberg_catalog", "db", "table",
                 TResultSinkType.METADATA_ICEBERG, snapshotId, "");
-        collectJob.init(starRocksAssert.getCtx());
+        collectJob.init(starRocksAssert.getCtx().getSessionVariable());
         String expectedSql = "SELECT content, file_path, file_format, spec_id, partition_data, record_count, " +
                 "file_size_in_bytes, split_offsets, sort_id, equality_ids, file_sequence_number, data_sequence_number , " +
                 "column_stats FROM `iceberg_catalog`.`db`.`table$logical_iceberg_metadata` FOR VERSION AS OF 1 WHERE 1=1'";
@@ -1346,7 +1346,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertNotNull(collectJob.getContext());
         Assert.assertTrue(collectJob.getContext().isMetadataContext());
         collectJob.asyncCollectMetadata();
-        Assert.assertNull(collectJob.getMetadataJobCoord());
+        Assert.assertNotNull(collectJob.getMetadataJobCoord());
         Assert.assertTrue(collectJob.getResultQueue().isEmpty());
     }
 }

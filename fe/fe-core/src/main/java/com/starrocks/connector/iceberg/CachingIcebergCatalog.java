@@ -206,7 +206,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private List<String> listPartitionNamesWithSnapshotId(
             Table table, String dbName, String tableName, long snapshotId, ExecutorService executorService) {
         Set<String> partitionNames = Sets.newHashSet();
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(PlanMode.LOCAL);
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                catalogName, dbName, tableName, PlanMode.LOCAL);
         scanContext.setOnlyReadCache(true);
         TableScan tableScan = getTableScan(table, scanContext)
                 .planWith(executorService)
@@ -306,7 +307,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             return;
         }
 
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(PlanMode.LOCAL);
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                catalogName, dbName, tableName, PlanMode.LOCAL);
         StarRocksIcebergTableScan tableScan = (StarRocksIcebergTableScan) getTableScan(updatedTable, scanContext)
                 .planWith(executorService)
                 .useSnapshot(updatedSnapshotId);

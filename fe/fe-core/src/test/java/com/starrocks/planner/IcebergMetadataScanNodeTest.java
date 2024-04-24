@@ -15,17 +15,20 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.RowBatch;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -37,6 +40,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 
 public class IcebergMetadataScanNodeTest extends TableTestBase {
@@ -143,4 +148,96 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
                 .get(new PlanNodeId(0)).getScanRangeLocations(100);
         Assert.assertEquals(2, scanRangeLocations.size());
     }
+
+    @Test
+    public void testIcebergDistributedPlanJobError() {
+        mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableC.refresh();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableC;
+            }
+        };
+
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public RowBatch getNext() throws Exception {
+                throw new RuntimeException("run failed");
+            }
+
+            @Mock
+            public void exec() throws Exception {
+
+            }
+        };
+
+
+        String sql = "trace values select * from iceberg_catalog.db.tc";
+        starRocksAssert.getCtx().getSessionVariable().setPlanMode("distributed");
+        ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class,
+                "Failed to execute metadata collection job. run failed",
+                () -> UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql));
+        starRocksAssert.getCtx().getSessionVariable().setPlanMode("local");
+    }
+
+    @Test
+    public void testIcebergDistributedPlanParserError() {
+        mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableC.refresh();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableC;
+            }
+        };
+
+        List<java.nio.ByteBuffer> rows = new ArrayList<>();
+        rows.add(ByteBuffer.wrap("aaaa".getBytes()));
+        TResultBatch resultBatch = new TResultBatch();
+        resultBatch.setRows(rows);
+        RowBatch rowBatch = new RowBatch();
+        rowBatch.setBatch(resultBatch);
+        rowBatch.setEos(true);
+
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public RowBatch getNext() throws Exception {
+                return rowBatch;
+            }
+
+            @Mock
+            public void exec() throws Exception {
+
+            }
+        };
+
+
+        String sql = "trace values select * from iceberg_catalog.db.tc";
+
+        starRocksAssert.getCtx().getSessionVariable().setPlanMode("distributed");
+        ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class,
+                "Failed to parse iceberg file scan task",
+                () -> UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql));
+        starRocksAssert.getCtx().getSessionVariable().setPlanMode("local");
+    }
+
 }
