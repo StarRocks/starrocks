@@ -327,7 +327,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     if (pieces_size > 0) {
         if (_decompressed_buffer->remaining() < pieces_size) {
             // align to 1024 bytes.
-            auto sz = std::ceil((_decompressed_buffer->capacity + pieces_size) * 1.0 / 1024) * 1024;
+            auto sz = std::ceil((_decompressed_buffer->pos + pieces_size) * 1.0 / 1024) * 1024;
             _decompressed_buffer = ByteBuffer::reallocate(_decompressed_buffer, sz);
         }
         for (const auto& piece : pieces) {
