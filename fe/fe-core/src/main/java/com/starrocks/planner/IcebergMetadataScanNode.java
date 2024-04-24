@@ -45,6 +45,7 @@ public class IcebergMetadataScanNode extends ScanNode {
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private String temporalClause;
     private String serializedTable;
+    private boolean loadColumnStats;
 
     public IcebergMetadataScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, String temporalClause) {
         super(id, desc, planNodeName);
@@ -83,7 +84,7 @@ public class IcebergMetadataScanNode extends ScanNode {
                 .getSerializedMetaSpec(catalogName, originDbName, originTableName, snapshotId, icebergPredicate).cast();
 
         this.serializedTable = serializedMetaSpec.getTable();
-
+        this.loadColumnStats = serializedMetaSpec.loadColumnStats();
         serializedMetaSpec.getSplits().forEach(this::addSplitScanRangeLocations);
     }
 
@@ -124,6 +125,7 @@ public class IcebergMetadataScanNode extends ScanNode {
 
         tHdfsScanNode.setSerialized_table(serializedTable);
         tHdfsScanNode.setSerialized_predicate(icebergPredicate);
+        tHdfsScanNode.setLoad_column_stats(loadColumnStats);
 
         msg.hdfs_scan_node = tHdfsScanNode;
     }
