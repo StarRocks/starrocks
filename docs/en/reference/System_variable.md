@@ -171,7 +171,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### cbo_eq_base_type
 
-* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
+* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
 * **Data type**: String
 * **Introduced in**: v2.5.14
 
