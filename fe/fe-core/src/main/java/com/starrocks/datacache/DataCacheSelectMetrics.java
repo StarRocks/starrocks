@@ -85,11 +85,15 @@ public class DataCacheSelectMetrics {
             row.add("SUCCESS");
 
             row.add(metrics.getReadBytes().toString());
-            row.add(new TimeValue(metrics.getReadTimeNs().getNanos() / metrics.getCount(),
-                    TimeUnit.NANOSECONDS).toString());
+            long avgReadTimeNs = 0;
+            long avgWriteTimeNs = 0;
+            if (metrics.getCount() != 0) { // avoid divide by 0
+                avgReadTimeNs = metrics.getReadTimeNs().getNanos() / metrics.getCount();
+                avgWriteTimeNs = metrics.getWriteTimeNs().getNanos() / metrics.getCount();
+            }
+            row.add(new TimeValue(avgReadTimeNs, TimeUnit.NANOSECONDS).toString());
             row.add(metrics.getWriteBytes().toString());
-            row.add(new TimeValue(metrics.getWriteTimeNs().getNanos() / metrics.getCount(),
-                    TimeUnit.NANOSECONDS).toString());
+            row.add(new TimeValue(avgWriteTimeNs, TimeUnit.NANOSECONDS).toString());
             row.add(String.format("%.2f%%", metrics.getLastDataCacheMetrics().getCacheUsage() * 100));
 
             rows.add(row);
@@ -126,10 +130,17 @@ public class DataCacheSelectMetrics {
         row.add(new ByteSizeValue(writeCacheSize).toString());
 
         // get avg write cache time
-        long avgWriteCacheTime = writeCacheTime / totalCount;
+        long avgWriteCacheTime = 0;
+        if (totalCount != 0) { // avoid divide by 0
+            avgWriteCacheTime = writeCacheTime / totalCount;
+        }
         row.add(new TimeValue(avgWriteCacheTime, TimeUnit.NANOSECONDS).toString());
 
-        row.add(String.format("%.2f%%", ((double) totalUsedCacheSize / totalCacheSize) * 100));
+        double totalUsedCacheRatio = 0;
+        if (totalCacheSize != 0) { // avoid divide by 0
+            totalUsedCacheRatio = (double) totalUsedCacheSize / totalCacheSize;
+        }
+        row.add(String.format("%.2f%%", totalUsedCacheRatio * 100));
         return new ShowResultSet(SIMPLE_META_DATA, rows);
     }
 
@@ -157,13 +168,21 @@ public class DataCacheSelectMetrics {
         }
 
         // get avg read/write cache time
-        long avgReadCacheTime = readCacheTime / totalCount;
-        long avgWriteCacheTime = writeCacheTime / totalCount;
+        long avgReadCacheTime = 0;
+        long avgWriteCacheTime = 0;
+        if (totalCount != 0) { // avoid divide by 0
+            avgReadCacheTime = readCacheTime / totalCount;
+            avgWriteCacheTime = writeCacheTime / totalCount;
+        }
 
+        double totalUsedCacheRatio = 0;
+        if (totalCacheSize != 0) { // avoid divide by 0
+            totalUsedCacheRatio = (double) totalUsedCacheSize / totalCacheSize;
+        }
         return String.format(
                 "AlreadyCachedSize: %s, AvgReadCacheTime: %s, WriteCacheSize: %s, AvgWriteCacheTime: %s, TotalCacheUsage: %.2f%%",
                 new ByteSizeValue(alreadyCachedSize), new TimeValue(avgReadCacheTime, TimeUnit.NANOSECONDS),
                 new ByteSizeValue(writeCacheSize), new TimeValue(avgWriteCacheTime, TimeUnit.NANOSECONDS),
-                ((double) totalUsedCacheSize / totalCacheSize) * 100);
+                totalUsedCacheRatio * 100);
     }
 }
