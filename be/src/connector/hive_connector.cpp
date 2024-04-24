@@ -606,13 +606,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
         scanner = create_odps_jni_scanner(jni_scanner_create_options).release();
-<<<<<<< HEAD
     } else if (use_iceberg_jni_metadata_reader) {
         scanner = create_iceberg_metadata_jni_scanner(jni_scanner_create_options).release();
-=======
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
->>>>>>> 7b59a80429 ([Feature] support reading kudu table)
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {

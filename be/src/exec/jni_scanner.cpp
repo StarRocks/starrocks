@@ -648,7 +648,6 @@ std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner
     jni_scanner_params["split_info"] = scan_range.serialized_split;
 
     const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
-    
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 

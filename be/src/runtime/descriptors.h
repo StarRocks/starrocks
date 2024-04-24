@@ -343,7 +343,7 @@ public:
 private:
     std::string _hive_column_names;
     std::string _hive_column_types;
-}
+};
 
 class KuduTableDescriptor : public HiveTableDescriptor {
 public:
