@@ -294,11 +294,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
         _decompressed_buffer = ByteBuffer::allocate(DEFAULT_DECOMPRESS_BUFFER_SIZE);
     }
 
-    auto ret = StreamLoadPipeReader::read();
-    if (!ret.ok()) {
-        return ret.status();
-    }
-    auto buf = ret.value();
+    ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
 
     // try to read all compressed data into _decompressed_buffer
     bool stream_end = false;
