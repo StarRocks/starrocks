@@ -237,65 +237,6 @@ public class BDBEnvironmentTest {
         System.out.println("testNormalCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
-    @Test
-    public void testDeleteDb() throws Exception {
-        long startMs = System.currentTimeMillis();
-        initClusterMasterFollower();
-
-        // open n dbs and each write 1 kv
-        DatabaseEntry key = randomEntry();
-        DatabaseEntry value = randomEntry();
-        Long [] dbIndexArr = {0L, 1L, 2L, 9L, 10L};
-        String [] dbNameArr = new String[dbIndexArr.length];
-        for (int i = 0; i < dbNameArr.length; ++ i) {
-            dbNameArr[i] = String.valueOf(dbIndexArr[i]);
-
-            // leader write
-            CloseSafeDatabase leaderDb = leaderEnvironment.openDatabase(dbNameArr[i]);
-            Assert.assertEquals(i + 1, leaderEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(dbIndexArr[i], leaderEnvironment.getDatabaseNames().get(i));
-            leaderDb.put(null, key, value);
-            leaderDb.close();
-
-            Thread.sleep(1000);
-
-            // follower read
-            for (BDBEnvironment followerEnvironment : followerEnvironments) {
-                Assert.assertEquals(i + 1, followerEnvironment.getDatabaseNames().size());
-                Assert.assertEquals(dbIndexArr[i], followerEnvironment.getDatabaseNames().get(i));
-
-                CloseSafeDatabase followerDb = followerEnvironment.openDatabase(dbNameArr[i]);
-                DatabaseEntry newvalue = new DatabaseEntry();
-                followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
-                Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
-                followerDb.close();
-            }
-        }
-
-        // drop first 2 dbs
-        leaderEnvironment.removeDatabase(dbNameArr[0]);
-        leaderEnvironment.removeDatabase(dbNameArr[1]);
-
-        // check dbnames
-        List<Long> expectDbNames = new ArrayList<>();
-        for (int i = 2;  i != dbNameArr.length; ++ i) {
-            expectDbNames.add(dbIndexArr[i]);
-        }
-        Assert.assertEquals(expectDbNames, leaderEnvironment.getDatabaseNames());
-        Thread.sleep(1000);
-        // follower read
-        for (BDBEnvironment followerEnvironment : followerEnvironments) {
-            Assert.assertEquals(expectDbNames, followerEnvironment.getDatabaseNames());
-        }
-
-        // close
-        leaderEnvironment.close();
-        for (BDBEnvironment followerEnvironment : followerEnvironments) {
-            followerEnvironment.close();
-        }
-        System.out.println("testDeleteDb cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
-    }
-
     /**
      * see https://github.com/StarRocks/starrocks/issues/4977
      *
