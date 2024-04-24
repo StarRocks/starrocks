@@ -80,7 +80,7 @@ public class StreamLoadInfo {
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
-    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
