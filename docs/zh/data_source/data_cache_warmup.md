@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # Data Cache 预热
 
-本文介绍如何通过 Data Cache 预热 (Warmup）来提前将远端数据载入 Data Cache。
+本文介绍如何通过 Data Cache 预热 (Warmup) 来提前将远端数据载入 Data Cache。
 
 在数据湖分析过程中，有一些场景对查询有一定的性能要求，比如 BI 报表，性能测试 POC 等。可以提前将远端数据载入 Data Cache，避免查询时还需要从远端拉取数据，从而提供快速、稳定的查询性能。
 
@@ -29,16 +29,16 @@ FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 
 参数说明：
 
-- `column_name`：要拉取的列。也可以不指定，使用 `*` 来拉取表中所有列。
+- `column_name`：要拉取的列，多列用逗号隔开。也可以不指定，使用 `*` 来拉取表中所有列。
 - `catalog_name`：远端 Catalog 名称。如果已经通过 SET CATALOG 切换到远端 Catalog 下，也可以不填。
 - `db_name`：远端数据库名称。如果已经切换到远端数据库下，也可以不填。
 - `table_name`：远端表名称。
 - `boolean_expression`: WHERE 中指定的过滤条件。
 - `PROPERTIES`：当前仅支持设置 `verbose` 属性，用于返回详细的预热指标。
 
-`CACHE_SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
+`CACHE_SELECT` 是一个同步过程，命令执行完成就会返回结果，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
 
-以下示例载入外表 `lineitem` 的所有数据：
+以下示例拉取外表 `lineitem` 中的所有数据：
 
 ```sql
 mysql> cache select * from hive_catalog.test_db.lineitem;
@@ -50,8 +50,10 @@ mysql> cache select * from hive_catalog.test_db.lineitem;
 1 row in set (36.56 sec)
 ```
 
+返回字段说明：
+
 - `STATUS`：预热任务的执行结果。
-- `ALREADY_CACHED_SIZE`：Data Cache 中已缓存的数据大小（目前这块统计存在一定误差，后续会改进）。
+- `ALREADY_CACHED_SIZE`：Data Cache 中已缓存的数据大小（目前统计会存在一定误差，后续会优化）。
 - `WRITE_CACHE_SIZE`：写入 Data Cache 的大小。
 - `AVG_WRITE_CACHE_TIME`：每一个文件写入 Data Cache 的平均耗时。
 - `TOTAL_CACHE_USAGE`：本次预热执行完成后 Data Cache 的空间使用率，可以根据这个指标评估 Data Cache 的空间是否充足。
