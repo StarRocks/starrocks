@@ -131,12 +131,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::flush_thread_num_per_store * dir_cnt);
         });
         _config_callback.emplace("lake_flush_thread_num_per_store", [&]() {
-            int threads = config::lake_flush_thread_num_per_store;
-            if (threads <= 0) {
-                threads = CpuInfo::num_cores() * 2;
-            }
-            const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
-            (void)StorageEngine::instance()->lake_memtable_flush_executor()->update_max_threads(threads * dir_cnt);
+            (void)StorageEngine::instance()->lake_memtable_flush_executor()->update_max_threads(
+                    MemTableFlushExecutor::calc_max_threads_for_lake_table(StorageEngine::instance()->get_stores()));
         });
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
             StorageEngine::instance()->increase_update_compaction_thread(

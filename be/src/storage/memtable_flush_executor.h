@@ -135,6 +135,8 @@ public:
 
     Status init_for_lake_table(const std::vector<DataDir*>& data_dirs);
 
+    static int calc_max_threads_for_lake_table(const std::vector<DataDir*>& data_dirs);
+
     // dynamic update max threads num
     Status update_max_threads(int max_threads);
 
