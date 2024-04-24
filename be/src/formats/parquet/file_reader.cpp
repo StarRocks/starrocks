@@ -679,8 +679,6 @@ Status FileReader::_init_group_readers() {
 
 Status FileReader::_prepare_cur_row_group() {
     auto& r = _row_group_readers[_cur_row_group_idx];
-    // prepare row group
-    RETURN_IF_ERROR(r->prepare());
     // if coalesce read enabled, we have to
     // 0. clear last group memory
     // 1. allocate shared buffered input stream and
@@ -701,7 +699,8 @@ Status FileReader::_prepare_cur_row_group() {
         _group_reader_param.sb_stream = _sb_stream;
     }
 
-    return Status::OK();
+    // prepare row group
+    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {
