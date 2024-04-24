@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -42,9 +43,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -438,7 +439,8 @@ public class ScalarOperatorsReuse {
             // Apply to normalize rule to eliminate invalid ColumnRef usage for in-predicate
             com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter rewriter =
                     new com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter();
-            List<ScalarOperatorRewriteRule> rules = Collections.singletonList(new NormalizePredicateRule());
+            List<ScalarOperatorRewriteRule> rules =
+                    ImmutableList.of(new NormalizePredicateRule(), new ReduceCastRule());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
                 ScalarOperator rewriteOperator =
                         ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators);
