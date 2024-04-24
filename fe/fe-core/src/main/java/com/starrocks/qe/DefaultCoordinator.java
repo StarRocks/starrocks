@@ -52,6 +52,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
@@ -125,7 +126,7 @@ public class DefaultCoordinator extends Coordinator {
     /**
      * Protects all the fields below.
      */
-    private final Lock lock = new ReentrantLock();
+    private final Lock lock = new FairReentrantLock();
 
     /**
      * Overall status of the entire query.

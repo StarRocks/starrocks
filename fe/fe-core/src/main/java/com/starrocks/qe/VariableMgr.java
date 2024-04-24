@@ -45,6 +45,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -136,7 +137,7 @@ public class VariableMgr {
     private static final SessionVariable DEFAULT_SESSION_VARIABLE;
 
     // Global read/write lock to protect access of globalSessionVariable.
-    private static final ReadWriteLock RWLOCK = new ReentrantReadWriteLock();
+    private static final ReadWriteLock RWLOCK = new FairReentrantReadWriteLock();
     private static final Lock RLOCK = RWLOCK.readLock();
     private static final Lock WLOCK = RWLOCK.writeLock();
 

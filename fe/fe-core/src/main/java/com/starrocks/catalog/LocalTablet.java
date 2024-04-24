@@ -44,6 +44,7 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -110,7 +111,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     private long lastFullCloneFinishedTimeMs = -1;
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock rwLock = new FairReentrantReadWriteLock();
 
     public LocalTablet() {
         this(0L, new ArrayList<>());

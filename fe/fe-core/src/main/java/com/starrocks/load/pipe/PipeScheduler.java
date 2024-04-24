@@ -34,8 +34,6 @@ public class PipeScheduler extends FrontendDaemon {
 
     private final PipeManager pipeManager;
 
-    private final Map<Long, Integer> beSlotMap = new HashMap<>();
-    private final ReentrantLock slotLock = new ReentrantLock();
     private boolean recovered = false;
 
     public PipeScheduler(PipeManager pm) {

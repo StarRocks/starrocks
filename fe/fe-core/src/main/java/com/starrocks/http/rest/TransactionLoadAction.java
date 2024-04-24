@@ -43,6 +43,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -111,7 +112,7 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
 
-    private final ReadWriteLock txnNodeMapAccessLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock txnNodeMapAccessLock = new FairReentrantReadWriteLock();
     private final Map<String, Long> txnNodeMap = new LinkedHashMap<>(512, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {

@@ -20,6 +20,7 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -49,7 +50,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
@@ -106,9 +106,9 @@ public class AuthenticationMgr {
 
     // resolve hostname to ip
     private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
-    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
+    private final FairReentrantReadWriteLock hostnameToIpLock = new FairReentrantReadWriteLock();
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final FairReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
