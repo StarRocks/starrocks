@@ -26,7 +26,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConnectorTblMetaInfoMgr {
     private static final Logger LOG = LogManager.getLogger(ConnectorTblMetaInfoMgr.class);

@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // TemporaryTableMgr is used to manage all temporary tables in the cluster,
 // all interfaces are thread-safe.

@@ -42,7 +42,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);

@@ -74,7 +74,6 @@ import java.util.Map;
 import java.util.StringJoiner;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Variable manager, merge session variable and global variable.
