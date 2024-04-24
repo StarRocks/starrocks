@@ -18,6 +18,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/common.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
@@ -39,7 +40,7 @@ public:
 
     Status seek_to_ordinal(ordinal_t ord) override;
 
-    ordinal_t get_current_ordinal() const override { return _field_iters[0]->get_current_ordinal(); }
+    ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
@@ -55,6 +56,7 @@ private:
     const ColumnAccessPath* _path;
 
     std::vector<uint8_t> _access_flags;
+    ordinal_t _current_ordinal = 0;
 };
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* _reader,
@@ -117,6 +119,7 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
         if (_access_flags[i]) {
             auto num_to_read = *n;
             RETURN_IF_ERROR(_field_iters[i]->next_batch(&num_to_read, fields[i].get()));
+            _current_ordinal = _field_iters[i]->get_current_ordinal();
         }
     }
 
@@ -153,6 +156,7 @@ Status StructColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         if (_access_flags[i]) {
             RETURN_IF_ERROR(_field_iters[i]->next_batch(range, fields[i].get()));
             row_count = fields[i]->size();
+            _current_ordinal = _field_iters[i]->get_current_ordinal();
         }
     }
 
@@ -183,6 +187,7 @@ Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
     for (int i = 0; i < _field_iters.size(); ++i) {
         if (_access_flags[i]) {
             RETURN_IF_ERROR(_field_iters[i]->fetch_values_by_rowid(rowids, size, fields[i].get()));
+            _current_ordinal = _field_iters[i]->get_current_ordinal();
         }
     }
 
@@ -201,6 +206,7 @@ Status StructColumnIterator::seek_to_first() {
     for (auto& iter : _field_iters) {
         RETURN_IF_ERROR(iter->seek_to_first());
     }
+    _current_ordinal = _field_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 
@@ -211,6 +217,7 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
     for (auto& iter : _field_iters) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(ord));
     }
+    _current_ordinal = _field_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 
@@ -219,5 +226,4 @@ Status StructColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
-
 } // namespace starrocks
