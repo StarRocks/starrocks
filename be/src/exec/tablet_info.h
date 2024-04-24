@@ -236,6 +236,8 @@ public:
 
     bool is_un_partitioned() const { return _partition_columns.empty(); }
 
+    const TOlapTablePartitionParam& param() const { return _t_param; }
+
 private:
     Status _create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key);
 

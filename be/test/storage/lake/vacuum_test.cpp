@@ -66,7 +66,7 @@ protected:
         std::string full_path;
         if (is_tablet_metadata(name)) {
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
-        } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name)) {
+        } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
@@ -1264,6 +1264,46 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
     ASSERT_OK(datafile_gc(kTestDir, "", 0, true));
     EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
     EXPECT_FALSE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
+        {
+            "txn_logs": [
+               {
+                  "tablet_id": 10,
+                  "txn_id": 1000,
+                  "partition_id": 11
+               }
+            ]
+        }
+        )DEL")));
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(10);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1696998550);
+        request.set_min_active_txn_id(1000);
+        request.set_delete_txn_log(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+        EXPECT_TRUE(file_exist(combined_txn_log_filename(1000)));
+    }
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(10);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1696998550);
+        request.set_min_active_txn_id(1001);
+        request.set_delete_txn_log(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+        EXPECT_FALSE(file_exist(combined_txn_log_filename(1000)));
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,

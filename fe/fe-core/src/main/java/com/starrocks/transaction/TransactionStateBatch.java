@@ -119,7 +119,7 @@ public class TransactionStateBatch implements Writable {
     }
 
     public List<Long> getTxnIds() {
-        return transactionStates.stream().map(state -> state.getTransactionId()).collect(Collectors.toList());
+        return transactionStates.stream().map(TransactionState::getTransactionId).collect(Collectors.toList());
     }
 
     // all transactionState in batch have the same table and return the tableId
