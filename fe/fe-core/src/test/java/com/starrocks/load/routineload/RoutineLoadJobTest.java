@@ -51,11 +51,14 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -235,6 +238,38 @@ public class RoutineLoadJobTest {
             Assert.assertEquals("RUNNING", showInfo.get(7));
             Assert.assertEquals("", showInfo.get(16));
         }
+    }
+
+    @Test
+    public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked WarehouseManager warehouseManager) throws UserException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+                warehouseManager.getWarehouse(0L);
+                result = new DefaultWarehouse(0, "default_warehouse");
+                warehouseManager.getWarehouse(1L);
+                result = new Exception("Warehouse '1' not exist");
+            }
+        };
+
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        routineLoadJob.setWarehouseId(0L);
+        List<String> showInfo = routineLoadJob.getShowInfo();
+        Assert.assertEquals(22, showInfo.size());
+        Assert.assertEquals("default_warehouse", showInfo.get(20));
+
+        routineLoadJob.setWarehouseId(1L);
+        showInfo = routineLoadJob.getShowInfo();
+        Assert.assertEquals("Warehouse '1' not exist", showInfo.get(20));
     }
 
     @Test
