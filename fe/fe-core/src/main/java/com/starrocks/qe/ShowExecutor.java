@@ -575,7 +575,7 @@ public class ShowExecutor {
         if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
-            mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
+            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName);
         }
         for (MaterializedView mvTable : materializedViews) {
             long mvId = mvTable.getId();
