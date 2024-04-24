@@ -82,7 +82,7 @@ public:
     void release_to_offset(int64_t offset);
     void release();
     void try_release() override;
-    void increase_hold_count();
+    int increase_hold_count();
 
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
@@ -102,6 +102,11 @@ public:
     const std::string& filename() const override { return _filename; }
     bool is_cache_hit() const override { return false; }
     StatusOr<std::string_view> peek_shared_buffer(int64_t count, SharedBufferPtr* shared_buffer);
+
+    // for test
+    int get_shared_buffer_size() {
+        return _map.size();
+    }
 
 private:
     void _update_estimated_mem_usage();

@@ -242,8 +242,8 @@ void SharedBufferedInputStream::try_release() {
     }
 }
 
-void SharedBufferedInputStream::increase_hold_count() {
-    hold_count.fetch_add(1);
+int SharedBufferedInputStream::increase_hold_count() {
+    return hold_count.fetch_add(1);
 }
 
 void SharedBufferedInputStream::release_to_offset(int64_t offset) {
