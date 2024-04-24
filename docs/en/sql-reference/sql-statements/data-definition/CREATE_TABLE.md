@@ -120,7 +120,7 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
 **From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../data-manipulation/INSERT.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
 
-**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and you can insert data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). See [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table).**
+**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). For more information, see [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table) and [Sink data to a Hive table](../../../data_source/catalog/hive_catalog.md#sink-data-to-a-hive-table).**
 
 - For MySQL, specify the following properties:
 
