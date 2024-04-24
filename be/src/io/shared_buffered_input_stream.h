@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <atomic>
 
 #include "common/status.h"
 #include "io/seekable_input_stream.h"
@@ -104,9 +104,7 @@ public:
     StatusOr<std::string_view> peek_shared_buffer(int64_t count, SharedBufferPtr* shared_buffer);
 
     // for test
-    int get_shared_buffer_size() {
-        return _map.size();
-    }
+    int get_shared_buffer_size() { return _map.size(); }
 
 private:
     void _update_estimated_mem_usage();
