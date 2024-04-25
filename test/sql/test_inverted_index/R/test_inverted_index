@@ -833,8 +833,14 @@ set cbo_enable_low_cardinality_optimize = false;
 -- !result
 CREATE TABLE `t_clone_for_gin` (
   `id1` bigint(20) NOT NULL COMMENT "",
-  `text_column` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+  `text_column_1` varchar(255) NULL COMMENT "",
+  `text_column_2` varchar(255) NULL COMMENT "",
+  `text_column_3` varchar(255) NULL COMMENT "",
+  `text_column_4` varchar(255) NULL COMMENT "",
+  INDEX gin_none_1 (`text_column_1`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_2 (`text_column_2`) USING BITMAP,
+  INDEX gin_none_3 (`text_column_3`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_4 (`text_column_4`) USING BITMAP
 ) ENGINE=OLAP
 DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
@@ -846,13 +852,13 @@ PROPERTIES (
 );
 -- result:
 -- !result
-INSERT INTO t_clone_for_gin VALUES (1, "abc"),(2, "ABC");
+INSERT INTO t_clone_for_gin VALUES (1, "abc","abc","abc","abc"),(2, "ABC","ABC","ABC","ABC");
 -- result:
 -- !result
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 -- result:
-1	abc
-2	ABC
+1	abc	abc	abc	abc
+2	ABC	ABC	ABC	ABC
 -- !result
 function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 -- result:
@@ -860,8 +866,8 @@ None
 -- !result
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 -- result:
-1	abc
-2	ABC
+1	abc	abc	abc	abc
+2	ABC	ABC	ABC	ABC
 -- !result
 -- name: test_complex_predicate_for_gin
 set low_cardinality_optimize_v2 = false;
