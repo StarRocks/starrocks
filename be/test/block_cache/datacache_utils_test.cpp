@@ -24,19 +24,19 @@ class DataCacheUtilsTest : public ::testing::Test {};
 TEST_F(DataCacheUtilsTest, test_set_metrics_from_thrift) {
     TDataCacheMetrics t_metrics{};
     DataCacheMetrics metrics{};
-    metrics.status = starcache::CacheStatus::NORMAL;
+    metrics.status = DataCacheStatus::NORMAL;
     DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::NORMAL);
 
-    metrics.status = starcache::CacheStatus::UPDATING;
+    metrics.status = DataCacheStatus::UPDATING;
     DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::UPDATING);
 
-    metrics.status = starcache::CacheStatus::LOADING;
+    metrics.status = DataCacheStatus::LOADING;
     DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::LOADING);
 
-    metrics.status = starcache::CacheStatus::ABNORMAL;
+    metrics.status = DataCacheStatus::ABNORMAL;
     DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
     ASSERT_EQ(t_metrics.status, TDataCacheStatus::ABNORMAL);
 }

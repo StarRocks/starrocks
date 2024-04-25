@@ -74,7 +74,8 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
 }
 
 Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, size_t size,
-                                      std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+                                      std::function<void()> deleter, DataCacheHandle* handle,
+                                      WriteCacheOptions* options) {
     if (!options) {
         return to_status(_cache->set_object(key, ptr, size, deleter, handle, nullptr));
     }
@@ -109,7 +110,7 @@ Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
     return st;
 }
 
-Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+Status StarCacheWrapper::read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) {
     if (!options) {
         return to_status(_cache->get_object(key, handle, nullptr));
     }

@@ -101,11 +101,12 @@ const DataCacheMetrics CacheLibWrapper::cache_metrics(int level) {
 }
 
 Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, size_t size,
-                                     std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+                                     std::function<void()> deleter, DataCacheHandle* handle,
+                                     WriteCacheOptions* options) {
     return Status::NotSupported("not supported write object in cachelib");
 }
 
-Status CacheLibWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+Status CacheLibWrapper::read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) {
     return Status::NotSupported("not supported read object in cachelib");
 }
 
