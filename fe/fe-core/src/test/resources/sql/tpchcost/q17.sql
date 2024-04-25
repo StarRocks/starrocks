@@ -38,6 +38,7 @@ UNPARTITIONED
       |
       7:SORT
       |  order by: <slot 18> 18: P_PARTKEY ASC
+      |  analytic partition by: 18: P_PARTKEY
       |  offset: 0
       |
       6:EXCHANGE

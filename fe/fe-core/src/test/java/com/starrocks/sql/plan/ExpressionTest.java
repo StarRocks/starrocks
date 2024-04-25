@@ -734,9 +734,10 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  3:ANALYTIC\n" +
                 "  |  functions: [, count(6: c1), ]\n" +
                 "  |  partition by: 8: array_sum"));
-        Assert.assertTrue(plan.contains("  2:SORT\n" +
+        assertContains(plan, "  2:SORT\n" +
                 "  |  order by: <slot 8> 8: array_sum ASC\n" +
-                "  |  offset:"));
+                "  |  analytic partition by: 8: array_sum\n" +
+                "  |  offset:");
         Assert.assertTrue(plan, plan.contains("  1:Project\n" +
                 "  |  <slot 6> : 2: c1\n" +
                 "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +

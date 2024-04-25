@@ -451,6 +451,7 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+                "  |  analytic partition by: 8: expr\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +
@@ -477,6 +478,7 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+                "  |  analytic partition by: 8: expr\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +
@@ -499,6 +501,7 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+                "  |  analytic partition by: 8: expr\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +

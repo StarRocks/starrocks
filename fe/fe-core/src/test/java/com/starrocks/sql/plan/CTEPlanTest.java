@@ -755,6 +755,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "  |  \n" +
                 "  23:SORT\n" +
                 "  |  order by: <slot 14> 14: v3 ASC, <slot 13> 13: v2 ASC\n" +
+                "  |  analytic partition by: 14: v3, 13: v2\n" +
                 "  |  offset: 0");
     }
 
