@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.function.Consumer;
 
@@ -103,8 +104,17 @@ public class TaskRunScheduler {
         }
         LOG.info("remove pending task run: {}", taskRun);
 
+        if (taskRun.getStatus().getState() != Constants.TaskRunState.PENDING) {
+            LOG.warn("task run is not in pending state: {}", taskRun);
+        }
         if (!pendingTaskRunQueue.remove(taskRun)) {
             LOG.warn("remove pending task run from queue failed: {}", taskRun);
+        }
+        // make sure future is canceled.
+        CompletableFuture<?> future = taskRun.getFuture();
+        boolean isCancel = future.cancel(true);
+        if (!isCancel) {
+            LOG.warn("fail to cancel scheduler for task [{}]", taskRun);
         }
 
         Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskRun.getTaskId());
@@ -123,15 +133,24 @@ public class TaskRunScheduler {
             return;
         }
         LOG.info("remove pending task: {}", task);
-
         Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(task.getId());
         if (taskRunQueue == null || taskRunQueue.isEmpty()) {
             return;
         }
 
-        for (TaskRun taskRun : taskRunQueue) {
-            removePendingTaskRun(taskRun);
+        while (!taskRunQueue.isEmpty()) {
+            TaskRun taskRun = taskRunQueue.poll();
+            if (!pendingTaskRunQueue.remove(taskRun)) {
+                LOG.warn("remove pending task run from queue failed: {}", taskRun);
+            }
+            // make sure future is canceled.
+            CompletableFuture<?> future = taskRun.getFuture();
+            boolean isCancel = future.cancel(true);
+            if (!isCancel) {
+                LOG.warn("fail to cancel scheduler for task [{}]", taskRun);
+            }
         }
+        pendingTaskRunMap.remove(task.getId());
     }
 
     public TaskRun getTaskRunByQueryId(Long taskId, String queryId) {

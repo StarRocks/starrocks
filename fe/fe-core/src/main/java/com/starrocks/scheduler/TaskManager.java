@@ -784,11 +784,7 @@ public class TaskManager implements MemoryTrackable {
                         statusChange.getQueryId(), taskId);
                 return;
             }
-            // remove it from pending task queue
-            taskRunScheduler.removePendingTaskRun(pendingTaskRun);
-
             TaskRunStatus status = pendingTaskRun.getStatus();
-
             if (toStatus == Constants.TaskRunState.RUNNING) {
                 if (status.getQueryId().equals(statusChange.getQueryId())) {
                     status.setState(Constants.TaskRunState.RUNNING);
@@ -811,6 +807,8 @@ public class TaskManager implements MemoryTrackable {
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
             }
+            // remove it from pending task queue
+            taskRunScheduler.removePendingTaskRun(pendingTaskRun);
         } else if (fromStatus == Constants.TaskRunState.RUNNING &&
                 (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
             // NOTE: TaskRuns before the fe restart will be replayed in `replayCreateTaskRun` which

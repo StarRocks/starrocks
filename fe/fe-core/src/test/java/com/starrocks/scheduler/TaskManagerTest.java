@@ -35,7 +35,9 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -47,6 +49,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Queue;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class TaskManagerTest {
 
     private static final Logger LOG = LogManager.getLogger(TaskManagerTest.class);
@@ -119,33 +122,35 @@ public class TaskManagerTest {
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
         Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
+        String dbName = UUIDUtil.genUUID().toString();
+        task.setDbName(dbName);
+
+        String realDbName = task.getDbName();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
         taskManager.createTask(task, true);
-        // taskManager.executeTask(taskList.get(0).getName());
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
         taskRunManager.submitTaskRun(taskRun, new ExecuteOption());
-        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+        List<TaskRunStatus> taskRuns = null;
         Constants.TaskRunState state = null;
 
         int retryCount = 0;
-        int maxRetry = 5;
+        int maxRetry = 30;
         while (retryCount < maxRetry) {
+            taskRuns = taskManager.showTaskRunStatus(realDbName);
             if (taskRuns.size() > 0) {
                 state = taskRuns.get(0).getState();
             }
             retryCount++;
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
             LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
-
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
-
     }
 
     @Test
