@@ -421,16 +421,21 @@ Status JsonFunctions::native_json_path_prepare(FunctionContext* context, Functio
         return Status::OK();
     }
 
-    auto* state = new NativeJsonState();
-    state->init_flat = false;
-    context->set_function_state(scope, state);
     if (context->is_notnull_constant_column(1)) {
         auto path_column = context->get_constant_column(1);
         Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
         auto json_path = JsonPath::parse(path_value);
         RETURN_IF(!json_path.ok(), json_path.status());
+
+        auto* state = new NativeJsonState();
         state->json_path.reset(std::move(json_path.value()));
+        state->init_flat = false;
+        context->set_function_state(scope, state);
         VLOG(10) << "prepare json path: " << path_value;
+    } else {
+        auto* state = new NativeJsonState();
+        state->init_flat = false;
+        context->set_function_state(scope, state);
     }
     return Status::OK();
 }
