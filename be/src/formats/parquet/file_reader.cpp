@@ -220,7 +220,7 @@ Status FileReader::_get_footer() {
     }
 
     BlockCache* cache = _cache;
-    CacheHandle cache_handle;
+    DataCacheHandle cache_handle;
     std::string metacache_key = _build_metacache_key();
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
