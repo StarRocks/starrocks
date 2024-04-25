@@ -1266,7 +1266,7 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
-CONF_mBool(enable_json_flat, "true");
+CONF_mBool(enable_json_flat, "false");
 
 // extract flat json column when row_num * null_factor < null_row_num
 CONF_mDouble(json_flat_null_factor, "0.3");
