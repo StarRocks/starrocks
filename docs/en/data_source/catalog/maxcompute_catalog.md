@@ -213,8 +213,6 @@ MaxCompute catalogs map the MaxCompute data types to the StarRocks data types. T
 | BINARY                | VARBINARY           |
 | DATE                  | DATE                |
 | DATETIME              | DATETIME            |
-| DATETIME              | DATETIME            |
-| DATETIME              | DATETIME            |
 | TIMESTAMP             | DATETIME            |
 | ARRAY                 | ARRAY               |
 | MAP                   | MAP                 |
