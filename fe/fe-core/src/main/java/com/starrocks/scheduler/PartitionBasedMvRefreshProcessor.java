@@ -619,14 +619,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void refreshExternalTable(TaskRunContext context) {
         List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Database db = baseTableInfo.getDb();
-            if (db == null) {
+            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+            if (dbOpt.isEmpty()) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getDbInfoStr(), materializedView.getName());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
 
-            Table table = baseTableInfo.getTable();
+            Table table = MvUtils.getTableChecked(baseTableInfo);
             if (table == null) {
                 LOG.warn("table {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getTableInfoStr(), materializedView.getName());
@@ -839,8 +839,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // FIXME: If base table's partition has been dropped, should drop the according version partition too?
             // remove partition info of not-exist partition for snapshot table from version map
+            Table table = MvUtils.getTableChecked(baseTableInfo);
             Set<String> partitionNames =
-                    Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTableChecked()));
+                    Sets.newHashSet(PartitionUtil.getPartitionNames(table));
             currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
         }
         if (!changedTablePartitionInfos.isEmpty()) {
@@ -1648,11 +1649,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
             Table snapshotTable = snapshotInfo.getBaseTable();
 
-            Table table = baseTableInfo.getTable();
-            if (table == null) {
+            Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
+            if (tableOptional.isEmpty()) {
                 return true;
             }
-
+            Table table = tableOptional.get();
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                 PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
@@ -1778,12 +1779,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     List<Database> collectDatabases(MaterializedView materializedView) {
         Map<Long, Database> databaseMap = Maps.newHashMap();
         for (BaseTableInfo baseTableInfo : materializedView.getBaseTableInfos()) {
-            Database db = baseTableInfo.getDb();
-            if (db == null) {
+            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+            if (dbOpt.isEmpty()) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getDbInfoStr(), materializedView.getName());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
+            Database db = dbOpt.get();
             databaseMap.put(db.getId(), db);
         }
         return Lists.newArrayList(databaseMap.values());
@@ -1800,13 +1802,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             locker.lockDatabases(dbs, LockType.READ);
 
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Table table = baseTableInfo.getTable();
-                if (table == null) {
+                Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                if (tableOpt.isEmpty()) {
                     LOG.warn("table {} do not exist when refreshing materialized view:{}",
                             baseTableInfo.getTableInfoStr(), materializedView.getName());
                     throw new DmlException("Materialized view base table: %s not exist.",
                             baseTableInfo.getTableInfoStr());
                 }
+                Table table = tableOpt.get();
                 if (table.isView()) {
                     // skip to collect snapshots for views
                 } else if (table.isOlapTable()) {

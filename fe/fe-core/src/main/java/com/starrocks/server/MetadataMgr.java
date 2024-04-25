@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -39,6 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -491,6 +493,43 @@ public class MetadataMgr {
             return null;
         }
         return database.getTable(tableId);
+    }
+
+    public Optional<Database> getDatabase(BaseTableInfo baseTableInfo) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return Optional.ofNullable(getDb(baseTableInfo.getDbId()));
+        } else {
+            return Optional.ofNullable(getDb(baseTableInfo.getCatalogName(), baseTableInfo.getDbName()));
+        }
+    }
+
+    public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return Optional.ofNullable(getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+        } else {
+            return Optional.ofNullable(
+                    getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
+        }
+    }
+
+    public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTable(baseTableInfo);
+        if (tableOpt.isPresent()) {
+            Table table = tableOpt.get();
+            String tableIdentifier = baseTableInfo.getTableIdentifier();
+            if (tableIdentifier != null && tableIdentifier.equals(table.getTableIdentifier())) {
+                return tableOpt;
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Table getTableChecked(BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTableWithIdentifier(baseTableInfo);
+        if (tableOpt.isPresent()) {
+            return tableOpt.get();
+        }
+        throw MaterializedViewExceptions.reportBaseTableNotExists(baseTableInfo);
     }
 
     public Table getTemporaryTable(UUID sessionId, String catalogName, Long databaseId, String tblName) {
