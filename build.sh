@@ -92,6 +92,8 @@ Usage: $0 <options>
      --with-bench       build Backend with bench(default without bench)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
+     --without-starcache
+                        build Backend without starcache library
      -j                 build Backend parallel
 
   Eg.
@@ -120,6 +122,7 @@ OPTS=$(getopt \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
+  -l 'without-starcache' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -o 'j:' \
@@ -141,6 +144,7 @@ RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
+WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 MSG=""
@@ -224,6 +228,11 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+<<<<<<< HEAD
+=======
+            --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
+>>>>>>> 0dcdf2d324 ([Enhancement] Add `without-starcache` build option to control whether build with starcache library. (#40599))
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -255,6 +264,7 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
+    WITH_STARCACHE      -- $WITH_STARCACHE
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
@@ -348,6 +358,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
+                  -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
