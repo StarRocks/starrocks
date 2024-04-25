@@ -33,7 +33,9 @@ struct PartialUpdateState {
 
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
+    // Container used to store the values of auto increment columns
     std::unique_ptr<Column> write_column;
+    // Schema of modified columns
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
@@ -44,8 +46,8 @@ struct AutoIncrementPartialUpdateState {
 
     AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
 
-    void init(std::shared_ptr<TabletSchema>& schema, uint32_t id, uint32_t segment_id) {
-        this->schema = schema;
+    void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
+        this->schema = std::move(modified_schema);
         this->id = id;
         this->segment_id = segment_id;
     }
