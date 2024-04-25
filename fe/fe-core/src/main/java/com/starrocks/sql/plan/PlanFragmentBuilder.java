@@ -1115,6 +1115,7 @@ public class PlanFragmentBuilder {
                 }
                 deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl());
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : " + e);
