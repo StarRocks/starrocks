@@ -46,6 +46,9 @@ std::string cache_status_str(const DataCacheStatus& status) {
     case DataCacheStatus::ABNORMAL:
         str_status = "ABNORMAL";
         break;
+    case DataCacheStatus::LOADING:
+        str_status = "LOADING";
+        break;
     }
     return str_status;
 }
@@ -90,6 +93,7 @@ void DataCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjs
 
 void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
     _handle(req, [=](rapidjson::Document& root) {
+#ifdef WITH_STARCACHE
         auto& allocator = root.GetAllocator();
         auto&& metrics = cache->cache_metrics(2);
         std::string status = cache_status_str(metrics.status);
@@ -165,6 +169,7 @@ void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
         root.AddMember("current_writing_count", rapidjson::Value(metrics.detail_l2->current_writing_count), allocator);
         root.AddMember("current_removing_count", rapidjson::Value(metrics.detail_l2->current_removing_count),
                        allocator);
+#endif
     });
 }
 

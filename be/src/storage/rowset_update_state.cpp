@@ -108,7 +108,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
         return res.status();
     }
     auto& itrs = res.value();
-    CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
 
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
@@ -130,7 +130,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
                 PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
             }
         }
-        CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
+        RETURN_ERROR_IF_FALSE(col->size() == num_rows, "read segment: iter rows != num rows");
     }
     for (const auto& itr : itrs) {
         itr->close();
@@ -157,9 +157,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // if rowset is partial rowset, we need to load rowset totally because we don't support load multiple load
     // for partial update so far
     bool ignore_mem_limit =
@@ -192,9 +190,7 @@ Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     return _load_deletes(rowset, idx, pk_column.get());
 }
 
@@ -206,9 +202,7 @@ Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
     return _load_upserts(rowset, upsert_id, pk_column.get());
 }
 
@@ -310,14 +304,18 @@ void RowsetUpdateState::plan_read_by_rssid(const vector<uint64_t>& rowids, size_
 Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, Rowset* rowset, uint32_t idx,
                                                                 const std::vector<uint32_t>& update_column_ids,
                                                                 const TabletSchemaCSPtr& tablet_schema) {
-    if (_partial_update_value_column_ids.empty()) {
+    if (!_partial_update_value_column_inited) {
+        _partial_update_value_column_inited = true;
         // need to init
         for (uint32_t cid : update_column_ids) {
             if (cid >= tablet_schema->num_key_columns()) {
                 _partial_update_value_column_ids.emplace_back(cid);
             }
         }
-        CHECK(_partial_update_value_column_ids.size() > 0) << "no partial update value columns";
+        if (_partial_update_value_column_ids.empty()) {
+            // no value column need to be read
+            return Status::OK();
+        }
         _partial_update_value_columns_schema =
                 ChunkHelper::convert_schema(tablet_schema, _partial_update_value_column_ids);
         auto res = rowset->get_segment_iterators2(_partial_update_value_columns_schema, tablet_schema, nullptr, 0,
@@ -670,11 +668,11 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& vs) {
 static Status append_full_row_column(const Schema& tschema,
                                      const std::vector<uint32_t>& partial_update_value_column_ids,
                                      const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
-    CHECK(state.write_columns.size() == read_column_ids.size());
+    RETURN_ERROR_IF_FALSE(state.write_columns.size() == read_column_ids.size());
     size_t input_column_size = tschema.num_fields() - tschema.num_key_fields() - 1;
     LOG(INFO) << "partial_update_value_column_ids:" << partial_update_value_column_ids
               << " read_column_ids:" << read_column_ids << " input_column_size:" << input_column_size;
-    CHECK(partial_update_value_column_ids.size() + read_column_ids.size() == input_column_size);
+    RETURN_ERROR_IF_FALSE(partial_update_value_column_ids.size() + read_column_ids.size() == input_column_size);
     Columns columns(input_column_size); // all values columns
     for (size_t i = 0; i < partial_update_value_column_ids.size(); ++i) {
         columns[partial_update_value_column_ids[i] - tschema.num_key_fields()] =

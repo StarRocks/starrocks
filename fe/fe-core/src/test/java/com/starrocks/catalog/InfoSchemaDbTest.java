@@ -23,6 +23,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.qe.ConnectContext;
@@ -82,7 +83,8 @@ public class InfoSchemaDbTest {
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
-        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(), null));
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(),
+                new DefaultAuthorizationProvider()));
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);

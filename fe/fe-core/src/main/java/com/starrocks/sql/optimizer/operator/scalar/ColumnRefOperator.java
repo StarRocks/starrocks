@@ -93,7 +93,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
-        if (getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+        if (OperatorType.LAMBDA_ARGUMENT.equals(getOpType())) {
             return new ColumnRefSet();
         }
         return new ColumnRefSet(id);
@@ -101,6 +101,9 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     @Override
     public void getColumnRefs(List<ColumnRefOperator> columns) {
+        if (OperatorType.LAMBDA_ARGUMENT.equals(getOpType())) {
+            return;
+        }
         columns.add(this);
     }
 

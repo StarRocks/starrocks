@@ -20,6 +20,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 
@@ -72,6 +73,9 @@ public:
 
     const std::string& absolute_path() const { return _absolute_path; }
 
+    // flat json use this to get the type of the path
+    const TypeDescriptor& value_type() const { return _value_type; }
+
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
     StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* field, uint32_t index);
@@ -83,6 +87,7 @@ public:
     size_t leaf_size() const;
 
 private:
+    // path type, to mark the path is KEY/OFFSET/FIELD/ALL/INDEX
     TAccessPathType::type _type;
 
     std::string _path;
@@ -96,6 +101,9 @@ private:
     uint32_t _column_index;
 
     bool _from_predicate;
+
+    // the data type of the subfield
+    TypeDescriptor _value_type;
 
     std::vector<std::unique_ptr<ColumnAccessPath>> _children;
 };

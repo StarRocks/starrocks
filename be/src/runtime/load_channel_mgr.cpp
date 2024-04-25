@@ -41,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+#include "storage/lake/tablet_manager.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -116,6 +117,9 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
 
             channel.reset(new LoadChannel(this, ExecEnv::GetInstance()->lake_tablet_manager(), load_id, txn_id,
                                           request.txn_trace_parent(), job_timeout_s, std::move(job_mem_tracker)));
+            if (request.has_load_channel_profile_config()) {
+                channel->set_profile_config(request.load_channel_profile_config());
+            }
             _load_channels.insert({load_id, channel});
         } else {
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
@@ -242,6 +246,11 @@ void LoadChannelMgr::_start_load_channels_clean() {
     for (auto& channel : timeout_channels) {
         channel->abort();
         LOG(INFO) << "Deleted timeout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
+    }
+
+    // clean load in writing data size
+    if (auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager(); lake_tablet_manager != nullptr) {
+        lake_tablet_manager->clean_in_writing_data_size();
     }
 
     // this log print every 1 min, so that we could observe the mem consumption of load process

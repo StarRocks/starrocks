@@ -83,6 +83,7 @@ import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -406,7 +407,7 @@ public class LeaderImpl {
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
+                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
                         tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
             }
 
@@ -1219,7 +1220,8 @@ public class LeaderImpl {
             txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second(),
+                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
         } catch (Exception e) {
             LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

@@ -22,6 +22,7 @@ import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -29,10 +30,8 @@ import io.trino.sql.parser.ParsingException;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.atn.PredictionMode;
 import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
@@ -43,12 +42,14 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
-
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
-
     private static final String EOF = "<EOF>";
+    private final AstBuilder.AstBuilderFactory astBuilderFactory;
+
+    public SqlParser(AstBuilder.AstBuilderFactory astBuilderFactory) {
+        this.astBuilderFactory = astBuilderFactory;
+    }
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
         if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
@@ -62,12 +63,18 @@ public class SqlParser {
         List<StatementBase> statements = Lists.newArrayList();
         try {
             StatementSplitter splitter = new StatementSplitter(sql);
-            for (StatementSplitter.Statement statement : splitter.getCompleteStatements()) {
-                statements.add(TrinoParserUtils.toStatement(statement.statement(), sessionVariable.getSqlMode()));
+            for (int idx = 0; idx < splitter.getCompleteStatements().size(); ++idx) {
+                StatementSplitter.Statement statement = splitter.getCompleteStatements().get(idx);
+                StatementBase statementBase = TrinoParserUtils.toStatement(statement.statement(),
+                        sessionVariable.getSqlMode());
+                statementBase.setOrigStmt(new OriginStatement(sql, idx));
+                statements.add(statementBase);
             }
             if (!splitter.getPartialStatement().isEmpty()) {
-                statements.add(TrinoParserUtils.toStatement(splitter.getPartialStatement(),
-                        sessionVariable.getSqlMode()));
+                StatementBase statement = TrinoParserUtils.toStatement(splitter.getPartialStatement(),
+                        sessionVariable.getSqlMode());
+                statement.setOrigStmt(new OriginStatement(sql, splitter.getCompleteStatements().size()));
+                statements.add(statement);
             }
             if (ConnectContext.get() != null) {
                 ConnectContext.get().setRelationAliasCaseInSensitive(true);
@@ -93,40 +100,23 @@ public class SqlParser {
         Pair<ParserRuleContext, StarRocksParser> pair = invokeParser(sql, sessionVariable, StarRocksParser::sqlStatements);
         StarRocksParser.SqlStatementsContext sqlStatementsContext = (StarRocksParser.SqlStatementsContext) pair.first;
         List<StarRocksParser.SingleStatementContext> singleStatementContexts = sqlStatementsContext.singleStatement();
-
-        try {
-            for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
-                // collect hint info
-                HintCollector collector = new HintCollector((CommonTokenStream) pair.second.getTokenStream(), sessionVariable);
-                collector.collect(singleStatementContexts.get(idx));
-
-                AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
-                StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
-                if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
-                        && !(statement instanceof PrepareStmt)) {
-                    // for prepare stm1 from  '', here statement is inner statement
-                    statement = new PrepareStmt("", statement, astBuilder.getParameters());
-                } else {
-                    statement.setOrigStmt(new OriginStatement(sql, idx));
-                }
-                statements.add(statement);
-            }
-            return statements;
-        } catch (SyntaxNotSupportException e) {
-            Parser recognizer = pair.second;
-            TokenStream tokens = recognizer.getInputStream();
-            String input;
-            if (tokens != null) {
-                if (e.getStartToken().getType() == Token.EOF) {
-                    input = EOF;
-                } else {
-                    input = tokens.getText(e.getStartToken(), e.getOffendingToken());
-                }
+        for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
+            // collect hint info
+            HintCollector collector = new HintCollector((CommonTokenStream) pair.second.getTokenStream(), sessionVariable);
+            collector.collect(singleStatementContexts.get(idx));
+            AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                    .create(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
+            StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
+            if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
+                    && !(statement instanceof PrepareStmt)) {
+                // for prepare stm1 from  '', here statement is inner statement
+                statement = new PrepareStmt("", statement, astBuilder.getParameters());
             } else {
-                input = "<unknown input>";
+                statement.setOrigStmt(new OriginStatement(sql, idx));
             }
-            throw new com.starrocks.sql.parser.ParsingException(PARSER_ERROR_MSG.noViableStatement(input));
+            statements.add(statement);
         }
+        return statements;
     }
 
     /**
@@ -172,13 +162,15 @@ public class SqlParser {
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
                 StarRocksParser::expressionSingleton).first;
-        return (Expr) new AstBuilder(sqlMode).visit(expressionContext);
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode).visit(expressionContext);
     }
 
     public static List<Expr> parseSqlToExprs(String expressions, SessionVariable sessionVariable) {
         StarRocksParser.ExpressionListContext expressionListContext = (StarRocksParser.ExpressionListContext)
                 invokeParser(expressions, sessionVariable, StarRocksParser::expressionList).first;
-        AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode());
+        AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode());
         return expressionListContext.expression().stream()
                 .map(e -> (Expr) astBuilder.visit(e))
                 .collect(Collectors.toList());
@@ -189,7 +181,8 @@ public class SqlParser {
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext importColumnsContext = invokeParser(expressionSql, sessionVariable,
                 StarRocksParser::importColumns).first;
-        return (ImportColumnsStmt) new AstBuilder(sqlMode).visit(importColumnsContext);
+        return (ImportColumnsStmt) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode).visit(importColumnsContext);
     }
 
     private static Pair<ParserRuleContext, StarRocksParser> invokeParser(

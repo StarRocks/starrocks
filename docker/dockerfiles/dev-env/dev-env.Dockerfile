@@ -13,28 +13,32 @@
 
 # whether prebuild starrocks maven project and cache the maven artifacts
 # value: true | false
-# default: true
-ARG prebuild_maven=true
+# default: false
+ARG prebuild_maven=false
 # whether pre download thirdparty all-in-one tarball before build
 # value: true | false
 # default: false
 ARG predownload_thirdparty=false
-ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230720.tar
+ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20240411.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v3.2-rc8
+ARG starlet_tag=v3.3-rc0
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
+# Token to access artifacts in private github repositories.
+ARG GITHUB_TOKEN
 
 FROM starrocks/toolchains-${distro}:main-20231123 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /root
 
-FROM base as builder
+FROM base as builder_stage1
+# stage1: build thirdparty
 ARG prebuild_maven
 ARG predownload_thirdparty
 ARG thirdparty_url
+ARG GITHUB_TOKEN
 
 COPY . ./starrocks
 RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
@@ -42,20 +46,41 @@ RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
         mkdir -p starrocks/thirdparty/src && tar -xf thirdparty.tar -C starrocks/thirdparty/src ; \
     fi
 RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd starrocks/thirdparty && \
-     PARALLEL=`nproc` ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
-RUN if test "x$prebuild_maven" = "xtrue" ; then \
+     PARALLEL=`nproc` GH_TOKEN=${GITHUB_TOKEN} ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
+# create empty maven directories
+RUN mkdir -p /root/.m2 /root/.mvn
+
+
+FROM builder_stage1 as build_prebuild_mvn_true
+# set the maven settings and download the dependency jars
+RUN cp -a /root/starrocks/docker/dockerfiles/dev-env/mvn/* /root/.mvn/ ; \
         export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd /root/starrocks ; ./build.sh --fe || true ; \
-        cd java-extensions ; mvn package -DskipTests || true ;  \
-    else \
-        mkdir -p /root/.m2  ;   \
-    fi
+        cd java-extensions ; mvn package -DskipTests || true
+
+FROM builder_stage1 as build_prebuild_mvn_false
+# do nothing
+
+
+FROM build_prebuild_mvn_${prebuild_maven} as build_stage2
+# build_stage2: prebuild maven dependencies, could be no-op if prebuild_maven=false
+
 
 FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
+# remove unnecessary and big starlet dependencies
+COPY --from=builder_stage1 /root/starrocks/docker/dockerfiles/dev-env/starlet_exclude.txt .
+RUN while read line; do \
+        if [[ "$line" == \#* ]] ; then \
+            continue ; \
+        fi ; \
+        rm -rvf /release/$line ; \
+    done < starlet_exclude.txt
+
 
 FROM base as dev-env
+# Final stage: collect all artifacts
 ARG commit_id
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
@@ -63,8 +88,9 @@ ENV STARLET_INSTALL_DIR=$STARROCKS_THIRDPARTY/installed/starlet
 ENV PATH=$STARROCKS_GCC_HOME/bin:$PATH
 
 # Copy third-party dependencies
-COPY --from=builder $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
+COPY --from=build_stage2 $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
 # Copy maven dependencies
-COPY --from=builder /root/.m2 /root/.m2
+COPY --from=build_stage2 /root/.m2 /root/.m2/
+COPY --from=build_stage2 /root/.mvn /root/.mvn/
 # Copy starlet dependencies
 COPY --from=starlet /release $STARLET_INSTALL_DIR

@@ -100,6 +100,8 @@ public:
     // src_pos is origin column position in table definition.
     const OrcMappingOrcType& get_orc_type_child_mapping(size_t original_pos_in_table_definition);
 
+    bool contains(size_t original_pos_in_table_definition) const;
+
     void add_mapping(size_t pos_in_src, const OrcMappingPtr& child_mapping, const orc::Type* orc_type);
 
     void clear();

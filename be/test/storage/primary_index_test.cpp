@@ -148,6 +148,23 @@ void test_integral_pk() {
         CHECK_EQ(i * 2, deletes[1][i]);
     }
 
+    // replace, range [0, 2 * kSegmentSize]
+    std::vector<uint32_t> replace_indexes;
+    for (uint32_t i = 0; i < kSegmentSize; i++) {
+        replace_indexes.push_back(i);
+    }
+    ASSERT_TRUE(pk_index->replace(5, 0, replace_indexes, *pk_col).ok());
+    {
+        // check result
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, 5);
+        }
+    }
+
     // remove all odd numbers in range [2 * kSegmentSize, 4 * kSegmentSize)
     for (int i = 0; i < kSegmentSize; i++) {
         pk_data[i] = 2 * kSegmentSize + i * 2 + 1;
@@ -164,6 +181,8 @@ void test_integral_pk() {
             uint32_t rssid = v >> 32;
             CHECK_EQ(rssid, -1);
         }
+        // replace not exist keys
+        ASSERT_TRUE(pk_index->replace(6, 0, replace_indexes, *pk_col).is_not_found());
     }
 
     CHECK(deletes.find(2) != deletes.end());
@@ -199,7 +218,8 @@ PARALLEL_TEST(PrimaryIndexTest, test_largeint) {
 }
 
 template <LogicalType field_type>
-void test_binary_pk() {
+void test_binary_pk(int key_size) {
+    std::string fill_str(key_size, 'a');
     auto f = std::make_shared<Field>(0, "c0", field_type, false);
     f->set_is_key(true);
     auto schema = std::make_shared<Schema>(Fields{f}, PRIMARY_KEYS, std::vector<ColumnId>{0});
@@ -216,7 +236,7 @@ void test_binary_pk() {
     // [0, kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", pk_value++));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_col).ok());
 
@@ -229,7 +249,7 @@ void test_binary_pk() {
     // [kSegmentSize, 2*kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", pk_value++));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(1, 0, *pk_col).ok());
     keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
@@ -240,7 +260,7 @@ void test_binary_pk() {
     // [2*kSegmentSize, 3*kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", pk_value++));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(2, 0, *pk_col).ok());
     keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
@@ -267,7 +287,7 @@ void test_binary_pk() {
     // [3*kSegmentSize, 4*kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", pk_value++));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     pk_index->upsert(3, 0, *pk_col, &deletes);
     CHECK_EQ(0, deletes.size());
@@ -275,7 +295,7 @@ void test_binary_pk() {
     // upsert all the even numbers in range [0, 2 * kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", i * 2));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, i * 2));
     }
     pk_index->upsert(4, 0, *pk_col, &deletes);
     CHECK_EQ(2, deletes.size());
@@ -291,10 +311,35 @@ void test_binary_pk() {
         CHECK_EQ(i * 2, deletes[1][i]);
     }
 
+    // replace all the odd numbers by indexes, range [0, 2 * kSegmentSize]
+    pk_col->resize(0);
+    std::vector<uint32_t> replace_indexes;
+    for (int i = 0; i < kSegmentSize * 2; i++) {
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, i));
+    }
+    for (uint32_t i = 0; i < kSegmentSize; i++) {
+        replace_indexes.push_back(i * 2 + 1);
+    }
+    ASSERT_TRUE(pk_index->replace(5, 0, replace_indexes, *pk_col).ok());
+    {
+        // check result
+        std::vector<uint64_t> rowids(pk_col->size());
+        pk_index->get(*pk_col, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize * 2; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            if (i % 2 == 0) {
+                CHECK_EQ(rssid, 4);
+            } else {
+                CHECK_EQ(rssid, 5);
+            }
+        }
+    }
+
     // remove all odd numbers in range [2 * kSegmentSize, 4 * kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", 2 * kSegmentSize + i * 2 + 1));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, 2 * kSegmentSize + i * 2 + 1));
     }
     deletes.clear();
     pk_index->erase(*pk_col, &deletes);
@@ -308,6 +353,9 @@ void test_binary_pk() {
             uint32_t rssid = v >> 32;
             CHECK_EQ(rssid, -1);
         }
+
+        // replace not exist keys
+        ASSERT_TRUE(pk_index->replace(6, 0, replace_indexes, *pk_col).is_not_found());
     }
 
     CHECK(deletes.find(2) != deletes.end());
@@ -322,8 +370,12 @@ void test_binary_pk() {
     }
 }
 
-PARALLEL_TEST(PrimaryIndexTest, test_varchar) {
-    test_binary_pk<TYPE_VARCHAR>();
+PARALLEL_TEST(PrimaryIndexTest, test_varchar1) {
+    test_binary_pk<TYPE_VARCHAR>(1);
+}
+
+PARALLEL_TEST(PrimaryIndexTest, test_varchar64) {
+    test_binary_pk<TYPE_VARCHAR>(64);
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
@@ -353,17 +405,35 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get());
 
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_column).ok());
-    LOG(INFO) << "pk_index memory:" << pk_index->memory_usage() << " capacity:" << pk_index->capacity();
+    LOG(INFO) << "pk_index memory:" << pk_index->memory_usage();
 
     PrimaryIndex::DeletesMap deletes;
     pk_index->upsert(1, 0, *pk_column, &deletes);
     ASSERT_EQ(deletes.size(), 1);
     ASSERT_EQ(deletes[0].size(), kSegmentSize);
 
+    std::vector<uint32_t> replace_indexes;
+    for (uint32_t i = 0; i < kSegmentSize; i++) {
+        replace_indexes.push_back(i);
+    }
+    ASSERT_TRUE(pk_index->replace(2, 0, replace_indexes, *pk_column).ok());
+    {
+        std::vector<uint64_t> rowids(pk_column->size());
+        pk_index->get(*pk_column, &rowids);
+        for (uint32_t i = 0; i < kSegmentSize; i++) {
+            uint64_t v = rowids[i];
+            uint32_t rssid = v >> 32;
+            CHECK_EQ(rssid, 2);
+        }
+    }
+
     deletes.clear();
     pk_index->erase(*pk_column, &deletes);
     ASSERT_EQ(deletes.size(), 1);
-    ASSERT_EQ(deletes[1].size(), kSegmentSize);
+    ASSERT_EQ(deletes[2].size(), kSegmentSize);
+
+    // replace not exist keys
+    ASSERT_TRUE(pk_index->replace(3, 0, replace_indexes, *pk_column).is_not_found());
 }
 
 // TODO: test composite primary key

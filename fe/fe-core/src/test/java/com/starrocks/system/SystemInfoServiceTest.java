@@ -16,12 +16,14 @@ package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import mockit.Expectations;
 import mockit.Mock;
@@ -313,6 +315,35 @@ public class SystemInfoServiceTest {
 
         Assert.assertEquals(10L, version.get());
     }
+    
+    @Test
+    public void testGetHostAndPort() {
+        String ipv4 = "192.168.1.2:9050";
+        String ipv6 = "[fe80::5054:ff:fec9:dee0]:9050";
+        String ipv6Error = "fe80::5054:ff:fec9:dee0:dee0";
+        try {
+            Pair<String, Integer> ipv4Addr = SystemInfoService.validateHostAndPort(ipv4, false);
+            Assert.assertEquals("192.168.1.2", ipv4Addr.first);
+            Assert.assertEquals(9050, ipv4Addr.second.intValue());
+        } catch (SemanticException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        try {
+            Pair<String, Integer> ipv6Addr = SystemInfoService.validateHostAndPort(ipv6, false);
+            Assert.assertEquals("fe80::5054:ff:fec9:dee0", ipv6Addr.first);
+            Assert.assertEquals(9050, ipv6Addr.second.intValue());
+        } catch (SemanticException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        try {
+            SystemInfoService.validateHostAndPort(ipv6Error, false);
+            Assert.fail();
+        } catch (SemanticException e) {
+            e.printStackTrace();
+        }
+    }
 
     @Test
     public void testGetComputeNodeWithBePort() throws Exception {
@@ -340,4 +371,5 @@ public class SystemInfoServiceTest {
         ComputeNode beIP3 = service.getComputeNodeWithBePort("127.0.0.2", 1001);
         Assert.assertTrue(beIP3 == null);
     }
+
 }

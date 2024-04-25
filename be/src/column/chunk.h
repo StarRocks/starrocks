@@ -246,6 +246,9 @@ public:
         }
     }
 
+    // Unpack and duplicate const columns in the chunk.
+    void unpack_and_duplicate_const_columns();
+
 #ifndef NDEBUG
     // check whether the internal state is consistent, abort the program if check failed.
     void check_or_die();

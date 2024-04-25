@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -82,6 +83,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
@@ -91,6 +93,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
@@ -132,6 +135,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -235,6 +239,10 @@ public class OlapTable extends Table {
     // with a new one that has the same 'indexName', the unique 'indexId' allows us to distinguish between them.
     @SerializedName(value = "maxIndexId")
     protected long maxIndexId = -1;
+
+    // the id of the session that created this table, only used in temporary table
+    @SerializedName(value = "sessionId")
+    protected UUID sessionId = null;
 
     protected BinlogConfig curBinlogConfig;
 
@@ -355,6 +363,7 @@ public class OlapTable extends Table {
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
         olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
+        olapTable.sessionId = this.sessionId;
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -450,6 +459,11 @@ public class OlapTable extends Table {
             return Lists.newArrayList();
         }
         return indexes.getIndexes();
+    }
+
+    @Override
+    public boolean isTemporaryTable() {
+        return this.sessionId != null;
     }
 
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
@@ -585,6 +599,12 @@ public class OlapTable extends Table {
             }
         }
         fullSchema = newFullSchema;
+        // update max column unique id
+        int maxColUniqueId = getMaxColUniqueId();
+        for (Column column : fullSchema) {
+            maxColUniqueId = Math.max(maxColUniqueId, column.getUniqueId());
+        }
+        setMaxColUniqueId(maxColUniqueId);
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }
 
@@ -2794,7 +2814,6 @@ public class OlapTable extends Table {
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }
-        // property is set false by default
         return false;
     }
 
@@ -2805,6 +2824,14 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION,
                 Boolean.valueOf(useFastSchemaEvolution).toString());
         tableProperty.buildUseFastSchemaEvolution();
+    }
+
+    public void setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public UUID getSessionId() {
+        return sessionId;
     }
 
     @Override
@@ -2838,6 +2865,12 @@ public class OlapTable extends Table {
                             "the execution of dynamic partitioning", ex);
                 }
             }, "BackgroundDynamicPartitionThread").start();
+        }
+
+        if (isTemporaryTable()) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), name, id);
+            LOG.debug("add temporary table, name[{}] id[{}] session[{}]", name, id, sessionId);
         }
     }
 
@@ -2980,16 +3013,138 @@ public class OlapTable extends Table {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = Maps.newHashMap();
+        // common properties for olap table, cloud native table
+        // use TreeMap to ensure the order of keys, such as for show create table.
+        Map<String, String> properties = Maps.newTreeMap();
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
 
+        // replication num
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
-        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
-        Map<String, String> tableProperty = getTableProperty().getProperties();
-        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        // bloom filter
+        Set<String> bfColumnNames = getCopiedBfColumns();
+        if (bfColumnNames != null && !bfColumnNames.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
         }
+
+        // colocate group
+        String colocateGroup = getColocateGroup();
+        if (colocateGroup != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
+        }
+
+        // dynamic partition
+        if (dynamicPartitionExists()) {
+            properties.putAll(tableProperty.getDynamicPartitionProperty().getProperties());
+        }
+
+        // automatic bucket
+        Long bucketSize = getAutomaticBucketSize();
+        if (bucketSize > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
+        }
+
+        // locations
+        Multimap<String, String> locationsMap = getLocation();
+        if (locationsMap != null) {
+            String locations = PropertyAnalyzer.convertLocationMapToString(locationsMap);
+            properties.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+
+        // primary key
+        if (keysType == KeysType.PRIMARY_KEYS) {
+            // persistent index
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, enablePersistentIndex().toString());
+
+            // index cache expire
+            int indexCacheExpireSec = primaryIndexCacheExpireSec();
+            if (indexCacheExpireSec > 0) {
+                properties.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, String.valueOf(indexCacheExpireSec));
+            }
+        }
+
+        // partition live number
+        String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
+        if (partitionLiveNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // compression type
+        TCompressionType compressionType = getCompressionType();
+        if (compressionType == TCompressionType.LZ4_FRAME) {
+            compressionType = TCompressionType.LZ4;
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
+
+        // unique properties
+        properties.putAll(getUniqueProperties());
+
+        return properties;
+    }
+
+    // unique properties for olap table, cloud native table
+    public Map<String, String> getUniqueProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+
+        // storage medium
+        String storageMedium = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+        if (storageMedium != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
+        }
+
+        // storage cooldown ttl
+        String storageCooldownTtl = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+        if (storageCooldownTtl != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCooldownTtl);
+        }
+
+        // replicated storage
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, enableReplicatedStorage().toString());
+
+        // binlog
+        if (containsBinlogConfig()) {
+            // binlog_version
+            BinlogConfig binlogConfig = getCurBinlogConfig();
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION, String.valueOf(binlogConfig.getVersion()));
+            // binlog_enable
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, String.valueOf(binlogConfig.getBinlogEnable()));
+            // binlog_ttl
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_TTL, String.valueOf(binlogConfig.getBinlogTtlSecond()));
+            // binlog_max_size
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, String.valueOf(binlogConfig.getBinlogMaxSize()));
+        }
+
+        // write quorum
+        TWriteQuorumType writeQuorumType = writeQuorum();
+        if (writeQuorumType != TWriteQuorumType.MAJORITY) {
+            properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, WriteQuorum.writeQuorumToName(writeQuorumType));
+        }
+
+        // fast schema evolution only when it is set true
+        boolean useFastSchemaEvolution = getUseFastSchemaEvolution();
+        if (useFastSchemaEvolution) {
+            properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "true");
+        }
+
+        // unique constraint
+        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, uniqueConstraint);
+        }
+
+        // foreign key constraint
+        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
+                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()));
+        }
+
+        // storage type
+        if (storageType() != null && !PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(storageType())) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
+        }
+
         return properties;
     }
 

@@ -432,7 +432,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
 
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
-            if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
                 LOG.warn("db: {}({}) has been dropped, skip", db.getFullName(), db.getId());
                 return false;
             }

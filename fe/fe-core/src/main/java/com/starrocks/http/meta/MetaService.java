@@ -36,6 +36,7 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -58,6 +59,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 public class MetaService {
     private static final int TIMEOUT_SECOND = 10;
@@ -172,6 +176,7 @@ public class MetaService {
         private static final String VERSION = "version";
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
+        private static final String FOR_GLOBAL_STATE = "for_global_state";
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -235,8 +240,8 @@ public class MetaService {
                 return;
             }
 
-            String url = "http://" + machine + ":" + portStr
-                    + "/image?version=" + versionStr + "&subdir=" + subDirStr;
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
+                    "/image?version=" + versionStr + "&subdir=" + subDirStr;
             String filename = Storage.IMAGE + "." + versionStr;
 
             String realDir = GlobalStateMgr.getCurrentState().getImageDir() + subDirStr;
@@ -256,7 +261,10 @@ public class MetaService {
                 return;
             }
 
-            GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            String forGlobalState = request.getSingleParameter(FOR_GLOBAL_STATE);
+            if (Strings.isNullOrEmpty(forGlobalState) || "true".equals(forGlobalState)) {
+                GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            }
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(realDir);
@@ -311,6 +319,11 @@ public class MetaService {
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             String host = request.getSingleParameter(HOST);
+            try {
+                host = URLDecoder.decode(host,  StandardCharsets.UTF_8.toString());
+            } catch (UnsupportedEncodingException e) {
+                throw new RuntimeException(e);
+            }
             String portString = request.getSingleParameter(PORT);
 
             if (!Strings.isNullOrEmpty(host) && !Strings.isNullOrEmpty(portString)) {

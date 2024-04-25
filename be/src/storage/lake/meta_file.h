@@ -36,7 +36,7 @@ enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
 class MetaFileBuilder {
 public:
-    explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
+    explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // handle txn log
@@ -56,6 +56,8 @@ public:
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
+
+    void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
 private:
     // update delvec in tablet meta

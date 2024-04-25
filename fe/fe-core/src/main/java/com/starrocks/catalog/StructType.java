@@ -326,5 +326,17 @@ public class StructType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "struct<...>";
+        }
+        ArrayList<String> fieldsSql = Lists.newArrayList();
+        for (StructField f : fields) {
+            fieldsSql.add(f.toTypeString(depth + 1));
+        }
+        return String.format("struct<%s>", Joiner.on(", ").join(fieldsSql));
+    }
 }
 

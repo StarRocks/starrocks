@@ -105,4 +105,4 @@ The Prefix indexes can not be modified directly after table creation (except for
 
 ## How to verify whether the Prefix index accelerates queries
 
-After executing a query, you can check whether the Prefix index takes effect and view its filtering effect from detailed metrics, such as `ShortKeyFilterRows`, in the scan node in the [Query Profile](../../administration/query_profile.md).
+After executing a query, you can check whether the Prefix index takes effect and view its filtering effect from detailed metrics, such as `ShortKeyFilterRows`, in the scan node in the [Query Profile](../../administration/query_profile_overview.md).

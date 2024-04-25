@@ -14,17 +14,19 @@
 //
 syntax="proto2";
 
-package starrocks.lake;
+package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+import "lake_types.proto";
 import "status.proto";
 
 option cc_generic_services = true;
 
 message PublishVersionRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;
+    // This field is deprecated now, use |txn_infos| instead.
+    repeated int64 txn_ids = 2; // deprecated
     // |base_version| would be |new_version - txn_ids_size()| now, define
     // it explicitly for more clarity and better forward compatibility.
     optional int64 base_version = 3;
@@ -32,8 +34,9 @@ message PublishVersionRequest {
     // Commit time of the transaction to be published.
     // If the size of txn_ids is greater than 1, commit_time should be the commit time of the last transaction.
     // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC)
-    optional int64 commit_time = 5;
+    optional int64 commit_time = 5; // deprecated
     optional int64 timeout_ms = 6;
+    repeated TxnInfoPB txn_infos = 7;
 }
 
 message PublishVersionResponse {
@@ -45,11 +48,12 @@ message PublishVersionResponse {
 
 message AbortTxnRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;
+    repeated int64 txn_ids = 2; // deprecated
     // Whether need to clean up the txn logs
     optional bool skip_cleanup = 3;
     // Should have the save size with txn_ids or 0
-    repeated TxnTypePB txn_types = 4;
+    repeated TxnTypePB txn_types = 4; // deprecated
+    repeated TxnInfoPB txn_infos = 5;
 }
 
 message AbortTxnResponse {
@@ -68,7 +72,8 @@ message DeleteTabletResponse {
 
 message DeleteTxnLogRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;
+    repeated int64 txn_ids = 2; // deprecated 
+    repeated TxnInfoPB txn_infos = 3;
 }
 
 message DeleteTxnLogResponse {
@@ -137,14 +142,16 @@ message TabletStatResponse {
 // Rename file txn_{tablet_id}_{txn_id} to vtxn_{tablet_id}_{version}
 message PublishLogVersionRequest {
     repeated int64 tablet_ids = 1;
-    optional int64 txn_id = 2;
+    optional int64 txn_id = 2; // deprecated
     optional int64 version = 3;
+    optional TxnInfoPB txn_info = 4;
 }
 
 message PublishLogVersionBatchRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;
+    repeated int64 txn_ids = 2; // deprecated
     repeated int64 versions = 3;
+    repeated TxnInfoPB txn_infos = 4;
 }
 
 message PublishLogVersionResponse {

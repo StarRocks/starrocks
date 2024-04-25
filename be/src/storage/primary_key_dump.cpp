@@ -253,7 +253,7 @@ Status PrimaryKeyDump::_dump_segment_keys() {
             return res.status();
         }
         auto& itrs = res.value();
-        CHECK(itrs.size() == rowset.second->num_segments()) << "itrs.size != num_segments";
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset.second->num_segments(), "itrs.size != num_segments");
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {

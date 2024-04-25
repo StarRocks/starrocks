@@ -120,13 +120,11 @@ PARTITION p20210108 VALUES [("2021-01-08 00:00:00"), ("2021-01-09 00:00:00")),
 PARTITION p20210109 VALUES [("2021-01-09 00:00:00"), ("2021-01-10 00:00:00")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "1",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 drop table partition_unixtime_ms;

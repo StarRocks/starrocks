@@ -52,6 +52,7 @@ private:
 
     Status build_iceberg_delete_builder();
     Status build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes);
+    Status build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes);
     Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
     Status resolve_columns(orc::Reader* reader);
 

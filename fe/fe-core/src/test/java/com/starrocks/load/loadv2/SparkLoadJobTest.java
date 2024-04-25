@@ -222,7 +222,7 @@ public class SparkLoadJobTest {
                 result = transactionMgr;
                 transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
                         (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
-                        anyLong, anyLong);
+                        anyLong, anyLong, anyLong);
                 result = transactionId;
                 pendingTask.init();
                 pendingTask.getSignature();
@@ -487,8 +487,6 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(tablet);
                 tablet.getId();
                 result = tabletId;
-                ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;

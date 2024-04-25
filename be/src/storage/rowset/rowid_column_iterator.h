@@ -88,11 +88,7 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override {
-        return Status::NotSupported("Not supported by RowIdColumnIterator: get_row_ranges_by_zone_map");
-    }
+    ordinal_t num_rows() const override { return std::numeric_limits<ordinal_t>::max(); }
 
     bool all_page_dict_encoded() const override { return false; }
 

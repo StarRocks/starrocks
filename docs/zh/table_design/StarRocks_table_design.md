@@ -115,7 +115,7 @@ StarRocks 提供两种分桶方式：
 - 哈希分桶：根据数据的分桶键值，将数据划分至分桶。选择查询时经常使用的条件列组成分桶键，能有效提高查询效率。
 - 随机分桶：随机划分数据至分桶。这种分桶方式更加简单易用。
 
-### [数据类型](../sql-reference/sql-statements/data-types/data-type-list.md)
+### [数据类型](../sql-reference/data-types/data-type-list.md)
 
 除了基本的数据类型，如数值、日期和字符串类型，StarRocks 还支持复杂的半结构化数据类型，包括 ARRAY、JSON、MAP、STRUCT。
 

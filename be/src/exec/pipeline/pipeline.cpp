@@ -15,6 +15,7 @@
 #include "exec/pipeline/pipeline.h"
 
 #include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -23,8 +24,11 @@
 
 namespace starrocks::pipeline {
 
-Pipeline::Pipeline(uint32_t id, OpFactories op_factories)
-        : _id(id), _op_factories(std::move(op_factories)), _pipeline_event(Event::create_event()) {
+Pipeline::Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group)
+        : _id(id),
+          _op_factories(std::move(op_factories)),
+          _pipeline_event(Event::create_event()),
+          _execution_group(execution_group) {
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
 }
 
@@ -38,7 +42,7 @@ void Pipeline::count_down_driver(RuntimeState* state) {
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
         _pipeline_event->finish(state);
-        state->fragment_ctx()->count_down_pipeline();
+        _execution_group->count_down_pipeline(state);
     }
 }
 
@@ -112,6 +116,8 @@ void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
 }
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
+    runtime_profile()->add_info_string("isGroupExecution",
+                                       _execution_group->is_colocate_exec_group() ? "true" : "false");
     runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
@@ -133,7 +139,7 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
 void Pipeline::count_down_epoch_finished_driver(RuntimeState* state) {
     bool all_drivers_finished = ++_num_epoch_finished_drivers == _drivers.size();
     if (all_drivers_finished) {
-        state->fragment_ctx()->count_down_epoch_pipeline(state);
+        _execution_group->count_down_epoch_pipeline(state);
     }
 }
 

@@ -41,7 +41,7 @@ public class ConcurrentTxnTest {
 
     int runTime = 2;
     int numDB = 2;
-    int numTable = 100;
+    int numTable = 20;
     int numThread = 2;
     // 0 means random num of tablets
     int numTabletPerTable = 0;

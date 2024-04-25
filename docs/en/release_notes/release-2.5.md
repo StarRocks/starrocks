@@ -4,6 +4,31 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.20
+
+Release date: March 22, 2024
+
+### Improvements
+
+- `replace_if_not_null` supports BITMAP columns in an Aggregate table. Users can specify `replace_if_not_null` as the aggregate function for BITMAP columns in an Aggregate table. [#42104](https://github.com/StarRocks/starrocks/pull/42104)
+- G1 Garbage Collector is used for JDK 9 and later by default. [#41374](https://github.com/StarRocks/starrocks/pull/41374)
+
+### Parameter Changes
+
+- The default value of the BE parameter `update_compaction_size_threshold` is changed from 256 MB to 64 MB to accelerate compaction. [#42776](https://github.com/StarRocks/starrocks/pull/42776)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Synchronizing data using StarRocks external tables encounters the error "commit and publish txn failed". The synchronization succeeds after a retry but the same copy of data is loaded twice.  [#25165](https://github.com/StarRocks/starrocks/pull/25165)
+- RPC transmit resources are temporarily unavailable due to GC issues. [#41636](https://github.com/StarRocks/starrocks/pull/41636)
+- array_agg() in v2.5 processes NULLs in a different way than it does in v2.3. As a result, the query result is incorrect after an upgrade from v2.3 to v2.5. [#42639](https://github.com/StarRocks/starrocks/pull/42639)
+- The Sink Operator in a query unexpectedly exits, which causes BEs to crash. [#38662](https://github.com/StarRocks/starrocks/pull/38662)
+- Executing the DELETE command on an Aggregate table results in a race for accessing tablet metadata, which causes BEs to crash. [#42174](https://github.com/StarRocks/starrocks/pull/42174)
+- The MemTracker encounters the Use-After-Free issue during UDF calling, which causes BEs to crash. [#41710](https://github.com/StarRocks/starrocks/pull/41710)
+- The unnest() function does not support aliases. [#42138](https://github.com/StarRocks/starrocks/pull/42138)
+
 ## 2.5.19
 
 Release date: February 8, 2024

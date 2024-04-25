@@ -1,0 +1,147 @@
+-- name: test_mv_refresh
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+function: prepare_data("ssb", "db_${uuid0}")
+-- result:
+None
+-- !result
+CREATE MATERIALIZED VIEW `lineorder_flat_mv1`
+DISTRIBUTED BY HASH(`LO_ORDERDATE`, `LO_ORDERKEY`) BUCKETS 48
+REFRESH MANUAL
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_medium" = "HDD",
+    "force_external_table_query_rewrite" = "true"
+)
+AS
+SELECT `l`.`LO_ORDERKEY`,
+    `l`.`LO_ORDERDATE`,
+    `l`.`LO_LINENUMBER`,
+    `l`.`LO_CUSTKEY`,
+    `l`.`LO_PARTKEY`,
+    `l`.`LO_SUPPKEY`,
+    `l`.`LO_ORDERPRIORITY`,
+    `l`.`LO_SHIPPRIORITY`,
+    `l`.`LO_QUANTITY`,
+    `l`.`LO_EXTENDEDPRICE`,
+    `l`.`LO_ORDTOTALPRICE`,
+    `l`.`LO_DISCOUNT`,
+    `l`.`LO_REVENUE`,
+    `c`.`C_NAME`,
+    `c`.`C_ADDRESS`,
+    `c`.`C_CITY`,
+    `c`.`C_NATION`,
+    `c`.`C_REGION`,
+    `s`.`S_NAME`,
+    `s`.`S_ADDRESS`,
+    `s`.`S_CITY`,
+    `p`.`P_NAME`,
+    `p`.`P_MFGR`,
+    `p`.`P_CATEGORY`,
+    `p`.`P_BRAND`,
+    `p`.`P_COLOR`,
+    `d`.`D_DATE`,
+    `d`.`D_DAYOFWEEK`,
+    `d`.`D_MONTH`,
+    `d`.`D_YEAR`,
+    `d`.`D_YEARMONTHNUM`,
+    `d`.`D_YEARMONTH`,
+    `d`.`D_DAYNUMINWEEK`,
+    `d`.`D_DAYNUMINMONTH`,
+    `d`.`D_DAYNUMINYEAR`,
+    `d`.`D_MONTHNUMINYEAR`,
+    `d`.`D_WEEKNUMINYEAR`
+FROM db_${uuid0}.lineorder AS `l`
+INNER JOIN db_${uuid0}.customer AS `c` ON `l`.`LO_CUSTKEY` = `c`.`C_CUSTKEY`
+INNER JOIN db_${uuid0}.supplier AS `s` ON `l`.`LO_SUPPKEY` = `s`.`S_SUPPKEY`
+INNER JOIN db_${uuid0}.part AS `p` ON `l`.`LO_PARTKEY` = `p`.`P_PARTKEY`
+INNER JOIN db_${uuid0}.dates AS `d` ON `l`.`LO_ORDERDATE` = `d`.`D_DATEKEY`
+limit 100;
+-- result:
+-- !result
+refresh materialized view lineorder_flat_mv1 with sync mode;
+select count() from lineorder_flat_mv1;
+-- result:
+100
+-- !result
+create database db_${uuid1};
+-- result:
+-- !result
+use db_${uuid1};
+-- result:
+-- !result
+create table customer as select * from db_${uuid0}.`customer`;
+-- result:
+-- !result
+create table supplier as select * from db_${uuid0}.`supplier`;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW `lineorder_flat_mv2`
+DISTRIBUTED BY HASH(`LO_ORDERDATE`, `LO_ORDERKEY`) BUCKETS 48
+REFRESH MANUAL
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_medium" = "HDD",
+    "force_external_table_query_rewrite" = "true"
+)
+AS
+SELECT `l`.`LO_ORDERKEY`,
+    `l`.`LO_ORDERDATE`,
+    `l`.`LO_LINENUMBER`,
+    `l`.`LO_CUSTKEY`,
+    `l`.`LO_PARTKEY`,
+    `l`.`LO_SUPPKEY`,
+    `l`.`LO_ORDERPRIORITY`,
+    `l`.`LO_SHIPPRIORITY`,
+    `l`.`LO_QUANTITY`,
+    `l`.`LO_EXTENDEDPRICE`,
+    `l`.`LO_ORDTOTALPRICE`,
+    `l`.`LO_DISCOUNT`,
+    `l`.`LO_REVENUE`,
+    `c`.`C_NAME`,
+    `c`.`C_ADDRESS`,
+    `c`.`C_CITY`,
+    `c`.`C_NATION`,
+    `c`.`C_REGION`,
+    `s`.`S_NAME`,
+    `s`.`S_ADDRESS`,
+    `s`.`S_CITY`,
+    `p`.`P_NAME`,
+    `p`.`P_MFGR`,
+    `p`.`P_CATEGORY`,
+    `p`.`P_BRAND`,
+    `p`.`P_COLOR`,
+    `d`.`D_DATE`,
+    `d`.`D_DAYOFWEEK`,
+    `d`.`D_MONTH`,
+    `d`.`D_YEAR`,
+    `d`.`D_YEARMONTHNUM`,
+    `d`.`D_YEARMONTH`,
+    `d`.`D_DAYNUMINWEEK`,
+    `d`.`D_DAYNUMINMONTH`,
+    `d`.`D_DAYNUMINYEAR`,
+    `d`.`D_MONTHNUMINYEAR`,
+    `d`.`D_WEEKNUMINYEAR`
+FROM db_${uuid0}.lineorder AS `l`
+INNER JOIN db_${uuid1}.customer AS `c` ON `l`.`LO_CUSTKEY` = `c`.`C_CUSTKEY`
+INNER JOIN db_${uuid1}.supplier AS `s` ON `l`.`LO_SUPPKEY` = `s`.`S_SUPPKEY`
+INNER JOIN db_${uuid0}.part AS `p` ON `l`.`LO_PARTKEY` = `p`.`P_PARTKEY`
+INNER JOIN db_${uuid0}.dates AS `d` ON `l`.`LO_ORDERDATE` = `d`.`D_DATEKEY`
+limit 100;
+-- result:
+-- !result
+refresh materialized view lineorder_flat_mv2 with sync mode;
+select count() from lineorder_flat_mv2;
+-- result:
+100
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid1} force;
+-- result:
+-- !result

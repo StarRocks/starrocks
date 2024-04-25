@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
@@ -82,9 +83,9 @@ KVStore::~KVStore() {
 Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
-    options.create_if_missing = true;
-    options.create_missing_column_families = true;
     std::string db_path = _root_path + META_POSTFIX;
+
+    RETURN_IF_ERROR(rocksdb::GetDBOptionsFromString(options, config::rocksdb_db_options_string, &options));
 
     ColumnFamilyOptions meta_cf_options;
     RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
@@ -227,7 +228,8 @@ static std::string get_iterate_upper_bound(const std::string& prefix) {
 }
 
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                        std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec) {
+                        std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                        int64_t timeout_sec) {
     int64_t t_start = MonotonicMillis();
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     auto opts = ReadOptions();
@@ -253,7 +255,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
             }
             std::string_view key(it->key().data(), it->key().size());
             std::string_view value(it->value().data(), it->value().size());
-            bool ret = func(key, value);
+            ASSIGN_OR_RETURN(bool ret, func(key, value));
             if (!ret) {
                 break;
             }
@@ -267,7 +269,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
             }
             std::string_view key(it->key().data(), it->key().size());
             std::string_view value(it->value().data(), it->value().size());
-            bool ret = func(key, value);
+            ASSIGN_OR_RETURN(bool ret, func(key, value));
             if (!ret) {
                 break;
             }
@@ -284,7 +286,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
 
 Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
                               const std::string& upper_bound,
-                              std::function<bool(std::string_view, std::string_view)> const& func) {
+                              std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     rocksdb::Slice iter_upper(upper_bound);
     ReadOptions options;
@@ -294,7 +296,8 @@ Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::
     for (; it->Valid(); it->Next()) {
         std::string_view key(it->key().data(), it->key().size());
         std::string_view value(it->value().data(), it->value().size());
-        if (!func(key, value)) {
+        ASSIGN_OR_RETURN(bool ret, func(key, value));
+        if (!ret) {
             break;
         }
     }

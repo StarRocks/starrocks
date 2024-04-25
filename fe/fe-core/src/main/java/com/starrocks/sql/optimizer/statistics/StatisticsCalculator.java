@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -36,6 +37,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -67,6 +69,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
@@ -102,6 +105,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
@@ -132,6 +136,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.StatisticUtils;
@@ -217,14 +222,64 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         Projection projection = node.getProjection();
         if (projection != null) {
+            Map<ColumnRefOperator, SubfieldOperator> subfieldColumns = Maps.newHashMap();
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                statisticsBuilder.addColumnStatistic(entry.getKey(),
-                        ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
+                if (entry.getValue() instanceof SubfieldOperator && (node instanceof LogicalScanOperator ||
+                        node instanceof PhysicalScanOperator)) {
+                    subfieldColumns.put(entry.getKey(), (SubfieldOperator) entry.getValue());
+                } else {
+                    statisticsBuilder.addColumnStatistic(entry.getKey(),
+                            ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
+                }
+            }
+            // for subfield operator, we get the statistics from statistics storage
+            if (!subfieldColumns.isEmpty()) {
+                addSubFiledStatistics(node, subfieldColumns, statisticsBuilder);
             }
         }
         context.setStatistics(statisticsBuilder.build());
         return null;
+    }
+
+    private void addSubFiledStatistics(Operator node, Map<ColumnRefOperator, SubfieldOperator> subfieldColumns,
+                                       Statistics.Builder statisticsBuilder) {
+        if (!(node instanceof LogicalScanOperator) && !(node instanceof PhysicalScanOperator)) {
+            return;
+        }
+
+        Table table = node.isLogical() ? ((LogicalScanOperator) node).getTable() :
+                ((PhysicalScanOperator) node).getTable();
+
+        List<Pair<String, ColumnRefOperator>> columnRefPairs = subfieldColumns.entrySet().stream()
+                .map(entry -> Pair.create(entry.getValue().getPath(), entry.getKey())).collect(Collectors.toList());
+        List<String> columnNames = columnRefPairs.stream().map(p -> p.first).collect(Collectors.toList());
+
+        List<ColumnStatistic> columnStatisticList;
+        Map<String, Histogram> histogramStatistics;
+        if (table.isNativeTableOrMaterializedView()) {
+            columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table,
+                            columnNames);
+            histogramStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table,
+                            columnNames);
+        } else {
+            columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table,
+                    columnNames).stream().map(ConnectorTableColumnStats::getColumnStatistic).collect(Collectors.toList());
+            histogramStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage().
+                    getConnectorHistogramStatistics(table, columnNames);
+        }
+        for (int i = 0; i < columnNames.size(); ++i) {
+            String columnName = columnNames.get(i);
+            ColumnRefOperator columnRef = columnRefPairs.get(i).second;
+            if (histogramStatistics.containsKey(columnName)) {
+                Histogram histogram = histogramStatistics.get(columnName);
+                statisticsBuilder.addColumnStatistic(columnRef, ColumnStatistic.buildFrom(
+                                columnStatisticList.get(i)).
+                        setHistogram(histogram).build());
+            } else {
+                statisticsBuilder.addColumnStatistic(columnRef, columnStatisticList.get(i));
+            }
+        }
     }
 
     @Override
@@ -378,6 +433,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalIcebergMetadataScan(LogicalIcebergMetadataScanOperator node, ExpressionContext context) {
+        return computeMetadataScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalIcebergMetadataScan(PhysicalIcebergMetadataScanOperator node, ExpressionContext context) {
+        return computeMetadataScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeMetadataScanNode(Operator node, ExpressionContext context,
+                                         Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+
         builder.setOutputRowCount(1);
         context.setStatistics(builder.build());
 
@@ -680,7 +758,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);
-            ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
+            if (mapOperator instanceof SubfieldOperator && context.getOptExpression() != null) {
+                Operator child = context.getOptExpression().inputAt(0).getOp();
+                if (child instanceof LogicalScanOperator || child instanceof PhysicalScanOperator) {
+                    addSubFiledStatistics(child, ImmutableMap.of(requiredColumnRefOperator,
+                                    (SubfieldOperator) mapOperator), builder);
+                    continue;
+                }
+            }
+            ColumnStatistic outputStatistic =
+                    ExpressionStatisticCalculator.calculate(mapOperator, allBuilder.build());
             builder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
             allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
         }
@@ -1558,5 +1645,4 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         return false;
     }
-
 }

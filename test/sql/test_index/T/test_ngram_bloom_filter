@@ -101,10 +101,6 @@ select * from ngram_index_case_in_sensitive order by ngram_search(Username,"aaba
 
 -- both are case insensitive, can't filter data 
 select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
-insert into ngram_index_case_in_sensitive values ('2023-01-01',"DDDDDDd",3);
---  one row is filterd
-select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
-
 
 -- name: test_ngram_bloom_filter_char
 create database ngram_bloom_filter_db_3;

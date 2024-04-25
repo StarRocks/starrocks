@@ -26,6 +26,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -59,6 +60,10 @@ Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAcces
     _path = slice.to_string();
     _absolute_path = parent_path + _path;
 
+    if (column_path.__isset.type_desc) {
+        _value_type = TypeDescriptor::from_thrift(column_path.type_desc);
+    }
+
     for (const auto& child : column_path.children) {
         ColumnAccessPathPtr child_path = std::make_unique<ColumnAccessPath>();
         RETURN_IF_ERROR(child_path->init(_absolute_path + "/", child, state, pool));
@@ -73,7 +78,7 @@ Status ColumnAccessPath::init(TAccessPathType::type type, const std::string& pat
     _path = path;
     _column_index = index;
     _absolute_path = path;
-
+    _value_type = TypeDescriptor(LogicalType::TYPE_JSON);
     return Status::OK();
 }
 
@@ -93,6 +98,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
     path->_from_predicate = this->_from_predicate;
     path->_absolute_path = this->_absolute_path;
     path->_column_index = index;
+    path->_value_type = this->_value_type;
 
     // json field has none sub-fields, and we only convert the root path, child path find reader by name
     if (field->type()->type() == LogicalType::TYPE_JSON) {

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -32,6 +31,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
@@ -44,10 +44,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.common.model.HoodieTableType;
-import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
-import org.apache.hudi.common.table.timeline.HoodieTimeline;
-import org.apache.hudi.common.util.Option;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,7 +59,6 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
-
 
 /**
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
@@ -112,12 +108,14 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @SerializedName(value = "prop")
     private Map<String, String> hudiProperties = Maps.newHashMap();
 
+    private HudiTableType tableType;
+
     public HudiTable() {
         super(TableType.HUDI);
     }
 
     public HudiTable(long id, String name, String catalogName, String hiveDbName, String hiveTableName,
-                     String resourceName, List<Column> schema, List<String> dataColumnNames,
+                     String resourceName, String comment, List<Column> schema, List<String> dataColumnNames,
                      List<String> partColumnNames, long createTime, Map<String, String> properties) {
         super(id, name, TableType.HUDI, schema);
         this.catalogName = catalogName;
@@ -128,6 +126,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.createTime = createTime;
         this.hudiProperties = properties;
+        this.comment = comment;
     }
 
     public String getDbName() {
@@ -253,6 +252,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return null;
         }
 
+        HoodieInstant lastInstant = null;
         for (int i = 0; i < hudiPartitions.size(); i++) {
             DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
             PartitionKey key = info.getKey();
@@ -269,6 +269,20 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             tPartitionLocation.setSuffix(hudiPartitions.get(i).getFullPath());
             tPartition.setLocation(tPartitionLocation);
             tHudiTable.putToPartitions(partitionId, tPartition);
+
+            // update lastInstant according to remote file info.
+            {
+                RemoteFileInfo fileInfo = hudiPartitions.get(i);
+                for (RemoteFileDesc desc : fileInfo.getFiles()) {
+                    HoodieInstant instant = desc.getHudiInstant();
+                    if (instant == null) {
+                        continue;
+                    }
+                    if (lastInstant == null || instant.compareTo(lastInstant) > 0) {
+                        lastInstant = instant;
+                    }
+                }
+            }
         }
 
         Configuration conf = new Configuration();
@@ -281,15 +295,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                     .applyToConfiguration(conf);
         }
 
-        HoodieTableMetaClient metaClient =
-                HoodieTableMetaClient.builder().setConf(conf).setBasePath(getTableLocation()).build();
-        HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
-        Option<HoodieInstant> latestInstant = timeline.lastInstant();
-        String queryInstant = "";
-        if (latestInstant.isPresent()) {
-            queryInstant = latestInstant.get().getTimestamp();
+        if (tableType == HudiTableType.MOR) {
+            tHudiTable.setInstant_time(lastInstant == null ? "" : lastInstant.getTimestamp());
         }
-        tHudiTable.setInstant_time(queryInstant);
+
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
         tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
@@ -437,11 +446,15 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         private String hiveDbName;
         private String hiveTableName;
         private String resourceName;
+
+        private String comment;
         private long createTime;
         private List<Column> fullSchema;
         private List<String> partitionColNames = Lists.newArrayList();
         private List<String> dataColNames = Lists.newArrayList();
         private Map<String, String> hudiProperties = Maps.newHashMap();
+
+        private HudiTableType tableType;
 
         public Builder() {
         }
@@ -476,6 +489,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setComment(String comment) {
+            this.comment = comment;
+            return this;
+        }
+
         public Builder setCreateTime(long createTime) {
             this.createTime = createTime;
             return this;
@@ -501,9 +519,14 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setTableType(HudiTableType tableType) {
+            this.tableType = tableType;
+            return this;
+        }
+
         public HudiTable build() {
-            return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, fullSchema,
-                    dataColNames, partitionColNames, createTime, hudiProperties);
+            return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, comment,
+                    fullSchema, dataColNames, partitionColNames, createTime, hudiProperties);
         }
     }
 }

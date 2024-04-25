@@ -43,9 +43,6 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
@@ -59,16 +56,20 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -88,7 +89,6 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -101,6 +101,7 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
@@ -148,7 +149,7 @@ public class FileScanNode extends LoadScanNode {
     // file num
     private int filesAdded;
     private long totalBytes = 0;
-    
+
     private List<ComputeNode> nodes;
     private int nextBe = 0;
 
@@ -164,6 +165,7 @@ public class FileScanNode extends LoadScanNode {
     private boolean flexibleColumnMapping = false;
 
     private boolean nullExprInAutoIncrement;
+
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
         public TBrokerScanRangeParams params;
@@ -176,13 +178,14 @@ public class FileScanNode extends LoadScanNode {
     private List<ParamCreateContext> paramCreateContexts;
 
     public FileScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, long warehouseId) {
         super(id, desc, planNodeName);
         this.fileStatusesList = fileStatusesList;
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
         this.nullExprInAutoIncrement = true;
+        this.warehouseId = warehouseId;
     }
 
     @Override
@@ -289,7 +292,7 @@ public class FileScanNode extends LoadScanNode {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
             THdfsProperties hdfsProperties = new THdfsProperties();
-            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties); 
+            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties);
             params.setHdfs_properties(hdfsProperties);
         }
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
@@ -503,7 +506,18 @@ public class FileScanNode extends LoadScanNode {
         Preconditions.checkState(fileStatusesList.size() == fileGroups.size());
 
         if (isLoad() && filesAdded == 0) {
-            throw new UserException("No source file in this table(" + targetTable.getName() + ").");
+            // return at most 3 paths to users
+            int limit = 3;
+            List<String> allFilePaths =
+                    fileGroups.stream().map(BrokerFileGroup::getFilePaths).flatMap(List::stream).collect(Collectors.toList());
+            List<String> filePaths = Lists.newArrayList();
+            if (allFilePaths.size() > limit) {
+                filePaths.addAll(allFilePaths.subList(0, limit));
+                filePaths.add("...");
+            } else {
+                filePaths.addAll(allFilePaths);
+            }
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_FILES_FOUND, String.join(", ", filePaths));
         }
 
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {
@@ -528,8 +542,8 @@ public class FileScanNode extends LoadScanNode {
 
         // TODO: need to refactor after be split into cn + dn
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-            for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long cnId : computeNodeIds) {
                 ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
                 if (cn != null && cn.isAvailable()) {
                     nodes.add(cn);
@@ -548,7 +562,6 @@ public class FileScanNode extends LoadScanNode {
         }
         Collections.shuffle(nodes, random);
     }
-
 
     // If fileFormat is not null, we use fileFormat instead of check file's suffix
     private void processFileGroup(

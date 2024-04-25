@@ -66,6 +66,7 @@ private:
     ObjectPool _pool;
     std::atomic<bool> _prepared_probe = false;
     RuntimeProfile* _runtime_profile = nullptr;
+    THashJoinNode _hash_join_node;
 };
 
 } // namespace starrocks

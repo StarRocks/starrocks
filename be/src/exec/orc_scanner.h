@@ -40,7 +40,7 @@ public:
     void close() override;
 
 private:
-    Status _next_orc_batch(ChunkPtr* result);
+    StatusOr<ChunkPtr> _next_orc_batch();
 
     StatusOr<ChunkPtr> _next_orc_chunk();
 

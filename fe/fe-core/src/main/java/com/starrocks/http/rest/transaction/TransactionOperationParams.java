@@ -31,6 +31,7 @@ public class TransactionOperationParams {
 
     private final String dbName;
     private final String tableName;
+    private final String warehouseName;
     private final String label;
     private final TransactionOperation txnOperation;
     private final Long timeoutMillis;
@@ -46,6 +47,7 @@ public class TransactionOperationParams {
 
     public TransactionOperationParams(String dbName,
                                       String tableName,
+                                      String warehouseName,
                                       String label,
                                       TransactionOperation txnOperation,
                                       Long timeoutMillis,
@@ -54,6 +56,7 @@ public class TransactionOperationParams {
                                       Body body) {
         this.dbName = dbName;
         this.tableName = tableName;
+        this.warehouseName = warehouseName;
         this.label = label;
         this.txnOperation = txnOperation;
         this.timeoutMillis = timeoutMillis;
@@ -134,6 +137,10 @@ public class TransactionOperationParams {
 
     public String getLabel() {
         return label;
+    }
+
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     public TransactionOperation getTxnOperation() {

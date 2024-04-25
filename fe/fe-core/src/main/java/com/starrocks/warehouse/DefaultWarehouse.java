@@ -14,19 +14,8 @@
 
 package com.starrocks.warehouse;
 
-import com.google.gson.annotations.SerializedName;
-
 public class DefaultWarehouse extends Warehouse {
-    @SerializedName(value = "cluster")
-    Cluster cluster;
-
-    public DefaultWarehouse(long id, String name, long clusterId) {
-        super(id, name);
-        cluster = new Cluster(clusterId);
-    }
-
-    @Override
-    public Cluster getAnyAvailableCluster() {
-        return cluster;
+    public DefaultWarehouse(long id, String name) {
+        super(id, name, "An internal warehouse init after FE is ready");
     }
 }

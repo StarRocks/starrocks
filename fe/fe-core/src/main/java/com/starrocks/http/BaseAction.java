@@ -99,7 +99,7 @@ public abstract class BaseAction implements IAction {
     }
 
     @Override
-    public void handleRequest(BaseRequest request) throws Exception {
+    public void handleRequest(BaseRequest request) {
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);

@@ -60,6 +60,7 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -308,6 +309,11 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         String tableName = request.getRequest().headers().get(TABLE_KEY);
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
+
         String label = request.getRequest().headers().get(LABEL_KEY);
         if (StringUtils.isBlank(label)) {
             throw new UserException("Empty label.");
@@ -367,6 +373,7 @@ public class TransactionLoadAction extends RestBaseAction {
         return new TransactionOperationParams(
                 dbName,
                 tableName,
+                warehouseName,
                 label,
                 txnOperation,
                 timeoutMillis,

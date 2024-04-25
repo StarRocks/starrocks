@@ -33,6 +33,7 @@ DictQueryExpr::DictQueryExpr(const TExprNode& node) : Expr(node), _dict_query_ex
 StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
+    bool null_if_not_found = !_dict_query_expr.strict_mode;
     for (int i = 0; i < _children.size(); ++i) {
         columns[i] = _children[i]->evaluate(context, ptr);
     }
@@ -86,8 +87,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             res->append_datum(value_chunk->get_column_by_index(0)->get(res_idx));
             res_idx++;
         } else {
-            if (_dict_query_expr.strict_mode) {
-                return Status::NotFound("In strict mode, query failed if record not exist in dict table.");
+            if (!null_if_not_found) {
+                return Status::NotFound("query failed if record not exist in dict table.");
             }
             res->append_nulls(1);
         }

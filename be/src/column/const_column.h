@@ -47,6 +47,7 @@ public:
     ~ConstColumn() override = default;
 
     bool is_nullable() const override { return _data->is_nullable(); }
+    bool is_json() const override { return _data->is_json(); }
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
 

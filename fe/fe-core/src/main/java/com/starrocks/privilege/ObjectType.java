@@ -27,9 +27,9 @@ import java.util.stream.Collectors;
 
 public class ObjectType {
     @SerializedName("id")
-    private final int id;
+    protected final int id;
 
-    private ObjectType(int id) {
+    protected ObjectType(int id) {
         this.id = id;
     }
 

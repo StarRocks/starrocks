@@ -312,8 +312,9 @@ public abstract class SetOperationNode extends PlanNode {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
-
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds()) &&
+                partitionByExprs.stream().allMatch(expr -> expr.isBoundByTupleIds(getTupleIds()));
+        if (!isBound) {
             return false;
         }
 

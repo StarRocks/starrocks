@@ -17,20 +17,26 @@ package com.starrocks.lake;
 import com.google.common.base.Preconditions;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.TransactionState;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -106,7 +112,20 @@ public class LakeTableHelper {
                 continue;
             }
             LakeTablet tablet = (LakeTablet) tablets.get(0);
-            return Optional.of(tablet.getShardInfo());
+            try {
+                if (GlobalStateMgr.isCheckpointThread()) {
+                    throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
+                }
+                ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
+                        StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+
+                return Optional.of(shardInfo);
+            } catch (StarClientException e) {
+                if (e.getCode() != StatusCode.NOT_EXIST) {
+                    throw e;
+                }
+                // Shard does not exist, ignore this shard
+            }
         }
         return Optional.empty();
     }
@@ -150,5 +169,39 @@ public class LakeTableHelper {
      */
     public static boolean isSharedDirectory(String path, long partitionId) {
         return !path.endsWith(String.format("/%d", partitionId));
+    }
+
+    /**
+     * For tables created in the old version of StarRocks cluster, the column unique id is generated on BE and
+     * is not saved in FE catalog. For these tables, we want to be able to record their column unique id in the
+     * catalog after the upgrade, and the column unique id recorded must be consistent with the one on BE.
+     * For shared data mode, the algorithm to generate column unique id on BE is simple: take the subscript of
+     * each column as their unique id, so here we just need to follow the same algorithm to calculate the unique
+     * id of each column.
+     *
+     * @param table the table to restore column unique id
+     * @return the max column unique id
+     */
+    public static int restoreColumnUniqueId(OlapTable table) {
+        int maxId = 0;
+        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+            final int columnCount = indexMeta.getSchema().size();
+            maxId = Math.max(maxId, columnCount - 1);
+            for (int i = 0; i < columnCount; i++) {
+                Column col = indexMeta.getSchema().get(i);
+                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+                col.setUniqueId(i);
+            }
+        }
+        return maxId;
+    }
+
+    public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && hasSingleOlapTableSink(sourceType);
+    }
+
+    private static boolean hasSingleOlapTableSink(TransactionState.LoadJobSourceType sourceType) {
+        return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK;
     }
 }

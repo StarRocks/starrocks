@@ -24,6 +24,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/olap_runtime_range_pruner.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -36,9 +37,9 @@ struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
+struct OlapScanRange;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
-
 // Params for TabletReader
 struct TabletReaderParams {
     enum class RangeStartOperation { GT = 0, GE, EQ };
@@ -65,7 +66,7 @@ struct TabletReaderParams {
     RangeEndOperation end_range = RangeEndOperation::LT;
     std::vector<OlapTuple> start_key;
     std::vector<OlapTuple> end_key;
-    std::vector<const ColumnPredicate*> predicates;
+    PredicateTree pred_tree;
 
     RuntimeState* runtime_state = nullptr;
 
@@ -84,6 +85,13 @@ struct TabletReaderParams {
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     bool use_pk_index = false;
+
+    int64_t splitted_scan_rows = 0;
+    int64_t scan_dop = 0;
+    TScanRange* scan_range = nullptr;
+    int32_t plan_node_id;
+
+    bool prune_column_after_index_filter = false;
 
 public:
     std::string to_string() const;

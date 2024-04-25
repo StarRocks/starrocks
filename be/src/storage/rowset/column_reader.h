@@ -103,7 +103,7 @@ public:
     ColumnReader(ColumnReader&&) = delete;
     void operator=(ColumnReader&&) = delete;
 
-    // create a new column iterator. Caller should free the returned iterator after unused.
+    // create a new column iterator.
     StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
 
     // Caller should free returned iterator after unused.
@@ -113,6 +113,7 @@ public:
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
     Status seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterator* iter);
+    Status seek_by_page_index(int page_index, OrdinalPageIndexIterator* iter);
 
     // read a page from file into a page handle
     Status read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,
@@ -159,9 +160,13 @@ public:
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
+    void print_debug_info() { _ordinal_index->print_debug_info(); }
+
     size_t mem_usage() const;
 
     const std::string& name() const { return _name; }
+
+    const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }
@@ -180,7 +185,7 @@ private:
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
-    Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
+    Status _parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
     Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges);
 

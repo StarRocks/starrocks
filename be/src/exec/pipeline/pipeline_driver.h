@@ -338,7 +338,7 @@ public:
         _all_global_rf_ready_or_timeout =
                 _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
                 std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
-                    return rf_desc->is_local() || rf_desc->runtime_filter() != nullptr;
+                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
                 }); // or all the remote RFs are ready.
 
         return !_all_global_rf_ready_or_timeout;

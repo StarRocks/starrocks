@@ -62,7 +62,7 @@ displayed_sidebar: "Chinese"
       JAVA_HOME = <path_to_JDK>
       ```
 
-   e.  更多高级配置项请参考 [参数配置 - FE 配置项](../administration/FE_configuration.md#fe-配置项)。
+   e.  更多高级配置项请参考 [参数配置 - FE 配置项](../administration/management/FE_configuration.md)。
 
 3. 启动 FE 节点。
 
@@ -140,7 +140,7 @@ displayed_sidebar: "Chinese"
       JAVA_HOME = <path_to_JDK>
       ```
 
-   e.  更多高级配置项请参考 [参数配置 - BE 配置项](../administration/BE_configuration.md#be-配置项)。
+   e.  更多高级配置项请参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md)。
 
 3. 启动 BE 节点。
 
@@ -201,7 +201,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
       JAVA_HOME = <path_to_JDK>
       ```
 
-   d.  由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/BE_configuration.md#be-配置项) 了解更多 CN 高级配置项。
+   d.  由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md) 了解更多 CN 高级配置项。
 
 2. 启动 CN 节点。
 

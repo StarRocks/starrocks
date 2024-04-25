@@ -51,6 +51,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
@@ -228,6 +229,13 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
             Assert.fail();
@@ -294,6 +302,13 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
             Assert.fail();
@@ -335,6 +350,13 @@ public class DeleteTest {
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         try {
             deleteHandler.process(deleteStmt);

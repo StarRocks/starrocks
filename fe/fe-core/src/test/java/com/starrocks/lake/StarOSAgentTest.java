@@ -215,7 +215,7 @@ public class StarOSAgentTest {
         starosAgent.addWorker(5, workerHost, 0);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
-        starosAgent.removeWorker(workerHost);
+        starosAgent.removeWorker(workerHost, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
     }
 
@@ -304,7 +304,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to get worker id from starMgr.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
+                () -> starosAgent.removeWorker("127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
         new Expectations() {
             {
@@ -312,7 +312,7 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = 10;
 
-                client.removeWorker("1", 10);
+                client.removeWorker("1", 10, 0);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }
@@ -320,7 +320,7 @@ public class StarOSAgentTest {
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to remove worker.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
+                () -> starosAgent.removeWorker("127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
 
     @Test

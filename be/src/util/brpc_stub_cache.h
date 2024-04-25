@@ -82,15 +82,17 @@ public:
     PInternalService_Stub* get_stub(const std::string& host, int port) {
         butil::EndPoint endpoint;
         std::string realhost;
+        std::string brpc_url;
         realhost = host;
         if (!is_valid_ip(host)) {
-            realhost = hostname_to_ip(host);
-            if (realhost == "") {
-                LOG(WARNING) << "failed to get ip from host, host=" << host;
+            Status status = hostname_to_ip(host, realhost);
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
                 return nullptr;
             }
         }
-        if (str2endpoint(realhost.c_str(), port, &endpoint)) {
+        brpc_url = get_host_port(realhost, port);
+        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
             LOG(WARNING) << "unknown endpoint, host=" << host;
             return nullptr;
         }
@@ -121,6 +123,7 @@ private:
                 // all requests are sent on this connection and the throughput will be limited by this.
                 // we use `connection_group` to create multiple single connections to remove this bottleneck.
                 options.connection_group = std::to_string(_stubs.size());
+                options.connection_type = config::brpc_connection_type;
                 std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
                 if (channel->Init(endpoint, &options)) {
                     return nullptr;
@@ -153,14 +156,17 @@ public:
     StatusOr<PInternalService_Stub*> get_http_stub(const TNetworkAddress& taddr) {
         butil::EndPoint endpoint;
         std::string realhost;
+        std::string brpc_url;
         realhost = taddr.hostname;
         if (!is_valid_ip(taddr.hostname)) {
-            realhost = hostname_to_ip(taddr.hostname);
-            if (realhost == "") {
-                return Status::RuntimeError("failed to get ip from host " + taddr.hostname);
+            Status status = hostname_to_ip(taddr.hostname, realhost);
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
+                return nullptr;
             }
         }
-        if (str2endpoint(realhost.c_str(), taddr.port, &endpoint)) {
+        brpc_url = get_host_port(realhost, taddr.port);
+        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
             return Status::RuntimeError("unknown endpoint, host = " + taddr.hostname);
         }
         // get is exist

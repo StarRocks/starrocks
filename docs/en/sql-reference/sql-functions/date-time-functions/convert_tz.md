@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Converts a DATE or DATETIME value from one time zone to another.
 
-This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/timezone.md).
+This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/management/timezone.md).
 
 ## Syntax
 

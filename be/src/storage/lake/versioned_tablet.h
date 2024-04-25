@@ -21,6 +21,7 @@
 
 namespace starrocks {
 class TabletSchema;
+class TabletMetadataPB;
 class Schema;
 class ThreadPool;
 } // namespace starrocks
@@ -29,7 +30,6 @@ namespace starrocks::lake {
 
 class Rowset;
 class TabletManager;
-class TabletMetadataPB;
 class TabletWriter;
 class TabletReader;
 enum WriterType : int;
@@ -69,9 +69,11 @@ public:
     // `segment_max_rows` is used in vertical writer
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
-                                                       ThreadPool* flush_pool = nullptr);
+                                                       ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
+
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically);
 
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 

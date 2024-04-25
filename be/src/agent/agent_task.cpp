@@ -594,10 +594,8 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
             if (schema_version <= ori_tablet_schema->schema_version()) {
                 continue;
             }
-            TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>();
-            new_schema->copy_from(ori_tablet_schema);
-            st = new_schema->build_current_tablet_schema(schema_id, schema_version, pcolumn_param, ori_tablet_schema);
-            if (!st.ok()) {
+            auto ret = TabletSchema::create(*ori_tablet_schema, schema_id, schema_version, pcolumn_param);
+            if (!ret.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
                 std::string msg =
                         strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
@@ -606,7 +604,7 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
                 error_tablet_ids.push_back(tablet_id);
                 continue;
             }
-            tablet->update_max_version_schema(new_schema);
+            tablet->update_max_version_schema(ret.value());
             VLOG(1) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
                     << " to " << schema_version;
         }
@@ -966,16 +964,14 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
 
-    std::string src_snapshot_path;
-    bool incremental_snapshot;
+    TSnapshotInfo src_snapshot_info;
 
     Status res;
     if (remote_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req, &src_snapshot_path,
-                                                                        &incremental_snapshot);
+        res = exec_env->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req, &src_snapshot_info);
     } else {
-        res = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-                remote_snapshot_req, &src_snapshot_path, &incremental_snapshot);
+        res = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_req,
+                                                                                    &src_snapshot_info);
     }
 
     if (!res.ok()) {
@@ -983,8 +979,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
         LOG(WARNING) << "remote snapshot failed. status: " << res << ", signature:" << agent_task_req->signature;
         error_msgs.emplace_back("replicate snapshot failed, " + res.to_string());
     } else {
-        finish_task_request.__set_snapshot_path(src_snapshot_path);
-        finish_task_request.__set_incremental_snapshot(incremental_snapshot);
+        finish_task_request.__set_snapshot_info(src_snapshot_info);
     }
 
     task_status.__set_status_code(status_code);

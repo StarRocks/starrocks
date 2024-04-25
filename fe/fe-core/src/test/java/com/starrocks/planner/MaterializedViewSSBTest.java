@@ -21,8 +21,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.List;
-
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -91,7 +89,6 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery4_1() {
-        setTracLogModule("MV");
         runFileUnitTest("materialized-view/ssb/q4-1");
     }
 

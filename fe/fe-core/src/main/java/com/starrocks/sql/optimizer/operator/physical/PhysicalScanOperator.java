@@ -66,6 +66,10 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimzeOption = new ScanOptimzeOption();
 
+        updateOutputColumns();
+    }
+
+    protected void updateOutputColumns() {
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
             for (ScalarOperator scalarOperator : this.projection.getColumnRefMap().values()) {
@@ -186,6 +190,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
             builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
             return (B) this;
+        }
+
+        @Override
+        public O build() {
+            O op = super.build();
+            op.updateOutputColumns();
+            return op;
         }
     }
 }

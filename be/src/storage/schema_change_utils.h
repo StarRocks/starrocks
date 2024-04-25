@@ -40,6 +40,7 @@ struct SchemaChangeParams {
     TabletSharedPtr new_tablet;
     std::vector<std::unique_ptr<TabletReader>> rowset_readers;
     Version version;
+    int64_t gtid = 0;
     TabletSchemaCSPtr base_tablet_schema = nullptr;
     std::vector<RowsetSharedPtr> rowsets_to_change;
     bool sc_sorting = false;

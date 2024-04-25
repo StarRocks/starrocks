@@ -90,7 +90,7 @@ public class ProfileManager implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("Profile", (long) profileMap.size(),
+        return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
                                "LoadProfile", (long) loadProfileMap.size());
     }
 

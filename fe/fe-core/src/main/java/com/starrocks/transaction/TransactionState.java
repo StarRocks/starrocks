@@ -54,6 +54,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.task.PublishVersionTask;
@@ -248,6 +249,8 @@ public class TransactionState implements Writable {
     private long finishTime;
     @SerializedName("rs")
     private String reason = "";
+    @SerializedName("gtid")
+    private long globalTransactionId;
 
     // whether this txn is finished using new mechanism
     // this field needs to be persisted, so we shared the serialization field with `reason`.
@@ -260,6 +263,10 @@ public class TransactionState implements Writable {
     // error replica ids
     @SerializedName("er")
     private Set<Long> errorReplicas;
+
+    @SerializedName("ctl")
+    private boolean useCombinedTxnLog;
+
     private final CountDownLatch latch;
 
     // these states need not be serialized
@@ -306,6 +313,9 @@ public class TransactionState implements Writable {
     // optional
     @SerializedName("ta")
     private TxnCommitAttachment txnCommitAttachment;
+
+    @SerializedName("wid")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     // this map should be set when load execution begin, so that when the txn commit, it will know
     // which tables and rollups it loaded.
@@ -472,6 +482,10 @@ public class TransactionState implements Writable {
         return transactionId;
     }
 
+    public long getGlobalTransactionId() {
+        return globalTransactionId;
+    }
+
     public String getLabel() {
         return this.label;
     }
@@ -510,6 +524,14 @@ public class TransactionState implements Writable {
 
     public long getTimeoutMs() {
         return timeoutMs;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
     public void setTransactionStatus(TransactionStatus transactionStatus) {
@@ -633,6 +655,10 @@ public class TransactionState implements Writable {
 
     public boolean waitTransactionVisible(long timeout, @NotNull TimeUnit unit) throws InterruptedException {
         return this.latch.await(timeout, unit);
+    }
+
+    public void setGlobalTransactionId(long globalTransactionId) {
+        this.globalTransactionId = globalTransactionId;
     }
 
     public void setPrepareTime(long prepareTime) {
@@ -856,6 +882,7 @@ public class TransactionState implements Writable {
         for (long backendId : publishBackends) {
             PublishVersionTask task = new PublishVersionTask(backendId,
                     this.getTransactionId(),
+                    this.getGlobalTransactionId(),
                     this.getDbId(),
                     commitTime,
                     partitionVersions,
@@ -978,6 +1005,14 @@ public class TransactionState implements Writable {
 
     public void setWriteDurationMs(long writeDurationMs) {
         this.writeDurationMs = writeDurationMs;
+    }
+
+    public void setUseCombinedTxnLog(boolean useCombinedTxnLog) {
+        this.useCombinedTxnLog = useCombinedTxnLog;
+    }
+
+    public boolean isUseCombinedTxnLog() {
+        return useCombinedTxnLog;
     }
 
     public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {

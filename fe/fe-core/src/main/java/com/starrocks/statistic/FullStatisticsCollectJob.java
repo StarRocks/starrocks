@@ -20,7 +20,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -72,6 +71,13 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                                     StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                     Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
+        this.partitionIdList = partitionIdList;
+    }
+
+    public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
+                                    List<Type> columnTypes, StatsConstants.AnalyzeType type,
+                                    StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
         this.partitionIdList = partitionIdList;
     }
 
@@ -227,18 +233,19 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                 // statistics job doesn't lock DB, partition may be dropped, skip it
                 continue;
             }
-            for (String columnName : columns) {
-                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnName));
+            for (int i = 0; i < columnNames.size(); i++) {
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnNames.get(i),
+                        columnTypes.get(i)));
             }
         }
 
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
-    private String buildBatchCollectFullStatisticSQL(Table table, Partition partition, String columnName) {
+    private String buildBatchCollectFullStatisticSQL(Table table, Partition partition, String columnName,
+                                                     Type columnType) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
-        Column column = table.getColumn(columnName);
 
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(columnName);
@@ -246,12 +253,12 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
         context.put("partitionId", partition.getId());
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", fullAnalyzeGetDataSize(column));
+        context.put("dataSize", fullAnalyzeGetDataSize(columnName, columnType));
         context.put("partitionName", partition.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
 
-        if (!column.getType().canStatistic()) {
+        if (!columnType.canStatistic()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
@@ -259,8 +266,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         } else {
             context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
-            context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
-            context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
+            context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnName, true));
+            context.put("minFunction", getMinMaxFunction(columnType, quoteColumnName, false));
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));

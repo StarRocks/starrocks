@@ -15,7 +15,7 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 两种导入方式各有优势：
 
 - Stream Load 支持 CSV 和 JSON 两种数据文件格式，适用于数据文件数量较少且单个文件的大小不超过 10 GB 的场景。
-- Broker Load 支持 Parquet、ORC、CSV、及 JSON 四种文件格式（JSON 文件格式自 3.2.3 版本起支持），适用于数据文件数量较多且单个文件的大小超过 10 GB 的场景、以及文件存储在 NAS 的场景。**StarRocks 自 2.5 版本起支持使用 Broker Load 从本地文件系统导入数据。需要注意的是，使用 Broker Load 从本地文件系统导入数据前，您需要在数据所在的机器上[部署 Broker](../deployment/deploy_broker.md)。**
+- Broker Load 支持 Parquet、ORC、CSV、及 JSON 四种文件格式（JSON 文件格式自 3.2.3 版本起支持），适用于数据文件数量较多且单个文件的大小超过 10 GB 的场景、以及文件存储在 NAS 的场景。
 
 对于 CSV 格式的数据，需要注意以下两点：
 
@@ -30,6 +30,10 @@ Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及�
 
 <InsertPrivNote />
 
+### 查看网络配置
+
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+
 ## 使用 Stream Load 从本地导入
 
 Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
@@ -40,15 +44,15 @@ Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业�
 
 ### 基本原理
 
-您需要在客户端上通过 HTTP 发送导入作业请求给 FE，FE 会通过 HTTP 重定向 (Redirect) 指令将请求转发给某一个 BE。或者，您也可以直接发送导入作业请求给某一个 BE。
+您需要在客户端上通过 HTTP 发送导入作业请求给 FE，FE 会通过 HTTP 重定向 (Redirect) 指令将请求转发给某一个 BE（或 CN）。或者，您也可以直接发送导入作业请求给某一个 BE（或 CN）。
 
 :::note
 
-如果把导入作业请求发送给 FE，FE 会通过轮询机制选定由哪一个 BE 来接收请求，从而实现 StarRocks 集群内的负载均衡。因此，推荐您把导入作业请求发送给 FE。
+如果把导入作业请求发送给 FE，FE 会通过轮询机制选定由哪一个 BE（或 CN）来接收请求，从而实现 StarRocks 集群内的负载均衡。因此，推荐您把导入作业请求发送给 FE。
 
 :::
 
-接收导入作业请求的 BE 作为 Coordinator BE，将数据按表结构划分、并分发数据到其他各相关的 BE。导入作业的结果信息由 Coordinator BE 返回给客户端。需要注意的是，如果您在导入过程中停止 Coordinator BE，会导致导入作业失败。
+接收导入作业请求的 BE（或 CN）作为 Coordinator BE（或 CN），将数据按表结构划分、并分发数据到其他各相关的 BE（或 CN）。导入作业的结果信息由 Coordinator BE（或 CN）返回给客户端。需要注意的是，如果您在导入过程中停止 Coordinator BE（或 CN），会导致导入作业失败。
 
 下图展示了 Stream Load 的主要流程：
 
@@ -247,11 +251,11 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
 这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
 
-- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/BE_configuration.md)。
+- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE（或 CN） 动态参数](../administration/management/BE_configuration.md)。
 
   建议一次导入的数据量不要超过 10 GB。如果数据文件的大小超过 10 GB，建议您拆分成若干小于 10 GB 的文件分次导入。如果由于业务场景需要，无法拆分数据文件，可以适当调大该参数的取值，从而提高数据文件的大小上限。
 
-  需要注意的是，如果您调大该参数的取值，需要重启 BE 才能生效，并且系统性能有可能会受影响，并且也会增加失败重试时的代价。
+  需要注意的是，如果您调大该参数的取值，需要重启 BE（或 CN）才能生效，并且系统性能有可能会受影响，并且也会增加失败重试时的代价。
 
   :::note
 
@@ -262,7 +266,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::
 
-- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/FE_configuration.md)。
+- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/management/FE_configuration.md)。
 
   如果您创建的导入作业经常发生超时，可以通过该参数适当地调大超时时间。您可以通过如下公式计算导入作业的超时时间：
 
@@ -272,7 +276,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::note
   
-  “平均导入速度”是指目前 StarRocks 集群的平均导入速度。导入速度主要受限于集群的磁盘 I/O 及 BE 个数。
+  “平均导入速度”是指目前 StarRocks 集群的平均导入速度。导入速度主要受限于集群的磁盘 I/O 及 BE（或 CN）个数。
 
   :::
 
@@ -293,23 +297,7 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
 ### 使用限制
 
 - 目前只能从单个 Broker 中导入数据，并且 Broker 版本必须为 2.5 及以后。
-- 并发访问单点的 Broker 容易成为瓶颈，并发越高反而越容易造成超时、OOM 等问题。您可以通过设置 `pipeline_dop`（参见[调整查询并发度](../administration/Query_management.md#调整查询并发度)）来限制 Broker Load 的并行度，对于单个 Broker 的访问并行度建议设置小于 `16`。
-
-### 准备工作
-
-在使用 Broker Load 从本地文件系统导入数据前，需要完成如下准备工作：
-
-1. 按照“[部署前提条件](../deployment/deployment_prerequisites.md)”、“[检查环境配置](../deployment/environment_configurations.md)”和“[准备部署文件](../deployment/prepare_deployment_files.md)”中的介绍，在本地文件所在机器上完成必要的环境配置。然后，在该机器上部署一个 Broker。具体操作跟在 BE 节点上部署一样，参见[部署 Broker 节点](../deployment/deploy_broker.md)。
-
-   > **NOTICE**
-   >
-   > 只能从单个 Broker 中导入数据，并且 Broker 版本必须为 2.5 及以后。
-
-2. 通过 [ALTER SYSTEM](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md#broker) 语句在 StarRocks 中添加上一步骤中部署好的 Broker（如 `172.26.199.40:8000`），并给 Broker 指定新名称（如 `sole_broker`）：
-
-   ```SQL
-   ALTER SYSTEM ADD BROKER sole_broker "172.26.199.40:8000";
-   ```
+- 并发访问单点的 Broker 容易成为瓶颈，并发越高反而越容易造成超时、OOM 等问题。您可以通过设置 `pipeline_dop`（参见[调整查询并发度](../administration/management/resource_management/Query_management.md#调整查询并发度)）来限制 Broker Load 的并行度，对于单个 Broker 的访问并行度建议设置小于 `16`。
 
 ### 操作示例
 
@@ -319,7 +307,7 @@ Broker Load 支持导入单个数据文件到单张表、导入多个数据文�
 
 #### 数据样例
 
-以 CSV 格式的数据为例，登录本地文件系统，在指定路径（假设为 `/user/starrocks/`）下创建两个 CSV 格式的数据文件，`file1.csv` 和 `file2.csv`。两个数据文件都包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
+以 CSV 格式的数据为例，登录本地文件系统，在指定路径（假设为 `/home/disk1/business/`）下创建两个 CSV 格式的数据文件，`file1.csv` 和 `file2.csv`。两个数据文件都包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
 - `file1.csv`
 
@@ -367,7 +355,7 @@ PROPERTIES("replication_num"="1");
 
 #### 提交导入作业
 
-通过如下语句，把本地文件系统的 `/user/starrocks/` 路径下所有数据文件（`file1.csv` 和 `file2.csv`）的数据导入到目标表 `mytable`：
+通过如下语句，把本地文件系统的 `/home/disk1/business/` 路径下所有数据文件（`file1.csv` 和 `file2.csv`）的数据导入到目标表 `mytable`：
 
 ```SQL
 LOAD LABEL mydatabase.label_local
@@ -449,9 +437,9 @@ WHERE LABEL = "label_local";
 
 本小节主要介绍这种方法。具体操作步骤如下：
 
-1. 把 NAS 挂载到所有的 BE、FE 节点，同时保证所有节点的挂载路径完全一致。这样，所有 BE 可以像访问 BE 自己的本地文件一样访问 NAS。
+1. 把 NAS 挂载到所有的 BE（或 CN）、FE 节点，同时保证所有节点的挂载路径完全一致。这样，所有 BE（或 CN）可以像访问 BE（或 CN）自己的本地文件一样访问 NAS。
 
-2. 使用 Broker Load 导入数据。
+2. 使用 Broker Load 导入数据。例如：
 
    ```SQL
    LOAD LABEL test_db.label_nas

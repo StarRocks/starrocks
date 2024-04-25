@@ -117,5 +117,16 @@ public class LogicalValuesOperator extends LogicalOperator {
             builder.rows = valuesOperator.rows;
             return this;
         }
+
+        public Builder setColumnRefSet(List<ColumnRefOperator> columnRefSet) {
+            builder.columnRefSet = columnRefSet;
+            return this;
+        }
+
+        public Builder setRows(List<List<ScalarOperator>> rows) {
+            builder.rows = rows;
+            return this;
+        }
+        
     }
 }

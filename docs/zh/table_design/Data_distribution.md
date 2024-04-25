@@ -189,7 +189,7 @@ StarRocks 支持单独和组合使用数据分布方式。
 
 > **注意**
 >
-> 3.1 版本起，StarRocks [存算分离模式](../deployment/shared_data/s3.md)支持时间函数的分区表达式。
+> 3.1 版本起，StarRocks [存算分离模式](../deployment/shared_data/shared_data.mdx)支持时间函数的分区表达式。
 
 [表达式分区](./expression_partitioning.md)，原称自动创建分区，更加灵活易用，适用于大多数场景，比如按照连续日期范围或者枚举值来查询和管理数据。
 
@@ -382,7 +382,7 @@ DISTRIBUTED BY HASH(site_id);
 
 执行如下语句，删除 `site_access` 表中分区 p1 及数据：
 
-> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../sql-reference/sql-statements/data-definition/RECOVER.md)恢复分区及数据。
+> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md)恢复分区及数据。
 
 ```SQL
 ALTER TABLE site_access
@@ -756,7 +756,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 > **注意**
 >
-> StarRocks [存算分离模式](../deployment/shared_data/s3.md)暂不支持该特性。
+> StarRocks [存算分离模式](../deployment/shared_data/shared_data.mdx)暂不支持该特性。
 
 随着业务场景中查询模式和数据量变化，建表时设置的分桶方式和分桶数量，以及排序键可能不再能适应新的业务场景，导致查询性能下降，此时可以通过 `ALTER TABLE` 调整分桶方式和分桶数量，以及排序键，优化数据分布。比如：
 

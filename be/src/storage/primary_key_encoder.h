@@ -33,7 +33,6 @@ namespace starrocks {
 //   if this column is the last column: append directly
 //   if not: convert each 0x00 inside the string to 0x00 0x01,
 //           add a tailing 0x00 0x00, then append
-
 class PrimaryKeyEncoder {
 public:
     static bool is_supported(const Field& f);
@@ -62,7 +61,7 @@ public:
 
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
-    static void encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+    static Status encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
     static void encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
                                  Column* dest);

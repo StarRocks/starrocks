@@ -40,6 +40,13 @@
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 
+#define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
+
+#define RETURN_TRUE_IF_SPILL_TASK_ERROR(spiller) \
+    if (!(spiller)->task_status().ok()) {        \
+        return true;                             \
+    }
+
 namespace starrocks::spill {
 
 // some metrics for spill

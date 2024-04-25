@@ -13,7 +13,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -31,7 +30,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -123,7 +121,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-INSERT INTO t VALUES (1, NULL), (2, "abc");
+INSERT INTO t VALUES (1, NULL);
 -- result:
 -- !result
 SELECT dict_mapping("dict", col_1, col_2) FROM t;
@@ -264,5 +262,48 @@ PROPERTIES (
 E: (1064, 'Getting analyzing error. Detail message: column:COL_1 does not exist.')
 -- !result
 DROP DATABASE test_dictmapping_generated_column_in_create_table;
+-- result:
+-- !result
+-- name: test_dictmapping_null_if_not_found
+CREATE DATABASE test_dictmapping_null_if_not_found;
+-- result:
+-- !result
+USE test_dictmapping_null_if_not_found;
+-- result:
+-- !result
+CREATE TABLE `t_dictmapping_null_if_not_found` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AUTO_INCREMENT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t_dictmapping_null_if_not_found values (1,default);
+-- result:
+-- !result
+select dict_mapping("t_dictmapping_null_if_not_found", 2);
+-- result:
+E: (1064, 'query failed if record not exist in dict table.')
+-- !result
+select dict_mapping("t_dictmapping_null_if_not_found", 2, false);
+-- result:
+E: (1064, 'query failed if record not exist in dict table.')
+-- !result
+select dict_mapping("t_dictmapping_null_if_not_found", 2, true);
+-- result:
+None
+-- !result
+drop table t_dictmapping_null_if_not_found;
+-- result:
+-- !result
+drop database test_dictmapping_null_if_not_found;
 -- result:
 -- !result

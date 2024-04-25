@@ -28,7 +28,7 @@
 
 std::vector<std::string> starrocks_kill_exclude_prefixes;
 
-#if !defined(NDEBUG) || defined(BE_TEST)
+#if defined(BE_TEST)
 namespace starrocks {
 
 SyncPoint* SyncPoint::GetInstance() {
@@ -80,4 +80,4 @@ void SyncPoint::Process(const std::string_view& point, void* cb_arg) {
 }
 
 } // namespace starrocks
-#endif // NDEBUG
+#endif

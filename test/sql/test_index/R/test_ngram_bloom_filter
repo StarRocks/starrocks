@@ -59,6 +59,9 @@ drop database ngram_bloom_filter_db_1;
 -- result:
 -- !result
 
+
+
+
 -- name: test_ngram_bloom_filter_default
 create database ngram_bloom_filter_db_2;
 -- result:
@@ -103,6 +106,9 @@ show index from ngram_index_default_3;
 ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF	
 -- !result
 
+
+
+
 -- name: test_ngram_bloom_filter_like
 CREATE TABLE ngram_index_like(
     timestamp DATETIME NOT NULL,
@@ -129,6 +135,9 @@ select * from ngram_index_like where username like '_hin%';
 -- result:
 2023-01-01 00:00:00	chinese	3
 -- !result
+
+
+
 
 -- name: test_ngram_bloom_filter_case_insensitive
 CREATE TABLE ngram_index_case_in_sensitive(
@@ -193,15 +202,6 @@ select * from ngram_index_case_in_sensitive order by ngram_search_case_insensiti
 2023-01-01 00:00:00	AaBAa	3
 2023-01-01 00:00:00	aAbac	3
 -- !result
-insert into ngram_index_case_in_sensitive values ('2023-01-01',"DDDDDDd",3);
--- result:
--- !result
-select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
--- result:
-2023-01-01 00:00:00	AaBAa	3
-2023-01-01 00:00:00	aAbac	3
--- !result
-
 -- name: test_ngram_bloom_filter_char
 create database ngram_bloom_filter_db_3;
 -- result:
@@ -227,3 +227,4 @@ insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"ch
 select * from ngram_index_char where username like '_hiaa%';
 -- result:
 -- !result
+

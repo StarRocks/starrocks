@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -51,6 +52,9 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
     @SerializedName("columns")
     private List<String> columns;
 
+    @SerializedName("columnTypes")
+    private List<Type> columnTypes;
+
     @SerializedName("type")
     private AnalyzeType type;
 
@@ -69,12 +73,14 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
     @SerializedName("reason")
     private String reason;
 
-    public NativeAnalyzeJob(long dbId, long tableId, List<String> columns, AnalyzeType type, ScheduleType scheduleType,
-                            Map<String, String> properties, ScheduleStatus status, LocalDateTime workTime) {
+    public NativeAnalyzeJob(long dbId, long tableId, List<String> columns, List<Type> columnTypes, AnalyzeType type,
+                            ScheduleType scheduleType, Map<String, String> properties, ScheduleStatus status,
+                            LocalDateTime workTime) {
         this.id = -1;
         this.dbId = dbId;
         this.tableId = tableId;
         this.columns = columns;
+        this.columnTypes = columnTypes;
         this.type = type;
         this.scheduleType = scheduleType;
         this.properties = properties;
@@ -135,6 +141,11 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
     @Override
     public List<String> getColumns() {
         return columns;
+    }
+
+    @Override
+    public List<Type> getColumnTypes() {
+        return columnTypes;
     }
 
     @Override
@@ -202,7 +213,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
             AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                    statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumns(),
+                    statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
                     statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);

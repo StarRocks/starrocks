@@ -132,6 +132,7 @@ struct TInternalScanRange {
   12: optional bool fill_data_cache = true;
   // used for per-bucket compute optimize
   13: optional i32 bucket_sequence
+  14: optional i64 gtid
 }
 
 enum TFileFormatType {
@@ -363,6 +364,11 @@ struct THdfsScanRange {
 
     // delete columns slots like iceberg equality delete column slots
     21: optional list<Types.TSlotId> delete_column_slot_ids;
+
+    22: optional bool use_iceberg_jni_metadata_reader
+
+    // for metadata table split (eg: iceberg manifest file bean)
+    23: optional string serialized_split
 }
 
 struct TBinlogScanRange {
@@ -495,6 +501,7 @@ struct TColumnAccessPath {
     2: optional Exprs.TExpr path
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
+    5: optional Types.TTypeDesc type_desc
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -524,6 +531,7 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+  35: optional bool enable_prune_column_after_index_filter
 }
 
 struct TJDBCScanNode {
@@ -749,6 +757,9 @@ struct TAggregationNode {
   27: optional bool use_sort_agg
 
   28: optional bool use_per_bucket_optimize
+
+  // enable runtime limit, pipelines share one limit
+  29: optional bool enable_pipeline_share_limit = false
 }
 
 struct TRepeatNode {
@@ -974,7 +985,7 @@ struct TExchangeNode {
   3: optional i64 offset
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
-  5: optional bool enable_parallel_merge;
+  5: optional bool enable_parallel_merge
 }
 
 // This contains all of the information computed by the plan as part of the resource
@@ -1056,6 +1067,15 @@ struct THdfsScanNode {
     16: optional bool use_partition_column_value_only;
 
     17: optional Types.TTupleId mor_tuple_id;
+
+    // serialized static metadata table
+    18: optional string serialized_table;
+
+    // serialized lake format predicate for data skipping
+    19: optional string serialized_predicate;
+
+    // if load column statistics for metadata table scan
+    20: optional bool load_column_stats;
 }
 
 struct TProjectNode {

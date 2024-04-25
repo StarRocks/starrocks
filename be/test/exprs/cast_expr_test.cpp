@@ -1880,7 +1880,29 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("true", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "true")->get_data()[0]);
     EXPECT_EQ("star", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"star\"")->get_data()[0]);
     EXPECT_EQ("{\"a\": 1}", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "{\"a\": 1}")->get_data()[0]);
-    EXPECT_EQ("", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "")->get_data()[0]);
+
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"1123\"")->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"true\"")->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 123)->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 234.453)->get_data()[0]);
+
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"0\"")->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"false\"")->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 0)->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 0.000)->get_data()[0]);
+
+    EXPECT_EQ(123123, evaluateCastFromJson<TYPE_INT>(cast_expr, "\"123123\"")->get_data()[0]);
+    EXPECT_EQ(123123, evaluateCastFromJson<TYPE_INT>(cast_expr, "123123")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_INT>(cast_expr, 123.123)->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(0, evaluateCastFromJson<TYPE_INT>(cast_expr, false)->get_data()[0]);
+
+    EXPECT_EQ(123.123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "\"123.123\"")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "\"123\"")->get_data()[0]);
+    EXPECT_EQ(123.123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "123.123")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "123")->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, false)->get_data()[0]);
 
     // implicit json type case
     EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1)->get_data()[0]);
@@ -1891,12 +1913,12 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "false")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "null")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "[1,2]")));
-    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "\"a\"")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1.0")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "null")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "[]")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "{}")));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "\"123.123\"")));
 
     // overflow
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, 100000)));
@@ -2334,14 +2356,28 @@ TEST_F(VectorizedCastExprTest, json_to_array_with_const_input) {
 }
 
 TEST_F(VectorizedCastExprTest, unsupported_test) {
+    TExprNode cast_expr;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.__set_opcode(TExprOpcode::CAST);
+    cast_expr.num_children = 1;
+
     // can't cast arry<array<int>> to array<bool> rather than crash
-    expr_node.child_type = to_thrift(LogicalType::TYPE_ARRAY);
-    expr_node.child_type_desc = gen_multi_array_type_desc(to_thrift(TYPE_INT), 2);
-    expr_node.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
-
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
-
+    cast_expr.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
+    cast_expr.__isset.child_type = false;
+    cast_expr.__set_child_type_desc(gen_multi_array_type_desc(to_thrift(TYPE_INT), 2));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
     ASSERT_TRUE(expr == nullptr);
+
+    // can't cast array<int> to varchar
+    cast_expr.type = gen_type_desc(to_thrift(LogicalType::TYPE_VARCHAR));
+    cast_expr.__isset.child_type = false;
+    cast_expr.__set_child_type_desc(gen_multi_array_type_desc(to_thrift(TYPE_INT), 1));
+    std::unique_ptr<Expr> expr2(VectorizedCastExprFactory::from_thrift(cast_expr));
+    ASSERT_TRUE(expr2 == nullptr);
+
+    Expr* expr3 = nullptr;
+    ObjectPool pool;
+    ASSERT_FALSE(Expr::create_vectorized_expr(&pool, cast_expr, &expr3, &runtime_state).ok());
 }
 
 } // namespace starrocks

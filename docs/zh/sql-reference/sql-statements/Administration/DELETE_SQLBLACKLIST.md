@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 从 SQL 黑名单中删除一个 SQL 正则表达式。
 
-有关 SQL 黑名单的更多信息，请参阅 [管理 SQL 黑名单](../../../administration/Blacklist.md)。
+有关 SQL 黑名单的更多信息，请参阅 [管理 SQL 黑名单](../../../administration/management/resource_management/Blacklist.md)。
 
 :::tip
 

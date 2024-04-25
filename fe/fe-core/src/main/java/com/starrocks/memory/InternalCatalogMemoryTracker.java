@@ -57,7 +57,8 @@ public class InternalCatalogMemoryTracker implements MemoryTrackable {
                 estimateCount += partitions.size();
             }
         }
-        return ImmutableMap.of("Partition", estimateCount);
+        return ImmutableMap.of("Catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogCount(),
+                               "Partition", estimateCount);
     }
 
 }

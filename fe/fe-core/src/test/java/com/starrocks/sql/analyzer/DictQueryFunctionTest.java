@@ -129,7 +129,7 @@ public class DictQueryFunctionTest {
 
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', '2023-05-06', 'value', 'extra');",
-                "dict_mapping function strict_mode param should be bool constant.");
+                "dict_mapping function null_if_not_found param should be bool constant.");
 
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', CAST('2023-05-06' AS datetime), 'v');",

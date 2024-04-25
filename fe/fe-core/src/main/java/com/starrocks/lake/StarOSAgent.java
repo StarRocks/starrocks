@@ -77,11 +77,11 @@ public class StarOSAgent {
 
     public static final long DEFAULT_WORKER_GROUP_ID = 0L;
 
-    private StarClient client;
-    private String serviceId;
-    private Map<String, Long> workerToId;
-    private Map<Long, Long> workerToBackend;
-    private ReentrantReadWriteLock rwLock;
+    protected StarClient client;
+    protected String serviceId;
+    protected Map<String, Long> workerToId;
+    protected Map<Long, Long> workerToBackend;
+    protected ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
         serviceId = "";
@@ -96,7 +96,7 @@ public class StarOSAgent {
         return true;
     }
 
-    private void prepare() {
+    protected void prepare() {
         if (!serviceId.isEmpty()) {
             return;
         }
@@ -344,13 +344,13 @@ public class StarOSAgent {
         workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
     }
 
-    public void removeWorker(String workerIpPort) throws DdlException {
+    public void removeWorker(String workerIpPort, long workerGroupId) throws DdlException {
         prepare();
 
         long workerId = getWorker(workerIpPort);
 
         try {
-            client.removeWorker(serviceId, workerId);
+            client.removeWorker(serviceId, workerId, workerGroupId);
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception

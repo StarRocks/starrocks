@@ -32,6 +32,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -43,6 +44,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/runtime_profile.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -55,6 +57,7 @@ public:
     LakeTabletsChannelTest() {
         _schema_id = next_id();
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
         _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager =
@@ -119,8 +122,8 @@ public:
         tablet3->set_tablet_id(10089);
     }
 
-    std::unique_ptr<lake::TabletMetadata> new_tablet_metadata(int64_t tablet_id) {
-        auto metadata = std::make_unique<lake::TabletMetadata>();
+    std::unique_ptr<TabletMetadata> new_tablet_metadata(int64_t tablet_id) {
+        auto metadata = std::make_unique<TabletMetadata>();
         metadata->set_id(tablet_id);
         metadata->set_version(1);
         //
@@ -195,9 +198,9 @@ protected:
         _load_channel =
                 std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(), UniqueId::gen_uid(),
                                               next_id(), string(), 1000, std::move(load_mem_tracker));
-        TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
-        _tablets_channel =
-                new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
+        TabletsChannelKey key{UniqueId::gen_uid().to_proto(), kIndexId};
+        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key,
+                                                    _load_channel->mem_tracker(), _root_profile.get());
     }
 
     void TearDown() override {
@@ -243,6 +246,7 @@ protected:
 
     int64_t _schema_id;
     std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<RuntimeProfile> _root_profile;
     std::unique_ptr<lake::FixedLocationProvider> _location_provider;
     std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::TabletManager> _tablet_manager;
@@ -572,8 +576,8 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
 
     {
-        lake::DeleteTabletRequest request;
-        lake::DeleteTabletResponse response;
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
         request.add_tablet_ids(10089);
         lake::delete_tablets(_tablet_manager.get(), request, &response);
 
@@ -751,6 +755,110 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
         PTabletWriterAddBatchResult finish_response2;
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response2);
         ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, finish_response2.status().status_code());
+    }
+}
+
+TEST_F(LakeTabletsChannelTest, test_profile) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 128;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(true);
+    add_chunk_request.set_packet_seq(0);
+
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+
+    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", kIndexId));
+    ASSERT_NE(nullptr, profile);
+    ASSERT_EQ(4, profile->get_counter("TabletsNum")->value());
+    ASSERT_EQ(1, profile->get_counter("OpenCount")->value());
+    ASSERT_TRUE(profile->get_counter("OpenTime")->value() > 0);
+    ASSERT_EQ(1, profile->get_counter("AddChunkCount")->value());
+    ASSERT_TRUE(profile->get_counter("AddChunkTime")->value() > 0);
+    ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+}
+
+TEST_F(LakeTabletsChannelTest, test_dont_write_txn_log) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+    open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 24;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+    ASSERT_FALSE(add_chunk_response.has_lake_tablet_data());
+
+    PTabletWriterAddChunkRequest finish_request;
+    PTabletWriterAddBatchResult finish_response;
+    finish_request.set_index_id(kIndexId);
+    finish_request.set_sender_id(0);
+    finish_request.set_eos(true);
+    finish_request.set_packet_seq(1);
+    finish_request.add_partition_ids(10);
+    finish_request.add_partition_ids(11);
+
+    _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
+    ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code());
+    ASSERT_EQ(4, finish_response.tablet_vec_size());
+
+    std::vector<int64_t> finished_tablets;
+    for (auto& info : finish_response.tablet_vec()) {
+        finished_tablets.emplace_back(info.tablet_id());
+    }
+    std::sort(finished_tablets.begin(), finished_tablets.end());
+    ASSERT_EQ(10086, finished_tablets[0]);
+    ASSERT_EQ(10087, finished_tablets[1]);
+    ASSERT_EQ(10088, finished_tablets[2]);
+    ASSERT_EQ(10089, finished_tablets[3]);
+
+    ASSERT_TRUE(finish_response.has_lake_tablet_data());
+    ASSERT_EQ(4, finish_response.lake_tablet_data().txn_logs_size());
+
+    auto metacache = _tablet_manager->metacache();
+    for (auto tablet_id : finished_tablets) {
+        auto txn_log_path = _tablet_manager->txn_log_location(tablet_id, kTxnId);
+        ASSERT_TRUE(metacache->lookup_txn_log(txn_log_path));
+        ASSERT_TRUE(FileSystem::Default()->path_exists(txn_log_path).is_not_found());
     }
 }
 

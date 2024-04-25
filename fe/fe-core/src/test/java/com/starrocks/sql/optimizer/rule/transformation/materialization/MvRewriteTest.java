@@ -648,7 +648,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  |  group by: 23: add, 17: v1");
         PlanTestBase.assertContains(plan5, "  1:Project\n" +
                 "  |  <slot 17> : 17: v1\n" +
-                "  |  <slot 18> : 18: t1d\n" +
                 "  |  <slot 19> : 19: total_sum\n" +
                 "  |  <slot 20> : 20: total_num\n" +
                 "  |  <slot 23> : 17: v1 + 1");
@@ -2089,7 +2088,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             String mvName = mvNameGen.apply(i);
             starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
                     "refresh async " +
-                    "properties('query_rewrite_consistency'='loose') " +
+                    "properties('query_rewrite_consistency'='nocheck') " +
                     "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension);
         }
 

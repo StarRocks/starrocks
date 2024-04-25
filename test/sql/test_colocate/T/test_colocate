@@ -11,7 +11,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -30,7 +29,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -50,7 +48,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -70,7 +67,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",

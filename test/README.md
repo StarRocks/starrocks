@@ -21,7 +21,7 @@ Reference documentation for the syntax format and other functions.
 <table>
   <tr>
     <td>Python</td>
-    <td>>= 3.6.8</td>
+    <td>>= 3.7</td>
   </tr>
 </table>
 
@@ -326,4 +326,16 @@ explain select 1;
 -- result:
 [REGEX].*PARTITION: UNPARTITIONED.*
 -- !result
+```
+
+
+### 6. SPECIFY THE CLUSTER MODE TO RUN
+By default, the cases will run in both cloud&native mode. If you expect to run it only in a certain mode, you can specify it by the case tag.  
+Usage: Add the `@native`(shared_nothing deployment) or `@cloud`(shared_data deployment) tag in case name lines.  
+```sql
+-- name: ${case name} @cloud
+...
+
+-- name: ${case name} @native
+...
 ```

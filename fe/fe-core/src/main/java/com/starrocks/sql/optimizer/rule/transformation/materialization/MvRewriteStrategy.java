@@ -37,7 +37,6 @@ public class MvRewriteStrategy {
 
     // cbo config
     public boolean enableCBORewrite = false;
-    public boolean enableCBOSingleTableRewrite = false;
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -98,14 +97,6 @@ public class MvRewriteStrategy {
             return true;
         }
 
-        private boolean isEnableCBOSingleTableRewrite() {
-            if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
-                    optimizerContext.getCandidateMvs().stream().anyMatch(MaterializationContext::hasMultiTables)) {
-                return true;
-            }
-            return false;
-        }
-
         private boolean isEnableCBOMultiTableRewrite(OptExpression queryPlan) {
             if (!sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite() &&
                     MvUtils.getAllTables(queryPlan).size() <= 1) {
@@ -142,6 +133,5 @@ public class MvRewriteStrategy {
 
         // cbo strategies
         strategy.enableCBORewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
-        strategy.enableCBOSingleTableRewrite = arbitrator.isEnableCBOSingleTableRewrite();
     }
 }

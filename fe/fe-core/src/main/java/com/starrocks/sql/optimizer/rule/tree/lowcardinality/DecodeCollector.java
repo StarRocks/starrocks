@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
@@ -119,6 +121,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private final List<Integer> scanStringColumns = Lists.newArrayList();
 
+    // operators which are the children of Match operator
+    private final ColumnRefSet matchChildren = new ColumnRefSet();
+
     public DecodeCollector(SessionVariable session) {
         this.sessionVariable = session;
     }
@@ -131,6 +136,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private void initContext(DecodeContext context) {
         // choose the profitable string columns
         for (Integer cid : scanStringColumns) {
+            if (matchChildren.contains(cid)) {
+                continue;
+            }
             if (expressionStringRefCounter.getOrDefault(cid, 0) > 1) {
                 context.allStringColumns.add(cid);
                 continue;
@@ -149,6 +157,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         // resolve depend-on relation:
         // like: b = upper(a), c = lower(b), if we forbidden a, should forbidden b & c too
         for (Integer cid : stringRefToDefineExprMap.keySet()) {
+            if (matchChildren.contains(cid)) {
+                continue;
+            }
             if (context.allStringColumns.contains(cid)) {
                 continue;
             }
@@ -361,6 +372,45 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     @Override
+    public DecodeInfo visitPhysicalTableFunction(OptExpression optExpression, DecodeInfo context) {
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+        DecodeInfo info = context.createOutputInfo();
+        PhysicalTableFunctionOperator tableFunc = optExpression.getOp().cast();
+
+        if (!FunctionSet.UNNEST.equalsIgnoreCase(tableFunc.getFn().getFunctionName().getFunction())) {
+            info.decodeStringColumns.union(info.inputStringColumns);
+            info.decodeStringColumns.intersect(tableFunc.getFnParamColumnRefs());
+            info.inputStringColumns.except(info.decodeStringColumns);
+        }
+
+        info.outputStringColumns.clear();
+        for (ColumnRefOperator outerColRef : tableFunc.getOuterColRefs()) {
+            if (info.inputStringColumns.contains(outerColRef)) {
+                info.outputStringColumns.union(outerColRef);
+            }
+        }
+
+        if (!FunctionSet.UNNEST.equalsIgnoreCase(tableFunc.getFn().getFunctionName().getFunction())) {
+            return info;
+        }
+
+        Preconditions.checkState(tableFunc.getFnParamColumnRefs().size() == tableFunc.getFnResultColRefs().size());
+        for (int i = 0; i < tableFunc.getFnParamColumnRefs().size(); i++) {
+            ColumnRefOperator unnestOutput = tableFunc.getFnResultColRefs().get(i);
+            ColumnRefOperator unnestInput = tableFunc.getFnParamColumnRefs().get(i);
+
+            if (info.inputStringColumns.contains(unnestInput)) {
+                stringRefToDefineExprMap.put(unnestOutput.getId(), unnestInput);
+                expressionStringRefCounter.put(unnestOutput.getId(), 1);
+                info.outputStringColumns.union(unnestOutput);
+            }
+        }
+        return info;
+    }
+
+    @Override
     public DecodeInfo visitPhysicalDistribution(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.EMPTY;
@@ -470,6 +520,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 stringExpressions.computeIfAbsent(c, l -> Lists.newArrayList()).addAll(expressions);
             }
         });
+
+        matchChildren.union(dictExpressionCollector.matchChildren);
     }
 
     private void collectProjection(Operator operator, DecodeInfo info) {
@@ -506,6 +558,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     info.outputStringColumns.union(key.getId());
                 }
             });
+            matchChildren.union(dictExpressionCollector.matchChildren);
         }
     }
 
@@ -523,6 +576,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         private final ColumnRefSet allDictColumnRefs;
         private final Map<Integer, List<ScalarOperator>> dictExpressions = Maps.newHashMap();
+
+        private final ColumnRefSet matchChildren = new ColumnRefSet();
 
         public DictExpressionCollector(ColumnRefSet allDictColumnRefs) {
             this.allDictColumnRefs = allDictColumnRefs;
@@ -691,6 +746,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
+            return merge(visitChildren(operator, context), operator);
+        }
+
+        @Override
+        public ScalarOperator visitMatchExprOperator(MatchExprOperator operator, Void context) {
+            matchChildren.union((ColumnRefOperator) operator.getChildren().get(0));
             return merge(visitChildren(operator, context), operator);
         }
     }

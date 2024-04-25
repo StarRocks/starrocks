@@ -18,6 +18,7 @@
 #include <memory>
 #include <utility>
 
+#include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
@@ -130,7 +131,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }
@@ -212,8 +213,9 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(workgroup::YieldContext& 
     if (has_chunk()) {
         return read_from_buffer();
     }
-    CHECK(!_is_prefetching);
-    return _input_stream->get_next(yield_ctx, ctx);
+    // if prefetch failed, return empty chunk
+    DCHECK(false);
+    return std::make_unique<Chunk>();
 }
 
 Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
@@ -260,7 +262,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }
@@ -349,7 +351,6 @@ Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs,
             if (!input_stream->is_ready()) {
                 return false;
             }
-            // @TODO(silverbullet233): reuse ctx
             SerdeContext ctx;
             workgroup::YieldContext mock_ctx;
             auto res = input_stream->get_next(mock_ctx, ctx);
@@ -386,7 +387,6 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(workgroup::YieldContext& y
 }
 
 StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream(const SerdePtr& serde, Spiller* spiller) {
-    std::partition(_blocks.begin(), _blocks.end(), [](const BlockPtr& block) { return !block->is_remote(); });
     auto stream = std::make_shared<UnorderedInputStream>(_blocks, serde);
     return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream), spiller);
 }
@@ -396,8 +396,6 @@ StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, cons
     if (_blocks.empty()) {
         return as_unordered_stream(serde, spiller);
     }
-    std::partition(_blocks.begin(), _blocks.end(), [](const BlockPtr& block) { return !block->is_remote(); });
-
     auto stream = std::make_shared<OrderedInputStream>(_blocks, state);
     RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
     return stream;

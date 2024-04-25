@@ -19,11 +19,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -34,8 +32,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -46,6 +42,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -78,11 +75,9 @@ import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
@@ -108,13 +103,11 @@ public class StatementPlanner {
             }
         }
 
-        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
         boolean needWholePhaseLock = true;
-
         // 1. For all queries, we need db lock when analyze phase
-        Locker locker = new Locker();
+        PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
         try (var guard = session.bindScope()) {
-            lock(locker, dbs);
+            lock(plannerMetaLocker);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
@@ -124,8 +117,6 @@ public class StatementPlanner {
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
             }
 
-            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (stmt instanceof QueryStatement) {
@@ -133,9 +124,9 @@ public class StatementPlanner {
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 ExecPlan plan;
                 if (isLockFree(isOnlyOlapTableQueries, session)) {
-                    unLock(locker, dbs);
+                    unLock(plannerMetaLocker);
                     needWholePhaseLock = false;
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker);
                 } else {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
                 }
@@ -147,7 +138,7 @@ public class StatementPlanner {
                 boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
                 boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
                         !session.getSessionVariable().isCboUseDBLock();
-                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
+                return new InsertPlanner(plannerMetaLocker, useOptimisticLock).plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -155,7 +146,7 @@ public class StatementPlanner {
             }
         } finally {
             if (needWholePhaseLock) {
-                unLock(locker, dbs);
+                unLock(plannerMetaLocker);
             }
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
@@ -231,7 +222,8 @@ public class StatementPlanner {
 
     public static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt,
                                                     ConnectContext session,
-                                                    TResultSinkType resultSinkType) {
+                                                    TResultSinkType resultSinkType,
+                                                    PlannerMetaLocker plannerMetaLocker) {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
@@ -239,16 +231,13 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         boolean isSchemaValid = true;
 
-        // Because we don't hold db lock outer, if the olap table schema change, we need to regenerate the query plan
-        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
-        session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
-        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
+        Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
-                reAnalyzeStmt(queryStmt, dbs, session);
+                reAnalyzeStmt(queryStmt, session, plannerMetaLocker);
                 colNames = queryStmt.getQueryRelation().getColumnOutputNames();
             }
 
@@ -262,24 +251,6 @@ public class StatementPlanner {
 
             OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
 
-            boolean oldIsEnableLowCardinalityOptimize = session.getSessionVariable().isEnableLowCardinalityOptimize();
-            boolean oldIsUseLowCardinalityOptimizeV2 = session.getSessionVariable().isUseLowCardinalityOptimizeV2();
-            for (OlapTable tbl : olapTables) {
-                if (!session.getSessionVariable().isEnableLowCardinalityOptimize() &&
-                        !session.getSessionVariable().isUseLowCardinalityOptimizeV2()) {
-                    break;
-                }
-                for (Index index : tbl.getIndexes()) {
-                    if (index.getIndexType() == IndexDef.IndexType.GIN) {
-                        // Do not use global low cardinality optimization
-                        // for GIN column. Because the predicate rewrite
-                        // may not be completely equivalent in this case
-                        session.getSessionVariable().setEnableLowCardinalityOptimize(false);
-                        session.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
-                        break;
-                    }
-                }
-            }
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
@@ -298,8 +269,6 @@ public class StatementPlanner {
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
             }
-            session.getSessionVariable().setEnableLowCardinalityOptimize(oldIsEnableLowCardinalityOptimize);
-            session.getSessionVariable().setUseLowCardinalityOptimizeV2(oldIsUseLowCardinalityOptimizeV2);
 
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan
@@ -340,24 +309,22 @@ public class StatementPlanner {
         return null;
     }
 
-    public static Set<OlapTable> collectOriginalOlapTables(StatementBase queryStmt, Map<String, Database> dbs) {
+    public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt) {
         Set<OlapTable> olapTables = Sets.newHashSet();
-        Locker locker = new Locker();
+        PlannerMetaLocker locker = new PlannerMetaLocker(session, queryStmt);
         try {
             // Need lock to avoid olap table metas ConcurrentModificationException
-            lock(locker, dbs);
+            lock(locker);
             AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
             return olapTables;
         } finally {
-            unLock(locker, dbs);
+            unLock(locker);
         }
     }
 
-    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
-                                               ConnectContext session) {
-        Locker locker = new Locker();
+    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, ConnectContext session, PlannerMetaLocker locker) {
         try {
-            lock(locker, dbs);
+            lock(locker);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
             // only copy the latest olap table
@@ -365,26 +332,18 @@ public class StatementPlanner {
             AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
             return copiedTables;
         } finally {
-            unLock(locker, dbs);
+            unLock(locker);
         }
     }
 
     // Lock all database before analyze
-    public static void lock(Locker locker, Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        List<Database> dbList = new ArrayList<>(dbs.values());
-        locker.lockDatabases(dbList, LockType.READ);
+    public static void lock(PlannerMetaLocker locker) {
+        locker.lock();
     }
 
     // unLock all database after analyze
-    public static void unLock(Locker locker, Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        List<Database> dbList = new ArrayList<>(dbs.values());
-        locker.unlockDatabases(dbList, LockType.READ);
+    public static void unLock(PlannerMetaLocker locker) {
+        locker.unlock();
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.
@@ -429,8 +388,12 @@ public class StatementPlanner {
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
+
         Database db = MetaUtils.getDatabase(catalogName, dbName);
-        Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
+        if (targetTable == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
         if (stmt instanceof DeleteStmt && targetTable instanceof OlapTable &&
                 ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
             return;
@@ -484,6 +447,7 @@ public class StatementPlanner {
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
+            long warehouseId = session.getCurrentWarehouseId();
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
                     dbId,
@@ -492,7 +456,8 @@ public class StatementPlanner {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    session.getSessionVariable().getQueryTimeoutS());
+                    session.getSessionVariable().getQueryTimeoutS(),
+                    warehouseId);
 
             // add table indexes to transaction state
             if (targetTable instanceof OlapTable) {

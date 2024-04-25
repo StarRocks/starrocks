@@ -22,10 +22,12 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -47,8 +49,6 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
           _read_size(read_size) {
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
-    _properties.enable_buffered_stream();
-    _properties.set_buffer_size(1 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
@@ -84,6 +84,29 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         * A DATETIME or TIMESTAMP value can include a trailing fractional seconds part in up to microseconds (6 digits) precision
         */
         arrow_reader_properties.set_coerce_int96_timestamp_unit(arrow::TimeUnit::MICRO);
+
+        // arrow default batch size is 64K,
+        // the bigger batch size, the more memory it uses
+        arrow_reader_properties.set_batch_size(config::arrow_read_batch_size);
+
+        // io coalesce
+        // performance test 0: tpcds store_sales, 23 columns, 649M, 7218819 lines
+        //                  | file read time | file read count | memory
+        // io coalesce 8M   | 13s            |   80            | 587M
+        // buffer stream 8M | 15s            |   176           | 1313M
+        // buffer stream 1M | 29s            |   1145          | 1157M
+        //
+        // performance test 1: 1001 columns table, 147M, 50000 lines
+        //                  | file read time | file read count | memory
+        // io coalesce 8M   | 3s             |   20            | 1G
+        // buffer stream 8M | 15s            |   1003          | 10.1G
+        // buffer stream 1M | 15s            |   1003          | 3.3G
+        //
+        arrow_reader_properties.set_pre_buffer(true);
+        auto cache_options = arrow::io::CacheOptions::LazyDefaults();
+        cache_options.hole_size_limit = config::arrow_io_coalesce_read_max_distance_size;
+        cache_options.range_size_limit = config::arrow_io_coalesce_read_max_buffer_size;
+        arrow_reader_properties.set_cache_options(cache_options);
 
         // new file reader for parquet file
         auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
@@ -348,8 +371,9 @@ using ArrowStatusCode = ::arrow::StatusCode;
 using StarRocksStatus = ::starrocks::Status;
 using ArrowStatus = ::arrow::Status;
 
-ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos)
-        : _file(std::move(file)), _pos(pos) {}
+ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos,
+                                   ScannerCounter* counter)
+        : _file(std::move(file)), _pos(pos), _counter(counter) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
     [[maybe_unused]] auto st = Close();
@@ -370,6 +394,8 @@ arrow::Result<int64_t> ParquetChunkFile::Read(int64_t nbytes, void* buffer) {
 
 arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, void* out) {
     _pos += nbytes;
+    ++_counter->file_read_count;
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
     auto status = _file->read_at_fully(position, out, nbytes);
     return status.ok()
                    ? nbytes

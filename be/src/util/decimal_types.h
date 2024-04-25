@@ -21,6 +21,7 @@
 namespace starrocks {
 
 typedef __int128 int128_t;
+typedef unsigned __int128 uint128_t;
 
 template <typename T>
 inline constexpr bool is_underlying_type_of_decimal = false;
@@ -124,10 +125,14 @@ inline constexpr T get_min_decimal() {
     return -get_max_decimal<T>();
 }
 
+static const uint128_t UINT128_MAX = uint128_t(int128_t(-1L));
+static const int128_t INT128_MAX = UINT128_MAX >> 1;
+static const int128_t INT128_MIN = -INT128_MAX - 1;
+
 template <typename T>
 inline constexpr T get_max() {
     if constexpr (std::is_same_v<T, int128_t>) {
-        return ~(static_cast<int128_t>(1ll) << 127);
+        return INT128_MAX;
     } else {
         return std::numeric_limits<T>::max();
     }
@@ -136,7 +141,7 @@ inline constexpr T get_max() {
 template <typename T>
 inline constexpr T get_min() {
     if constexpr (std::is_same_v<T, int128_t>) {
-        return static_cast<int128_t>(1ll) << 127;
+        return INT128_MIN;
     } else {
         return std::numeric_limits<T>::lowest();
     }

@@ -16,10 +16,10 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,7 +39,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
-                    + "FROM (SELECT `$columnName` as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
+                    + "FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', "
@@ -48,28 +48,34 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     + "       IFNULL(SUM(IF(t1.`column_key` IS NULL, t1.count, 0)), 0) * $ratio, "
                     + "       $maxFunction, $minFunction, NOW() "
                     + "FROM ( "
-                    + "    SELECT t0.`$columnName` as column_key, COUNT(1) as count "
-                    + "    FROM (SELECT `$columnName` FROM `$dbName`.`$tableName` $hints) as t0 "
+                    + "    SELECT t0.`column_key`, COUNT(1) as count "
+                    + "    FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` $hints) as t0 "
                     + "    GROUP BY t0.column_key "
                     + ") as t1 ";
 
     protected static final String INSERT_STATISTIC_TEMPLATE =
             "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 
-    public SampleStatisticsCollectJob(Database db, Table table, List<String> columns,
+    public SampleStatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                       Map<String, String> properties) {
-        super(db, table, columns, type, scheduleType, properties);
+        super(db, table, columnNames, type, scheduleType, properties);
+    }
+
+    public SampleStatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
+                                      StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                      Map<String, String> properties) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
     }
 
     protected int splitColumns(long rowCount) {
         long splitSize;
         if (rowCount == 0) {
-            splitSize = columns.size();
+            splitSize = columnNames.size();
         } else {
             splitSize = Config.statistic_collect_max_row_count_per_query / rowCount + 1;
-            if (splitSize > columns.size()) {
-                splitSize = columns.size();
+            if (splitSize > columnNames.size()) {
+                splitSize = columnNames.size();
             }
         }
         // Supports a maximum of 256 tasks for a union,
@@ -82,12 +88,15 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
 
-        List<List<String>> collectSQLList = Lists.partition(columns, splitColumns(sampleRowCount));
+        int splitSize = splitColumns(sampleRowCount);
+        List<List<String>> collectSQLList = Lists.partition(columnNames, splitSize);
+        List<List<Type>> collectTypeList = Lists.partition(columnTypes, splitSize);
         long finishedSQLNum = 0;
         long totalCollectSQL = collectSQLList.size();
 
-        for (List<String> splitColItem : collectSQLList) {
-            String sql = buildSampleInsertSQL(db.getId(), table.getId(), splitColItem, sampleRowCount);
+        for (int i = 0; i < collectSQLList.size(); i++) {
+            String sql = buildSampleInsertSQL(db.getId(), table.getId(), collectSQLList.get(i), collectTypeList.get(i),
+                    sampleRowCount);
             collectStatisticSync(sql, context);
 
             finishedSQLNum++;
@@ -96,20 +105,21 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private String getDataSize(Column column) {
-        if (column.getPrimitiveType().isCharFamily()) {
+    private String getDataSize(Type columnType) {
+        if (columnType.getPrimitiveType().isCharFamily()) {
             return "IFNULL(SUM(CHAR_LENGTH(`column_key`)), 0)";
         }
 
-        long typeSize = column.getType().getTypeSize();
+        long typeSize = columnType.getTypeSize();
 
-        if (column.getType().canStatistic()) {
+        if (columnType.canStatistic()) {
             return "IFNULL(SUM(t1.count), 0) * " + typeSize;
         }
         return "COUNT(1) * " + typeSize;
     }
 
-    protected String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
+    protected String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, List<Type> columnTypes,
+                                          long rows) {
         Table table = MetaUtils.getTable(dbId, tableId);
 
         long hitRows = 1;
@@ -160,26 +170,28 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         Set<String> lowerDistributeColumns =
                 table.getDistributionColumnNames().stream().map(String::toLowerCase).collect(Collectors.toSet());
 
-        for (String name : columnNames) {
+        for (int i = 0; i < columnNames.size(); i++) {
             VelocityContext context = new VelocityContext();
-            Column column = table.getColumn(name);
+            String quoteColumnName =  StatisticUtils.quoting(columnNames.get(i));
+            String columnNameStr = StringEscapeUtils.escapeSql(columnNames.get(i));
+            Type columnType = columnTypes.get(i);
 
             context.put("dbId", dbId);
             context.put("tableId", tableId);
-            context.put("columnName", name);
-            context.put("columnNameStr", StringEscapeUtils.escapeSql(name));
+            context.put("columnName", quoteColumnName);
+            context.put("columnNameStr", columnNameStr);
             context.put("dbName", db.getFullName());
             context.put("dbNameStr", StringEscapeUtils.escapeSql(db.getFullName()));
             context.put("tableName", table.getName());
             context.put("tableNameStr", StringEscapeUtils.escapeSql(table.getName()));
-            context.put("dataSize", getDataSize(column));
+            context.put("dataSize", getDataSize(columnType));
             context.put("ratio", ratio);
             context.put("hints", hintTablets);
-            context.put("maxFunction", getMinMaxFunction(column, "t1.`column_key`", true));
-            context.put("minFunction", getMinMaxFunction(column, "t1.`column_key`", false));
+            context.put("maxFunction", getMinMaxFunction(columnType, "t1.`column_key`", true));
+            context.put("minFunction", getMinMaxFunction(columnType, "t1.`column_key`", false));
 
             // countDistinctFunction
-            if (lowerDistributeColumns.size() == 1 && lowerDistributeColumns.contains(name.toLowerCase())) {
+            if (lowerDistributeColumns.size() == 1 && lowerDistributeColumns.contains(quoteColumnName.toLowerCase())) {
                 context.put("countDistinctFunction", "COUNT(1) * " + ratio);
             } else {
                 // From PostgreSQL: n*d / (n - f1 + f1*n/N)
@@ -198,7 +210,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
             StringWriter sw = new StringWriter();
 
-            if (!column.getType().canStatistic()) {
+            if (!columnType.canStatistic()) {
                 DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_METRIC_SAMPLE_TEMPLATE);
             } else {
                 DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_TYPE_SAMPLE_TEMPLATE);

@@ -10,8 +10,6 @@ cardinality: 40000
 column statistics:
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
-* s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-* n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 
@@ -155,7 +153,7 @@ OutPut Exchange Id: 15
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (12: ps_partkey), remote = true
 |  - filter_id = 2, build_expr = (13: ps_suppkey), remote = false
-|  output columns: 13, 14, 43
+|  output columns: 13
 |  cardinality: 39032168
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE

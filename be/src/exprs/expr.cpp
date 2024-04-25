@@ -73,6 +73,7 @@
 #include "exprs/map_apply_expr.h"
 #include "exprs/map_element_expr.h"
 #include "exprs/map_expr.h"
+#include "exprs/match_expr.h"
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
 #include "gutil/strings/substitute.h"
@@ -351,12 +352,15 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
             *expr = pool->add(VectorizedCastExprFactory::from_thrift(
                     pool, texpr_node, (state == nullptr) ? false : state->query_options().allow_throw_exception));
             if (*expr == nullptr) {
-                LogicalType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
-                LogicalType from_type = thrift_to_type(texpr_node.child_type);
-                std::string err_msg = fmt::format(
-                        "Vectorized engine does not support the operator, cast from {} to {} failed, maybe use switch "
-                        "function",
-                        type_to_string_v2(from_type), type_to_string_v2(to_type));
+                TypeDescriptor to_type = TypeDescriptor::from_thrift(texpr_node.type);
+                TypeDescriptor from_type(thrift_to_type(texpr_node.child_type));
+                // In cast TExprNode, child_type is used to represent scalar type,
+                // and child_type_desc is used to represent complex types, such as struct, map, array
+                if (texpr_node.__isset.child_type_desc) {
+                    from_type = TypeDescriptor::from_thrift(texpr_node.child_type_desc);
+                }
+                auto err_msg =
+                        fmt::format("Not support cast {} to {}.", from_type.debug_string(), to_type.debug_string());
                 LOG(WARNING) << err_msg;
                 return Status::InternalError(err_msg);
             } else {
@@ -445,6 +449,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::DICTIONARY_GET_EXPR:
         *expr = pool->add(new DictionaryGetExpr(texpr_node));
+        break;
+    case TExprNodeType::MATCH_EXPR:
+        *expr = pool->add(new MatchExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
@@ -779,7 +786,8 @@ std::string Expr::jit_func_name_impl(RuntimeState* state) const {
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced) {
     if (_node_type == TExprNodeType::DICT_EXPR || _node_type == TExprNodeType::DICT_QUERY_EXPR ||
-        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
+        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR ||
+        _node_type == TExprNodeType::MATCH_EXPR) {
         return Status::OK();
     }
     DCHECK(JITEngine::get_instance()->support_jit());

@@ -43,10 +43,15 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void testInspectMvMeta() throws Exception {
+    public void testInspectMvMetaFunctions() throws Exception {
         String db = starRocksAssert.getCtx().getDatabase();
         starRocksAssert.withTable(
                 "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+        starRocksAssert.withView("create view mv_base_table_9527_view_1 " +
+                "as " +
+                "select id, count(1) as cnt " +
+                "from mv_base_table_9527 " +
+                "group by id;");
         starRocksAssert.withMaterializedView("create materialized view mv1 " +
                 "distributed by hash(id) " +
                 "refresh async " +
@@ -55,6 +60,10 @@ public class ConstantExpressionTest extends PlanTestBase {
         testFragmentPlanContains("select inspect_mv_meta('mv1');", "MaterializedView");
         String fullName = db + ".mv1";
         testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "MaterializedView");
+
+        testFragmentPlanContains("select inspect_mv_plan('mv1', true);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1', false);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1');", "LogicalOlapScanOperator {table=");
 
         // wrong arguments
         Assert.assertThrows(StarRocksPlannerException.class,
@@ -68,6 +77,22 @@ public class ConstantExpressionTest extends PlanTestBase {
 
         // inspect_related_mv
         testFragmentPlanContains("select inspect_related_mv('mv_base_table_9527')", "name\":\"mv1\"");
+        starRocksAssert.withMaterializedView("create materialized view mv_from_view_1 " +
+                "distributed by hash(id) " +
+                "refresh async " +
+                "properties('replication_num'='1') " +
+                "as select * from mv_base_table_9527_view_1");
+
+        {
+            String explainString = getFragmentPlan("select inspect_mv_plan('mv_from_view_1');");
+            Assert.assertTrue(explainString,
+                    explainString.contains("LogicalViewScanOperator {table=\\'mv_base_table_9527_view_1\\'"));
+            Assert.assertTrue(explainString, explainString.contains("LogicalAggregation"));
+            Assert.assertTrue(explainString, explainString.contains("->  LogicalOlapScanOperator"));
+        }
+
+        starRocksAssert.dropView("mv_base_table_9527_view_1");
+        starRocksAssert.dropMaterializedView("mv_from_view_1");
     }
 
     @Test

@@ -86,15 +86,22 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
     for (int i = 0; i < olap_scan_ranges.size(); ++i) {
         auto* scan_range = olap_scan_ranges[i];
 
-        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
         ASSIGN_OR_RETURN(TabletSharedPtr tablet, OlapScanNode::get_tablet(scan_range));
 
-        // Capture row sets of this version tablet.
-        {
+        if (scan_range->__isset.gtid) {
+            std::shared_lock l(tablet->get_header_lock());
+            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(scan_range->gtid, &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
+        } else {
+            int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
+            // Capture row sets of this version tablet.
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
             Rowset::acquire_readers(_tablet_rowsets[i]);
         }
+
+        VLOG(1) << "capture tablet rowsets: " << tablet->full_name() << ", rowsets: " << _tablet_rowsets[i].size()
+                << ", version: " << scan_range->version << ", gtid: " << scan_range->gtid;
 
         _tablets[i] = std::move(tablet);
     }
@@ -103,7 +110,8 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
 }
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
-                                        RuntimeFilterProbeCollector* runtime_bloom_filters) {
+                                        RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence) {
+    TEST_ERROR_POINT("OlapScanContext::parse_conjuncts");
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
 
@@ -126,6 +134,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     cm.key_column_names = &thrift_olap_scan_node.sort_key_column_names;
     cm.runtime_filters = runtime_bloom_filters;
     cm.runtime_state = state;
+    cm.driver_sequence = driver_sequence;
 
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;

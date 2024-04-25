@@ -196,6 +196,9 @@ TEST_P(CSVScannerTest, test_scalar_types) {
     EXPECT_EQ(true, chunk->get(2)[4].is_null());
     // len(oranges) == 7 > 6
     EXPECT_EQ(true, chunk->get(3)[4].is_null());
+
+    ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
+    ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
 }
 
 TEST_P(CSVScannerTest, test_adaptive_nullable_column1) {

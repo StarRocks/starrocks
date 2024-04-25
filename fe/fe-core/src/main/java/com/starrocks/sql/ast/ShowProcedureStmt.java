@@ -65,4 +65,9 @@ public class ShowProcedureStmt extends ShowStmt {
     public String getPattern() {
         return pattern;
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowProcedureStatement(this, context);
+    }
 }

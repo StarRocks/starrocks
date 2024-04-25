@@ -6,3 +6,6 @@ parameterized
 pymysql
 nose_xunitmp
 flaky==3.7.0
+fuzzywuzzy
+python-Levenshtein
+PyGithub

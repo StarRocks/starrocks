@@ -1,0 +1,27 @@
+-- name: testParquetSplitTask
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_split_task/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/multi_stripes.parquet oss://${oss_bucket}/test_parquet_split_task/${uuid0}/multi_stripes.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE multi_stripes
+(
+    c0 int,
+    c1 string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_split_task/${uuid0}/",
+    "format" = "parquet"
+);
+
+set enable_connector_split_io_tasks = true;
+
+set connector_max_split_size = 64;
+select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1 order by c1;
+
+set connector_max_split_size = 64 * 1024 * 1024;
+select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1 order by c1;
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_split_task/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

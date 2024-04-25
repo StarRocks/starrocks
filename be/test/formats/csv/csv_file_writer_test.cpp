@@ -74,7 +74,7 @@ TEST_F(CSVFileWriterTest, TestWriteIntergers) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -130,7 +130,7 @@ TEST_F(CSVFileWriterTest, TestWriteBoolean) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -170,7 +170,7 @@ TEST_F(CSVFileWriterTest, TestWriteFloat) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -211,7 +211,7 @@ TEST_F(CSVFileWriterTest, TestWriteDouble) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -252,7 +252,7 @@ TEST_F(CSVFileWriterTest, TestWriteDate) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -302,7 +302,7 @@ TEST_F(CSVFileWriterTest, TestWriteDatetime) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -351,7 +351,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -400,44 +400,8 @@ TEST_F(CSVFileWriterTest, TestWriteArray) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
-    ASSERT_OK(writer->init());
-
-    // [1], NULL, [], [2, NULL, 3]
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto elements_data_col = Int32Column::create();
-        std::vector<int32_t> nums{1, 2, -99, 3};
-        elements_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
-        auto elements_null_col = UInt8Column::create();
-        std::vector<uint8_t> nulls{0, 0, 1, 0};
-        elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto elements_col = NullableColumn::create(elements_data_col, elements_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto array_col = ArrayColumn::create(elements_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0, 1, 0, 0};
-        auto null_col = UInt8Column::create();
-        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(array_col, null_col);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // verify correctness
-    std::string content;
-    ASSERT_OK(_fs.read_file(_file_path, &content));
-    std::string expect = "[1]\n\\N\n[]\n[2,null,3]\n"; // TODO(letian-jiang): check if this is valid
-    ASSERT_EQ(content, expect);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(CSVFileWriterTest, TestWriteMap) {
@@ -459,52 +423,8 @@ TEST_F(CSVFileWriterTest, TestWriteMap) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
-    ASSERT_OK(writer->init());
-
-    // [1 -> 1], NULL, [], [2 -> 2, 3 -> NULL, 4 -> 4]
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto key_data_col = Int32Column::create();
-        std::vector<int32_t> key_nums{1, 2, 3, 4};
-        key_data_col->append_numbers(key_nums.data(), sizeof(int32_t) * key_nums.size());
-        auto key_null_col = UInt8Column::create();
-        std::vector<uint8_t> key_nulls{0, 0, 0, 0};
-        key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t) * key_nulls.size());
-        auto key_col = NullableColumn::create(key_data_col, key_null_col);
-
-        auto value_data_col = Int32Column::create();
-        std::vector<int32_t> value_nums{1, 2, -99, 4};
-        value_data_col->append_numbers(value_nums.data(), sizeof(int32_t) * value_nums.size());
-        auto value_null_col = UInt8Column::create();
-        std::vector<uint8_t> value_nulls{0, 0, 1, 0};
-        value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t) * value_nulls.size());
-        auto value_col = NullableColumn::create(value_data_col, value_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto map_col = MapColumn::create(key_col, value_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0, 1, 0, 0};
-        auto null_col = UInt8Column::create();
-        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(map_col, null_col);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // verify correctness
-    std::string content;
-    ASSERT_OK(_fs.read_file(_file_path, &content));
-    std::string expect = "{1:1}\n\\N\n{}\n{2:2,3:null,4:4}\n"; // TODO(letian-jiang): check if this is valid
-    ASSERT_EQ(content, expect);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
@@ -526,55 +446,8 @@ TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
-    ASSERT_OK(writer->init());
-
-    // [[1], NULL, [], [2, NULL, 3]], [[4, 5], [6]], NULL
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto int_data_col = Int32Column::create();
-        std::vector<int32_t> nums{1, 2, -99, 3, 4, 5, 6};
-        int_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
-        auto int_null_col = UInt8Column::create();
-        std::vector<uint8_t> nulls{0, 0, 1, 0, 0, 0, 0};
-        int_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto int_col = NullableColumn::create(int_data_col, int_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 1, 1, 1, 4, 6, 7};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto array_data_col = ArrayColumn::create(int_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0, 1, 0, 0, 0, 0};
-        auto array_null_col = UInt8Column::create();
-        array_null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto array_col = NullableColumn::create(array_data_col, array_null_col);
-
-        auto array_array_offsets_col = UInt32Column::create();
-        std::vector<uint32_t> array_array_offsets{0, 4, 6, 6};
-        array_array_offsets_col->append_numbers(array_array_offsets.data(),
-                                                sizeof(uint32_t) * array_array_offsets.size());
-        auto array_array_data_col = ArrayColumn::create(array_col, array_array_offsets_col);
-
-        std::vector<uint8_t> outer_nulls{0, 0, 1};
-        auto array_array_null_col = UInt8Column::create();
-        array_array_null_col->append_numbers(outer_nulls.data(), sizeof(uint8_t) * outer_nulls.size());
-        auto array_array_col = NullableColumn::create(array_array_data_col, array_array_null_col);
-
-        chunk->append_column(array_array_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 3);
-
-    // verify correctness
-    std::string content;
-    ASSERT_OK(_fs.read_file(_file_path, &content));
-    std::string expect = "[[1],null,[],[2,null,3]]\n[[4,5],[6]]\n\\N\n"; // TODO(letian-jiang): check if this is valid
-    ASSERT_EQ(content, expect);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(CSVFileWriterTest, TestWriteWithExecutors) {
@@ -591,7 +464,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithExecutors) {
     auto executors = PriorityThreadPool("test", 1, 1);
     auto writer = std::make_unique<formats::CSVFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, &executors);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, &executors, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -626,7 +499,8 @@ TEST_F(CSVFileWriterTest, TestFactory) {
     auto column_names = _make_type_names(type_descs);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto fs = std::make_shared<MemoryFileSystem>();
-    auto factory = formats::CSVFileWriterFactory(fs, {}, column_names, std::move(column_evaluators));
+    auto factory = formats::CSVFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names,
+                                                 std::move(column_evaluators), nullptr, nullptr);
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create("/test.csv");
     ASSERT_OK(maybe_writer.status());

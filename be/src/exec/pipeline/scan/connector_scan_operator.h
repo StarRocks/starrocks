@@ -109,7 +109,6 @@ public:
     void set_buffer_finished() override;
 
     int available_pickup_morsel_count() override;
-    void begin_pickup_morsels() override;
     void begin_driver_process() override;
     void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
@@ -122,9 +121,6 @@ private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
-    std::mutex _buffered_morsels_mutex;
-    std::vector<MorselPtr> _buffered_morsels;
-    std::atomic<int64_t> _buffered_morsels_size = 0;
 };
 
 class ConnectorChunkSource : public ChunkSource {

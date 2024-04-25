@@ -113,6 +113,7 @@ class ParserTest {
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",
+                "SELECT * FROM t FOR VERSION AS OF 123345456321;",
         };
 
         for (String query : temporalQueries) {
@@ -491,28 +492,6 @@ class ParserTest {
             } catch (Exception e) {
                 e.printStackTrace();
                 fail("sql should success. errMsg: " + e.getMessage());
-            }
-        }
-    }
-
-    @Test
-    void testSyntaxNotSupport() {
-        List<String> sqls = Lists.newArrayList(
-                "create warehouse w1",
-                "drop warehouse w1",
-                "suspend warehouse w1",
-                "resume warehouse w1",
-                "set warehouse w1",
-                "show warehouses",
-                "show clusters from warehouse w1",
-                "show nodes from warehouse w1");
-
-        for (String sql : sqls) {
-            try {
-                SqlParser.parse(sql, SessionVariable.DEFAULT_SESSION_VARIABLE);
-                Assert.fail();
-            } catch (ParsingException e) {
-                Assert.assertTrue(e.getMessage().contains("No viable statement for input"));
             }
         }
     }

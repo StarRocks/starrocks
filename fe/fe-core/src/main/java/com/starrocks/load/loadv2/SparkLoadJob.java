@@ -87,6 +87,7 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
@@ -235,7 +236,7 @@ public class SparkLoadJob extends BulkLoadJob {
         transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        LoadJobSourceType.FRONTEND, id, timeoutSecond);
+                        LoadJobSourceType.FRONTEND, id, timeoutSecond, warehouseId);
     }
 
     @Override
@@ -503,6 +504,7 @@ public class SparkLoadJob extends BulkLoadJob {
                             LOG.warn("partition does not exist. id: {}", partitionId);
                             continue;
                         }
+                        long partitionVersion = partition.getVisibleVersion();
 
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
@@ -537,7 +539,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                                 .getBackend(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
-                                                replicaId, schemaHash, params, batchTask, tabletMetaStr,
+                                                replicaId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
                                                 backend, replica, tabletFinishedReplicas,
                                                 TTabletType.TABLET_TYPE_DISK, columnsDesc);
                                     }
@@ -556,18 +558,17 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                                    // TODO: need to refactor after be split into cn + dn
-                                    ComputeNode backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
-                                            getBackendOrComputeNode(backendId);
+                                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                                    ComputeNode backend = warehouseManager
+                                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                                     if (backend == null) {
-                                        LOG.warn("replica {} not exists", backendId);
+                                        LOG.warn("replica {} not exists", ((LakeTablet) tablet).getShardId());
                                         continue;
                                     }
 
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
-                                            tabletId, schemaHash, params, batchTask, tabletMetaStr,
-                                            backend, new Replica(tabletId, backendId, -1, NORMAL),
+                                            tabletId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
+                                            backend, new Replica(tabletId, backend.getId(), -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE, columnsDesc);
 
                                     if (tabletFinishedReplicas.contains(tabletId)) {
@@ -603,7 +604,7 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     private void pushTask(long backendId, long tableId, long partitionId, long indexId,
-                          long tabletId, long replicaId, int schemaHash,
+                          long tabletId, long replicaId, int schemaHash, long partitionVersion,
                           PushBrokerReaderParams params,
                           AgentBatchTask batchTask,
                           String tabletMetaStr,
@@ -649,7 +650,7 @@ public class SparkLoadJob extends BulkLoadJob {
             }
 
             PushTask pushTask = new PushTask(backendId, dbId, tableId, partitionId,
-                    indexId, tabletId, replicaId, schemaHash,
+                    indexId, tabletId, replicaId, schemaHash, partitionVersion,
                     0, id, TPushType.LOAD_V2,
                     TPriority.NORMAL, transactionId, taskSignature,
                     tBrokerScanRange, params.tDescriptorTable,

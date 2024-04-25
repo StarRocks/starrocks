@@ -19,16 +19,6 @@ Spark load is an **asynchronous** import method that requires users to create Sp
 - **Broker**: Broker is an independent stateless process. It encapsulates the file system interface and provides StarRocks with the ability to read files from remote storage systems.
 - **Global Dictionary**: Saves the data structure that maps data from the original value to the encoded value. The original value can be any data type, while the encoded value is an integer. The global dictionary is mainly used in scenarios where exact count distinct is precomputed.
 
-## Background information
-
-In StarRocks v2.4 and earlier, Spark Load depends on Broker process to set up connections between your StarRocks cluster and your storage system. When you create a Spark Load job, you need to input `WITH BROKER "<broker_name>"` to specify the Broker you want to use. A Broker is an independent, stateless process that is integrated with a file-system interface. With Broker process, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
-
-From StarRocks v2.5 onwards, Spark Load no longer needs to depend on Broker process to set up connections between your StarRocks cluster and your storage system. When you create a Spark Load job, you no longer need to specify the Broker, but you still need to retain the `WITH BROKER` keyword.
-
-> **NOTE**
->
-> Loading without Broker process may not work in certain circumstances, such as when you have multiple HDFS clusters or multiple Kerberos users. In this situation, you can still load data by using Broker process.
-
 ## Fundamentals
 
 The user submits a Spark type import job through the MySQL client;the FE records the metadata and returns the submission result.
@@ -78,12 +68,6 @@ The basic process of data pre-processing is as follows:
 6. The subsequent Broker process will pull the files from HDFS and import them into the StarRocks BE node.
 
 ## Basic Operations
-
-### Prerequisites
-
-If you continue to load data through Broker process, you must ensure that Broker process are deployed in your StarRocks cluster.
-
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) statement to check for Broker that are deployed in your StarRocks cluster. If no Broker are deployed, you must deploy Broker by following the instructions provided in [Deploy Broker](../deployment/deploy_broker.md).
 
 ### Configuring ETL Clusters
 

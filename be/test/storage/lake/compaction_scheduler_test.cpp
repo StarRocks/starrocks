@@ -14,16 +14,22 @@
 
 #include "storage/lake/compaction_scheduler.h"
 
+#include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
 #include "testutil/assert.h"
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
+#include "util/scoped_cleanup.h"
 
 namespace starrocks::lake {
 
 inline void notify_and_wait_latch(std::shared_ptr<CountDownLatch> l1, std::shared_ptr<CountDownLatch> l2) {
     l1->count_down();
     l2->wait();
+}
+
+inline void notify(std::shared_ptr<CountDownLatch> latch) {
+    latch->count_down();
 }
 
 class LakeCompactionSchedulerTest : public TestBase {
@@ -80,6 +86,58 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     EXPECT_FALSE(tasks[0].skipped);
 
     bthread_join(tid, nullptr);
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
+    CompactRequest request;
+    CompactResponse response;
+
+    // has error
+    {
+        auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
+        cb->update_status(Status::Aborted("aborted for test"));
+        EXPECT_EQ(compaction_should_cancel(&ctx), true);
+    }
+
+    // not checker
+    {
+        auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
+        EXPECT_EQ(compaction_should_cancel(&ctx), false);
+    }
+
+    // is checker
+    {
+        auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, true /* is_checker */, cb);
+        ctx.last_check_time = 0;
+        EXPECT_EQ(compaction_should_cancel(&ctx), false);
+    }
+}
+
+// https://github.com/StarRocks/starrocks/issues/44136
+TEST_F(LakeCompactionSchedulerTest, test_issue44136) {
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"lake::CompactionScheduler::abort:unlock:1", "lake::CompactionTaskCallback::finish_task:finish_task"},
+             {"lake::CompactionTaskCallback::finish_task:finish_task", "lake::CompactionScheduler::abort:unlock:2"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+    SCOPED_CLEANUP({ SyncPoint::GetInstance()->DisableProcessing(); });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    auto request = CompactRequest{};
+    auto response = CompactResponse{};
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(/*1 minute=*/60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    auto cb = ::google::protobuf::NewCallback(notify, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+
+    _compaction_scheduler.abort(txn_id);
+
+    latch->wait();
 }
 
 } // namespace starrocks::lake

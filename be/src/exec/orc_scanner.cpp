@@ -35,6 +35,7 @@ public:
     ~ORCFileStream() override { _file.reset(); }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
+        ++_counter->file_read_count;
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ORCHdfsFileStream::read(buf, length, offset);
     }
@@ -118,8 +119,7 @@ StatusOr<ChunkPtr> ORCScanner::get_next() {
 
 StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
     try {
-        ChunkPtr chunk = _create_src_chunk();
-        RETURN_IF_ERROR(_next_orc_batch(&chunk));
+        ASSIGN_OR_RETURN(ChunkPtr chunk, _next_orc_batch());
         // fill path column
         const TBrokerRangeDesc& range = _scan_range.ranges.at(_next_range - 1);
         if (range.__isset.num_of_columns_from_file) {
@@ -161,7 +161,7 @@ ChunkPtr ORCScanner::_create_src_chunk() {
     return chunk;
 }
 
-Status ORCScanner::_next_orc_batch(ChunkPtr* result) {
+StatusOr<ChunkPtr> ORCScanner::_next_orc_batch() {
     {
         SCOPED_RAW_TIMER(&_counter->read_batch_ns);
         Status status = _orc_reader->read_next();
@@ -176,11 +176,13 @@ Status ORCScanner::_next_orc_batch(ChunkPtr* result) {
         RETURN_IF_ERROR(status);
     }
     {
+        // create chunk after the _orc_reader is initialized
+        auto result = _create_src_chunk();
         SCOPED_RAW_TIMER(&_counter->fill_ns);
-        RETURN_IF_ERROR(_orc_reader->fill_chunk(result));
+        RETURN_IF_ERROR(_orc_reader->fill_chunk(&result));
         _counter->num_rows_filtered += _orc_reader->get_num_rows_filtered();
+        return result;
     }
-    return Status::OK();
 }
 
 Status ORCScanner::_open_next_orc_reader() {

@@ -135,7 +135,7 @@ public class UnifiedMetadataTest {
                 minTimes = 1;
             }
             {
-                hiveMetadata.listPartitionNames("test_db", "test_tbl");
+                hiveMetadata.listPartitionNames("test_db", "test_tbl", -1);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -171,7 +171,7 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof HiveTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl");
+        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", -1);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
@@ -207,7 +207,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                icebergMetadata.listPartitionNames("test_db", "test_tbl");
+                icebergMetadata.listPartitionNames("test_db", "test_tbl", -1);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -253,7 +253,7 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof IcebergTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl");
+        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", -1);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
@@ -286,7 +286,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                hudiMetadata.listPartitionNames("test_db", "test_tbl");
+                hudiMetadata.listPartitionNames("test_db", "test_tbl", -1);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -322,7 +322,7 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof HudiTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl");
+        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", -1);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
@@ -358,7 +358,7 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
-                deltaLakeMetadata.listPartitionNames("test_db", "test_tbl");
+                deltaLakeMetadata.listPartitionNames("test_db", "test_tbl", -1);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -394,7 +394,7 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof DeltaLakeTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl");
+        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", -1);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);

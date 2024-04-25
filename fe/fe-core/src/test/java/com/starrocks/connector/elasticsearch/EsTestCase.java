@@ -87,11 +87,12 @@ public class EsTestCase {
 
     public EsTable fakeEsTable(String table, String index, String type, List<Column> columns) throws DdlException {
         Map<String, String> props = new HashMap<>();
-        props.put(EsTable.KEY_HOSTS, "127.0.0.1:8200");
+        props.put(EsTable.KEY_HOSTS, "http://127.0.0.1:8200");
         props.put(EsTable.KEY_INDEX, index);
         props.put(EsTable.KEY_TYPE, type);
         props.put(EsTable.KEY_VERSION, "6.5.3");
         return new EsTable(new Random().nextLong(), table, columns, props, null);
-
     }
+
+
 }

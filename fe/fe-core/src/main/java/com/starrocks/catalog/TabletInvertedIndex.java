@@ -269,6 +269,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
                                             TPartitionVersionInfo versionInfo =
                                                     new TPartitionVersionInfo(tabletMeta.getPartitionId(),
                                                             partitionCommitInfo.getVersion(), 0);
+                                            versionInfo.setGtid(transactionState.getGlobalTransactionId());
                                             Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
                                                     transactionsToPublish.computeIfAbsent(
                                                             transactionState.getDbId(), k -> Maps.newHashMap());
@@ -878,7 +879,9 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size());
+        return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size(),
+                               "TabletCount", getTabletCount(),
+                               "ReplicateCount", getReplicaCount());
     }
 }
 

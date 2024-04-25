@@ -147,7 +147,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     RETURN_IF_ERROR(captured_mem_table->done());
 
     _running_flush_tasks++;
-    // TODO: handle spill queue
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
                  trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
@@ -158,7 +157,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         DCHECK(has_pending_data());
         //
         if (!yield_ctx.task_context_data.has_value()) {
-            yield_ctx.task_context_data = std::make_shared<FlushContext>();
+            yield_ctx.task_context_data = SpillIOTaskContextPtr(std::make_shared<FlushContext>());
         }
         auto defer = CancelableDefer([&]() {
             {
@@ -176,9 +175,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         yield_ctx.time_spent_ns = 0;
         yield_ctx.need_yield = false;
 
-        if (!yield_ctx.task_context_data.has_value()) {
-            yield_ctx.task_context_data = std::make_shared<FlushContext>();
-        }
         _spiller->update_spilled_task_status(yieldable_flush_task(yield_ctx, state, mem_table));
         if (yield_ctx.need_yield) {
             COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
@@ -325,7 +321,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
         // concurrency test
-        RACE_DETECT(detect_flush, var1);
+        RACE_DETECT(detect_flush);
         auto defer = CancelableDefer([&]() {
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
             yield_ctx.set_finished();
@@ -337,7 +333,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         yield_ctx.time_spent_ns = 0;
         yield_ctx.need_yield = false;
         if (!yield_ctx.task_context_data.has_value()) {
-            yield_ctx.task_context_data = std::make_shared<PartitionedFlushContext>();
+            yield_ctx.task_context_data = SpillIOTaskContextPtr(std::make_shared<PartitionedFlushContext>());
         }
         _spiller->update_spilled_task_status(
                 yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions));

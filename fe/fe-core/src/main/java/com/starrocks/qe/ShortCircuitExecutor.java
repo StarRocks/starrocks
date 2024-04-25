@@ -47,24 +47,27 @@ public class ShortCircuitExecutor {
 
     protected final boolean enableProfile;
 
+    protected final String protocol;
+
     protected ShortCircuitResult result = null;
 
     private static final Random RANDOM = new Random(); // NOSONAR
 
     protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
                                    List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
-                                   boolean isBinaryRow, boolean enableProfile) {
+                                   boolean isBinaryRow, boolean enableProfile, String protocol) {
         this.context = context;
         this.planFragment = planFragment;
         this.scanRangeLocations = scanRangeLocations;
         this.tDescriptorTable = tDescriptorTable;
         this.isBinaryRow = isBinaryRow;
         this.enableProfile = enableProfile;
+        this.protocol = protocol;
     }
 
     public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments,
                                               List<ScanNode> scanNodes, TDescriptorTable tDescriptorTable,
-                                              boolean isBinaryRow, boolean enableProfile) {
+                                              boolean isBinaryRow, boolean enableProfile, String protocol) {
         boolean isEmpty = scanNodes.isEmpty();
         List<TScanRangeLocations> scanRangeLocations = isEmpty ?
                 ImmutableList.of() : scanNodes.get(0).getScanRangeLocations(0);
@@ -74,7 +77,7 @@ public class ShortCircuitExecutor {
 
         if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
             return new ShortCircuitHybridExecutor(context, fragments.get(0), scanRangeLocations,
-                    tDescriptorTable, isBinaryRow, enableProfile);
+                    tDescriptorTable, isBinaryRow, enableProfile, protocol);
         }
         return null;
     }

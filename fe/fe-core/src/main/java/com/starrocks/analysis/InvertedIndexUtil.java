@@ -73,7 +73,7 @@ public class InvertedIndexUtil {
             throw new SemanticException("The inverted index can only be build on DUPLICATE table.");
         }
         if (!validGinColumnType(column)) {
-            throw new SemanticException("The inverted index can only be build on column with type of scalar type.");
+            throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
         }
 
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);

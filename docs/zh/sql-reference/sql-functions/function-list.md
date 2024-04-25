@@ -170,7 +170,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 |  [any_value](./aggregate-functions/any_value.md)| 在包含 GROUP BY 的聚合查询中，该函数用于从每个聚合分组中**随机**选择一行返回。 |
 |  [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)| 返回类似于 COUNT(DISTINCT col) 结果的近似值。 |
-|  [array_agg](./array-functions/array_agg.md) | 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。  |
+|  [approx_top_k](./aggregate-functions/approx_top_k.md)| 返回表达式 `expr` 中最常出现的 `k` 个项目以及每个项目出现的近似次数。 |
+|  [array_agg](./array-functions/array_agg.md) | 将一列中的值（包括空值 null）串联成一个数组（多行转一行）。  |
 |  [avg](./aggregate-functions/avg.md)| 用于返回选中字段的平均值。 |
 |  [bitmap](./aggregate-functions/bitmap.md)| 通过 bitmap 函数实现聚合。 |
 |  [bitmap_agg](./bitmap-functions/bitmap_agg.md)| 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。 |
@@ -494,3 +495,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 | [murmur_hash3_32](./hash-functions/murmur_hash3_32.md) | 返回输入字符串的 32 位 murmur3 hash 值。 |
 | [xx_hash3_64](./hash-functions/xx_hash3_64.md) | 返回输入字符串的 64 位 xxhash3 值。 |
+
+## 字典函数
+
+| 函数                |                 功能      |
+|  :-:                |                :-:       |
+|  [dict_mapping](./dict-functions/dict_mapping.md)| 通过指定字典表和 key，返回该 key 所映射的 value。 |

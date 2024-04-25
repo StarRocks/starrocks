@@ -24,12 +24,12 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.datacache.DataCacheExprRewriter;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.datacache.DataCacheRule;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.common.ErrorType;
@@ -63,6 +63,7 @@ public class RemoteScanRangeLocations {
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = new ArrayList<>();
     private boolean forceScheduleLocal = false;
+    private boolean canBackendSplitFile = false;
 
     public void setup(DescriptorTable descTbl, Table table, HDFSScanNodePredicates scanNodePredicates) {
         Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
@@ -87,13 +88,14 @@ public class RemoteScanRangeLocations {
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
                                        Optional<RemoteFileBlockDesc> blockDesc, DataCacheOptions dataCacheOptions) {
-        // NOTE: Config.hive_max_split_size should be extracted to a local variable,
-        // because it may be changed before calling 'splitScanRangeLocations'
-        // and after needSplit has been calculated.
-        final long splitSize = Config.hive_max_split_size;
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null) {
+            sv = connectContext.getSessionVariable();
+        }
+
         long totalSize = fileDesc.getLength();
         long offset = 0;
-
         if (blockDesc.isPresent()) {
             // If blockDesc existed, we will split according block desc
             RemoteFileBlockDesc block = blockDesc.get();
@@ -101,7 +103,17 @@ public class RemoteScanRangeLocations {
             offset = block.getOffset();
         }
 
-        boolean needSplit = fileDesc.isSplittable() && totalSize > splitSize;
+        // assume we can not split at all.
+        long splitSize = totalSize;
+        if (fileDesc.isSplittable()) {
+            // if splittable, then use max split size.
+            splitSize = sv.getConnectorMaxSplitSize();
+            if (canBackendSplitFile && sv.isEnableConnectorSplitIoTasks() && partition.getFormat().isBackendSplittable()) {
+                // if BE can split, use a higher threshold.
+                splitSize = sv.getConnectorHugeFileSize();
+            }
+        }
+        boolean needSplit = (totalSize > splitSize);
         if (needSplit) {
             splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
                     dataCacheOptions);
@@ -270,8 +282,39 @@ public class RemoteScanRangeLocations {
         return Optional.of(dataCacheOptions);
     }
 
+    private void updateCanBackendSplitFile(List<RemoteFileInfo> partitions) {
+        canBackendSplitFile = true;
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return;
+        }
+        // if we let backend do split file work, how many splits we will get.
+        int splits = getSplitsIfBackendSplitFile(partitions, connectContext);
+        // if splits is small comparing to nodes, then better not let backend do split.
+        int nodes = connectContext.getAliveComputeNumber() + connectContext.getAliveBackendNumber();
+        if ((nodes * 2) >= splits) {
+            canBackendSplitFile = false;
+        }
+    }
+
+    private static int getSplitsIfBackendSplitFile(List<RemoteFileInfo> partitions, ConnectContext connectContext) {
+        SessionVariable sv = connectContext.getSessionVariable();
+        int splits = 0;
+        long splitSize = sv.getConnectorHugeFileSize();
+        for (int i = 0; i < partitions.size(); i++) {
+            for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
+                if (fileDesc.isSplittable()) {
+                    splits += (fileDesc.getLength() + splitSize - 1) / splitSize;
+                } else {
+                    splits += 1;
+                }
+            }
+        }
+        return splits;
+    }
+
     public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
-                                           HDFSScanNodePredicates scanNodePredicates) {
+                                                           HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
 
@@ -295,6 +338,8 @@ public class RemoteScanRangeLocations {
             LOG.error("Failed to get remote files", e);
             throw e;
         }
+
+        updateCanBackendSplitFile(partitions);
 
         if (table instanceof HiveTable) {
             for (int i = 0; i < partitions.size(); i++) {

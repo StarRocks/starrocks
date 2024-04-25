@@ -18,21 +18,17 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -47,14 +43,12 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
@@ -119,9 +113,6 @@ public class AuthenticationMgr {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
-    @SerializedName("sim")
-    protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
-
     public AuthenticationMgr() {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
@@ -130,8 +121,6 @@ public class AuthenticationMgr {
                 LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
         AuthenticationProviderFactory.installPlugin(
                 KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
 
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
@@ -262,54 +251,8 @@ public class AuthenticationMgr {
         return null;
     }
 
-    protected UserIdentity checkPasswordForNonNative(
-            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString, String authMechanism) {
-        SecurityIntegration securityIntegration =
-                nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
-        if (securityIntegration == null) {
-            LOG.info("'{}' authentication mechanism not found", authMechanism);
-        } else {
-            try {
-                AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
-                        securityIntegration);
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        userAuthenticationInfo);
-                // the ephemeral user is identified as 'username'@'auth_mechanism'
-                UserIdentity authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
-                ConnectContext currentContext = ConnectContext.get();
-                if (currentContext != null) {
-                    currentContext.setCurrentRoleIds(new HashSet<>(
-                            Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
-                }
-                return authenticatedUser;
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
-                        remoteUser, remoteHost, securityIntegration, e.getMessage());
-            }
-        }
-
-        return null;
-    }
-
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        String[] authChain = Config.authentication_chain;
-        UserIdentity authenticatedUser = null;
-        for (String authMechanism : authChain) {
-            if (authenticatedUser != null) {
-                break;
-            }
-
-            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
-            } else {
-                authenticatedUser = checkPasswordForNonNative(
-                        remoteUser, remoteHost, remotePasswd, randomString, authMechanism);
-            }
-        }
-
-        return authenticatedUser;
+        return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
@@ -401,59 +344,6 @@ public class AuthenticationMgr {
         } finally {
             writeUnlock();
         }
-    }
-
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap) throws DdlException {
-        createSecurityIntegration(name, propertyMap, false);
-
-    }
-
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap, boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration;
-        try {
-            securityIntegration =
-                    SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        } catch (DdlException e) {
-            throw new DdlException("failed to create security integration, error: " + e.getMessage(), e);
-        }
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateSecurityIntegration(name, propertyMap);
-        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
-    }
-
-    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
-                                         boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public SecurityIntegration getSecurityIntegration(String name) {
-        return nameToSecurityIntegrationMap.get(name);
-    }
-
-    public Set<SecurityIntegration> getAllSecurityIntegrations() {
-        return new HashSet<>(nameToSecurityIntegrationMap.values());
-    }
-
-    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws DdlException {
-        // using concurrent hash map and COW, we don't need lock protection here
-        SecurityIntegration securityIntegration =
-                SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-    }
-
-    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void replayDropSecurityIntegration(String name)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
     }
 
     public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
@@ -700,7 +590,6 @@ public class AuthenticationMgr {
         // mark data is loaded
         this.isLoaded = true;
         this.userNameToProperty = ret.userNameToProperty;
-        this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
     }
 }

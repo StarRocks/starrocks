@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -40,14 +41,18 @@ public class MaterializedViewMetricsRegistry {
         idToMVMetrics = Maps.newHashMap();
         // clear all metrics everyday
         timer = ThreadPoolManager.newDaemonScheduledThreadPool(1, "MaterializedView-Metrics-Cleaner", true);
-        timer.scheduleAtFixedRate(new MaterializedViewMetricsRegistry.MetricsCleaner(), 0, 1L, TimeUnit.DAYS);
+        // add initial delay to avoid all metrics are cleared at the same time
+        timer.scheduleAtFixedRate(new MaterializedViewMetricsRegistry.MetricsCleaner(), 1L, 1L, TimeUnit.DAYS);
     }
 
     public static MaterializedViewMetricsRegistry getInstance() {
         return INSTANCE;
     }
 
-    public synchronized MaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
+    public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
+        if (!Config.enable_materialized_view_metrics_collect) {
+            return new MaterializedViewMetricsBlackHoleEntity();
+        }
         return idToMVMetrics.computeIfAbsent(mvId, k -> new MaterializedViewMetricsEntity(metricRegistry, mvId));
     }
 
@@ -70,7 +75,7 @@ public class MaterializedViewMetricsRegistry {
                 continue;
             }
             for (MaterializedView mv : db.getMaterializedViews()) {
-                MaterializedViewMetricsEntity mvEntity =
+                IMaterializedViewMetricsEntity mvEntity =
                         MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
 
                 for (Metric m : mvEntity.getMetrics()) {

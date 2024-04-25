@@ -74,7 +74,7 @@ If any of the above ports are occupied, you must find alternatives and specify t
 
 ## Hostnames
 
-If you want to [enable FQDN access](../administration/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
+If you want to [enable FQDN access](../administration/management/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
 
 In the file **/etc/hosts** on each instance, you must specify the IP addresses and corresponding hostnames of all the other instances in the cluster.
 

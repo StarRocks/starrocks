@@ -47,20 +47,7 @@ public class LockHolder implements Cloneable {
     }
 
     boolean isConflict(LockHolder lockHolderRequest) {
-        if (lockHolderRequest.locker == this.locker
-                && this.lockType == LockType.WRITE && lockHolderRequest.lockType == LockType.READ) {
-            /*
-             * If you acquire an exclusive lock first and then request a shared lock, you can successfully acquire the lock.
-             * This scenario is generally called "lock downgrade",
-             *  but this lock does not actually reduce the original write lock directly to a read lock.
-             * In fact, it is still two independent read and write locks, and the two locks still need
-             * to be released independently. The actual scenario is that before releasing the write lock,
-             * acquire the read lock first, so that there is no gap time to release the lock.
-             */
-            return false;
-        } else {
-            return this.lockType.isConflict(lockHolderRequest.getLockType());
-        }
+        return this.lockType.isConflict(lockHolderRequest.getLockType());
     }
 
     @Override

@@ -106,7 +106,7 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
         mockedNativeTableA.refresh();
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableA, Maps.newHashMap());
 
         ColumnRefOperator colRef1 = new ColumnRefOperator(1, Type.INT, "id", true);
         Column col1 = new Column("id", Type.INT, true);

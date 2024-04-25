@@ -48,7 +48,7 @@ public class ShowFailPointStatement extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return null;
+        return visitor.visitShowFailPointStatement(this, context);
     }
 
     @Override

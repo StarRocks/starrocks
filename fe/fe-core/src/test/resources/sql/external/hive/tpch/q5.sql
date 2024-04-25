@@ -46,7 +46,7 @@ OutPut Exchange Id: 26
 
 25:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([48: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([48: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true]
 |  cardinality: 25
 |  column statistics:
@@ -56,7 +56,7 @@ OutPut Exchange Id: 26
 24:Project
 |  output columns:
 |  42 <-> [42: n_name, VARCHAR, true]
-|  48 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  48 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 16391888
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -344,4 +344,3 @@ column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * r_name-->[-Infinity, Infinity, 0.0, 6.8, 1.0] ESTIMATE
 [end]
-
