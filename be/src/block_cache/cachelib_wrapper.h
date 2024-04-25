@@ -47,12 +47,12 @@ public:
     Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
 
     Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
-                        CacheHandle* handle, WriteCacheOptions* options) override;
+                        DataCacheHandle* handle, WriteCacheOptions* options) override;
 
     Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
                        ReadCacheOptions* options) override;
 
-    Status read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) override;
+    Status read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) override;
 
     Status remove(const std::string& key) override;
 

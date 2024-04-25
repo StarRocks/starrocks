@@ -14,9 +14,7 @@
 
 #pragma once
 
-#ifdef WITH_STARCACHE
-#include "starcache/obj_handle.h"
-#endif
+#include "common/status.h"
 
 namespace starrocks {
 
@@ -29,14 +27,20 @@ public:
     void release() {}
 };
 
-// We use the `starcache::ObjectHandle` directly because implementing a new one seems unnecessary.
-// Importing the starcache headers here is not graceful, but the `cachelib` doesn't support
-// object cache and we'll deprecate it for some performance reasons. Now there is no need to
-// pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
-#ifdef WITH_STARCACHE
-using CacheHandle = starcache::ObjectHandle;
-#else
-using CacheHandle = DummyCacheHandle;
-#endif
+enum class DummyCacheStatus { NORMAL, UPDATING, ABNORMAL, LOADING };
+
+struct DummyCacheMetrics {
+    struct DirSpace {
+        std::string path;
+        size_t quota_bytes;
+    };
+    DummyCacheStatus status;
+    int64_t mem_quota_bytes;
+    size_t mem_used_bytes;
+    size_t disk_quota_bytes;
+    size_t disk_used_bytes;
+    std::vector<DirSpace> disk_dir_spaces;
+    size_t meta_used_bytes = 0;
+};
 
 } // namespace starrocks
