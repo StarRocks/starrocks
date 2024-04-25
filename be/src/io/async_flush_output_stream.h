@@ -21,6 +21,7 @@
 
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
+#include "util/priority_thread_pool.hpp"
 #include "fs/fs.h"
 
 namespace starrocks::io {
@@ -58,6 +59,10 @@ public:
 
         enqueue_and_maybe_submit_task(task);
         return Status::OK();
+    }
+
+    const std::string& filename() const {
+        return _file->filename();
     }
 
     int64_t tell() const {

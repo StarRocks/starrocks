@@ -459,7 +459,7 @@ StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std
                                                rollback_action, _executors, _runtime_state);
 }
 
-StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const string &path) const {
+StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const std::string &path) const {
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
