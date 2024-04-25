@@ -222,6 +222,8 @@ import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
@@ -2814,4 +2816,43 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         return resp;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public TListSessionsResponse listSessions(TListSessionsRequest request) throws TException {
+        TListSessionsResponse response = new TListSessionsResponse();
+        if (!request.isSetOptions()) {
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.addToError_msgs("options must be set");
+            response.setStatus(status);
+            return response;
+        }
+        TListSessionsOptions options = request.options;
+        if (options.isSetTemporary_table_only() && options.temporary_table_only) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            Set<UUID> sessions = ExecuteEnv.getInstance().getScheduler().listAllSessionsId();
+            sessions.retainAll(temporaryTableMgr.listSessions());
+            List<TSessionInfo> sessionInfos = new ArrayList<>();
+            for (UUID session : sessions) {
+                TSessionInfo sessionInfo = new TSessionInfo();
+                sessionInfo.setSession_id(session.toString());
+                sessionInfos.add(sessionInfo);
+            }
+            response.setStatus(new TStatus(TStatusCode.OK));
+            response.setSessions(sessionInfos);
+        } else {
+            TStatus status = new TStatus(NOT_IMPLEMENTED_ERROR);
+            status.addToError_msgs("only support temporary_table_only options now");
+            response.setStatus(status);
+        }
+        return response;
+    }
+
+    @Override
+    public TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        return InformationSchemaDataSource.generateTemporaryTablesInfoResponse(request);
+    }
+>>>>>>> 0318b05e75 ([Feature] temporary table(part-4): support system table of temporary tables (#44156))
 }
