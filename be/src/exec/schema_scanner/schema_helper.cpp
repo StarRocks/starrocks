@@ -88,6 +88,14 @@ Status SchemaHelper::get_tables_info(const SchemaScannerState& state, const TGet
     });
 }
 
+Status SchemaHelper::get_temporary_tables_info(const SchemaScannerState& state,
+                                               const TGetTemporaryTablesInfoRequest& request,
+                                               TGetTemporaryTablesInfoResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getTemporaryTablesInfo(*response, request);
+    });
+}
+
 Status SchemaHelper::describe_table(const SchemaScannerState& state, const TDescribeTableParams& request,
                                     TDescribeTableResult* result) {
     return _call_rpc(

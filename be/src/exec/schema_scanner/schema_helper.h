@@ -56,6 +56,10 @@ public:
     static Status get_tables_info(const SchemaScannerState& state, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 
+    static Status get_temporary_tables_info(const SchemaScannerState& state,
+                                            const TGetTemporaryTablesInfoRequest& request,
+                                            TGetTemporaryTablesInfoResponse* response);
+
     static Status describe_table(const SchemaScannerState& state, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result);
 
