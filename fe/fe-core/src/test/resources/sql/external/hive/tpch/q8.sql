@@ -110,25 +110,14 @@ OutPut Exchange Id: 35
 33:Project
 |  output columns:
 |  61 <-> year[([37: o_orderdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
-<<<<<<< HEAD
-|  62 <-> [77: multiply, DECIMAL128(33,4), true]
-|  63 <-> if[([55: n_name, VARCHAR, true] = 'IRAN', [77: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]
+|  62 <-> [77: multiply, DECIMAL128(31,4), true]
+|  63 <-> if[([55: n_name, VARCHAR, true] = 'IRAN', [77: multiply, DECIMAL128(31,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(31,4); args nullable: true; result nullable: true]
 |  common expressions:
 |  73 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  74 <-> [23: l_discount, DECIMAL64(15,2), true]
-|  75 <-> 1 - [74: cast, DECIMAL64(18,2), true]
-|  76 <-> cast([75: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
-|  77 <-> [73: cast, DECIMAL128(15,2), true] * [76: cast, DECIMAL128(18,2), true]
-=======
-|  62 <-> [71: multiply, DECIMAL128(31,4), true]
-|  63 <-> if[([55: n_name, VARCHAR, true] = 'IRAN', [71: multiply, DECIMAL128(31,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(31,4); args nullable: true; result nullable: true]
-|  common expressions:
-|  67 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
-|  68 <-> [23: l_discount, DECIMAL64(15,2), true]
-|  69 <-> 1 - [68: cast, DECIMAL64(16,2), true]
-|  70 <-> cast([69: subtract, DECIMAL64(16,2), true] as DECIMAL128(16,2))
-|  71 <-> [67: cast, DECIMAL128(15,2), true] * [70: cast, DECIMAL128(16,2), true]
->>>>>>> 8250b3c32b ([BugFix] fix decimal overflow problem in subtract (#42998))
+|  75 <-> 1 - [74: cast, DECIMAL64(16,2), true]
+|  76 <-> cast([75: subtract, DECIMAL64(16,2), true] as DECIMAL128(16,2))
+|  77 <-> [73: cast, DECIMAL128(15,2), true] * [76: cast, DECIMAL128(16,2), true]
 |  cardinality: 242843
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
