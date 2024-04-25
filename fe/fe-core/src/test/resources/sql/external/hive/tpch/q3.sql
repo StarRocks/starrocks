@@ -32,7 +32,7 @@ OutPut Exchange Id: 14
 |  * sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 12:AGGREGATE (update finalize)
-|  aggregate: sum[([34: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([34: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [18: l_orderkey, INT, true], [13: o_orderdate, DATE, true], [16: o_shippriority, INT, true]
 |  cardinality: 46851716
 |  column statistics:
@@ -46,7 +46,7 @@ OutPut Exchange Id: 14
 |  13 <-> [13: o_orderdate, DATE, true]
 |  16 <-> [16: o_shippriority, INT, true]
 |  18 <-> [18: l_orderkey, INT, true]
-|  34 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  34 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 46851716
 |  column statistics:
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
