@@ -243,6 +243,8 @@ Status FileReader::_get_footer() {
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
+        } else {
+            deleter();
         }
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
