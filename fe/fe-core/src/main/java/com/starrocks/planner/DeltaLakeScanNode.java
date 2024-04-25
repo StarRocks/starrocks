@@ -111,13 +111,14 @@ public class DeltaLakeScanNode extends ScanNode {
         List<Expression> expressions = new ArrayList<>(conjuncts.size());
         ExpressionConverter convertor = new ExpressionConverter(tableSchema);
         for (Expr expr : conjuncts) {
-            Expression filterExpr = convertor.convert(expr);
-            if (filterExpr != null) {
-                try {
+            try {
+                // convert expr to delta expression, some expr can not convert and will throw exception
+                Expression filterExpr = convertor.convert(expr);
+                if (filterExpr != null) {
                     expressions.add(filterExpr);
-                } catch (Exception e) {
-                    LOG.debug("binding to the table schema failed, cannot be pushed down expression: {}", expr.toSql());
                 }
+            } catch (Exception e) {
+                LOG.warn("Failed to convert expr: {}", expr.toSql(), e);
             }
         }
 
@@ -284,6 +285,7 @@ public class DeltaLakeScanNode extends ScanNode {
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 
     @Override

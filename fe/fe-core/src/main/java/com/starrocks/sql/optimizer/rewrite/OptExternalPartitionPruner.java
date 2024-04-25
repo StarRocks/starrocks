@@ -23,6 +23,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -246,9 +247,15 @@ public class OptExternalPartitionPruner {
                 partitionKeys.put(new PartitionKey(), 0L);
             }
 
+<<<<<<< HEAD
             partitionKeys.entrySet().stream().parallel().forEach(entry -> {
                 PartitionKey key = entry.getKey();
                 long partitionId = entry.getValue();
+=======
+            partitionKeys.stream().parallel().forEach(entry -> {
+                PartitionKey key = entry.first;
+                long partitionId = entry.second;
+>>>>>>> ad0f81349c ([BugFix] delta lake query predicate don't throw exception which used for skip data (#44690))
                 List<LiteralExpr> literals = key.getKeys();
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
@@ -268,6 +275,15 @@ public class OptExternalPartitionPruner {
                 PartitionKey key = entry.getKey();
                 long partitionId = entry.getValue();
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
+            }
+        } else if (table instanceof DeltaLakeTable) {
+            // Init columnToPartitionValuesMap for delta lake, it will be used in classifyConjuncts function
+            // to classify partition conjuncts
+            DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+            List<Column> partitionColumns = deltaLakeTable.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
+                columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
             }
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
