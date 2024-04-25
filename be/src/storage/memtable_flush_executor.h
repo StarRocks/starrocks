@@ -95,9 +95,14 @@ public:
     }
 
     void set_status(const Status& status) {
-        if (status.ok()) return;
+        if (status.ok()) {
+            return;
+        }
+
         std::lock_guard l(_status_lock);
-        if (_status.ok()) _status = status;
+        if (_status.ok()) {
+            _status = status;
+        }
     }
 
 private:
