@@ -1688,7 +1688,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewPlanCache = true;
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
-    private boolean enableViewBasedMvRewrite = false;
+    private boolean enableViewBasedMvRewrite = true;
 
     @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
     private boolean enableCBOViewBasedMvRewrite = false;
