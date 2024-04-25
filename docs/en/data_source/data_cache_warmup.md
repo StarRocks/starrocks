@@ -47,7 +47,7 @@ mysql> cache select * from hive_catalog.test_db.lineitem;
 
 Return fields:
 
-- `STATUS`: The execution result of the warmup task.
+- `STATUS`: The execution result of the warmup task. Values: `SUCCESS` and `FAILED`. If the status is `FAILED`, an `ERROR_MSG` field is also returned, showing the error message.
 - `ALREADY_CACHED_SIZE`: The size of data cached in the data cache (Currently, there is a certain margin of error in this statistics, which will be improved in the future).
 - `WRITE_CACHE_SIZE`: The size of data written to the data cache.
 - `AVG_WRITE_CACHE_TIME`: The average time taken to write each file to the data cache.
