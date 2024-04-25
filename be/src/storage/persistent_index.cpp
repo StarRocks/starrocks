@@ -2632,16 +2632,10 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     std::unique_ptr<ImmutableIndexShard> shard =
             std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
     if (shard_info.uncompressed_size == 0) {
-<<<<<<< HEAD
-        CHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
-    } else {
-        CHECK(shard->pages.size() * kPageSize == shard_info.uncompressed_size) << "illegal shard size";
-=======
         RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
     } else {
         RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
                               "illegal shard size");
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
@@ -2724,16 +2718,10 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
     std::unique_ptr<ImmutableIndexShard> shard =
             std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
     if (shard_info.uncompressed_size == 0) {
-<<<<<<< HEAD
-        CHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
-    } else {
-        CHECK(shard->pages.size() * kPageSize == shard_info.uncompressed_size) << "illegal shard size";
-=======
         RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
     } else {
         RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
                               "illegal shard size");
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
