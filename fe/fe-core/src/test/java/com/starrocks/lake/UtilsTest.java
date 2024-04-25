@@ -15,6 +15,7 @@
 
 package com.starrocks.lake;
 
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -27,6 +28,8 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.Optional;
 
 public class UtilsTest {
 
@@ -77,8 +80,18 @@ public class UtilsTest {
         WarehouseManager manager = new WarehouseManager();
         manager.initDefaultWarehouse();
 
-        long workerGroupId = Utils.getFirstWorkerGroupByWarehouseId(manager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId);
+        Optional<Long> workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertFalse(workerGroupId.isEmpty());
+        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
+
+        try {
+            workerGroupId = Optional.ofNullable(null);
+            workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, 1111L);
+            Assert.assertEquals(1, 2);   // can not be here
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(workerGroupId.isEmpty());
+            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
+        }
     }
 
     @Test
@@ -96,17 +109,15 @@ public class UtilsTest {
         systemInfo.addBackend(b2);
 
         // If the version of be is old, it may pass null.
-        long warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, 0);
-        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, warehouseId);
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                Utils.getWarehouseIdByNodeId(systemInfo, 0).orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID).longValue());
 
         // pass a wrong tBackend
-        warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, 10003);
-        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, warehouseId);
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                Utils.getWarehouseIdByNodeId(systemInfo, 10003).orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID).longValue());
 
         // pass a right tBackend
-        warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, 10001);
-        Assert.assertEquals(10001L, warehouseId);
-        warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, 10002);
-        Assert.assertEquals(10002L, warehouseId);
+        Assert.assertEquals(10001L, Utils.getWarehouseIdByNodeId(systemInfo, 10001).get().longValue());
+        Assert.assertEquals(10002L, Utils.getWarehouseIdByNodeId(systemInfo, 10002).get().longValue());
     }
 }

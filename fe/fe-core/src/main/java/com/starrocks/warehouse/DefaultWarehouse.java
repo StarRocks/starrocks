@@ -17,7 +17,6 @@ package com.starrocks.warehouse;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.lake.StarOSAgent;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class DefaultWarehouse extends Warehouse {

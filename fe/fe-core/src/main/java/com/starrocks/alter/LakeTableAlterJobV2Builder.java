@@ -27,6 +27,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -116,8 +117,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             throws DdlException {
         WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
         return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
-                        properties, Utils.getFirstWorkerGroupByWarehouseId(warehouseManager, warehouseId));
+                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
+                        Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouseId)
+                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
-
 }

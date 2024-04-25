@@ -34,6 +34,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,6 +43,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
@@ -208,20 +210,29 @@ public class Utils {
         }
     }
 
-    public static long getFirstWorkerGroupByWarehouseId(WarehouseManager manager, long warehouseId) {
+    public static Optional<Long> selectWorkerGroupByWarehouseId(WarehouseManager manager, long warehouseId) {
         Warehouse warehouse = manager.getWarehouse(warehouseId);
+        if (warehouse == null)  {
+            LOG.warn("failed to get warehouse by id {}", warehouseId);
+            return Optional.ofNullable(null);
+        }
+
         List<Long> ids = warehouse.getWorkerGroupIds();
-        return ids.get(0);
+        if (CollectionUtils.isEmpty(ids)) {
+            LOG.warn("failed to get worker group id from warehouse {}", warehouse);
+            return Optional.ofNullable(null);
+        }
+
+        return Optional.of(ids.get(0));
     }
 
-    public static long getWarehouseIdByBackendId(SystemInfoService systemInfo, long nodeId) {
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        ComputeNode cn = systemInfo.getBackendOrComputeNode(nodeId);
-        if (cn != null) {
-            warehouseId = cn.getWarehouseId();
-        } else {
-            LOG.warn("failed to get node by node id: {}", nodeId);
+    public static Optional<Long> getWarehouseIdByNodeId(SystemInfoService systemInfo, long nodeId) {
+        ComputeNode node = systemInfo.getBackendOrComputeNode(nodeId);
+        if (node == null) {
+            LOG.warn("failed to get warehouse id by node id: {}", nodeId);
+            return Optional.ofNullable(null);
         }
-        return warehouseId;
+
+        return Optional.of(node.getWarehouseId());
     }
 }

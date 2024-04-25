@@ -1268,7 +1268,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         if (request.isSetBackend_id()) {
             SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, request.getBackend_id());
+            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
             // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
             String warehouseName = request.getWarehouse();
@@ -1964,7 +1965,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throws UserException {
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
-
         TImmutablePartitionResult result = new TImmutablePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
 
@@ -2004,7 +2004,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         if (request.isSetBackend_id()) {
-            warehouseId = Utils.getWarehouseIdByBackendId(systemInfo, request.getBackend_id());
+            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         }
 
         // immute partitions and create new sub partitions

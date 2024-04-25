@@ -138,6 +138,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.persist.AddPartitionsInfoV2;
@@ -2496,7 +2497,8 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
                 null, properties,
-                com.starrocks.lake.Utils.getFirstWorkerGroupByWarehouseId(warehouseManager, warehouseId));
+                com.starrocks.lake.Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouseId)
+                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);
