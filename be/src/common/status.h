@@ -541,6 +541,8 @@ struct StatusInstance {
         }                                          \
     } while (false)
 
+#define VA_ARGS_HELPER(fmt, ...) fmt " " #__VA_ARGS__
+
 #define RETURN_ERROR_IF_FALSE(condition, ...)                                       \
     if (GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition))) {                            \
         std::ostringstream oss;                                                     \
