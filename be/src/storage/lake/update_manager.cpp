@@ -442,8 +442,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 
     std::shared_ptr<FileSystem> fs;
     auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
-                                         const TabletSchemaCSPtr& tablet_schema,
-                                         const std::vector<uint32_t>& rowids,
+                                         const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
                                          const std::vector<uint32_t>& read_column_ids) -> Status {
         FileInfo file_info{.path = tablet->segment_location(segment_info.path)};
         if (segment_info.size.has_value()) {
