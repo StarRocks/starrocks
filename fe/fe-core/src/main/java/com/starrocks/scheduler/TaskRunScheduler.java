@@ -17,7 +17,6 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.google.gson.JsonObject;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
@@ -306,11 +305,6 @@ public class TaskRunScheduler {
 
     @Override
     public String toString() {
-        JsonObject res = new JsonObject();
-        res.addProperty("pending_map", GsonUtils.GSON.toJson(pendingTaskRunMap));
-        res.addProperty("pending_queue", GsonUtils.GSON.toJson(pendingTaskRunQueue));
-        res.addProperty("running", GsonUtils.GSON.toJson(runningTaskRunMap));
-        res.addProperty("running_sync_task_runs", GsonUtils.GSON.toJson(runningSyncTaskRunMap));
-        return res.toString();
+        return GsonUtils.GSON.toJson(this);
     }
 }

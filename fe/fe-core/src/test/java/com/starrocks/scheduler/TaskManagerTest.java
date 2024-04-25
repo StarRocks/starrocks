@@ -476,7 +476,7 @@ public class TaskManagerTest {
 
         {
             // task run 1
-            TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
+            TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun1.getStatus(),
                     Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
             taskManager.replayUpdateTaskRun(change);
             Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());

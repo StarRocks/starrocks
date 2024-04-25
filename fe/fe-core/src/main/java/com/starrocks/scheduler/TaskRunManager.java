@@ -121,7 +121,7 @@ public class TaskRunManager implements MemoryTrackable {
                     // but other attributes may be different, such as priority, creation time.
                     // higher priority and create time will be result after merge is complete
                     // and queryId will be changed.
-                    if (!oldTaskRun.equals(taskRun)) {
+                    if (!oldTaskRun.isEqualTask(taskRun)) {
                         LOG.warn("failed to remove TaskRun definition is [{}]",
                                 taskRun);
                         continue;
