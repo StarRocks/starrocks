@@ -2705,8 +2705,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 8> : 8: count\n" +
                 "  |  <slot 9> : 9: count\n" +
                 "  |  \n" +
-                "  9:AGGREGATE (update finalize)\n" +
-                "  |  output: count(1: v1), count(9: count), max(10: max)\n" +
+                "  9:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(8: count), count(9: count), max(10: max)\n" +
                 "  |  group by: 7: abs\n" +
                 "  |  having: 10: max > CAST(abs(1) AS BIGINT)");
     }
