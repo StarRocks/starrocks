@@ -73,14 +73,15 @@ Create Table: CREATE TABLE `user_access` (
 ) ENGINE=OLAP 
 DUPLICATE KEY(`uid`, `name`)
 DISTRIBUTED BY RANDOM
+ORDER BY(`uid`, `name`)
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"replication_num" = "3"
 );
-1 row in set (0.00 sec)
+1 row in set (0.01 sec)
 ```
 
 ## 全面了解表结构
