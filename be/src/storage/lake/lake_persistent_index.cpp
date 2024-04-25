@@ -144,7 +144,6 @@ Status LakePersistentIndex::minor_compact() {
 Status LakePersistentIndex::flush_memtable() {
     if (_immutable_memtable != nullptr) {
         RETURN_IF_ERROR(minor_compact());
-        _immutable_memtable->reset_max_version();
     }
     _immutable_memtable = std::make_unique<PersistentIndexMemtable>();
     _memtable.swap(_immutable_memtable);
