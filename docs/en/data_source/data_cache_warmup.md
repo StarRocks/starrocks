@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 Some data lake analytics scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) performance testing. Loading remote data into local data cache can avoid the need to fetch the same data multiple times, significantly speeding up query execution and minimizing resource usage.
 
-StarRocks v3.3 introduces the Data Cache Warmup feature, which is an enhancement to [Data Cache](./data_cache.md). Data Cache is a process of passively populating the cache, in which data is written to the cache during data querying. Data Cache Warmup, however, is an active process of populating the cache. It proactively fetching the desired data from remote storage in advance.
+StarRocks v3.3 introduces the Data Cache Warmup feature, which is an enhancement to [Data Cache](./data_cache.md). Data Cache is a process of passively populating the cache, in which data is written to the cache during data querying. Data Cache Warmup, however, is an active process of populating the cache. It proactively fetches the desired data from remote storage in advance.
 
 ## How it works
 
@@ -22,16 +22,16 @@ FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 
 Parameters:
 
-- `column_name`: The columns to fetch. You can also use `*` to fetch all columns in the remote table.
-- `catalog_name`: The name of the remote catalog. If you have switched to the remote catalog using SET CATALOG, it can be left unspecified.
-- `db_name`: The name of the remote database. If you have switched to the remote database, it can be left unspecified.
-- `table_name`: The name of the remote table.
+- `column_name`: The columns to fetch. You can also use `*` to fetch all columns in the external table.
+- `catalog_name`: The name of the external catalog. If you have switched to the external catalog using SET CATALOG, it can be left unspecified.
+- `db_name`: The name of the database in the external catalog. If you have switched to that database, it can be left unspecified.
+- `table_name`: The name of the external table.
 - `boolean_expression`: The filter condition.
 - `PROPERTIES`: Currently, only the `verbose` property is supported. It is used to return detailed warmup metrics.
 
-CACHE_SELECT is a synchronous process and it can warm up only one table at a time. Upon successful execution, it will return cache-related metrics.
+CACHE SELECT is a synchronous process and it can warm up only one table at a time. Upon successful execution, it will return cache-related metrics.
 
-### Warm up all data in the remote table
+### Warm up all data in an external table
 
 The following example loads all data from external table `lineitem`:
 
@@ -105,7 +105,7 @@ where l_shipdate='1994-10-28';
 
 ### Manage CACHE SELECT tasks
 
-#### Query created tasks
+#### View created tasks
 
 ```plaintext
 mysql> select * from default_catalog.information_schema.tasks;
@@ -117,7 +117,7 @@ mysql> select * from default_catalog.information_schema.tasks;
 1 row in set (0.21 sec)
 ```
 
-#### Query task execution history
+#### View task execution history
 
 ```plaintext
 mysql> select * from default_catalog.information_schema.task_runs;
@@ -140,7 +140,7 @@ DROP TASK <task_name>
 
 ## Use cases
 
-1. During PoC performance testing, if you want to assess StarRocks' performance without interference from external storage systems, you can use the CACHE_SELECT statement to load the data of the table to test into the data cache in advance.
+1. During PoC performance testing, if you want to assess StarRocks' performance without interference from external storage systems, you can use the CACHE SELECT statement to load the data of the table to test into the data cache in advance.
 
 2. The business team need to view BI reports at 8 a.m. every morning. To ensure a relatively stable query performance, you can schedule a CACHE SELECT task to start running at 7 a.m. each day.
 
