@@ -3221,17 +3221,19 @@ TEST_F(FileReaderTest, TestReadNoMinMaxStatistics) {
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_range = (_create_scan_range(_file_no_min_max_stats_path));
 
+    // create min max conjuncts
     Utils::SlotDesc min_max_slots[] = {
             {"attr_value", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
             {""},
     };
     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
-    // create min max conjuncts
-    // attr_value = '2'
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_string_conjunct(TExprOpcode::GE, 0, "2", &t_conjuncts);
     ParquetUTBase::append_string_conjunct(TExprOpcode::LE, 0, "2", &t_conjuncts);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+
+    // attr_value = '2'
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 0, "2", &ctx->conjunct_ctxs_by_slot[0]);
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
