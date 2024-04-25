@@ -413,26 +413,11 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
     - FLOAT 转换成 DOUBLE。
     - INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
 
-6. 不支持从 NULL 转为 NOT NULL。
+#### 修改排序键
 
-#### 对指定 index 的列进行重新排序
+自 3.3 版本起，支持修改明细表、聚合表和更新表的排序键，自 3.0 版本起，支持修改主键表的排序键。
 
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ORDER BY (column_name1, column_name2, ...)
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
-```
-
-注意：
-
-- index 中的所有列都要写出来。
-- value 列在 key 列之后。
-
-#### 修改主键表中组成排序键的列
-<!--支持版本-->
+明细表和主键表中排序键可以为任意列的排序组合，聚合表和更新表中排序键必须包含所有 key 列，但是列的顺序无需与 key 列保持一致。
 
 语法：
 
@@ -444,9 +429,9 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
-示例：
+示例：修改主键表中组成排序键
 
-假设原表为主键表，排序键与主键耦合  `dt,order_id`。
+假设原表为主键表，排序键与主键耦合 `dt,order_id`。
 
 ```SQL
 create table orders (

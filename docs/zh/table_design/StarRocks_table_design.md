@@ -31,10 +31,12 @@ CREATE TABLE user_access (
     last_access datetime,
     credits double
 )
-DUPLICATE KEY(uid, name);
+ORDER BY (uid, name);
 ```
 
-上述建表示例创建了明细表，该表中数据不具有任何约束，相同的数据行可能会重复存在。并且指定明细表中前两列为排序列，构成排序键。数据按排序键排序后存储，有助于查询时的快速索引。 
+上述建表示例创建了明细表，该表中数据不具有任何约束，相同的数据行可能会重复存在。并且指定明细表中前两列为排序列，构成排序键。数据按排序键排序后存储，有助于查询时的快速索引。
+
+自 3.3.0 起，明细表支持使用 `ORDER BY` 指定排序键，如果同时使用 `ORDER BY` 和 `DUPLICATE KEY`，则 `DUPLICATE KEY` 不生效。
 
 <Replicanum />
 
