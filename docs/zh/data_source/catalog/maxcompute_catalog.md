@@ -185,7 +185,7 @@ DROP CATALOG odps_catalog;
 
 ## 导入 MaxCompute 数据
 
-假设有一个 OLAP 表，表名为 `olap_tbl`。您可以通过类似如下的语句来转换该表中的数据，并把数据导入到 StarRocks 中：
+假设 StarRocks 集群中有一个 OLAP 表 `olap_tbl`，MaxCompute 集群中有一个表 `mc_table`。您可以通过类似如下的语句来转换 MaxCompute 表 `mc_table` 中的数据，并把转换后的数据导入到 StarRocks 表 `olap_tbl` 中：
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM mc_table;

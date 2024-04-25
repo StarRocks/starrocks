@@ -186,7 +186,7 @@ You can use one of the following syntaxes to view the schema of a MaxCompute tab
 
 ## Load data from MaxCompute
 
-Suppose that you have an OLAP table named `olap_tbl` in your MaxCompute cluster. You can transform and load the data from the table like below:
+Suppose that there is an OLAP table named `olap_tbl` in your StarRock cluster and there is a table named `mc_table` in your MaxCompute cluster. You can transform and load the data from the MaxCompute table `mc_table` into the StarRocks table `olap_tbl` like below:
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM mc_table;
