@@ -37,7 +37,6 @@ import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
@@ -207,10 +206,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public int deleteUnusedWorker() {
         int cnt = 0;
         try {
-            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            long workerGroupId = Utils.selectWorkerGroupByWarehouseId(warehouseManager,
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID).get();
-            List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listWorkerGroupIpPort(workerGroupId);
+            List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listDefaultWorkerGroupIpPort();
 
             // filter backend
             List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
@@ -233,7 +229,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
 
             for (String unusedWorkerAddress : workerAddresses) {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(unusedWorkerAddress, workerGroupId);
+                GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .removeWorker(unusedWorkerAddress, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 LOG.info("unused worker {} removed from star mgr", unusedWorkerAddress);
                 cnt++;
             }

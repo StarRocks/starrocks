@@ -56,7 +56,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -451,7 +450,7 @@ public class StarOSAgentTest {
                 "Failed to get primary backend. shard id: 10",
                 () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
 
-        Assert.assertEquals(Sets.newHashSet(), getBackendIdsByShard(10L, 0));
+        Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L, 0));
 
         workerToBackend.put(1L, 10001L);
         workerToBackend.put(2L, 10002L);
@@ -461,7 +460,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
         Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
-                getBackendIdsByShard(10L, 0));
+                starosAgent.getBackendIdsByShard(10L, 0));
     }
 
     @Test
@@ -723,12 +722,8 @@ public class StarOSAgentTest {
                 return Lists.newArrayList(group);
             }
         };
-        List<String> addresses = starosAgent.listWorkerGroupIpPort(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        List<String> addresses = starosAgent.listDefaultWorkerGroupIpPort();
         Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
         Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
-    }
-
-    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
-        return starosAgent.getAllBackendIdsByShard(shardId, workerGroupId, false);
     }
 }

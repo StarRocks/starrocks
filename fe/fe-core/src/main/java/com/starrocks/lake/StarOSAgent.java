@@ -573,7 +573,6 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
-        // TODO(yandongxiao): Change this to the worker group id of Config.lake_background_warehouse
         return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
     }
 
@@ -588,6 +587,10 @@ public class StarOSAgent {
                     "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
+    }
+
+    public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+        return getAllBackendIdsByShard(shardId, workerGroupId, false);
     }
 
     public Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
@@ -683,12 +686,12 @@ public class StarOSAgent {
         }
     }
 
-    public List<String> listWorkerGroupIpPort(long workerGroupId) throws UserException {
+    public List<String> listDefaultWorkerGroupIpPort() throws UserException {
         List<String> addresses = new ArrayList<>();
         prepare();
         try {
             List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
-                    listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
+                    listWorkerGroup(serviceId, Collections.singletonList(DEFAULT_WORKER_GROUP_ID), true);
             Preconditions.checkState(1 == workerGroupDetailInfos.size());
             WorkerGroupDetailInfo workerGroupInfo = workerGroupDetailInfos.get(0);
             for (WorkerInfo workerInfo : workerGroupInfo.getWorkersInfoList()) {

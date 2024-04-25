@@ -177,7 +177,6 @@ public class PartitionInfoView {
                     if (lakeTabletOptional.isPresent()) {
                         LakeTablet lakeTablet = lakeTabletOptional.get();
                         try {
-                            // TODO(yandongxiao): Change this to the worker group id of Config.lake_background_warehouse
                             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
                                     .getShardInfo(lakeTablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                             pvo.setStoragePath(shardInfo.getFilePath().getFullPath());
