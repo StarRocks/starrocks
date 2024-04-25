@@ -441,7 +441,6 @@ public class IcebergExprVisitorTest {
 
         Expression convertedExpr;
 
-        // don't support cast double to varchar, different comparator
         ConstantOperator value = ConstantOperator.createVarchar("11.11");
         CastOperator cast = new CastOperator(Type.VARCHAR, K17);
         convertedExpr = converter.convert(Lists.newArrayList(
