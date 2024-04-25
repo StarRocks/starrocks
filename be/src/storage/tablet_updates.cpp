@@ -4914,14 +4914,6 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         uint32_t segment_id = auto_increment_state->segment_id;
         uint32_t rssid = rowset->rowset_meta()->get_rowset_seg_id() + segment_id;
 
-        uint32_t auto_increment_column_idx = 0;
-        for (int i = 0; i < read_tablet_schema->num_columns(); i++) {
-            if (read_tablet_schema->column(i).is_auto_increment()) {
-                auto_increment_column_idx = i;
-                break;
-            }
-        }
-
         std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
         FileInfo seg_info{.path = seg_path};
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(seg_path));
@@ -4946,7 +4938,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                              new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
-                const TabletColumn& col = auto_increment_state->schema->column(auto_increment_column_idx);
+                // use partial segment column offset id to get the column
+                const TabletColumn& col = auto_increment_state->schema->column(auto_increment_state->id);
                 ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
                 iter_opts.read_file = read_file.get();
             }
