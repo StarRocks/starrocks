@@ -3,6 +3,17 @@
 create external catalog delta_test_${uuid0} PROPERTIES ("type"="deltalake", "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}");
 
 -- only partition column Predicate with runtime filter
-select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='a' order by c1;;
+select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='a' order by c1;
+
+-- test struct column is null
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is null;
+
+-- test struct column is not null
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is not null;
+
+-- test partition prune with boolean type
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = true;
+
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = false;
 
 drop catalog delta_test_${uuid0}

@@ -221,6 +221,16 @@ public class HdfsScanNode extends ScanNode {
         tHdfsScanNode.setPartition_sql_predicates(partitionSqlPredicate);
     }
 
+    public static void setPartitionConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
+                                                            HDFSScanNodePredicates scanNodePredicates) {
+        List<Expr> partitionConjuncts = scanNodePredicates.getPartitionConjuncts();
+        String partitionSqlPredicate = scanNode.getExplainString(partitionConjuncts);
+        for (Expr expr : partitionConjuncts) {
+            tHdfsScanNode.addToPartition_conjuncts(expr.treeToThrift());
+        }
+        tHdfsScanNode.setPartition_sql_predicates(partitionSqlPredicate);
+    }
+
     public static void setNonPartitionConjunctsToThrift(TPlanNode msg, ScanNode scanNode,
                                                         HDFSScanNodePredicates scanNodePredicates) {
         // put non-partition conjuncts into conjuncts
