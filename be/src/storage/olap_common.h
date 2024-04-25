@@ -319,12 +319,11 @@ const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
 
+// The position index of a column in a specific TabletSchema starts from 0.
+// The position of the same column in different TabletSchema may be different, which
+// means that the ColumnId may be different.
 typedef uint32_t ColumnId;
-typedef int32_t ColumnUID;
-// Column unique id set
-typedef std::set<uint32_t> UniqueIdSet;
-// Column unique Id -> column id map
-typedef std::map<ColumnId, ColumnId> UniqueIdToColumnIdMap;
+typedef uint32_t ColumnUID;
 
 // 8 bit rowset id version
 // 56 bit, inc number from 1

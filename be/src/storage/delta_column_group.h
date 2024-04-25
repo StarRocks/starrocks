@@ -65,8 +65,10 @@ public:
         return column_files;
     }
 
-    std::vector<std::vector<uint32_t>>& column_ids() { return _column_ids; }
-    const std::vector<std::vector<uint32_t>>& column_ids() const { return _column_ids; }
+    // TODO: rename function name
+    std::vector<std::vector<ColumnUID>>& column_ids() { return _column_ids; }
+    // TODO: rename function name
+    const std::vector<std::vector<ColumnUID>>& column_ids() const { return _column_ids; }
     int64_t version() const { return _version; }
 
     std::string debug_string() {
@@ -75,7 +77,7 @@ public:
         for (int i = 0; i < _column_files.size(); ++i) {
             ss << "file:" << _column_files[i] << ", ";
             ss << "cids:";
-            for (uint32_t cid : _column_ids[i]) {
+            for (auto cid : _column_ids[i]) {
                 ss << cid << "|";
             }
 
@@ -93,7 +95,7 @@ private:
 
 private:
     int64_t _version = 0;
-    std::vector<std::vector<uint32_t>> _column_ids;
+    std::vector<std::vector<ColumnUID>> _column_ids;
     std::vector<std::string> _column_files;
     size_t _memory_usage = 0;
 };

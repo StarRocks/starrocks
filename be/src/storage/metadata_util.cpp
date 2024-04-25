@@ -70,7 +70,7 @@ static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggr
 }
 
 static Status validate_tablet_schema(const TabletSchemaPB& schema_pb) {
-#if !defined(NDEBUG) || defined(BE_TEST)
+#ifdef USE_STAROS
     std::unordered_set<std::string> column_names;
     std::unordered_set<int64_t> column_ids;
     for (const auto& col : schema_pb.column()) {
@@ -84,8 +84,6 @@ static Status validate_tablet_schema(const TabletSchemaPB& schema_pb) {
             return Status::InvalidArgument("Duplicate column name found in tablet schema");
         }
     }
-    return Status::OK();
-#else
     return Status::OK();
 #endif
 }
