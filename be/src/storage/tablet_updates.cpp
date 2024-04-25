@@ -4852,7 +4852,13 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i]));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
+<<<<<<< HEAD
                 ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(id));
+=======
+                // use partial segment column offset id to get the column
+                const TabletColumn& col = auto_increment_state->schema->column(auto_increment_state->id);
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
+>>>>>>> 51455ad39c ([BugFix] Fix incorrect column read for auto-increment column in partial update (#44724))
                 iter_opts.read_file = read_file.get();
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));

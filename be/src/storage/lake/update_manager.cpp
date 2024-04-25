@@ -428,8 +428,13 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 
     std::shared_ptr<FileSystem> fs;
     auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
+<<<<<<< HEAD
                                          const TabletSchema* tablet_schema,
                                          const std::vector<uint32_t>& rowids) -> Status {
+=======
+                                         const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
+                                         const std::vector<uint32_t>& read_column_ids) -> Status {
+>>>>>>> 51455ad39c ([BugFix] Fix incorrect column read for auto-increment column in partial update (#44724))
         FileInfo file_info{.path = tablet->segment_location(segment_info.path)};
         if (segment_info.size.has_value()) {
             file_info.size = segment_info.size;
@@ -449,8 +454,14 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_info));
         iter_opts.read_file = read_file.get();
+<<<<<<< HEAD
         for (auto i = 0; i < column_ids.size(); ++i) {
             ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator(column_ids[i]));
+=======
+        for (auto i = 0; i < read_column_ids.size(); ++i) {
+            const TabletColumn& col = tablet_schema->column(read_column_ids[i]);
+            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
+>>>>>>> 51455ad39c ([BugFix] Fix incorrect column read for auto-increment column in partial update (#44724))
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
@@ -469,7 +480,11 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
                                                  metadata.version(), rssid));
         }
         // use 0 segment_id is safe, because we need not get either delvector or dcg here
+<<<<<<< HEAD
         RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, &tablet_schema, rowids));
+=======
+        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, tablet_schema, rowids, column_ids));
+>>>>>>> 51455ad39c ([BugFix] Fix incorrect column read for auto-increment column in partial update (#44724))
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
@@ -478,9 +493,16 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         }
         uint32_t segment_id = auto_increment_state->segment_id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
+        const std::vector<uint32_t> auto_increment_col_partial_id(1, auto_increment_state->id);
 
+<<<<<<< HEAD
         RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{op_write.rowset().segments(segment_id)}, segment_id,
                                                   auto_increment_state->schema.get(), rowids));
+=======
+        RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{.path = op_write.rowset().segments(segment_id)}, segment_id,
+                                                  // use partial segment column offset id to get the column
+                                                  auto_increment_state->schema, rowids, auto_increment_col_partial_id));
+>>>>>>> 51455ad39c ([BugFix] Fix incorrect column read for auto-increment column in partial update (#44724))
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
     VLOG(2) << "UpdateManager get_column_values " << cost_str.str();
