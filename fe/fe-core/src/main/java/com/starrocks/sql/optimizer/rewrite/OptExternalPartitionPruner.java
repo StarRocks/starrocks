@@ -247,15 +247,9 @@ public class OptExternalPartitionPruner {
                 partitionKeys.put(new PartitionKey(), 0L);
             }
 
-<<<<<<< HEAD
-            partitionKeys.entrySet().stream().parallel().forEach(entry -> {
-                PartitionKey key = entry.getKey();
-                long partitionId = entry.getValue();
-=======
             partitionKeys.stream().parallel().forEach(entry -> {
                 PartitionKey key = entry.first;
                 long partitionId = entry.second;
->>>>>>> ad0f81349c ([BugFix] delta lake query predicate don't throw exception which used for skip data (#44690))
                 List<LiteralExpr> literals = key.getKeys();
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
