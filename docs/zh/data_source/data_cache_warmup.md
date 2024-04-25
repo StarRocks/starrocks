@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 Data Cache 预热和 [Data Cache](./data_cache.md) 特性的区别：
 
-- Data Cache 是一个被动填充 cache 的过程，相当于在查询时，顺便把数据写入 cache，以便后续查询使用。
+- Data Cache 是一个被动填充 cache 的过程，相当于在查询时通过同步或异步的方式把数据写入 cache，以便后续查询使用。
 - Data Cache 预热是一个主动填充 cache 的过程，提前将想要查询的数据放到 cache 里，是基于 Data Cache 的扩展。
 
 该特性从 3.3 版本开始支持。
@@ -29,14 +29,14 @@ FROM <catalog_name>.<db_name>.<table_name> [WHERE <boolean_expression>]
 
 参数说明：
 
-- `column_name`：要拉取的列，多列用逗号隔开。也可以不指定，使用 `*` 来拉取表中所有列。
-- `catalog_name`：远端 Catalog 名称。如果已经通过 SET CATALOG 切换到远端 Catalog 下，也可以不填。
+- `column_name`：需要缓存的列，可以用 `*` 来表示表中所有列。
+- `catalog_name`：External Catalog 名称。如果已经通过 SET CATALOG 切换到 External Catalog 下，也可以不填。
 - `db_name`：远端数据库名称。如果已经切换到远端数据库下，也可以不填。
-- `table_name`：远端表名称。
+- `table_name`：外部表名称。
 - `boolean_expression`: WHERE 中指定的过滤条件。
 - `PROPERTIES`：当前仅支持设置 `verbose` 属性，用于返回详细的预热指标。
 
-`CACHE_SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
+`CACHE SELECT` 是一个同步过程，且一次只能对一个表进行预热。执行成功后，会返回 Cache 的指标。
 
 ### 预热远端表所有数据
 
@@ -54,15 +54,15 @@ mysql> cache select * from hive_catalog.test_db.lineitem;
 
 返回字段说明：
 
-- `STATUS`：预热任务的执行结果。
+- `STATUS`：预热任务的执行结果，结果包括 `SUCCESS` 和 `FAILED`。如果状态为 `FAILED`，会同时返回一个 `ERROR_MSG` 列，提供错误消息。
 - `ALREADY_CACHED_SIZE`：Data Cache 中已缓存的数据大小（目前统计会存在一定误差，后续会优化）。
-- `WRITE_CACHE_SIZE`：写入 Data Cache 的大小。
+- `WRITE_CACHE_SIZE`：写入 Data Cache 的数据大小。
 - `AVG_WRITE_CACHE_TIME`：每一个文件写入 Data Cache 的平均耗时。
 - `TOTAL_CACHE_USAGE`：本次预热执行完成后 Data Cache 的空间使用率，可以根据这个指标评估 Data Cache 的空间是否充足。
 
 ### 根据过滤条件预热指定列
 
-您也可以通过指定列名和谓词进行更细粒度的预热，以减少 Data Cache 的占用，比如下面这个 case：
+您也可以通过指定列名和谓词进行更细粒度的预热，以减少 Data Cache 的占用。举例：
 
 ```plaintext
 mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipdate='1994-10-28';
@@ -76,7 +76,7 @@ mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipda
 
 ### verbose 模式预热
 
-默认情况下，`CACHE SELECT` 返回的指标是一个合并后的指标，您可以在 `CACHE SELECT` 末尾添加 `PROPERTIES("verbose"="true")` 获得各个 BE 上更加详细的指标。
+默认情况下，`CACHE SELECT` 返回的指标是一个合并后的指标，您可以在 `CACHE SELECT` 末尾添加 `PROPERTIES("verbose"="true")` 来获取各个 BE 上详细的指标。
 
 ```plaintext
 mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="true");
@@ -96,9 +96,9 @@ mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="t
 
 ## CACHE SELECT 定时调度
 
-CACHE SELECT 可以和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 结合，以实现周期性的预热。
+CACHE SELECT 可以和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 结合，实现周期性的预热。
 
-比如下面这个例子，每隔 5 分钟对 `lineitem` 表进行一次预热：
+每隔 5 分钟对 `lineitem` 表进行一次预热：
 
 ```plaintext
 mysql> submit task always_cache schedule every(interval 5 minute) as cache select l_orderkey
@@ -149,7 +149,7 @@ DROP TASK <task_name>
 
 ## CACHE SELECT 最佳实践
 
-1. 做 POC 性能测试时，如果想抛开外部存储系统的干扰，测试 StarRocks 的性能。可以通过 `CACHE_SELECT` 语句提前把待 POC 的表数据载入 Data Cache。
+1. 做 POC 性能测试时，如果想抛开外部存储系统的干扰，测试 StarRocks 的性能。可以通过 `CACHE SELECT` 语句提前把待 POC 的表数据载入 Data Cache。
 
 2. 业务方每天早上 8 点需要查看 BI 报表，希望那时候能够给业务方提供一个相对稳定的查询性能。
 
@@ -189,9 +189,9 @@ DROP TASK <task_name>
 - 需要开启 Data Cache 特性，且拥有对目标表的 SELECT 权限。
 - `CACHE SELECT` 只支持对单表进行预热，不支持 `ORDER BY`，`LIMIT`，`GROUP BY` 等算子。
 - `CACHE SELECT` 支持存算分离和存算一体架构的外表查询，支持预热远端的 TEXT, ORC, Parquet 文件。
-- `CACHE SELECT` 预热的数据不会保证一定不被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
-- 目前 `CACHE SELECT` 的实现采用 `INSERT INTO BLACKHOLE()` 方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销差不多。后续会做出改进，提升 `CACHE SELECT` 性能。
+- `CACHE SELECT` 预热的数据也可能会被淘汰，Data Cache 底层仍然按照 LRU 规则进行淘汰。用户可以通过 `SHOW BACKENDS\G` 查看 Data Cache 的剩余容量，以此判断是否会触发 LRU 淘汰。
+- 目前 `CACHE SELECT` 的实现采用 `INSERT INTO BLACKHOLE()` 方案，即按照正常的查询流程对表进行预热。所以 `CACHE SELECT` 的性能开销和普通查询的开销差不多。后续会继续改进，提升 `CACHE SELECT` 性能。
 
 ## Data Cache 预热后续展望
 
-后续 StarRocks 将会引入自适应的 Data Cache 预热，尽可能保证在用户日常查询的过程中，能获得更高的缓存命中率。
+后续 StarRocks 将会引入自适应的 Data Cache 预热，保证更高的缓存命中率。
