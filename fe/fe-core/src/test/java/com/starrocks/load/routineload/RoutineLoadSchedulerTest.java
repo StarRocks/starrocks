@@ -136,6 +136,19 @@ public class RoutineLoadSchedulerTest {
         }
     }
 
+    @Test
+    public void testEmptyTaskQueue(@Injectable RoutineLoadMgr routineLoadManager) {
+        RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        new Expectations() {
+            {
+                routineLoadManager.getClusterIdleSlotNum();
+                result = 1;
+                times = 1;
+            }
+        };
+        routineLoadTaskScheduler.runAfterCatalogReady();
+    }
+
     public void functionTest(@Mocked GlobalStateMgr globalStateMgr,
                              @Mocked SystemInfoService systemInfoService,
                              @Injectable Database database) throws DdlException, InterruptedException {
