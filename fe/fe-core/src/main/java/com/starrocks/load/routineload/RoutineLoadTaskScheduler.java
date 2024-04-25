@@ -79,7 +79,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private static final long BACKEND_SLOT_UPDATE_INTERVAL_MS = 10000; // 10s
     private static final long SLOT_FULL_SLEEP_MS = 10000; // 10s
-    private static final long POLL_TIMEOUT_SEC = 10000; // 10s
+    private static final long POLL_TIMEOUT_SEC = 10; // 10s
 
     private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
@@ -123,8 +123,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
         try {
             // This step will be blocked until timeout when queue is empty
-            RoutineLoadTaskInfo routineLoadTaskInfo =
-                    needScheduleTasksQueue.poll(POLL_TIMEOUT_SEC, TimeUnit.SECONDS);
+            RoutineLoadTaskInfo routineLoadTaskInfo = needScheduleTasksQueue.poll(POLL_TIMEOUT_SEC, TimeUnit.SECONDS);
             if (routineLoadTaskInfo == null) {
                 return;
             }
