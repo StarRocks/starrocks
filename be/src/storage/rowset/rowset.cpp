@@ -396,8 +396,8 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
         // link inverted files
         if (!_schema->indexes()->empty()) {
             int segment_n = i;
-            for (int index_id = 0; index_id < _schema->indexes()->size(); index_id++) {
-                const auto& index = (*(_schema->indexes()))[index_id];
+            const auto& indexes = *_schema->indexes();
+            for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
