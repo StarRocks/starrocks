@@ -514,3 +514,53 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_auto_increment;
 -- result:
 -- !result
+-- name: test_auto_increment_incorrect_col_id
+CREATE DATABASE test_auto_increment_incorrect_col_id;
+-- result:
+-- !result
+USE test_auto_increment_incorrect_col_id;
+-- result:
+-- !result
+CREATE TABLE `t_auto_increment_incorrect_col_id` (
+  `k1` BIGINT NOT NULL COMMENT "",
+  `k2` string default "abc" COMMENT "",
+  `k3` BIGINT AUTO_INCREMENT COMMENT "",
+  `k4` string default "bcd"COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_auto_increment_incorrect_col_id VALUES (1, DEFAULT, DEFAULT, DEFAULT);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_incorrect_col_id;
+-- result:
+1	abc	1	bcd
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_incorrect_col_id.csv -XPUT -H partial_update:true -H label:test_auto_increment_incorrect_col_id_1 -H column_separator:, -H columns:"k1, k4" ${url}/api/test_auto_increment_incorrect_col_id/t_auto_increment_incorrect_col_id/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_incorrect_col_id;
+-- result:
+1	abc	1	bcd
+2	abc	2	ddd
+-- !result
+DROP TABLE t_auto_increment_incorrect_col_id;
+-- result:
+-- !result
+DROP DATABASE test_auto_increment_incorrect_col_id;
+-- result:
+-- !result
