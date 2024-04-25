@@ -32,6 +32,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -45,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.InstantiationUtil;
 
@@ -52,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -125,7 +128,20 @@ public class PaimonScanNode extends ScanNode {
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;
-            addScanRangeLocations(dataSplit, predicateInfo);
+            Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
+            if (optionalRawFiles.isPresent()) {
+                List<RawFile> rawFiles = optionalRawFiles.get();
+                boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
+                if (validFormat) {
+                    for (RawFile rawFile : rawFiles) {
+                        addRowfileScanRangeLocations(rawFile);
+                    }
+                } else {
+                    addSplitScanRangeLocations(dataSplit, predicateInfo);
+                }
+            } else {
+                addSplitScanRangeLocations(dataSplit, predicateInfo);
+            }
             BinaryRow partitionValue = dataSplit.partition();
             if (!selectedPartitions.containsKey(partitionValue)) {
                 selectedPartitions.put(partitionValue, nextPartitionId());
@@ -134,7 +150,43 @@ public class PaimonScanNode extends ScanNode {
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
     }
 
-    private void addScanRangeLocations(DataSplit split, String predicateInfo) {
+    private THdfsFileFormat fromType(String type) {
+        THdfsFileFormat tHdfsFileFormat;
+        switch (type) {
+            case "orc":
+                tHdfsFileFormat = THdfsFileFormat.ORC;
+                break;
+            case "parquet":
+                tHdfsFileFormat = THdfsFileFormat.PARQUET;
+                break;
+            default:
+                tHdfsFileFormat = THdfsFileFormat.UNKNOWN;
+        }
+        return tHdfsFileFormat;
+    }
+
+    private void addRowfileScanRangeLocations(RawFile rawFile) {
+        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+        THdfsScanRange hdfsScanRange = new THdfsScanRange();
+        hdfsScanRange.setUse_paimon_jni_reader(false);
+        hdfsScanRange.setFull_path(rawFile.path());
+        hdfsScanRange.setOffset(rawFile.offset());
+        hdfsScanRange.setFile_length(rawFile.length());
+        hdfsScanRange.setLength(rawFile.length());
+        hdfsScanRange.setFile_format(fromType(rawFile.format()));
+
+        TScanRange scanRange = new TScanRange();
+        scanRange.setHdfs_scan_range(hdfsScanRange);
+        scanRangeLocations.setScan_range(scanRange);
+
+        TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+        scanRangeLocations.addToLocations(scanRangeLocation);
+
+        scanRangeLocationsList.add(scanRangeLocations);
+    }
+
+    private void addSplitScanRangeLocations(DataSplit split, String predicateInfo) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
