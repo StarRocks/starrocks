@@ -200,12 +200,22 @@ public:
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
 
+    bool could_split() const { return _could_split; }
+
+    bool could_split_physically() const { return _could_split_physically; }
+
+    int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
+
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
 
     // for ut
     lake::TabletManager* _tablet_manager;
+
+    bool _could_split = false;
+    bool _could_split_physically = false;
+    int64_t splitted_scan_rows = 0;
 
 private:
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
