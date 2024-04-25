@@ -214,13 +214,13 @@ public class Utils {
         Warehouse warehouse = manager.getWarehouse(warehouseId);
         if (warehouse == null)  {
             LOG.warn("failed to get warehouse by id {}", warehouseId);
-            return Optional.ofNullable(null);
+            return Optional.empty();
         }
 
         List<Long> ids = warehouse.getWorkerGroupIds();
         if (CollectionUtils.isEmpty(ids)) {
             LOG.warn("failed to get worker group id from warehouse {}", warehouse);
-            return Optional.ofNullable(null);
+            return Optional.empty();
         }
 
         return Optional.of(ids.get(0));
@@ -230,7 +230,7 @@ public class Utils {
         ComputeNode node = systemInfo.getBackendOrComputeNode(nodeId);
         if (node == null) {
             LOG.warn("failed to get warehouse id by node id: {}", nodeId);
-            return Optional.ofNullable(null);
+            return Optional.empty();
         }
 
         return Optional.of(node.getWarehouseId());
