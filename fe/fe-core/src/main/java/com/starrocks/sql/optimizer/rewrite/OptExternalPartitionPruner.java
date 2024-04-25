@@ -247,9 +247,9 @@ public class OptExternalPartitionPruner {
                 partitionKeys.put(new PartitionKey(), 0L);
             }
 
-            partitionKeys.stream().parallel().forEach(entry -> {
-                PartitionKey key = entry.first;
-                long partitionId = entry.second;
+            partitionKeys.entrySet().stream().parallel().forEach(entry -> {
+                PartitionKey key = entry.getKey();
+                long partitionId = entry.getValue();
                 List<LiteralExpr> literals = key.getKeys();
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
