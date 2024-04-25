@@ -21,7 +21,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 08
 
 7:AGGREGATE (update serialize)
-|  aggregate: sum[(cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [7: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[(cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [7: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
