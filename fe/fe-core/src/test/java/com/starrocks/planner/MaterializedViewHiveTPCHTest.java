@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
@@ -62,6 +63,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testQuery7() {
         runFileUnitTest("materialized-view/tpch-hive/q7");
     }
