@@ -78,7 +78,7 @@ public class TaskRunManager implements MemoryTrackable {
     }
 
     public boolean killTaskRun(Long taskId) {
-        TaskRun taskRun = taskRunScheduler.removeRunningTask(taskId);
+        TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
         if (taskRun == null) {
             return false;
         }
