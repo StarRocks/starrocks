@@ -116,6 +116,7 @@ public class LakeTableHelper {
                 if (GlobalStateMgr.isCheckpointThread()) {
                     throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
                 }
+                // TODO(yandongxiao): Change this to the worker group id of Config.lake_background_warehouse
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
                         StarOSAgent.DEFAULT_WORKER_GROUP_ID);
 

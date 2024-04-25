@@ -42,6 +42,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * compared to StarOSAgentTest, only mock the StarClient, others keep real
@@ -105,7 +106,7 @@ public class StarOSAgent2ndTest {
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort + 1);
             backend.setStarletPort(workerStarletPort);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
             workerToBackend.clear();
         }
@@ -114,7 +115,7 @@ public class StarOSAgent2ndTest {
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
             // empty result
-            Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId, 0).isEmpty());
+            Assert.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
             workerToBackend.clear();
         }
@@ -122,7 +123,7 @@ public class StarOSAgent2ndTest {
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
             workerToBackend.clear();
         }
@@ -140,7 +141,7 @@ public class StarOSAgent2ndTest {
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort + 1);
             cn.setStarletPort(workerStarletPort);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
             workerToBackend.clear();
         }
@@ -149,7 +150,7 @@ public class StarOSAgent2ndTest {
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
             // empty result
-            Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId, 0).isEmpty());
+            Assert.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
             workerToBackend.clear();
         }
@@ -157,7 +158,7 @@ public class StarOSAgent2ndTest {
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort);
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assert.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
             workerToBackend.clear();
         }
@@ -259,5 +260,9 @@ public class StarOSAgent2ndTest {
             Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
                     fsPathBuilder.build().toBuilder().clearFullPath().toString());
         }
+    }
+
+    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+        return starosAgent.getAllBackendIdsByShard(shardId, workerGroupId, false);
     }
 }
