@@ -212,8 +212,6 @@ MaxCompute Catalog 将 MaxCompute 数据类型映射到 StarRocks 数据类型�
 | BINARY              | VARBINARY           |
 | DATE                | DATE                |
 | DATETIME            | DATETIME            |
-| DATETIME            | DATETIME            |
-| DATETIME            | DATETIME            |
 | TIMESTAMP           | DATETIME            |
 | ARRAY               | ARRAY               |
 | MAP                 | MAP                 |
