@@ -156,7 +156,7 @@ public class StreamLoadPlannerTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setLoad_dop(2);
-        request.setCompression_type("LZ4_FRAME");
+        request.setPayload_compression_type("LZ4_FRAME");
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());

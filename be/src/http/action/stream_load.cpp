@@ -591,7 +591,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     }
 
     if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty()) {
-        request.__set_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
+        request.__set_payload_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
     } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
         request.__set_compression_type(http_req->header(HTTP_COMPRESSION));
     }

@@ -428,9 +428,9 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     }
 
     if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty()) {
-        request.__set_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
+        request.__set_payload_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
     } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
-        request.__set_compression_type(http_req->header(HTTP_COMPRESSION));
+        request.__set_payload_compression_type(http_req->header(HTTP_COMPRESSION));
     }
 
     return Status::OK();
