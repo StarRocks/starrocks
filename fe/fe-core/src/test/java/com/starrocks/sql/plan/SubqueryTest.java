@@ -1574,6 +1574,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0");
         }
         {
@@ -1594,6 +1595,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  8:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0");
         }
         {
@@ -1616,6 +1618,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  analytic partition by: 1: v1, 3: v3\n" +
                     "  |  offset: 0");
         }
         {
@@ -1636,6 +1639,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0");
         }
         {
@@ -1658,6 +1662,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  8:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0");
         }
         {
@@ -1679,6 +1684,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  8:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0");
         }
     }
