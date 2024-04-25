@@ -298,4 +298,50 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
             testRewriteOK(mv, query);
         }
     }
+
+    @Test
+    public void testTextMatchRewriteWithSubQuery1() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time";
+        String query = String.format("select user_id, count(time) from (%s) as t group by user_id limit 3;", mv);
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testTextMatchRewriteWithSubQuery2() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time limit 3";
+        String query = String.format("select user_id, count(time) from (%s) as t group by user_id limit 3;", mv);
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testTextMatchRewriteWithSubQuery3() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time order by " +
+                "user_id, time";
+        String query = String.format("select user_id, count(time) from (%s) as t group by user_id limit 3;", mv);
+        // TODO: support order by elimiation
+        testRewriteFail(mv, query);
+    }
+
+    @Test
+    public void testTextMatchRewriteWithSubQuery4() {
+        String mv = "select * from (select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id," +
+                " time order by user_id, time) s where user_id != 'xxxx'";
+        String query = String.format("select user_id, count(time) from (%s) as t group by user_id limit 3;", mv);
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testTextMatchRewriteWithExtraOrder1() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time";
+        String query = String.format("select user_id from (%s) t order by user_id, time;", mv);
+        testRewriteOK(mv, query);
+    }
+    @Test
+    public void testTextMatchRewriteWithExtraOrder2() {
+        String mv = "select user_id, count(1) from (select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags " +
+                "group by user_id, time) t group by user_id";
+        String query = String.format("%s order by user_id;", mv);
+        // TODO: support text based view for more patterns, now only rewrite the same query and subquery
+        testRewriteFail(mv, query);
+    }
 }

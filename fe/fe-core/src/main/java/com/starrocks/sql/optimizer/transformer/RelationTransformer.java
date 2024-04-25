@@ -128,6 +128,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -265,7 +266,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap).plan(node, outer);
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
+        LogicalPlan logicalPlan = queryTransformer.plan(node, outer);
+        return logicalPlan;
     }
 
     @Override
@@ -676,10 +679,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         builder = addOrderByLimit(builder, node);
 
-        // store opt expression to ast map if sub-query is project or union
+        // store opt expression to ast map if sub-query's type is supported.
         OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
-        if (optToAstMap != null && (operatorType == OperatorType.LOGICAL_PROJECT ||
-                operatorType == OperatorType.LOGICAL_UNION)) {
+        if (optToAstMap != null && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(operatorType)) {
             optToAstMap.put(subQueryOptExpression.getOp(), node.getQueryStatement());
         }
 
