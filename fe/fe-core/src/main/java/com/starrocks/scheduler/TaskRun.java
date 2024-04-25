@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -53,12 +54,15 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
+    @SerializedName("taskId")
     private long taskId;
 
+    @SerializedName("properties")
     private Map<String, String> properties;
 
     private final CompletableFuture<Constants.TaskRunState> future;
 
+    @SerializedName("task")
     private Task task;
 
     private ConnectContext runCtx;
@@ -67,12 +71,16 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private TaskRunProcessor processor;
 
+    @SerializedName("status")
     private TaskRunStatus status;
 
+    @SerializedName("type")
     private Constants.TaskType type;
 
+    @SerializedName("executeOption")
     private ExecuteOption executeOption;
 
+    @SerializedName("taskRunId")
     private final String taskRunId;
 
     TaskRun() {
@@ -136,7 +144,7 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
-    public String getUUID() {
+    public String getTaskRunId() {
         return taskRunId;
     }
 
@@ -354,7 +362,8 @@ public class TaskRun implements Comparable<TaskRun> {
         }
         TaskRun taskRun = (TaskRun) o;
         return this.taskId == taskRun.getTaskId() &&
-                this.task.getDefinition().equals(taskRun.getTask().getDefinition());
+                this.task.getDefinition().equals(taskRun.getTask().getDefinition()) &&
+                this.taskRunId.equals(taskRun.getTaskRunId());
     }
 
     @Override

@@ -18,12 +18,14 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -42,15 +44,20 @@ public class TaskRunScheduler {
     // TODO: Refactor this to find a better way to store the task runs.
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
+    @SerializedName("pendingTaskRunMap")
     private final Map<Long, Queue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
 
     // pending TaskRun Queue, compared by priority and created time
+    @SerializedName("pendingTaskRunQueue")
     private final Queue<TaskRun> pendingTaskRunQueue = new PriorityBlockingQueue<>();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
+    @SerializedName("runningTaskRunMap")
     private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
 
+    @SerializedName("runningSyncTaskRunMap")
+    private final Map<Long, TaskRun> runningSyncTaskRunMap = Maps.newConcurrentMap();
 
     ////////// pending task run map //////////
     /**
@@ -71,12 +78,12 @@ public class TaskRunScheduler {
      * @param taskId: task id
      * @return: pending task run queue
      */
-    public List<TaskRun> getCopiedPendingTaskRunsByTaskId(long taskId) {
+    public Collection<TaskRun> getPendingTaskRunsByTaskId(long taskId) {
         Queue<TaskRun> pendingTaskRuns = pendingTaskRunMap.get(taskId);
         if (pendingTaskRuns == null) {
             return null;
         }
-        return ImmutableList.copyOf(pendingTaskRuns);
+        return pendingTaskRuns;
     }
 
     /**
@@ -107,24 +114,26 @@ public class TaskRunScheduler {
         if (taskRun.getStatus().getState() != Constants.TaskRunState.PENDING) {
             LOG.warn("task run is not in pending state: {}", taskRun);
         }
-        if (!pendingTaskRunQueue.remove(taskRun)) {
-            LOG.warn("remove pending task run from queue failed: {}", taskRun);
+
+        synchronized (this) {
+            if (!pendingTaskRunQueue.remove(taskRun)) {
+                LOG.warn("remove pending task run from queue failed: {}", taskRun);
+            }
+
+            Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskRun.getTaskId());
+            if (!taskRunQueue.remove(taskRun)) {
+                LOG.warn("remove pending task run from pending map failed: {}", taskRun);
+            }
+            if (taskRunQueue.isEmpty()) {
+                LOG.info("remove pending task run from pending map: {}", taskRun);
+                pendingTaskRunMap.remove(taskRun.getTaskId());
+            }
         }
         // make sure future is canceled.
         CompletableFuture<?> future = taskRun.getFuture();
         boolean isCancel = future.cancel(true);
         if (!isCancel) {
             LOG.warn("fail to cancel scheduler for task [{}]", taskRun);
-        }
-
-        Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskRun.getTaskId());
-        if (!taskRunQueue.remove(taskRun)) {
-            LOG.warn("remove pending task run from pending map failed: {}", taskRun);
-
-        }
-        if (taskRunQueue.isEmpty()) {
-            LOG.info("remove pending task run from pending map: {}", taskRun);
-            pendingTaskRunMap.remove(taskRun.getTaskId());
         }
     }
 
@@ -138,19 +147,21 @@ public class TaskRunScheduler {
             return;
         }
 
-        while (!taskRunQueue.isEmpty()) {
-            TaskRun taskRun = taskRunQueue.poll();
-            if (!pendingTaskRunQueue.remove(taskRun)) {
-                LOG.warn("remove pending task run from queue failed: {}", taskRun);
+        synchronized (this) {
+            while (!taskRunQueue.isEmpty()) {
+                TaskRun taskRun = taskRunQueue.poll();
+                // make sure future is canceled.
+                CompletableFuture<?> future = taskRun.getFuture();
+                boolean isCancel = future.cancel(true);
+                if (!isCancel) {
+                    LOG.warn("fail to cancel scheduler for task [{}]", taskRun);
+                }
+                if (!pendingTaskRunQueue.remove(taskRun)) {
+                    LOG.warn("remove pending task run from queue failed: {}", taskRun);
+                }
             }
-            // make sure future is canceled.
-            CompletableFuture<?> future = taskRun.getFuture();
-            boolean isCancel = future.cancel(true);
-            if (!isCancel) {
-                LOG.warn("fail to cancel scheduler for task [{}]", taskRun);
-            }
+            pendingTaskRunMap.remove(task.getId());
         }
-        pendingTaskRunMap.remove(task.getId());
     }
 
     public TaskRun getTaskRunByQueryId(Long taskId, String queryId) {
@@ -220,7 +231,7 @@ public class TaskRunScheduler {
     }
 
     public long getTaskIdPendingTaskRunCount(long taskId) {
-        List<TaskRun> pendingTaskRuns = getCopiedPendingTaskRunsByTaskId(taskId);
+        Collection<TaskRun> pendingTaskRuns = getPendingTaskRunsByTaskId(taskId);
         return  pendingTaskRuns == null ? 0L : pendingTaskRuns.size();
     }
 
@@ -278,12 +289,28 @@ public class TaskRunScheduler {
         return null;
     }
 
+    //////////// sync running task run map ////////////
+    public void addSyncRunningTaskRun(TaskRun taskRun) {
+        if (taskRun == null) {
+            return;
+        }
+        runningSyncTaskRunMap.put(taskRun.getTaskId(), taskRun);
+    }
+
+    public TaskRun removeSyncRunningTaskRun(TaskRun taskRun) {
+        if (taskRun == null) {
+            return null;
+        }
+        return runningSyncTaskRunMap.remove(taskRun.getTaskId());
+    }
+
     @Override
     public String toString() {
         JsonObject res = new JsonObject();
-        res.addProperty("running", GsonUtils.GSON.toJson(runningTaskRunMap));
         res.addProperty("pending_map", GsonUtils.GSON.toJson(pendingTaskRunMap));
         res.addProperty("pending_queue", GsonUtils.GSON.toJson(pendingTaskRunQueue));
+        res.addProperty("running", GsonUtils.GSON.toJson(runningTaskRunMap));
+        res.addProperty("running_sync_task_runs", GsonUtils.GSON.toJson(runningSyncTaskRunMap));
         return res.toString();
     }
 }
