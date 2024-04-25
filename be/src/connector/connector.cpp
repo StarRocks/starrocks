@@ -61,7 +61,7 @@ public:
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
         cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
-        cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
+        // cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
     }
 };
 

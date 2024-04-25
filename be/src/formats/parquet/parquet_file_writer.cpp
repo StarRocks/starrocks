@@ -466,9 +466,9 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const string &pa
     };
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
-    auto async_output_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file));
+    auto async_output_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
-    auto writer = std::make_unique<ParquetFileWriter>(path, async_output_stream.get(), _column_names, types,
+    auto writer = std::make_unique<ParquetFileWriter>(path, parquet_output_stream, _column_names, types,
                                                std::move(column_evaluators), _compression_type, _parsed_options,
                                                rollback_action, _executors, _runtime_state);
     return WriterAndStream{

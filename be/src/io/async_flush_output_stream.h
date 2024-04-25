@@ -20,6 +20,7 @@
 #include <future>
 
 #include "common/statusor.h"
+#include "runtime/current_thread.h"
 #include "fs/fs.h"
 
 namespace starrocks::io {
@@ -27,7 +28,7 @@ namespace starrocks::io {
 // NOT thread-safe
 class AsyncFlushOutputStream {
 public:
-    AsyncFlushOutputStream(std::unique_ptr<WritableFile> file) : _file(std::move(file)) {}
+    AsyncFlushOutputStream(std::unique_ptr<WritableFile> file, PriorityThreadPool* io_executor, RuntimeState* runtime_state) : _file(std::move(file)), _io_executor(io_executor), _runtime_state(runtime_state) {}
 
     Status write(const uint8_t* data, size_t size) {
         _total_size += size;
@@ -36,6 +37,11 @@ public:
         std::memcpy(buffer->data(), data, size);
 
         auto task = [&, buffer]() {
+#ifndef BE_TEST
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+        CurrentThread::current().set_query_id(_runtime_state->query_id());
+        CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
+#endif
             auto status = _file->append(Slice(buffer->data(), buffer->size()));
             {
                 std::scoped_lock lock(_mutex);
@@ -58,8 +64,14 @@ public:
         return _total_size;
     }
 
+    // called exactly once
     Status close() {
         auto task = [&]() {
+#ifndef BE_TEST
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+            CurrentThread::current().set_query_id(_runtime_state->query_id());
+            CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
+#endif
             auto status = _file->close();
             {
                 std::scoped_lock lock(_mutex);
@@ -79,7 +91,7 @@ public:
         return _promise.get_future();
     };
 
-    void enqueue_and_maybe_submit_task(std::function<void()> task) {
+    void enqueue_and_maybe_submit_task(const std::function<void()>& task) {
         std::scoped_lock lock(_mutex);
         _task_queue.push(task);
         if (_has_in_flight_io) {
@@ -94,8 +106,9 @@ public:
 private:
     int64_t _total_size{0};
     std::promise<Status> _promise;
-    PriorityThreadPool* _io_executor;
     std::unique_ptr<WritableFile> _file;
+    PriorityThreadPool* _io_executor = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 
     std::mutex _mutex; // guards following
     bool _has_in_flight_io{false};

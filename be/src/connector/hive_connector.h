@@ -29,7 +29,7 @@ public:
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
-    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
+//    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
 };

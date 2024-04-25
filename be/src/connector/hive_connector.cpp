@@ -35,9 +35,9 @@ DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<HiveDataSourceProvider>(scan_node, plan_node);
 }
 
-std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_provider() const {
-    return std::make_unique<HiveChunkSinkProvider>();
-}
+//std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_provider() const {
+//    return std::make_unique<HiveChunkSinkProvider>();
+//}
 
 // ================================
 
