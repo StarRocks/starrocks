@@ -116,6 +116,8 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _cached_pages_num_counter = ADD_COUNTER(_runtime_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+    _not_pushdown_predicates_counter =
+            ADD_COUNTER_SKIP_MERGE(_runtime_profile, "UnPushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     _pushdown_access_paths_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownAccessPaths", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
 
@@ -616,6 +618,8 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+    COUNTER_SET(_not_pushdown_predicates_counter,
+                ((int64_t)_not_push_down_predicates.size() + (int64_t)_scan_ctx->not_push_down_conjuncts().size()));
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
