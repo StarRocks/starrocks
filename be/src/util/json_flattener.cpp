@@ -18,6 +18,7 @@
 #include "util/json_flattener.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -180,6 +181,10 @@ struct FlatColumnDesc {
 
     // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
     uint64_t max = 0;
+
+    // same key may appear many times in json, so we need avoid duplicate compute hits
+    uint64_t last_row = -1;
+    uint64_t multi_times = 0;
 };
 
 void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
@@ -211,6 +216,7 @@ void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
         return;
     }
 
+    size_t rows = 0;
     // extract common keys, type
     std::unordered_map<std::string_view, FlatColumnDesc> derived_maps;
     for (size_t k = 0; k < json_datas.size(); k++) {
@@ -218,6 +224,7 @@ void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
 
         ColumnViewer<TYPE_JSON> viewer(json_datas[k]);
         for (size_t i = 0; i < row_count; ++i) {
+            rows++;
             if (viewer.is_null(i)) {
                 continue;
             }
@@ -238,6 +245,9 @@ void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
                 uint8_t compatibility_type = JsonFlattener::get_compatibility_type(json_type, base_type);
                 derived_maps[name].type = compatibility_type;
                 derived_maps[name].casts += (base_type != compatibility_type);
+
+                derived_maps[name].multi_times += (derived_maps[name].last_row == rows);
+                derived_maps[name].last_row = rows;
 
                 if (json_type == vpack::ValueType::UInt) {
                     derived_maps[name].max = std::max(derived_maps[name].max, it.value.getUIntUnchecked());
@@ -284,7 +294,8 @@ void JsonFlattener::derived_paths(std::vector<ColumnPtr>& json_datas) {
     for (int i = 0; i < top_hits.size() && i < config::json_flat_column_max; i++) {
         const auto& [name, desc] = top_hits[i];
         // check sparsity
-        if (desc.hits >= total_rows * config::json_flat_sparsity_factor) {
+        // same key may appear many times in json, so we need avoid duplicate compute hits
+        if (desc.multi_times <= 0 && desc.hits >= total_rows * config::json_flat_sparsity_factor) {
             _flat_paths.emplace_back(name);
             _flat_types.emplace_back(desc.type);
         }
@@ -315,6 +326,8 @@ void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* r
         flat_jsons.emplace_back(down_cast<NullableColumn*>((*result)[i].get()));
     }
 
+    // may not empty rows when compaction
+    size_t base_rows = flat_jsons[0]->size();
     // output
     DCHECK_LE(_flat_paths.size(), std::numeric_limits<int>::max());
     for (size_t row = 0; row < json_column->size(); row++) {
@@ -365,12 +378,12 @@ void JsonFlattener::flatten(const Column* json_column, std::vector<ColumnPtr>* r
         }
 
         for (auto col : flat_jsons) {
-            DCHECK_EQ(col->size(), row + 1);
+            DCHECK_EQ(col->size(), row + 1 + base_rows);
         }
     }
 
     for (auto col : flat_jsons) {
-        DCHECK_EQ(col->size(), json_column->size());
+        DCHECK_EQ(col->size(), json_column->size() + base_rows);
     }
 
     for (auto& col : *result) {
