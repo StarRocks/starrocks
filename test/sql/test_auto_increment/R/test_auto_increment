@@ -521,6 +521,9 @@ CREATE DATABASE test_auto_increment_incorrect_col_id;
 USE test_auto_increment_incorrect_col_id;
 -- result:
 -- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+-- result:
+-- !result
 CREATE TABLE `t_auto_increment_incorrect_col_id` (
   `k1` BIGINT NOT NULL COMMENT "",
   `k2` string default "abc" COMMENT "",

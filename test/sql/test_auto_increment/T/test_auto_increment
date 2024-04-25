@@ -218,6 +218,7 @@ DROP DATABASE test_table_with_null;
 -- name: test_auto_increment_incorrect_col_id
 CREATE DATABASE test_auto_increment_incorrect_col_id;
 USE test_auto_increment_incorrect_col_id;
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
 CREATE TABLE `t_auto_increment_incorrect_col_id` (
   `k1` BIGINT NOT NULL COMMENT "",
   `k2` string default "abc" COMMENT "",
