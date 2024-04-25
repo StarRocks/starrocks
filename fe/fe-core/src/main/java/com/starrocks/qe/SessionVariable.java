@@ -975,7 +975,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // it's need BE to enable flat json, else will take a poor performance
     @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD)
-    private boolean cboPruneJsonSubfield = true;
+    private boolean cboPruneJsonSubfield = false;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
