@@ -772,8 +772,11 @@ void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks
     // Update cpu cost of this query
     int64_t runtime_ns = driver_acct().get_last_time_spent();
     int64_t source_operator_last_cpu_time_ns = source_operator()->get_last_growth_cpu_time_ns();
+    DCHECK(source_operator_last_cpu_time_ns >= 0);
     int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
+    DCHECK(sink_operator_last_cpu_time_ns >= 0);
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
+    DCHECK(accounted_cpu_cost >= 0);
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
     if (_workgroup != nullptr) {
         _workgroup->incr_cpu_runtime_ns(accounted_cpu_cost);
