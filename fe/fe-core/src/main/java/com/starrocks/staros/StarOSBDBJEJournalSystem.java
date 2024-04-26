@@ -31,7 +31,6 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.EditLog;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -208,7 +207,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
                 break;
             }
 
-            editLog.loadJournal(GlobalStateMgr.getCurrentState(), entity);
+            editLog.loadJournal(null /* GlobalStateMgr */, entity);
             replayedJournalId.incrementAndGet();
 
             LOG.debug("star mgr journal {} replayed.", replayedJournalId);
