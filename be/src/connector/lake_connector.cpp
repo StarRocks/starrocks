@@ -185,6 +185,26 @@ public:
     // Make cloud native table behavior same as olap table
     bool always_shared_scan() const override { return false; }
 
+    // possiable physical distribution optimize of data source
+    bool sorted_by_keys_per_tablet() const override {
+        return _t_lake_scan_node.__isset.sorted_by_keys_per_tablet && _t_lake_scan_node.sorted_by_keys_per_tablet;
+    }
+    bool output_chunk_by_bucket() const override {
+        return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
+    }
+    bool is_asc_hint() const override {
+        if (sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
+            return _t_lake_scan_node.output_asc_hint;
+        }
+        return true;
+    }
+    std::optional<bool> partition_order_hint() const override {
+        if (sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.partition_order_hint) {
+            return _t_lake_scan_node.partition_order_hint;
+        }
+        return std::nullopt;
+    }
+
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
