@@ -482,7 +482,8 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 
         RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{op_write.rowset().segments(segment_id)}, segment_id,
                                                   // use partial segment column offset id to get the column
-                                                  auto_increment_state->schema.get(), rowids, auto_increment_col_partial_id));
+                                                  auto_increment_state->schema.get(), rowids,
+                                                  auto_increment_col_partial_id));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
     VLOG(2) << "UpdateManager get_column_values " << cost_str.str();
