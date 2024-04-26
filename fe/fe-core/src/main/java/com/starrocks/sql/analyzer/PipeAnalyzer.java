@@ -28,6 +28,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
+import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -108,9 +109,9 @@ public class PipeAnalyzer {
                         value = Integer.parseInt(valueStr);
                     } catch (NumberFormatException ignored) {
                     }
-                    if (value < 1 || value > 1024) {
+                    if (value < 1 || value > Pipe.MAX_POLL_INTERVAL) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                                PROPERTY_POLL_INTERVAL + " should in [1, 1024]");
+                                String.format("%s should in [1, %d]", PROPERTY_POLL_INTERVAL, Pipe.MAX_POLL_INTERVAL));
                     }
                     break;
                 }
@@ -188,8 +189,9 @@ public class PipeAnalyzer {
         }
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         if (selectRelation.hasAggregation() || selectRelation.hasOrderByClause() || selectRelation.hasLimit()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be a vanilla select statement." +
-                    " Aggregation, order by clause, limit clause are not supported yet.");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
+                    "must be a vanilla select statement." +
+                            " Aggregation, order by clause, limit clause are not supported yet.");
         }
         if (!(selectRelation.getRelation() instanceof FileTableFunctionRelation)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
