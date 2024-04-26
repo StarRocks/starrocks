@@ -529,7 +529,7 @@ int64_t PipelineBuilderContext::_recent_limit_size(const OpFactories& pred_opera
     for (auto it = pred_operators.rbegin(); it != pred_operators.rend(); ++it) {
         if (auto limit = dynamic_cast<LimitOperatorFactory*>(it->get())) {
             return limit->limit();
-        } else if (dynamic_cast<ChunkAccumulateOperatorFactory*>(it->get()) != nullptr) {
+        } else if (dynamic_cast<ChunkAccumulateOperatorFactory*>(it->get()) == nullptr) {
             return -1;
         }
     }
