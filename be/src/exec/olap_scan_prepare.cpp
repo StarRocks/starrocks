@@ -179,16 +179,16 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     return true;
 }
 
-static std::vector<ExprContextContainer> build_expr_context_containers(const std::vector<ExprContext*>& expr_contexts) {
-    std::vector<ExprContextContainer> containers;
+static std::vector<BoxedExprContext> build_expr_context_containers(const std::vector<ExprContext*>& expr_contexts) {
+    std::vector<BoxedExprContext> containers;
     for (auto* expr_ctx : expr_contexts) {
         containers.emplace_back(expr_ctx);
     }
     return containers;
 }
 
-static std::vector<RawExprContainer> build_raw_expr_containers(const std::vector<Expr*>& exprs) {
-    std::vector<RawExprContainer> containers;
+static std::vector<BoxedExpr> build_raw_expr_containers(const std::vector<Expr*>& exprs) {
+    std::vector<BoxedExpr> containers;
     for (auto* expr : exprs) {
         containers.emplace_back(expr);
     }
@@ -220,12 +220,16 @@ static TExprOpcode::type maybe_invert_in_and_equal_op(const TExprOpcode::type op
 // ChunkPredicateBuilder
 // ------------------------------------------------------------------------------------
 
-RawExprContainer::RawExprContainer(Expr* root_expr) : root_expr(root_expr) {}
-Expr* RawExprContainer::root() const {
+BoxedExpr::BoxedExpr(Expr* root_expr) : root_expr(root_expr) {}
+Expr* BoxedExpr::root() const {
     return get_root_expr(root_expr);
 }
-StatusOr<ExprContext*> RawExprContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state) const {
+StatusOr<ExprContext*> BoxedExpr::expr_context(ObjectPool* obj_pool, RuntimeState* state) const {
     if (new_expr_ctx == nullptr) {
+        // Copy expr to prevent two ExprContexts from owning the same Expr, which will cause the same Expr to be
+        // closed twice.
+        // - The ExprContext in the `original _opts.conjunct_ctxs_ptr` will own an Expr and all its children.
+        // - The newly created ExprContext here will also own this Expr.
         auto* new_expr = Expr::copy(obj_pool, root_expr);
         new_expr_ctx = obj_pool->add(new ExprContext(new_expr));
         RETURN_IF_ERROR(new_expr_ctx->prepare(state));
@@ -234,20 +238,20 @@ StatusOr<ExprContext*> RawExprContainer::expr_context(ObjectPool* obj_pool, Runt
     return new_expr_ctx;
 }
 
-ExprContextContainer::ExprContextContainer(ExprContext* expr_ctx) : expr_ctx(expr_ctx) {}
-Expr* ExprContextContainer::root() const {
+BoxedExprContext::BoxedExprContext(ExprContext* expr_ctx) : expr_ctx(expr_ctx) {}
+Expr* BoxedExprContext::root() const {
     return get_root_expr(expr_ctx);
 }
-StatusOr<ExprContext*> ExprContextContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state) const {
+StatusOr<ExprContext*> BoxedExprContext::expr_context(ObjectPool* obj_pool, RuntimeState* state) const {
     return expr_ctx;
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 ChunkPredicateBuilder<E, Type>::ChunkPredicateBuilder(const OlapScanConjunctsManagerOptions& opts, std::vector<E> exprs,
                                                       bool is_root_builder)
         : _opts(opts), _exprs(std::move(exprs)), _is_root_builder(is_root_builder), _normalized_exprs(_exprs.size()) {}
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     RETURN_IF_ERROR(normalize_expressions());
     RETURN_IF_ERROR(build_olap_filters());
@@ -270,7 +274,7 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     return normalized && !SIMD::contain_zero(_normalized_exprs);
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicates() {
     const size_t num_preds = _exprs.size();
     for (size_t i = 0; i < num_preds; i++) {
@@ -288,10 +292,10 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicates() 
     return true;
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicate(const Expr* root_expr) {
     auto process = [&]<CompoundNodeType ChildType>() -> StatusOr<bool> {
-        ChunkPredicateBuilder<RawExprContainer, ChildType> child_builder(
+        ChunkPredicateBuilder<BoxedExpr, ChildType> child_builder(
                 _opts, build_raw_expr_containers(root_expr->children()), false);
         ASSIGN_OR_RETURN(const bool normalized, child_builder.parse_conjuncts());
         if (normalized) {
@@ -314,7 +318,7 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicate(con
     return false;
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 StatusOr<PredicateCompoundNode<Type>> ChunkPredicateBuilder<E, Type>::get_predicate_tree_root(
         PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner) {
     auto compound_node = PredicateCompoundNode<Type>{};
@@ -347,7 +351,7 @@ static bool is_not_in(const auto* pred) {
     }
 };
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, typename RangeValueType, bool Negative>
 requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize_in_or_equal_predicate(
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
@@ -409,7 +413,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
 }
 
 // explicit specialization for DATE.
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, typename RangeValueType, bool Negative>
 requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_in_or_equal_predicate(
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
@@ -499,7 +503,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, typename RangeValueType, bool Negative>
 Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDescriptor& slot,
                                                                   ColumnValueRange<RangeValueType>* range) {
@@ -531,7 +535,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDesc
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, typename RangeValueType, bool Negative>
 Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotDescriptor& slot,
                                                                      ColumnValueRange<RangeValueType>* range) {
@@ -627,7 +631,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, typename RangeValueType, bool Negative>
 Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
@@ -690,7 +694,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::normalize_is_null_predicate(const SlotDescriptor& slot) {
     for (size_t i = 0; i < _exprs.size(); i++) {
         if (_normalized_exprs[i]) {
@@ -721,7 +725,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_is_null_predicate(const SlotDes
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, typename RangeValueType>
 Status ChunkPredicateBuilder<E, Type>::normalize_predicate(const SlotDescriptor& slot,
                                                            ColumnValueRange<RangeValueType>* range) {
@@ -772,7 +776,7 @@ struct ColumnRangeBuilder {
     }
 };
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::normalize_expressions() {
     // Note: _normalized_exprs size must be equal to _conjunct_ctxs size,
     // but HashJoinNode will push down predicate to OlapScanNode's _conjunct_ctxs,
@@ -788,7 +792,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_expressions() {
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
     constexpr bool Negative = Type == CompoundNodeType::OR;
     olap_filters.clear();
@@ -846,7 +850,7 @@ private:
     int32_t _max_scan_key_num;
 };
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::build_scan_keys(bool unlimited, int32_t max_scan_key_num) {
     int conditional_key_columns = 0;
     scan_keys.set_is_convertible(unlimited);
@@ -869,7 +873,7 @@ Status ChunkPredicateBuilder<E, Type>::build_scan_keys(bool unlimited, int32_t m
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* parser,
                                                               ColumnPredicatePtrs& col_preds_owner) {
     for (auto& f : olap_filters) {
@@ -907,7 +911,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
     RETURN_IF_ERROR(scan_keys.get_key_range(key_ranges));
     if (key_ranges->empty()) {
@@ -916,12 +920,12 @@ Status ChunkPredicateBuilder<E, Type>::get_key_ranges(std::vector<std::unique_pt
     return Status::OK();
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 bool ChunkPredicateBuilder<E, Type>::is_pred_normalized(size_t index) const {
     return index < _normalized_exprs.size() && _normalized_exprs[index];
 }
 
-template <ExprContainer E, CompoundNodeType Type>
+template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::build_column_expr_predicates() {
     std::map<SlotId, int> slot_id_to_index;
     const auto& slots = _opts.tuple_desc->decoded_slots();
