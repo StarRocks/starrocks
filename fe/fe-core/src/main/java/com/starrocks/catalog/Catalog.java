@@ -3650,6 +3650,11 @@ public class Catalog {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+            if (olapTable == null) {
+                LOG.warn("replayDropPartition failed, table is null, db id: {}, table id: {}",
+                        info.getDbId(), info.getTableId());
+                return;
+            }
             if (info.isTempPartition()) {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
