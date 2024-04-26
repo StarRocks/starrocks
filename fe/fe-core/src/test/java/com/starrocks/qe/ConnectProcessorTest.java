@@ -551,4 +551,6 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }
+
+
 }
