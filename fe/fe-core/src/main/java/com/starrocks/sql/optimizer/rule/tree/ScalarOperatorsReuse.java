@@ -333,7 +333,7 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visit(ScalarOperator scalarOperator, Void context) {
-            if (scalarOperator.getChildren().isEmpty()) {
+            if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
 
@@ -356,7 +356,7 @@ public class ScalarOperatorsReuse {
                 // for example:
                 // select (rnd + 1) as rnd1, (rnd + 2) as rnd2 from (select rand() as rnd) sub
                 return collectCommonOperatorsByDepth(1, scalarOperator);
-            } else if (scalarOperator.getChildren().isEmpty()) {
+            } else if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
                 // to keep the same logic as origin
                 return 0;
             } else {
@@ -370,8 +370,7 @@ public class ScalarOperatorsReuse {
             return collectCommonOperatorsByDepth(1, scalarOperator);
         }
 
-        // If a scalarOperator contains any non-deterministic function, it cannot be reused
-        // because the non-deterministic function results returned each time are inconsistent.
+
         // a lambda-dependent expressions also can't be reused if reuseLambdaDependentExpr is false.
         // For example, array_map(x->2x+1+2x,array),2x is lambda-dependent, so it can't be reused if
         // reuseLambdaDependentExpr is false, but array_map(x->2x+1+2x,array) can be reused if needed.

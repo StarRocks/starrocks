@@ -336,11 +336,11 @@ public class ScanTest extends PlanTestBase {
     @Test
     public void testScalarReuseIsNull() throws Exception {
         String plan =
-                getFragmentPlan("SELECT (abs(1) IS NULL) = true AND ((abs(1) IS NULL) IS NOT NULL) as count FROM t1;");
+                getFragmentPlan("SELECT (abs(v4) IS NULL) = true AND ((abs(v4) IS NULL) IS NOT NULL) as count FROM t1;");
         Assert.assertTrue(plan, plan.contains("1:Project\n" +
                 "  |  <slot 4> : (6: expr) AND (6: expr IS NOT NULL)\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 5> : abs(1)\n" +
+                "  |  <slot 5> : abs(1: v4)\n" +
                 "  |  <slot 6> : 5: abs IS NULL"));
     }
 

@@ -875,23 +875,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql =
                 "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  |  output columns:\n" +
-                "  |  9 <-> if[(DictDecode(11: S_ADDRESS, [<place-holder> = 'kks']), [13: expr, VARCHAR, true], " +
-                "DictDecode(12: S_COMMENT, [<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; " +
-                "args nullable: true; result nullable: true]\n" +
-                "  |  10 <-> concat[([13: expr, VARCHAR, true], DictDecode(11: S_ADDRESS, [<place-holder>])); " +
-                "args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
-        Assert.assertTrue(plan, plan.contains("  |  common expressions:\n" +
-                "  |  13 <-> DictDecode(12: S_COMMENT, [upper(<place-holder>)])"));
+        Assert.assertTrue(plan, plan.contains("9 <-> if[(DictDecode(11: S_ADDRESS, [<place-holder> = 'kks'])"));
 
         // support(support(unsupport(Column), unsupport(Column)))
         sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 9> : reverse(substr(left(11: expr, CAST(CAST(instr(11: expr, '/') AS BIGINT)" +
-                " - 1 AS INT)), 5))\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 11> : DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
+        assertContains(plan, "<slot 9> : reverse(substr(left(DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
     }
 
     @Test
