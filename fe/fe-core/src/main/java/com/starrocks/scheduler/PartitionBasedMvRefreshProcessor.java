@@ -1023,12 +1023,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-<<<<<<< HEAD
+        ctx.getSessionVariable().setEnableInsertStrict(false);
         LOG.info("start to refresh materialized view {}, query_id:{}", materializedView.getName(),
                 ctx.getQueryId());
-=======
-        ctx.getSessionVariable().setEnableInsertStrict(false);
->>>>>>> 1db05ef031 ([BugFix] Set mv insert overwrite job enableInsertStrict to false (#33643))
         try {
             executor.handleDMLStmt(execPlan, insertStmt);
         } finally {
