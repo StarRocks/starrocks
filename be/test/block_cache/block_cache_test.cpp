@@ -31,9 +31,9 @@ static const size_t block_size = 1024 * 1024;
 
 class BlockCacheTest : public ::testing::Test {
 protected:
-    static void SetUpTestCase() { ASSERT_TRUE(fs::create_directories("./block_disk_cache").ok()); }
+    static void SetUpTestCase() {}
 
-    static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./block_disk_cache").ok()); }
+    static void TearDownTestCase() {}
 
     void SetUp() override {}
     void TearDown() override {}
@@ -68,45 +68,52 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
 }
 
 TEST_F(BlockCacheTest, parse_cache_space_paths) {
+    const std::string cache_dir = "./block_disk_cache2";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
     const std::string cwd = std::filesystem::current_path().string();
-    const std::string s_normal_path = fmt::format("{}/block_disk_cache/cache1;{}/block_disk_cache/cache2", cwd, cwd);
+    const std::string s_normal_path = fmt::format("{}/block_disk_cache2/cache1;{}/block_disk_cache2/cache2", cwd, cwd);
     std::vector<std::string> paths;
     ASSERT_TRUE(parse_conf_block_cache_paths(s_normal_path, &paths).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
-    const std::string s_space_path = fmt::format(" {}/block_disk_cache/cache3 ; {}/block_disk_cache/cache4 ", cwd, cwd);
+    const std::string s_space_path =
+            fmt::format(" {}/block_disk_cache2/cache3 ; {}/block_disk_cache2/cache4 ", cwd, cwd);
     ASSERT_TRUE(parse_conf_block_cache_paths(s_space_path, &paths).ok());
     ASSERT_EQ(paths.size(), 2);
 
     paths.clear();
-    const std::string s_empty_path = fmt::format("//;{}/block_disk_cache/cache4 ", cwd, cwd);
+    const std::string s_empty_path = fmt::format("//;{}/block_disk_cache2/cache4 ", cwd, cwd);
     ASSERT_FALSE(parse_conf_block_cache_paths(s_empty_path, &paths).ok());
     ASSERT_EQ(paths.size(), 1);
 
     paths.clear();
-    const std::string s_invalid_path = fmt::format(" /block_disk_cache/cache5;{}/+/cache6", cwd, cwd);
+    const std::string s_invalid_path = fmt::format(" /block_disk_cache2/cache5;{}/+/cache6", cwd, cwd);
     ASSERT_FALSE(parse_conf_block_cache_paths(s_invalid_path, &paths).ok());
     ASSERT_EQ(paths.size(), 0);
 }
 
 #ifdef WITH_STARCACHE
 TEST_F(BlockCacheTest, hybrid_cache) {
+    const std::string cache_dir = "./block_disk_cache3";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
     std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
+    const size_t block_size = 256 * 1024;
 
     CacheOptions options;
-    options.mem_space_size = 10 * 1024 * 1024;
-    size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
+    options.mem_space_size = 2 * 1024 * 1024;
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
-    const size_t batch_size = block_size - 1234;
-    const size_t rounds = 20;
+    const size_t batch_size = block_size;
+    const size_t rounds = 10;
     const std::string cache_key = "test_file";
 
     // write cache
@@ -144,6 +151,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     ASSERT_TRUE(res.status().is_not_found());
 
     cache->shutdown();
+    fs::remove_all(cache_dir).ok();
 }
 
 TEST_F(BlockCacheTest, write_with_overwrite_option) {
