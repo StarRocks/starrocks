@@ -160,8 +160,8 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::AUTO;
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
 
-    auto data_source_provider = scan_node->data_source_provider();
-    dynamic_cast<connector::LakeDataSourceProvider*>(data_source_provider)->set_lake_tablet_manager(_tablet_mgr.get());
+    auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
+    data_source_provider->set_lake_tablet_manager(_tablet_mgr.get());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
@@ -218,8 +218,8 @@ TEST_F(LakeScanNodeTest, test_issue_44386) {
     auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::AUTO;
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
 
-    auto data_source_provider = scan_node->data_source_provider();
-    dynamic_cast<connector::LakeDataSourceProvider*>(data_source_provider)->set_lake_tablet_manager(_tablet_mgr.get());
+    auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
+    data_source_provider->set_lake_tablet_manager(_tablet_mgr.get());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
