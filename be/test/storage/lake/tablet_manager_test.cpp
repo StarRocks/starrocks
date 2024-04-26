@@ -26,12 +26,14 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/bthreads/util.h"
 #include "util/filesystem_util.h"
 
 // NOTE: intend to put the following header to the end of the include section
@@ -587,6 +589,43 @@ TEST_F(LakeTabletManagerTest, test_multi_partition_schema_file) {
         auto partition_dir = lake::join_path(_test_dir, std::to_string(i));
         auto schema_file_path = lake::join_path(partition_dir, lake::schema_filename(kIndexId));
         EXPECT_TRUE(fs::path_exist(schema_file_path)) << schema_file_path;
+    }
+}
+
+TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+    auto req = build_create_tablet_request(tablet_id, schema_id);
+    ASSERT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto schema, tablet.get_schema_by_id(schema_id));
+
+    auto fn_read_schema = [&]() {
+        for (int i = 0; i < 50; i++) {
+            ASSIGN_OR_ABORT(auto real_schema, tablet.get_schema_by_id(schema_id));
+            EXPECT_EQ(*schema, *real_schema);
+            _tablet_manager->metacache()->prune();
+        }
+    };
+
+    auto pthreads = std::vector<std::thread>{};
+    pthreads.reserve(10);
+    for (int i = 0; i < 10; i++) {
+        pthreads.emplace_back(fn_read_schema);
+    }
+
+    auto bthreads = std::vector<bthread_t>{};
+    bthreads.reserve(10);
+    for (int i = 0; i < 10; i++) {
+        ASSIGN_OR_ABORT(auto bid, bthreads::start_bthread(fn_read_schema));
+        bthreads.emplace_back(bid);
+    }
+
+    for (auto&& t : pthreads) {
+        t.join();
+    }
+    for (auto&& t : bthreads) {
+        bthread_join(t, nullptr);
     }
 }
 
