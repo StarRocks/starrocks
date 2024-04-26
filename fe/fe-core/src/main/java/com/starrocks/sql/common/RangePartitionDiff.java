@@ -92,6 +92,8 @@ public class RangePartitionDiff {
             }
             diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
             result.getAdds().putAll(diff.getAdds());
+
+            //
             result.getDeletes().putAll(diff.getDeletes());
             result.getRollupToBasePartitionMap().putAll(diff.getRollupToBasePartitionMap());
         }
