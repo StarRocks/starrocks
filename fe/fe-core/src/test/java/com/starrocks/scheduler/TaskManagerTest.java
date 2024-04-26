@@ -15,6 +15,8 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Config;
@@ -35,12 +37,15 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -48,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.PriorityBlockingQueue;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class TaskManagerTest {
 
     private static final Logger LOG = LogManager.getLogger(TaskManagerTest.class);
@@ -83,31 +89,31 @@ public class TaskManagerTest {
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
-                "(\n" +
-                "    k1 date,\n" +
-                "    k2 int,\n" +
-                "    v1 int sum\n" +
-                ")\n" +
-                "PARTITION BY RANGE(k1)\n" +
-                "(\n" +
-                "    PARTITION p1 values less than('2020-02-01'),\n" +
-                "    PARTITION p2 values less than('2020-03-01')\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');")
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withTable("CREATE TABLE test.tbl2\n" +
-                "(\n" +
-                "    k1 date,\n" +
-                "    k2 int,\n" +
-                "    v1 int sum\n" +
-                ")\n" +
-                "PARTITION BY RANGE(k1)\n" +
-                "(\n" +
-                "    PARTITION p1 values less than('2020-02-01'),\n" +
-                "    PARTITION p2 values less than('2020-03-01')\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');");
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
     }
 
     @Test
@@ -212,6 +218,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+        task.setDefinition("select 1");
 
         long taskId = 1;
 
@@ -250,7 +257,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
-
+        task.setDefinition("select 1");
         long taskId = 1;
 
         TaskRun taskRun1 = TaskRunBuilder
@@ -288,6 +295,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+        task.setDefinition("select 1");
 
         long taskId = 1;
 
@@ -326,6 +334,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+        task.setDefinition("select 1");
 
         long taskId = 1;
 
@@ -565,5 +574,86 @@ public class TaskManagerTest {
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
         pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(Config.task_runs_queue_length, pendingTaskRunMap.get(taskId).size());
+    }
+
+    @Test
+    public void testTaskEquality() {
+        Task task1 = new Task("test");
+        task1.setDefinition("select 1");
+        task1.setId(1);
+
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task1)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        {
+            long now = System.currentTimeMillis();
+            taskRun1.setTaskId(task1.getId());
+            taskRun1.initStatus("1", now + 10);
+            taskRun1.getStatus().setPriority(0);
+        }
+
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task1)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("1", now + 10);
+            taskRun2.getStatus().setPriority(0);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(2);
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            try {
+                Field taskRunId = taskRun2.getClass().getDeclaredField("taskRunId");
+                taskRunId.setAccessible(true);
+                taskRunId.set(taskRun2, taskRun1.getTaskRunId());
+            } catch (Exception e) {
+                Assert.fail();
+            }
+            Assert.assertTrue(taskRun1.equals(taskRun2));
+        }
+
+        {
+            Map<Long, TaskRun> map1 = Maps.newHashMap();
+            map1.put(task1.getId(), taskRun1);
+            Map<Long, TaskRun> map2 = Maps.newHashMap();
+            map2.put(task1.getId(), taskRun1);
+            Assert.assertTrue(map1.equals(map2));
+            Map<Long, TaskRun> map3 = ImmutableMap.copyOf(map1);
+            Assert.assertTrue(map1.equals(map3));
+            Assert.assertTrue(map1.get(task1.getId()).equals(map3.get(task1.getId())));
+        }
     }
 }
