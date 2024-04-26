@@ -23,6 +23,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -268,6 +269,15 @@ public class OptExternalPartitionPruner {
                 PartitionKey key = entry.getKey();
                 long partitionId = entry.getValue();
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
+            }
+        } else if (table instanceof DeltaLakeTable) {
+            // Init columnToPartitionValuesMap for delta lake, it will be used in classifyConjuncts function
+            // to classify partition conjuncts
+            DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+            List<Column> partitionColumns = deltaLakeTable.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
+                columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
             }
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
