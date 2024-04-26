@@ -41,17 +41,40 @@ RowsetUpdateState::~RowsetUpdateState() {
     }
 }
 
+// Restore state to what it was before the data was loaded
+void RowsetUpdateState::_reset() {
+    _upserts.clear();
+    _deletes.clear();
+    _partial_update_states.clear();
+    _auto_increment_partial_update_states.clear();
+    _auto_increment_delete_pks.clear();
+    _memory_usage = 0;
+    _base_version = 0;
+    _schema_version = 0;
+}
+
 Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
                                Tablet* tablet, const MetaFileBuilder* builder, bool need_resolve_conflict,
                                bool need_lock) {
+    DCHECK_GT(metadata.version(), 0);
+    DCHECK_EQ(tablet->id(), metadata.id());
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
-    std::call_once(_load_once_flag, [&] {
+    if (_base_version > 0 && _schema_version < metadata.schema().schema_version()) {
+        LOG(INFO) << "schema version has changed from " << _schema_version << " to "
+                  << metadata.schema().schema_version() << ", need to reload the update state."
+                  << " tablet_id: " << tablet->id() << " old base version: " << _base_version
+                  << " new base version: " << metadata.version();
+        // The data has been loaded, but the schema has changed and needs to be reloaded according to the new schema
+        _reset();
+    }
+    if (_base_version == 0) {
         TRACE_COUNTER_SCOPE_LATENCY_US("update_state_load_latency_us");
         _base_version = base_version;
         _builder = builder;
         _tablet_id = metadata.id();
+        _schema_version = metadata.schema().schema_version();
         _status = _do_load(op_write, metadata, tablet, need_lock);
         if (!_status.ok()) {
             if (!_status.is_uninitialized() && !_status.is_cancelled()) {
@@ -62,7 +85,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
                 LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
             }
         }
-    });
+    }
     if (need_resolve_conflict && _status.ok()) {
         RETURN_IF_ERROR(_resolve_conflict(op_write, metadata, base_version, tablet, builder));
     }
