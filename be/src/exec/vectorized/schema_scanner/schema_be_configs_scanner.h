@@ -26,6 +26,7 @@ public:
     SchemaBeConfigsScanner();
     ~SchemaBeConfigsScanner() override;
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_configs_scanner.h
     Status start(RuntimeState* state) override;
     Status get_next(vectorized::ChunkPtr* chunk, bool* eos) override;
 
@@ -36,6 +37,11 @@ private:
     std::vector<std::pair<std::string, std::string>> _infos;
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
+=======
+    static void append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value, std::vector<TExpr>* tExprs);
+    static void append_string_conjunct(TExprOpcode::type opcode, SlotId slot_id, std::string value,
+                                       std::vector<TExpr>* tExprs);
+>>>>>>> 7fe278ca54 ([BugFix] Fix parquet footer not have min max statistics caused inaccurate query results (#44489)):be/test/formats/parquet/parquet_ut_base.h
 };
 
 } // namespace starrocks
