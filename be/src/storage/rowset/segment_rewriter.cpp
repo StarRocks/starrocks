@@ -25,6 +25,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
                                 const std::shared_ptr<const TabletSchema>& tschema, std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
                                 const FooterPointerPB& partial_rowset_footer) {
+    constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
+    if (UNLIKELY(column_ids.empty())) {
+        return fs::copy_file(src_path, dest_path->path, kBufferSize);
+    }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path->path));
@@ -36,10 +40,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     // because be may be crash during update rowset meta
     uint64_t remaining = partial_rowset_footer.position() + partial_rowset_footer.size();
     std::string read_buffer;
-    raw::stl_string_resize_uninitialized(&read_buffer, 4096);
+    raw::stl_string_resize_uninitialized(&read_buffer, kBufferSize);
     uint64_t offset = 0;
     while (remaining > 0) {
-        if (remaining < 4096) {
+        if (remaining < kBufferSize) {
             raw::stl_string_resize_uninitialized(&read_buffer, remaining);
         }
 
