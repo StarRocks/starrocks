@@ -19,7 +19,7 @@
 #include <vector>
 #ifdef __SSE2__
 #include <emmintrin.h>
-#elif defined(__ARM_NEON__) && defined(__aarch64__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
@@ -193,7 +193,7 @@ inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start, size
     return pos < list.size() && pos < start + count;
 }
 
-#if defined(__ARM_NEON__) && defined(__aarch64__)
+#if defined(__ARM_NEON) && defined(__aarch64__)
 
 /// Returns a 64-bit mask, each 4-bit represents a byte of the input.
 /// The input containes 16 bytes and is expected to either 0x00 or 0xff for each byte.

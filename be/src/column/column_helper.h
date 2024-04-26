@@ -20,7 +20,7 @@
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
-#if defined(__ARM_NEON__) || defined(__aarch64__)
+#if defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
@@ -433,7 +433,7 @@ public:
 
             start_offset += kBatchNums;
         }
-#elif defined(__ARM_NEON__) && defined(__aarch64__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
         const uint8_t* filter_data = filter.data() + from;
         constexpr size_t data_type_size = sizeof(T);
 
