@@ -373,6 +373,12 @@ SELECT /*+ SET_VAR
 * 默认值：false
 * 引入版本：v3.0
 
+### enable_spill_to_remote_storage
+
+* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 默认值：false
+* 引入版本：v3.3.0
+
 ### enable_strict_order_by
 
 * 描述：是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
@@ -813,6 +819,12 @@ SELECT /*+ SET_VAR
 * `force`：无论内存使用情况如何，StarRocks 都会强制落盘所有相关算子的中间结果。
 
 此变量仅在变量 `enable_spill` 设置为 `true` 时生效。
+
+### spill_storage_volume
+
+* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 默认值：空字符串
+* 引入版本：v3.3.0
 
 ### SQL_AUTO_IS_NULL
 
