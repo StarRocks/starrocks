@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -51,12 +52,15 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String FORCE = "FORCE";
     private boolean isKilled = false;
 
+    @SerializedName("taskId")
     private long taskId;
 
+    @SerializedName("properties")
     private Map<String, String> properties;
 
     private final CompletableFuture<Constants.TaskRunState> future;
 
+    @SerializedName("task")
     private Task task;
 
     private ConnectContext runCtx;
@@ -65,13 +69,21 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private TaskRunProcessor processor;
 
+    @SerializedName("status")
     private TaskRunStatus status;
 
+    @SerializedName("type")
     private Constants.TaskType type;
 
+    @SerializedName("executeOption")
     private ExecuteOption executeOption;
 
+<<<<<<< HEAD
     private final String uuid;
+=======
+    @SerializedName("taskRunId")
+    private final String taskRunId;
+>>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -134,6 +146,13 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
+<<<<<<< HEAD
+=======
+    public String getTaskRunId() {
+        return taskRunId;
+    }
+
+>>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     public void kill() {
         isKilled = true;
     }
@@ -313,6 +332,26 @@ public class TaskRun implements Comparable<TaskRun> {
         }
     }
 
+    /**
+     * Check the taskRun is equal task to the given taskRun which means they have the same taskRunId and the same task.
+     */
+    public boolean isEqualTask(TaskRun o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null) {
+            return false;
+        }
+        if (task.getDefinition() == null) {
+            return false;
+        }
+        return this.taskId == o.getTaskId() &&
+                this.task.getDefinition().equals(o.getTask().getDefinition());
+    }
+
+    /**
+     * TaskRun is equal if they have the same taskRunId and the same task.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -321,11 +360,16 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+<<<<<<< HEAD
         if (status.getDefinition() == null) {
             return false;
         }
         TaskRun taskRun = (TaskRun) o;
         return status.getDefinition().equals(taskRun.getStatus().getDefinition());
+=======
+        TaskRun taskRun = (TaskRun) o;
+        return this.taskRunId.equals(taskRun.getTaskRunId()) && isEqualTask(taskRun);
+>>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     }
 
     @Override
