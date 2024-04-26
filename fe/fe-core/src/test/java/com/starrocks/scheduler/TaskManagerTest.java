@@ -218,6 +218,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+        task.setDefinition("select 1");
 
         long taskId = 1;
 
@@ -256,7 +257,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
-
+        task.setDefinition("select 1");
         long taskId = 1;
 
         TaskRun taskRun1 = TaskRunBuilder
@@ -294,6 +295,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+        task.setDefinition("select 1");
 
         long taskId = 1;
 
@@ -332,6 +334,7 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+        task.setDefinition("select 1");
 
         long taskId = 1;
 
