@@ -53,6 +53,7 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
     build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
+    hash_table_memory_usage = ADD_COUNTER(runtime_profile, "HashTableMemoryUsage", TUnit::BYTES);
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
