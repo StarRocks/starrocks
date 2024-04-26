@@ -24,7 +24,13 @@ class ComputeService : public BackendServiceBase {
 public:
     explicit ComputeService(ExecEnv* exec_env);
 
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.h
     ~ComputeService() override;
+=======
+    static void append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value, std::vector<TExpr>* tExprs);
+    static void append_string_conjunct(TExprOpcode::type opcode, SlotId slot_id, std::string value,
+                                       std::vector<TExpr>* tExprs);
+>>>>>>> 7fe278ca54 ([BugFix] Fix parquet footer not have min max statistics caused inaccurate query results (#44489)):be/test/formats/parquet/parquet_ut_base.h
 };
 
 } // namespace starrocks
