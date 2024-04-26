@@ -225,8 +225,24 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
     return static_cast<uint32_t>(l ^ 0xffffffffu);
 }
 
+#if defined(__SSE4_2__) && defined(__PCLMUL__)
+uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
+#endif
+
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #ifdef __SSE4_2__
+#ifdef __PCLMUL__
+    constexpr size_t CRC32C_SSE42_CHUNKSIZE_MASK = ((1 << 4) - 1);
+    constexpr size_t CRC32C_SSE42_MINIMUM_LENGTH = (1 << 6);
+    if (size >= CRC32C_SSE42_MINIMUM_LENGTH) {
+        size_t chunk_size = size & ~CRC32C_SSE42_CHUNKSIZE_MASK;
+        size &= CRC32C_SSE42_CHUNKSIZE_MASK;
+        crc = ~crc32c_sse42_simd(~crc, buf, chunk_size);
+        if (!size) return crc;
+        buf += chunk_size;
+    }
+#endif
+
     return ExtendImpl<Fast_CRC32>(crc, buf, size);
 #else
     return ExtendImpl<Slow_CRC32>(crc, buf, size);

@@ -31,6 +31,7 @@ set(UTIL_FILES
   cpu_info.cpp
   cpu_usage_info.cpp
   crc32c.cpp
+  crc32c_sse_simd.cpp
   date_func.cpp
   dynamic_util.cpp
   debug_util.cpp
