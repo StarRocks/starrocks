@@ -220,6 +220,12 @@ public:
         return std::nullopt;
     }
 
+    bool could_split() const { return _could_split; }
+
+    bool could_split_physically() const { return _could_split_physically; }
+
+    int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
+
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
