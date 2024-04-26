@@ -72,7 +72,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Cache<String, Set<DataFile>> dataFileCache;
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
-    private long latestRefreshTime = -1;
+    private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
 
     public CachingIcebergCatalog(String catalogName, IcebergCatalog delegate, IcebergCatalogProperties icebergProperties,
                                  ExecutorService executorService) {
@@ -280,6 +280,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
+        long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
         List<String> updatedPartitionNames = updatedTable.spec().isPartitioned() ?
                 listPartitionNamesWithSnapshotId(updatedTable, dbName, tableName, updatedSnapshotId, executorService) :
@@ -301,6 +302,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .collect(Collectors.toList());
 
         if (manifestFiles.isEmpty()) {
+            tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
             return;
         }
 
@@ -309,6 +311,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .planWith(executorService)
                 .useSnapshot(updatedSnapshotId);
         tableScan.refreshDataFileCache(manifestFiles);
+
+        tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
         LOG.info("Refreshed {} iceberg manifests on the table [{}.{}]", manifestFiles.size(), dbName, tableName);
     }
 
@@ -328,7 +332,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 invalidateCache(identifier);
             }
         }
-        latestRefreshTime = System.currentTimeMillis();
     }
 
     public void invalidateCacheWithoutTable(IcebergTableName icebergTableName) {
