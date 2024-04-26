@@ -11,28 +11,30 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package com.starrocks.common.util.concurrent.lock;
 
 import java.util.List;
-import java.util.Set;
 
-public abstract class Lock {
-    public abstract LockGrantType lock(Locker locker, LockType lockType);
+public class LockInfo {
+    private final Long rid;
+    private final List<LockHolder> owners;
+    private final List<LockHolder> waiters;
 
-    public abstract Set<Locker> release(Locker locker, LockType lockType);
+    public LockInfo(Long rid, List<LockHolder> owners, List<LockHolder> waiters) {
+        this.rid = rid;
+        this.owners = owners;
+        this.waiters = waiters;
+    }
 
-    public abstract boolean isOwner(Locker locker, LockType lockType);
+    public Long getRid() {
+        return rid;
+    }
 
-    public abstract int ownerNum();
+    public List<LockHolder> getOwners() {
+        return owners;
+    }
 
-    public abstract int waiterNum();
-
-    public abstract Set<LockHolder> getOwners();
-
-    public abstract Set<LockHolder> cloneOwners();
-
-    public abstract void removeWaiter(Locker locker, LockType lockType);
-
-    public abstract List<LockHolder> cloneWaiters();
+    public List<LockHolder> getWaiters() {
+        return waiters;
+    }
 }

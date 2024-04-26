@@ -112,6 +112,20 @@ public class LockChecker extends FrontendDaemon {
         }
     }
 
+    public static JsonArray getLockWaiterInfoJsonArray(Collection<Thread> waiters) {
+        JsonArray waiterInfos = new JsonArray();
+        for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
+            if (th != null) {
+                JsonObject waiter = new JsonObject();
+                waiter.addProperty("threadId", th.getId());
+                waiter.addProperty("threadName", th.getName());
+                waiterInfos.add(waiter);
+            }
+        }
+
+        return waiterInfos;
+    }
+
     private void checkDeadlocks() {
         if (Config.lock_checker_enable_deadlock_check) {
             ThreadMXBean tmx = ManagementFactory.getThreadMXBean();

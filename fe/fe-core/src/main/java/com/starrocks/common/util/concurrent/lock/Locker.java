@@ -44,12 +44,14 @@ public class Locker {
     /* The LockType corresponding to waitingFor. */
     private LockType waitingForType;
 
-    /* The thread that created this locker */
-    private final String threadName;
-    private final long threadID;
+    /* The time when the current Locker starts to request for the lock. */
+    private long lockRequestTimeMs;
 
-    /* The thread stack that created this locker */
-    private final String stackTrace;
+    /* The thread stack that created this locker. */
+    private final String lockerStackTrace;
+
+    /* The thread that request lock. */
+    private final Thread lockerThread;
 
     private final Map<Long, Long> lastSlowLockLogTimeMap = new HashMap<>();
 
@@ -57,9 +59,8 @@ public class Locker {
         this.waitingForRid = null;
         this.waitingForType = null;
         /* Save the thread used to create the locker and thread stack. */
-        this.threadID = Thread.currentThread().getId();
-        this.threadName = Thread.currentThread().getName();
-        this.stackTrace = getStackTrace();
+        this.lockerThread = Thread.currentThread();
+        this.lockerStackTrace = getStackTrace(this.lockerThread);
     }
 
     /**
@@ -207,7 +208,8 @@ public class Locker {
     /**
      * FYI: should deduplicate dbs before call this api.
      * lock databases in ascending order of id.
-     * @param dbs: databases to be locked
+     *
+     * @param dbs:      databases to be locked
      * @param lockType: lock type
      */
     public void lockDatabases(List<Database> dbs, LockType lockType) {
@@ -222,7 +224,8 @@ public class Locker {
 
     /**
      * FYI: should deduplicate dbs before call this api.
-     * @param dbs: databases to be locked
+     *
+     * @param dbs:      databases to be locked
      * @param lockType: lock type
      */
     public void unlockDatabases(List<Database> dbs, LockType lockType) {
@@ -375,7 +378,11 @@ public class Locker {
     }
 
     public Long getThreadID() {
-        return threadID;
+        return lockerThread.getId();
+    }
+
+    public String getThreadName() {
+        return lockerThread.getName();
     }
 
     void setWaitingFor(Long rid, LockType type) {
@@ -388,16 +395,32 @@ public class Locker {
         waitingForType = null;
     }
 
-    private String getStackTrace() {
-        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+    private String getStackTrace(Thread thread) {
+        StackTraceElement[] stackTrace = thread.getStackTrace();
         StackTraceElement element = stackTrace[3];
         int lastIdx = element.getClassName().lastIndexOf(".");
         return element.getClassName().substring(lastIdx + 1) + "." + element.getMethodName() + "():" + element.getLineNumber();
     }
 
+    public String getLockerStackTrace() {
+        return lockerStackTrace;
+    }
+
+    public Thread getLockerThread() {
+        return lockerThread;
+    }
+
+    public long getLockRequestTimeMs() {
+        return lockRequestTimeMs;
+    }
+
+    public void setLockRequestTimeMs(long lockRequestTimeMs) {
+        this.lockRequestTimeMs = lockRequestTimeMs;
+    }
+
     @Override
     public String toString() {
-        return ("(" + threadName + "|" + threadID) + ")" + " [" + stackTrace + "]";
+        return ("(" + lockerThread.getName() + "|" + lockerThread.getId()) + ")" + " [" + lockerStackTrace + "]";
     }
 
     @Override
@@ -409,11 +432,11 @@ public class Locker {
             return false;
         }
         Locker locker = (Locker) o;
-        return threadID == locker.threadID;
+        return lockerThread.getId() == locker.lockerThread.getId();
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(threadID);
+        return Objects.hashCode(lockerThread.getId());
     }
 }
