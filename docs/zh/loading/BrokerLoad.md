@@ -461,7 +461,7 @@ curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/db1/_load_info?label=label1'
 ```
 
-命令执行后，以 JSON 格式返回导入该label最近一次执行作业的结果信息 `jobInfo`，如下所示：
+命令执行后，以 JSON 格式返回导入该 Label 最近一次执行作业的结果信息 `jobInfo`，如下所示：
 
 ```JSON
 {"jobInfo":{"dbName":"default_cluster:db1","tblNames":["table1_simple"],"label":"label1","state":"FINISHED","failMsg":"","trackingUrl":""},"status":"OK","msg":"Success"}%
