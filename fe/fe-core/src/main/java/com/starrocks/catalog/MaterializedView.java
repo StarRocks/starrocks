@@ -144,10 +144,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         @SerializedName(value = "lastRefreshTime")
         private final long lastRefreshTime;
 
+        // last modified time of partition data path
+        @SerializedName(value = "lastFileModifiedTime")
+        private long lastFileModifiedTime;
+
+        // file number in the partition data path
+        @SerializedName(value = "fileNumber")
+        private int fileNumber;
+
         public BasePartitionInfo(long id, long version, long lastRefreshTime) {
             this.id = id;
             this.version = version;
             this.lastRefreshTime = lastRefreshTime;
+            this.lastFileModifiedTime = -1;
+            this.fileNumber = -1;
         }
 
         public static BasePartitionInfo fromExternalTable(com.starrocks.connector.PartitionInfo info) {
@@ -171,12 +181,30 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return lastRefreshTime;
         }
 
+        public long getLastFileModifiedTime() {
+            return lastFileModifiedTime;
+        }
+
+        public void setLastFileModifiedTime(long lastFileModifiedTime) {
+            this.lastFileModifiedTime = lastFileModifiedTime;
+        }
+
+        public int getFileNumber() {
+            return fileNumber;
+        }
+
+        public void setFileNumber(int fileNumber) {
+            this.fileNumber = fileNumber;
+        }
+
         @Override
         public String toString() {
             return "BasePartitionInfo{" +
                     "id=" + id +
                     ", version=" + version +
                     ", lastRefreshTime=" + lastRefreshTime +
+                    ", lastFileModifiedTime=" + lastFileModifiedTime +
+                    ", fileNumber=" + fileNumber +
                     '}';
         }
     }
@@ -281,6 +309,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         public String toString() {
             return "AsyncRefreshContext{" +
                     "baseTableVisibleVersionMap=" + baseTableVisibleVersionMap +
+                    ", baseTableInfoVisibleVersionMap=" + baseTableInfoVisibleVersionMap +
                     ", defineStartTime=" + defineStartTime +
                     ", startTime=" + startTime +
                     ", step=" + step +
@@ -375,6 +404,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 res.asyncRefreshContext = this.asyncRefreshContext.copy();
             }
             return res;
+        }
+
+        @Override
+        public String toString() {
+            return "MvRefreshScheme{" +
+                    "moment=" + moment +
+                    ", type=" + type +
+                    ", asyncRefreshContext=" + asyncRefreshContext +
+                    ", lastRefreshTime=" + lastRefreshTime +
+                    '}';
         }
     }
 
@@ -1527,7 +1566,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (info.getBucketNum() == 0) {
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {
-                Table table = MvUtils.getTableChecked(base);
+                Optional<Table> tableOptional = MvUtils.getTable(base);
+                if (tableOptional.isEmpty()) {
+                    LOG.warn("base table: {} dropped", base.getReadableString());
+                    continue;
+                }
+                Table table = tableOptional.get();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) table;
                     DistributionInfo dist = olapTable.getDefaultDistributionInfo();

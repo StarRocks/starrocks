@@ -12,19 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.Path;
+public class PartitionDataInfo {
+    private long lastFileModifiedTime;
+    private int fileNumber;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
+    public PartitionDataInfo(long lastFileModifiedTime, int fileNumber) {
+        this.lastFileModifiedTime = lastFileModifiedTime;
+        this.fileNumber = fileNumber;
+    }
 
-public interface RemoteFileIO {
+    public long getLastFileModifiedTime() {
+        return lastFileModifiedTime;
+    }
 
-    Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey);
+    public void setLastFileModifiedTime(long lastFileModifiedTime) {
+        this.lastFileModifiedTime = lastFileModifiedTime;
+    }
 
-    FileStatus[] getFileStatus(Path[] files) throws IOException;
+    public int getFileNumber() {
+        return fileNumber;
+    }
+
+    public void setFileNumber(int fileNumber) {
+        this.fileNumber = fileNumber;
+    }
 }
