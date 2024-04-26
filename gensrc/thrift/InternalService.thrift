@@ -437,6 +437,7 @@ struct TExecPlanFragmentParams {
   57: optional bool is_stream_pipeline
 
   58: optional TAdaptiveDopParam adaptive_dop_param
+  59: optional i32 group_execution_scan_dop
 }
 
 struct TExecPlanFragmentResult {
