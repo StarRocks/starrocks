@@ -1039,4 +1039,32 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     ASSERT_OK(writer->init());
 }
 
+TEST_F(ParquetFileWriterTest, TestRuntimeStateException) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_TINYINT),
+    };
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs.new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
+    auto writer = std::make_unique<formats::ParquetFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, _runtime_state);
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_TINYINT), true);
+        std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
+        auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
+        ASSERT_EQ(4, count);
+        chunk->append_column(col0, chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_DEATH({ writer->write(chunk).get().ok(); }, "");
+}
+
 } // namespace starrocks::formats
