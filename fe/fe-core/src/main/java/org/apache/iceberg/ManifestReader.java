@@ -257,7 +257,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         Set<DataFile> dataFiles = dataFileCache.getIfPresent(file.location());
-                        if (dataFiles != null) {
+                        if (dataFiles != null && entry.isLive()) {
                             DataFile dataFile = (DataFile) entry.file();
                             dataFiles.add(dataFileCacheWithMetrics ? dataFile : dataFile.copyWithoutStats());
                         }
@@ -269,7 +269,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(file.location());
-                        if (deleteFiles != null) {
+                        if (deleteFiles != null && entry.isLive()) {
                             deleteFiles.add((DeleteFile) entry.file().copy());
                         }
                         return entry;
