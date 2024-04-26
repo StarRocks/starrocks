@@ -377,7 +377,7 @@ curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label1'
 ```
 
-The `curl` command returns the information about the load job as a JSON object `jobInfo`:
+The `curl` command returns the information about the most recently executed load job with the specified label as a JSON object `jobInfo`:
 
 ```JSON
 {"jobInfo":{"dbName":"default_cluster:test_db","tblNames":["table1_simple"],"label":"label1","state":"FINISHED","failMsg":"","trackingUrl":""},"status":"OK","msg":"Success"}%
