@@ -210,6 +210,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     }
                     List<List<Integer>> bucketSeqsPerDriverSeq = ListUtil.splitBySize(bucketSeqsOfInstance, logicalDop);
                     instance.setPipelineDop(expectedPhysicalDop);
+                    instance.setGroupExecutionScanDop(logicalDop);
 
                     for (int driverSeq = 0; driverSeq < bucketSeqsPerDriverSeq.size(); driverSeq++) {
                         int finalDriverSeq = driverSeq;
@@ -223,7 +224,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         });
                     }
 
-                    instance.paddingScanRanges(logicalDop);
+                    instance.paddingScanRanges();
                 }
             });
         });
@@ -279,11 +280,12 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             fragment.setPipelineDop(expectedPhysicalDop);
                         }
                         instance.setPipelineDop(expectedPhysicalDop);
+                        instance.setGroupExecutionScanDop(logicalDop);
 
                         for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                             instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
                         }
-                        instance.paddingScanRanges(logicalDop);
+                        instance.paddingScanRanges();
                     }
                 }
             });

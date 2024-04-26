@@ -175,6 +175,7 @@ public class TFragmentInstanceFactory {
         result.setBackend_num(instance.getIndexInJob());
         if (isEnablePipeline) {
             result.setPipeline_dop(instance.getPipelineDop());
+            result.setGroup_execution_scan_dop(instance.getGroupExecutionScanDop());
         }
 
         // Add instance number in file name prefix when export job.

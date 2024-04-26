@@ -69,6 +69,7 @@ public class FragmentInstance {
     private final ExecutionFragment execFragment;
 
     private int pipelineDop = ABSENT_PIPELINE_DOP;
+    private int groupExecutionScanDop = ABSENT_PIPELINE_DOP;
 
     private final ComputeNode worker;
 
@@ -214,6 +215,18 @@ public class FragmentInstance {
         this.pipelineDop = pipelineDop;
     }
 
+    public int getGroupExecutionScanDop() {
+        if (groupExecutionScanDop == ABSENT_PIPELINE_DOP) {
+            return getPipelineDop();
+        }
+        return groupExecutionScanDop;
+    }
+
+    public void setGroupExecutionScanDop(int groupExecutionScanDop) {
+        this.groupExecutionScanDop = groupExecutionScanDop;
+    }
+
+
     public FragmentInstanceExecState getExecution() {
         return execution;
     }
@@ -287,9 +300,9 @@ public class FragmentInstance {
                 .computeIfAbsent(driverSeq, k -> new ArrayList<>()).addAll(scanRanges);
     }
 
-    public void paddingScanRanges(int logicalDop) {
+    public void paddingScanRanges() {
         node2DriverSeqToScanRanges.forEach((scanId, driverSeqToScanRanges) -> {
-            for (int driverSeq = 0; driverSeq < logicalDop; driverSeq++) {
+            for (int driverSeq = 0; driverSeq < groupExecutionScanDop; driverSeq++) {
                 driverSeqToScanRanges.computeIfAbsent(driverSeq, k -> new ArrayList<>());
             }
         });

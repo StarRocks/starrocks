@@ -311,9 +311,18 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.common().params;
     const auto& fragment = request.common().fragment;
-    const auto dop = _calc_dop(exec_env, request);
+    const auto pipeline_dop = _calc_dop(exec_env, request);
+    const int32_t group_execution_scan_dop = request.group_execution_scan_dop();
     const auto& query_options = request.common().query_options;
     const int chunk_size = runtime_state->chunk_size();
+
+    // check group execution params
+    if (request.common().fragment.__isset.group_execution_param &&
+        request.common().fragment.group_execution_param.enable_group_execution) {
+        _fragment_ctx->set_enable_group_execution(true);
+        _colocate_exec_groups = ExecutionGroupBuilder::create_colocate_exec_groups(
+                request.common().fragment.group_execution_param, pipeline_dop);
+    }
 
     bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
     bool enable_tablet_internal_parallel =
@@ -417,8 +426,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
-                                 scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), dop,
-                                 enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+                                 scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
+                                 _is_in_colocate_exec_group(scan_node->id()), enable_tablet_internal_parallel,
+                                 tablet_internal_parallel_mode));
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
@@ -434,7 +444,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             // Some chunk sources scan `chunk_size` rows at a time, so normalize `limit` to be rounded up to `chunk_size`.
             logical_scan_limit += scan_node->limit();
             int64_t normalized_limit = (scan_node->limit() + chunk_size - 1) / chunk_size * chunk_size;
-            physical_scan_limit += normalized_limit * dop * scan_node->io_tasks_per_scan_operator();
+            physical_scan_limit += normalized_limit * pipeline_dop * scan_node->io_tasks_per_scan_operator();
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;
@@ -505,6 +515,15 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
+bool FragmentExecutor::_is_in_colocate_exec_group(PlanNodeId plan_node_id) {
+    for (auto& [group_id, group] : _colocate_exec_groups) {
+        if (group->contains(plan_node_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void create_adaptive_group_initialize_events(RuntimeState* state, PipelineGroupMap&& unready_pipeline_groups) {
     if (unready_pipeline_groups.empty()) {
         return;
@@ -531,15 +550,6 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
 
-    // check group execution params
-    std::unordered_map<int32_t, ExecutionGroupPtr> colocate_exec_groups;
-    if (request.common().fragment.__isset.group_execution_param &&
-        request.common().fragment.group_execution_param.enable_group_execution) {
-        _fragment_ctx->set_enable_group_execution(true);
-        colocate_exec_groups = ExecutionGroupBuilder::create_colocate_exec_groups(
-                request.common().fragment.group_execution_param, degree_of_parallelism);
-    }
-
     auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
@@ -549,7 +559,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
     // Build pipelines
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
-    context.init_colocate_groups(std::move(colocate_exec_groups));
+    context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
     auto exec_ops = builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan);
     // Set up sink if required
