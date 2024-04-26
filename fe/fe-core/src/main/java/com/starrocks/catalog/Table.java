@@ -121,7 +121,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("ODPS")
         ODPS,
         @SerializedName("BLACKHOLE")
+<<<<<<< HEAD
         BLACKHOLE;
+=======
+        BLACKHOLE,
+        @SerializedName("METADATA")
+        METADATA,
+        @SerializedName("KUDU")
+        KUDU;
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -332,7 +340,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isExternalTableWithFileSystem() {
-        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable();
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable() || isKuduTable();
     }
 
     public boolean isHiveTable() {
@@ -369,6 +377,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isBlackHoleTable() {
         return type == TableType.BLACKHOLE;
+    }
+
+    public boolean isKuduTable() {
+        return type == TableType.KUDU;
     }
 
     // for create table

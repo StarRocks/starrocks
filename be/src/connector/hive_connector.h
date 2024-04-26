@@ -102,6 +102,10 @@ private:
     // for hiveTable/fileTable with avro/rcfile/sequence format
     HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
     HdfsScanner* _create_odps_jni_scanner(const FSOptions& options);
+<<<<<<< HEAD
+=======
+    HdfsScanner* _create_kudu_jni_scanner(const FSOptions& options);
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
     Status _check_all_slots_nullable();
 
     // =====================================

@@ -150,6 +150,17 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+<<<<<<< HEAD
+=======
+    public R visitPhysicalIcebergMetadataScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalKuduScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
     public R visitPhysicalSchemaScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }

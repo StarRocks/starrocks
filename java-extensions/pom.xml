@@ -19,6 +19,11 @@
         <module>hive-reader</module>
         <module>hadoop-ext</module>
         <module>odps-reader</module>
+<<<<<<< HEAD
+=======
+        <module>iceberg-metadata-reader</module>
+        <module>kudu-reader</module>
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
     </modules>
     <name>starrocks-java-extensions</name>
 

@@ -29,6 +29,11 @@ public enum OperatorType {
     LOGICAL_DELTALAKE_SCAN,
     LOGICAL_PAIMON_SCAN,
     LOGICAL_ODPS_SCAN,
+<<<<<<< HEAD
+=======
+    LOGICAL_ICEBERG_METADATA_SCAN,
+    LOGICAL_KUDU_SCAN,
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
@@ -72,6 +77,11 @@ public enum OperatorType {
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,
     PHYSICAL_ODPS_SCAN,
+<<<<<<< HEAD
+=======
+    PHYSICAL_ICEBERG_METADATA_SCAN,
+    PHYSICAL_KUDU_SCAN,
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
     PHYSICAL_SCHEMA_SCAN,
     PHYSICAL_MYSQL_SCAN,
     PHYSICAL_META_SCAN,

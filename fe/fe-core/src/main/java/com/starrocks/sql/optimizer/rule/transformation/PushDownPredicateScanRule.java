@@ -54,6 +54,13 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PushDownPredicateScanRule PAIMON_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
+<<<<<<< HEAD
+=======
+    public static final PushDownPredicateScanRule ICEBERG_METADATA_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+    public static final PushDownPredicateScanRule KUDU_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_KUDU_SCAN);
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
     public static final PushDownPredicateScanRule SCHEMA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final PushDownPredicateScanRule ES_SCAN = new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);

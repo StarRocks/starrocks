@@ -374,6 +374,9 @@ const std::string& OdpsTableDescriptor::get_time_zone() const {
     return _time_zone;
 }
 
+KuduTableDescriptor::KuduTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {}
+
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
 
 bool HiveTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
@@ -724,6 +727,17 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
             break;
         }
+<<<<<<< HEAD
+=======
+        case TTableType::LOGICAL_ICEBERG_METADATA_TABLE: {
+            desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
+            break;
+        }
+        case TTableType::KUDU_TABLE: {
+            desc = pool->add(new KuduTableDescriptor(tdesc, pool));
+            break;
+        }
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
         default:
             DCHECK(false) << "invalid table type: " << tdesc.tableType;
         }

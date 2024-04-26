@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
@@ -66,6 +67,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -143,6 +145,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalOdpsScan(LogicalOdpsScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalKuduScan(LogicalKuduScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -325,6 +331,17 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+<<<<<<< HEAD
+=======
+    public R visitPhysicalIcebergMetadataScan(PhysicalIcebergMetadataScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalKuduScan(PhysicalKuduScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
     public R visitPhysicalTopN(PhysicalTopNOperator node, C context) {
         return visitOperator(node, context);
     }

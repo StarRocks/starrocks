@@ -35,6 +35,8 @@ import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.KuduPartitionKey;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OdpsPartitionKey;
@@ -83,6 +85,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
                     .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
                     .put(Table.TableType.ODPS, OdpsPartitionTraits::new)
+                    .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .build();
@@ -570,6 +573,26 @@ public abstract class ConnectorPartitionTraits {
         @Override
         PartitionKey createEmptyKey() {
             return new OdpsPartitionKey();
+        }
+    }
+
+    static class KuduPartitionTraits extends DefaultTraits {
+
+        @Override
+        public String getDbName() {
+            return ((KuduTable) table).getDbName();
+        }
+
+        @Override
+        PartitionKey createEmptyKey() {
+            return new KuduPartitionKey();
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            // TODO: implement
+            return null;
         }
     }
 

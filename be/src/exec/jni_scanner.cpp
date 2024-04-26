@@ -632,4 +632,39 @@ std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOpti
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
+<<<<<<< HEAD
+=======
+// ---------------iceberg metadata jni scanner------------------
+std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+    ;
+
+    const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(options.hive_table);
+    std::map<std::string, std::string> jni_scanner_params;
+
+    jni_scanner_params["required_fields"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
+    jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
+
+    jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
+    jni_scanner_params["split_info"] = scan_range.serialized_split;
+    jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
+
+    const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------kudu jni scanner------------------
+std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["kudu_scan_token"] = scan_range.kudu_scan_token;
+    jni_scanner_params["kudu_master"] = scan_range.kudu_master;
+
+    std::string scanner_factory_class = "com/starrocks/kudu/reader/KuduSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
 } // namespace starrocks

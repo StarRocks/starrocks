@@ -332,6 +332,29 @@ private:
     std::string _time_zone;
 };
 
+<<<<<<< HEAD
+=======
+class IcebergMetadataTableDescriptor : public HiveTableDescriptor {
+public:
+    IcebergMetadataTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~IcebergMetadataTableDescriptor() override = default;
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    bool has_partition() const override { return false; }
+
+private:
+    std::string _hive_column_names;
+    std::string _hive_column_types;
+};
+
+class KuduTableDescriptor : public HiveTableDescriptor {
+public:
+    KuduTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~KuduTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+};
+
+>>>>>>> 526602cf19 ([Feature] Support reading kudu table (#41090))
 // ===========================================
 
 class OlapTableDescriptor : public TableDescriptor {
