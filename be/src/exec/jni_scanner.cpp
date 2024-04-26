@@ -649,7 +649,18 @@ std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner
     jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
 
     const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
 
+// ---------------kudu jni scanner------------------
+std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["kudu_scan_token"] = scan_range.kudu_scan_token;
+    jni_scanner_params["kudu_master"] = scan_range.kudu_master;
+
+    std::string scanner_factory_class = "com/starrocks/kudu/reader/KuduSplitScannerFactory";
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 

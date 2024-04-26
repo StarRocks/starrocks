@@ -215,6 +215,13 @@ under the License.
                 <version>2.3</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/org.apache.kudu/kudu-client -->
+            <dependency>
+                <groupId>org.apache.kudu</groupId>
+                <artifactId>kudu-client</artifactId>
+                <version>1.16.0</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
             <dependency>
                 <groupId>com.github.seancfoley</groupId>
