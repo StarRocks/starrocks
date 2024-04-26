@@ -93,21 +93,3 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
-
-  feature-review:
-    needs: info
-    runs-on: [ self-hosted, normal ]
-    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'feature') && !contains(needs.info.outputs.LABELS, 'sync')
-    name: FEATURE-REVIEW
-
-    env:
-      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
-      REPO: ${{ github.repository }}
-      TEAM: feature-reviewer
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-      - name: FEATURE-REVIEW
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
-          ./scripts/check-approve.sh

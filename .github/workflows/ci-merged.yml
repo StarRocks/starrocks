@@ -11,6 +11,8 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+env:
+  PR_NUMBER: ${{ github.event.number }}
 
 jobs:
   backport:
@@ -194,6 +196,8 @@ jobs:
       github.base_ref != 'main' && github.event.pull_request.merged == true
     env:
       PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
     steps:
       - name: prepare merge label
         if: >
