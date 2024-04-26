@@ -32,6 +32,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
@@ -48,9 +49,12 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
@@ -59,6 +63,7 @@ import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -154,6 +159,85 @@ public class OptExternalPartitionPruner {
         return equalPredicates;
     }
 
+    /**
+     * If the following conditions are met, false is returned:
+     * 1. Predicates does not contain partition columns
+     * 2. The left and right children of the partition predicate cannot be function parameters
+     */
+    private static boolean checkPartitionPredicates(LogicalScanOperator operator, List<Column> partitionColumns) {
+        List<ScalarOperator> predicateList = Utils.extractConjuncts(operator.getPredicate());
+        Set<ColumnRefOperator> partitionColRefSet = new HashSet<>();
+        partitionColumns.forEach(partitionColumn -> partitionColRefSet.add(operator.getColumnReference(partitionColumn)));
+
+        List<ScalarOperator> partitionPredicateList = new ArrayList<>();
+        for (ScalarOperator scalarOperator : predicateList) {
+            if (containsPartitionColumn(scalarOperator, partitionColRefSet)) {
+                partitionPredicateList.add(scalarOperator);
+            }
+        }
+        if (partitionPredicateList.isEmpty()) {
+            return false;
+        }
+
+        for (ScalarOperator scalarOperator : partitionPredicateList) {
+            if (canPartitionPrune(scalarOperator, partitionColRefSet)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean canPartitionPrune(ScalarOperator partitionPredicate, Set<ColumnRefOperator> partitionColRefSet) {
+        if (partitionPredicate instanceof BinaryPredicateOperator) {
+            ScalarOperator leftChild = partitionPredicate.getChild(0);
+            ScalarOperator rightChild = partitionPredicate.getChild(1);
+            if (leftChild.isColumnRef() && rightChild.isColumnRef()) {
+                return false;
+            }
+            // Any child is neither a constant nor a ColumnRef, indicating that there is a function expression
+            return isConstantOrColumnRef(leftChild) && isConstantOrColumnRef(rightChild);
+        } else if (partitionPredicate instanceof InPredicateOperator) {
+            List<ScalarOperator> children = partitionPredicate.getChildren();
+            ScalarOperator firstChild = children.get(0);
+            if (!firstChild.isColumnRef()) {
+                return false;
+            }
+            for (int i = 1; i < partitionPredicate.getChildren().size(); ++i) {
+                ScalarOperator child = children.get(i);
+                if (!(child instanceof ConstantOperator)) {
+                    return false;
+                }
+            }
+        } else if (partitionPredicate instanceof CompoundPredicateOperator) {
+            ScalarOperator leftChild = partitionPredicate.getChild(0);
+            ScalarOperator rightChild = partitionPredicate.getChild(1);
+            return containsPartitionColumn(leftChild, partitionColRefSet)
+                    && containsPartitionColumn(rightChild, partitionColRefSet)
+                    && canPartitionPrune(leftChild, partitionColRefSet)
+                    && canPartitionPrune(rightChild, partitionColRefSet);
+        } else if (partitionPredicate instanceof LikePredicateOperator || partitionPredicate instanceof CallOperator) {
+            return false;
+        }
+        return true;
+    }
+
+    // Note: The isConstant() method cannot be used here. If the child of CallOperator is constant, isConstant() will return true, but partition pruning cannot be performed.
+    private static boolean isConstantOrColumnRef(ScalarOperator scalarOperator) {
+        return (scalarOperator instanceof ConstantOperator) || scalarOperator.isColumnRef();
+    }
+
+    private static boolean containsPartitionColumn(ScalarOperator scalarOperator, Set<ColumnRefOperator> partitionColRefSet) {
+        for (ScalarOperator child : scalarOperator.getChildren()) {
+            List<ColumnRefOperator> columnRefs = child.getColumnRefs();
+            for (ColumnRefOperator columnRef : columnRefs) {
+                if (partitionColRefSet.contains(columnRef)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // get equivalence predicate which column ref is partition column
     public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
             List<Column> partitionColumns, ScalarOperator predicate) {
@@ -219,6 +303,14 @@ public class OptExternalPartitionPruner {
 
             List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
             if (!hmsTable.isUnPartitioned()) {
+                if (!context.getSessionVariable().isAllowHiveWithoutPartitionFilter()
+                        && !checkPartitionPredicates(operator, partitionColumns)) {
+                    LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
+                    throw new AnalysisException("Partition pruning is invalid, please check: "
+                            + "1. The partition predicate must be included. "
+                            + "2. The left and right children of the partition predicate cannot be function parameters.");
+                }
+
                 // get partition names
                 List<String> partitionNames;
                 // check if the partition predicate could be used for filter partition names
@@ -306,6 +398,15 @@ public class OptExternalPartitionPruner {
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
             }
+
+            int scanHivePartitionNumLimit = context.getSessionVariable().getScanHivePartitionNumLimit();
+            if (scanHivePartitionNumLimit > 0 && !table.isUnPartitioned()
+                    && selectedPartitionIds.size() > scanHivePartitionNumLimit) {
+                String msg = "Exceeded the limit of " + scanHivePartitionNumLimit + " max scan hive external partitions";
+                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+                throw new AnalysisException(msg);
+            }
+
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         } else if (table instanceof IcebergTable) {
