@@ -1242,3 +1242,33 @@ E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a s
 DROP TABLE t_disable_global_dict_rewrite;
 -- result:
 -- !result
+-- name: test_create_mv_with_match
+CREATE TABLE `t_create_mv_with_match` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
+-- result:
+-- !result
+function: wait_materialized_view_cancel()
+-- result:
+None
+-- !result
+DROP TABLE t_create_mv_with_match;
+-- result:
+-- !result
