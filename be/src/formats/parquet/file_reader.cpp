@@ -445,6 +445,16 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
             *exist = false;
             return Status::OK();
         } else {
+            // When statistics is empty, column_meta->__isset.statistics is still true,
+            // but statistics.__isset.xxx may be false, so judgment is required here.
+            bool is_set_min_max =
+                    (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
+                    (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
+            if (!is_set_min_max) {
+                *exist = false;
+                return Status::OK();
+            }
+
             const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
             if (field == nullptr) {
                 LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
