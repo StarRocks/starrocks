@@ -61,7 +61,7 @@ enum TPlanNodeType {
   META_SCAN_NODE,
   ANALYTIC_EVAL_NODE,
   OLAP_REWRITE_NODE,
-  KUDU_SCAN_NODE, // Deprecated
+  KUDU_SCAN_NODE,
   FILE_SCAN_NODE,
   EMPTY_SET_NODE,
   UNION_NODE,
@@ -364,6 +364,15 @@ struct THdfsScanRange {
 
     // delete columns slots like iceberg equality delete column slots
     21: optional list<Types.TSlotId> delete_column_slot_ids;
+
+    // whether to use JNI scanner to read data of kudu table
+    22: optional bool use_kudu_jni_reader
+
+    // kudu master addresses
+    23: optional string kudu_master
+
+    // kudu scan token
+    24: optional string kudu_scan_token
 }
 
 struct TBinlogScanRange {

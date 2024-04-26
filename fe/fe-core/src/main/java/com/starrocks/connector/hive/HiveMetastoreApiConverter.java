@@ -25,6 +25,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
@@ -115,6 +116,10 @@ public class HiveMetastoreApiConverter {
         return inputFormat != null && HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
     }
 
+    public static boolean isKuduTable(String inputFormat) {
+        return inputFormat != null && KuduTable.isKuduInputFormat(inputFormat);
+    }
+
     public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
         Optional<Map<String, String>> tableParamsOptional = Optional.ofNullable(tableParams);
         if (isDeltaLakeTable(tableParamsOptional.orElse(ImmutableMap.of()))) {
@@ -190,6 +195,14 @@ public class HiveMetastoreApiConverter {
                 .collect(Collectors.toList()));
         apiTable.setSd(makeStorageDescriptorFromHiveTable(table));
         return apiTable;
+    }
+
+    public static KuduTable toKuduTable(Table table, String catalogName) {
+        List<Column> fullSchema = toFullSchemasForHiveTable(table);
+        List<String> partColNames = table.getPartitionKeys().stream()
+                .map(FieldSchema::getName)
+                .collect(Collectors.toList());
+        return KuduTable.fromMetastoreTable(table, catalogName, fullSchema, partColNames);
     }
 
     private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
