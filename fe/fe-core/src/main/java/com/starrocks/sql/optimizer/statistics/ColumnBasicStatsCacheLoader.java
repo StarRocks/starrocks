@@ -121,13 +121,11 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
         return asyncLoad(key, executor);
     }
 
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, String column)
-            throws AnalysisException {
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, String column) {
         return queryStatisticsData(context, tableId, ImmutableList.of(column));
     }
 
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, List<String> columns)
-            throws AnalysisException {
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, List<String> columns) {
         return statisticExecutor.queryStatisticSync(context, null, tableId, columns);
     }
 
