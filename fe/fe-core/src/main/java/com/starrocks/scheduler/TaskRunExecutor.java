@@ -39,6 +39,8 @@ public class TaskRunExecutor {
         }
         TaskRunStatus status = taskRun.getStatus();
         if (status == null) {
+            LOG.warn("TaskRun {}/{} has no state, avoid execute it again", status.getTaskName(),
+                    status.getQueryId());
             return false;
         }
         if (status.getState() != Constants.TaskRunState.PENDING) {

@@ -328,7 +328,9 @@ public class TaskManager implements MemoryTrackable {
         } finally {
             taskUnlock();
         }
+
         try {
+            taskRunScheduler.addSyncRunningTaskRun(taskRun);
             Constants.TaskRunState taskRunState = taskRun.getFuture().get();
             if (taskRunState != Constants.TaskRunState.SUCCESS) {
                 String msg = taskRun.getStatus().getErrorMessage();
@@ -340,6 +342,8 @@ public class TaskManager implements MemoryTrackable {
             throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
         } catch (Exception e) {
             throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
+        } finally {
+            taskRunScheduler.removeSyncRunningTaskRun(taskRun);
         }
     }
 
@@ -732,7 +736,7 @@ public class TaskManager implements MemoryTrackable {
                 return;
             }
         }
-        LOG.info("replayCreateTaskRun:" + status);
+        LOG.debug("replayCreateTaskRun:" + status);
 
         switch (status.getState()) {
             case PENDING:
@@ -771,12 +775,12 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayUpdateTaskRun(TaskRunStatusChange statusChange) {
+        LOG.debug("replayUpdateTaskRun:" + statusChange);
         Constants.TaskRunState fromStatus = statusChange.getFromStatus();
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
-        LOG.info("replayUpdateTaskRun:" + statusChange);
-        if (fromStatus == Constants.TaskRunState.PENDING) {
 
+        if (fromStatus == Constants.TaskRunState.PENDING) {
             // It is possible to update out of order for priority queue.
             TaskRun pendingTaskRun = taskRunScheduler.getTaskRunByQueryId(taskId, statusChange.getQueryId());
             if (pendingTaskRun == null) {
@@ -788,7 +792,6 @@ public class TaskManager implements MemoryTrackable {
             taskRunScheduler.removePendingTaskRun(pendingTaskRun);
 
             TaskRunStatus status = pendingTaskRun.getStatus();
-
             if (toStatus == Constants.TaskRunState.RUNNING) {
                 if (status.getQueryId().equals(statusChange.getQueryId())) {
                     status.setState(Constants.TaskRunState.RUNNING);
