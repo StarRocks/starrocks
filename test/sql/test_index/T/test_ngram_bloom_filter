@@ -138,3 +138,5 @@ PROPERTIES (
 );
 insert into common_duplicate values (1,1,"abc"),(2,2,"abc"),(3,3,"abc"),(4,4,"abc"),(5,5,"abc");
 select * from common_duplicate where c2 like '%b%' order by c0;
+select * from common_duplicate where c2 in ("ab","bc") order by c0;
+select * from common_duplicate where c2 is not null order by c0;
