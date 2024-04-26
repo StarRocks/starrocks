@@ -15,23 +15,22 @@
 
 package com.starrocks.connector.delta;
 
-import io.delta.standalone.types.ArrayType;
-import io.delta.standalone.types.BinaryType;
-import io.delta.standalone.types.BooleanType;
-import io.delta.standalone.types.ByteType;
-import io.delta.standalone.types.DataType;
-import io.delta.standalone.types.DateType;
-import io.delta.standalone.types.DecimalType;
-import io.delta.standalone.types.DoubleType;
-import io.delta.standalone.types.FloatType;
-import io.delta.standalone.types.IntegerType;
-import io.delta.standalone.types.LongType;
-import io.delta.standalone.types.MapType;
-import io.delta.standalone.types.NullType;
-import io.delta.standalone.types.ShortType;
-import io.delta.standalone.types.StringType;
-import io.delta.standalone.types.StructType;
-import io.delta.standalone.types.TimestampType;
+import io.delta.kernel.types.ArrayType;
+import io.delta.kernel.types.BinaryType;
+import io.delta.kernel.types.BooleanType;
+import io.delta.kernel.types.ByteType;
+import io.delta.kernel.types.DataType;
+import io.delta.kernel.types.DateType;
+import io.delta.kernel.types.DecimalType;
+import io.delta.kernel.types.DoubleType;
+import io.delta.kernel.types.FloatType;
+import io.delta.kernel.types.IntegerType;
+import io.delta.kernel.types.LongType;
+import io.delta.kernel.types.MapType;
+import io.delta.kernel.types.ShortType;
+import io.delta.kernel.types.StringType;
+import io.delta.kernel.types.StructType;
+import io.delta.kernel.types.TimestampType;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,8 +39,6 @@ import java.util.Map;
 /**
  * An Enum representing Delta's {@link DataType} class types.
  *
- * <p>
- * This Enum can be used for example to build switch statement based on Delta's DataType type.
  */
 public enum DeltaDataType {
     ARRAY(ArrayType.class),
@@ -55,10 +52,8 @@ public enum DeltaDataType {
     INTEGER(IntegerType.class),
     LONG(LongType.class),
     MAP(MapType.class),
-    NULL(NullType.class),
     SMALLINT(ShortType.class),
     TIMESTAMP(TimestampType.class),
-    TINYINT(ByteType.class),
     STRING(StringType.class),
     STRUCT(StructType.class),
     OTHER(null);
