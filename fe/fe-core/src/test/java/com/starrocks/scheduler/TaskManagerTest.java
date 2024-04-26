@@ -15,7 +15,6 @@
 
 package com.starrocks.scheduler;
 
-import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
@@ -49,15 +48,10 @@ import java.io.DataOutputStream;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
 import java.util.concurrent.PriorityBlockingQueue;
-=======
-import java.util.Queue;
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class TaskManagerTest {
@@ -95,31 +89,31 @@ public class TaskManagerTest {
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
-                "(\n" +
-                "    k1 date,\n" +
-                "    k2 int,\n" +
-                "    v1 int sum\n" +
-                ")\n" +
-                "PARTITION BY RANGE(k1)\n" +
-                "(\n" +
-                "    PARTITION p1 values less than('2020-02-01'),\n" +
-                "    PARTITION p2 values less than('2020-03-01')\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');")
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withTable("CREATE TABLE test.tbl2\n" +
-                "(\n" +
-                "    k1 date,\n" +
-                "    k2 int,\n" +
-                "    v1 int sum\n" +
-                ")\n" +
-                "PARTITION BY RANGE(k1)\n" +
-                "(\n" +
-                "    PARTITION p1 values less than('2020-02-01'),\n" +
-                "    PARTITION p2 values less than('2020-03-01')\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');");
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
     }
 
     @Test
@@ -131,35 +125,33 @@ public class TaskManagerTest {
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
         Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
-        String dbName = UUIDUtil.genUUID().toString();
-        task.setDbName(dbName);
-
-        String realDbName = task.getDbName();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
         taskManager.createTask(task, true);
+        // taskManager.executeTask(taskList.get(0).getName());
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
         taskRunManager.submitTaskRun(taskRun, new ExecuteOption());
-        List<TaskRunStatus> taskRuns = null;
+        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
         int retryCount = 0;
-        int maxRetry = 30;
+        int maxRetry = 5;
         while (retryCount < maxRetry) {
-            taskRuns = taskManager.showTaskRunStatus(realDbName);
             if (taskRuns.size() > 0) {
                 state = taskRuns.get(0).getState();
             }
             retryCount++;
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
             LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
+
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
+
     }
 
     @Test
@@ -251,20 +243,12 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun2);
 
-<<<<<<< HEAD
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
         PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
         Assert.assertEquals(10, taskRun.getStatus().getPriority());
 
-=======
-        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
-        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
-        Assert.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     }
 
     @Test
@@ -297,19 +281,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun2);
         taskRunManager.arrangeTaskRun(taskRun1);
 
-<<<<<<< HEAD
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
         PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
         Assert.assertEquals(10, taskRun.getStatus().getPriority());
-=======
-        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
-        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
-        Assert.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
     }
 
@@ -343,21 +319,12 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun2);
 
-<<<<<<< HEAD
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
         PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
         Assert.assertEquals(now + 10, taskRun.getStatus().getCreateTime());
 
-=======
-        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
-        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
-        TaskRun taskRun = taskRuns.get(0);
-        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     }
 
     @Test
@@ -390,21 +357,12 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun2);
         taskRunManager.arrangeTaskRun(taskRun1);
 
-<<<<<<< HEAD
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
         PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
         Assert.assertEquals(now + 10, taskRun.getStatus().getCreateTime());
 
-=======
-        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
-        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(1, taskRuns.size());
-        TaskRun taskRun = taskRuns.get(0);
-        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     }
 
     @Test
@@ -447,15 +405,8 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun3);
 
-<<<<<<< HEAD
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
-=======
-        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
-        Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(3, taskRuns.size());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     }
 
     @Test
@@ -485,55 +436,6 @@ public class TaskManagerTest {
         Map<Long, TaskRun> runningTaskRunMap = taskManager.getTaskRunManager().getRunningTaskRunMap();
         Assert.assertEquals(1, runningTaskRunMap.values().size());
 
-<<<<<<< HEAD
-=======
-    @Test
-    public void testReplayUpdateTaskRun1() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test");
-        task.setDefinition("select 1");
-        taskManager.replayCreateTask(task);
-        long taskId = 1;
-
-        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
-        long now = System.currentTimeMillis();
-        taskRun1.setTaskId(taskId);
-        taskRun1.initStatus("1", now);
-
-        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
-        taskRun2.setTaskId(taskId);
-        taskRun2.initStatus("2", now);
-        taskManager.replayCreateTaskRun(taskRun2.getStatus());
-        taskManager.replayCreateTaskRun(taskRun1.getStatus());
-
-        TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
-        {
-            // task run 2
-            TaskRunStatusChange change1 = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
-                    Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-            taskManager.replayUpdateTaskRun(change1);
-            Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
-            Assert.assertEquals(1, taskRunScheduler.getPendingQueueCount());
-        }
-
-        {
-            // task run 2
-            TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
-                    Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
-            taskManager.replayUpdateTaskRun(change);
-            Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
-            Assert.assertEquals(1, taskRunScheduler.getPendingQueueCount());
-        }
-
-        {
-            // task run 1
-            TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun1.getStatus(),
-                    Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
-            taskManager.replayUpdateTaskRun(change);
-            Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
-            Assert.assertEquals(0, taskRunScheduler.getPendingQueueCount());
-        }
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     }
 
     @Test
@@ -623,93 +525,53 @@ public class TaskManagerTest {
         result = taskRunManager.submitTaskRun(taskRun2, taskRun2.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
-<<<<<<< HEAD
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(2, pendingTaskRunMap.get(taskId).size());
-=======
-        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
-        Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
-        Assert.assertTrue(taskRuns != null);
-        Assert.assertEquals(2, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(2, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
         // If it's a sync refresh, no merge redundant anyway
         TaskRun taskRun3 = makeTaskRun(taskId, task, makeExecuteOption(false, true));
         result = taskRunManager.submitTaskRun(taskRun3, taskRun3.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-<<<<<<< HEAD
 
         pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
 
-=======
-        Assert.assertEquals(3, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
         // merge it
         TaskRun taskRun4 = makeTaskRun(taskId, task, makeExecuteOption(true, false));
         result = taskRunManager.submitTaskRun(taskRun4, taskRun4.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
-<<<<<<< HEAD
         pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
-=======
-        Assert.assertEquals(3, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
         // no merge it
         TaskRun taskRun5 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun5, taskRun5.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-<<<<<<< HEAD
         pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(4, pendingTaskRunMap.get(taskId).size());
-=======
-        Assert.assertEquals(4, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(4, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
         for (int i = 4; i < Config.task_runs_queue_length; i++) {
             TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(false, false));
             result = taskRunManager.submitTaskRun(taskRun, taskRun.getExecuteOption());
             Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-<<<<<<< HEAD
             pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
             Assert.assertEquals(i + 1, pendingTaskRunMap.get(taskId).size());
-=======
-            Assert.assertEquals(i + 1, taskRunScheduler.getPendingQueueCount());
-            Assert.assertEquals(i + 1, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
         }
         // no assign it: exceed queue's size
         TaskRun taskRun6 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun6, taskRun6.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-<<<<<<< HEAD
         pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(Config.task_runs_queue_length, pendingTaskRunMap.get(taskId).size());
-=======
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
         // no assign it: exceed queue's size
         TaskRun taskRun7 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun7, taskRun7.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-<<<<<<< HEAD
         pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(Config.task_runs_queue_length, pendingTaskRunMap.get(taskId).size());
     }
-}
-=======
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
-        Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
-    }
-
 
     @Test
     public void testTaskEquality() {
@@ -792,4 +654,3 @@ public class TaskManagerTest {
         }
     }
 }
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))

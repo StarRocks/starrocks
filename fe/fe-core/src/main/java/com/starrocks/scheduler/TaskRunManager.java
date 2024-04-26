@@ -32,14 +32,11 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-<<<<<<< HEAD
 import java.util.Iterator;
-=======
-import java.util.Collection;
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class TaskRunManager implements MemoryTrackable {
@@ -122,12 +119,8 @@ public class TaskRunManager implements MemoryTrackable {
         }
         try {
             long taskId = taskRun.getTaskId();
-<<<<<<< HEAD
             PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
                     u -> Queues.newPriorityBlockingQueue());
-=======
-            Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();

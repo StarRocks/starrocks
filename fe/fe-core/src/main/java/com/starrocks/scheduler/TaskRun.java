@@ -78,16 +78,12 @@ public class TaskRun implements Comparable<TaskRun> {
     @SerializedName("executeOption")
     private ExecuteOption executeOption;
 
-<<<<<<< HEAD
-    private final String uuid;
-=======
     @SerializedName("taskRunId")
     private final String taskRunId;
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 
     TaskRun() {
         future = new CompletableFuture<>();
-        uuid = UUIDUtil.genUUID().toString();
+        taskRunId = UUIDUtil.genUUID().toString();
     }
 
     public long getTaskId() {
@@ -146,13 +142,10 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
-<<<<<<< HEAD
-=======
     public String getTaskRunId() {
         return taskRunId;
     }
 
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     public void kill() {
         isKilled = true;
     }
@@ -360,16 +353,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-<<<<<<< HEAD
-        if (status.getDefinition() == null) {
-            return false;
-        }
-        TaskRun taskRun = (TaskRun) o;
-        return status.getDefinition().equals(taskRun.getStatus().getDefinition());
-=======
         TaskRun taskRun = (TaskRun) o;
         return this.taskRunId.equals(taskRun.getTaskRunId()) && isEqualTask(taskRun);
->>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
     }
 
     @Override
@@ -382,7 +367,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return "TaskRun{" +
                 "taskId=" + taskId +
                 ", type=" + type +
-                ", uuid=" + uuid +
+                ", taskRunId=" + taskRunId +
                 ", task_state=" + status.getState() +
                 ", properties=" + properties +
                 ", extra_message =" + status.getExtraMessage() +
