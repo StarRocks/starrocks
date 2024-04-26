@@ -112,6 +112,23 @@ public class LockChecker extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static JsonArray getLockWaiterInfoJsonArray(Collection<Thread> waiters) {
+        JsonArray waiterInfos = new JsonArray();
+        for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
+            if (th != null) {
+                JsonObject waiter = new JsonObject();
+                waiter.addProperty("threadId", th.getId());
+                waiter.addProperty("threadName", th.getName());
+                waiterInfos.add(waiter);
+            }
+        }
+
+        return waiterInfos;
+    }
+
+>>>>>>> 6dff51e405 ([Enhancement] LockManager enhances lock status observability (#44675))
     private void checkDeadlocks() {
         if (Config.lock_checker_enable_deadlock_check) {
             ThreadMXBean tmx = ManagementFactory.getThreadMXBean();

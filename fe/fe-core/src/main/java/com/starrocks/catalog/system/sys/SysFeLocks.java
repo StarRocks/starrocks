@@ -23,6 +23,15 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockHolder;
+import com.starrocks.common.util.concurrent.lock.LockInfo;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.consistency.LockChecker;
+>>>>>>> 6dff51e405 ([Enhancement] LockManager enhances lock status observability (#44675))
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,6 +50,11 @@ import org.apache.thrift.TException;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+import java.util.stream.Collectors;
+>>>>>>> 6dff51e405 ([Enhancement] LockManager enhances lock status observability (#44675))
 
 public class SysFeLocks {
 
@@ -82,10 +96,39 @@ public class SysFeLocks {
         }
 
         TFeLocksRes response = new TFeLocksRes();
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
-        for (Database db : CollectionUtils.emptyIfNull(dbs)) {
-            TFeLocksItem item = resolveLockInfo(db);
-            response.addToItems(item);
+        if (Config.lock_manager_enabled) {
+            long currentTime = System.currentTimeMillis();
+            LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+            List<LockInfo> lockInfos = lockManager.dumpLockManager();
+
+            for (LockInfo lockInfo : lockInfos) {
+                for (LockHolder owner : lockInfo.getOwners()) {
+                    TFeLocksItem lockItem = new TFeLocksItem();
+
+                    lockItem.setLock_type("");
+                    lockItem.setLock_object(String.valueOf(lockInfo.getRid()));
+                    lockItem.setLock_mode(owner.getLockType().toString());
+                    lockItem.setStart_time(owner.getLocker().getLockRequestTimeMs());
+                    lockItem.setHold_time_ms(currentTime - owner.getLockAcquireTimeMs());
+
+                    JsonObject ownerInfo = new JsonObject();
+                    ownerInfo.addProperty("threadId", owner.getLocker().getLockerThread().getId());
+                    ownerInfo.addProperty("threadName", owner.getLocker().getLockerThread().getName());
+                    lockItem.setThread_info(ownerInfo.toString());
+
+                    Collection<Thread> threads = lockInfo.getWaiters().stream().map(LockHolder::getLocker)
+                            .map(Locker::getLockerThread).collect(Collectors.toList());
+                    lockItem.setWaiter_list(LockChecker.getLockWaiterInfoJsonArray(threads).toString());
+
+                    response.addToItems(lockItem);
+                }
+            }
+        } else {
+            Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
+            for (Database db : CollectionUtils.emptyIfNull(dbs)) {
+                TFeLocksItem item = resolveLockInfo(db);
+                response.addToItems(item);
+            }
         }
         return response;
     }
