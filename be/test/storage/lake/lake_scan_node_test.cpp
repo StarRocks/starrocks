@@ -172,7 +172,7 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
     ASSIGN_OR_ABORT(auto morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_FALSE(data_source_provider->could_split());
     ASSERT_FALSE(data_source_provider->could_split_physically());
@@ -182,7 +182,7 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     config::tablet_internal_parallel_min_scan_dop = 10;
     ASSIGN_OR_ABORT(morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_FALSE(data_source_provider->could_split());
     ASSERT_FALSE(data_source_provider->could_split_physically());
@@ -192,10 +192,52 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     config::tablet_internal_parallel_min_scan_dop = 4;
     ASSIGN_OR_ABORT(morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());
 }
 
+<<<<<<< HEAD
+=======
+// test issue https://github.com/StarRocks/starrocks/pull/44386
+TEST_F(LakeScanNodeTest, test_issue_44386) {
+    auto new_tablet_metadata = std::make_unique<TabletMetadata>(*_tablet_metadata);
+    new_tablet_metadata->set_id(next_id());
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*new_tablet_metadata));
+    create_rowsets_for_testing(new_tablet_metadata.get(), 3);
+
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_cloud();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+
+    bool enable_tablet_internal_parallel = true;
+    auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::AUTO;
+    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
+
+    auto data_source_provider = scan_node->data_source_provider();
+    dynamic_cast<connector::LakeDataSourceProvider*>(data_source_provider)->set_lake_tablet_manager(_tablet_mgr.get());
+
+    config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
+    config::tablet_internal_parallel_min_splitted_scan_rows = 4;
+
+    int pipeline_dop = 3;
+    config::tablet_internal_parallel_min_scan_dop = 4;
+    auto tablet_metas = std::vector<TabletMetadata*>{new_tablet_metadata.get(), _tablet_metadata.get()};
+    auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
+    config::tablet_internal_parallel_min_scan_dop = 4;
+    ASSIGN_OR_ABORT(auto morsel_queue_factory,
+                    scan_node->convert_scan_range_to_morsel_queue_factory(
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
+                            enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+    ASSERT_TRUE(data_source_provider->could_split());
+    ASSERT_TRUE(data_source_provider->could_split_physically());
+}
+
+>>>>>>> 7c07753cca ([BugFix] Fix group execution crash with empty scan range (#44770))
 } // namespace starrocks::lake
