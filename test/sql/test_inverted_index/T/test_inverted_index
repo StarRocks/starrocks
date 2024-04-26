@@ -690,3 +690,24 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
 SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
 
 DROP TABLE t_disable_global_dict_rewrite;
+
+-- name: test_create_mv_with_match
+CREATE TABLE `t_create_mv_with_match` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
+CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
+function: wait_materialized_view_cancel()
+DROP TABLE t_create_mv_with_match;
