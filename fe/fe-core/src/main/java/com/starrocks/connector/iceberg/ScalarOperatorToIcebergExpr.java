@@ -132,10 +132,17 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         private static Type getColumnType(String qualifiedName, IcebergContext context) {
-            String[] paths = qualifiedName.split("\\.");
-            Type type = context.getSchema();
-            for (String path : paths) {
-                type = type.asStructType().fieldType(path);
+            Types.StructType structType = context.getSchema().asStructType();
+            Type type = structType.fieldType(qualifiedName);
+            if (null != type) {
+                return type;
+            }
+            if (qualifiedName.contains(".")) {
+                type = context.getSchema();
+                String[] paths = qualifiedName.split("\\.");
+                for (String path : paths) {
+                    type = type.asStructType().fieldType(path);
+                }
             }
             return type;
         }
