@@ -626,14 +626,14 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     RETURN_IF_ERROR(tablet->updates()->get_latest_applied_version(&latest_applied_version));
     RETURN_IF_ERROR(_finalize_partial_update_state(tablet, rowset, tracker, latest_applied_version, index));
 
-    std::vector<int32_t> update_column_ids;
-    std::vector<uint32_t> update_column_uids;
-    std::vector<uint32_t> unique_update_column_ids;
+    std::vector<ColumnId> update_column_ids;
+    std::vector<ColumnUID> update_column_uids;
+    std::vector<ColumnUID> unique_update_column_ids;
     const auto& tschema = rowset->schema();
-    for (int32_t cid : txn_meta.partial_update_column_ids()) {
+    for (ColumnId cid : txn_meta.partial_update_column_ids()) {
         if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
-            update_column_uids.push_back((uint32_t)cid);
+            update_column_uids.push_back((ColumnUID)cid);
         }
     }
     for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
@@ -694,7 +694,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
     // {{1,2}, {3,4}} -> {"aaa.cols", "bbb.cols"}
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
-    std::map<uint32_t, std::vector<std::vector<uint32_t>>> dcg_column_ids;
+    std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
     std::map<uint32_t, std::vector<std::string>> dcg_column_files;
     // 3. read from raw segment file and update file, and generate `.col` files one by one
     int idx = 0; // It is used for generate different .cols filename
@@ -702,15 +702,15 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         for (const auto& each : rss_rowid_to_update_rowid) {
             int64_t t1 = MonotonicMillis();
             // 3.1 build column id range
-            std::vector<int32_t> selective_update_column_ids =
+            std::vector<ColumnId> selective_update_column_ids =
                     append_fixed_batch(update_column_ids, col_index, BATCH_HANDLE_COLUMN_CNT);
-            std::vector<uint32_t> selective_update_column_uids =
+            std::vector<ColumnUID> selective_update_column_uids =
                     append_fixed_batch(update_column_uids, col_index, BATCH_HANDLE_COLUMN_CNT);
-            std::vector<uint32_t> selective_unique_update_column_ids =
+            std::vector<ColumnUID> selective_unique_update_column_ids =
                     append_fixed_batch(unique_update_column_ids, col_index, BATCH_HANDLE_COLUMN_CNT);
             // 3.2 build partial schema
-            auto partial_tschema = TabletSchema::create(tschema, selective_update_column_ids);
-            Schema partial_schema = ChunkHelper::convert_schema(tschema, selective_update_column_uids);
+            auto partial_tschema = TabletSchema::create(tschema, selective_update_column_uids);
+            Schema partial_schema = ChunkHelper::convert_schema(tschema, selective_update_column_ids);
             // 3.3 read from source segment
             ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(each.first));
             const std::string seg_path = Rowset::segment_file_path(

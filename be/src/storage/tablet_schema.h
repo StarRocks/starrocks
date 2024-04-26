@@ -244,7 +244,7 @@ public:
     static TabletSchemaSPtr create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
     static TabletSchemaSPtr create(const TabletSchemaCSPtr& tablet_schema, const std::vector<int32_t>& column_indexes);
     static TabletSchemaSPtr create_with_uid(const TabletSchemaCSPtr& tablet_schema,
-                                            const std::vector<uint32_t>& unique_column_ids);
+                                            const std::vector<ColumnUID>& unique_column_ids);
     static StatusOr<TabletSchemaSPtr> create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
                                              const POlapTableColumnParam& column_param);
     static TabletSchemaSPtr copy(const TabletSchema& tablet_schema);

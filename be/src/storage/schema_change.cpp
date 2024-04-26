@@ -370,7 +370,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
-        std::vector<uint32_t> unique_column_ids;
+        std::vector<ColumnUID> unique_column_ids;
         for (const auto& iter : *chunk_changer->get_gc_exprs()) {
             ColumnUID unique_id = new_tablet_schema->column(iter.first).unique_id();
             unique_column_ids.emplace_back(unique_id);
@@ -404,7 +404,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
 
         // Get DeltaColumnGroup for current cols file
         auto dcg = std::make_shared<DeltaColumnGroup>();
-        std::vector<std::vector<uint32_t>> dcg_column_ids{unique_column_ids};
+        std::vector<std::vector<ColumnUID>> dcg_column_ids{unique_column_ids};
         std::vector<std::string> dcg_column_files{file_name(segment_writer->segment_path())};
         dcg->init(version, dcg_column_ids, dcg_column_files);
         dcgs.emplace_back(dcg);

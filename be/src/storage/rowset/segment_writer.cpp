@@ -127,6 +127,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (footer->has_short_key_index_page()) {
             *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
         }
+        _verify_footer();
         // in partial update, key columns have been written in partial segment
         // set _num_rows as _num_rows in partial segment
         _num_rows = footer->num_rows();
@@ -235,6 +236,8 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         _schema_without_full_row_column = std::make_unique<Schema>(_tablet_schema->schema(), cids);
     }
 
+    _verify_footer();
+
     return Status::OK();
 }
 
@@ -339,6 +342,8 @@ Status SegmentWriter::_write_footer() {
     _footer.set_version(2);
     _footer.set_num_rows(_num_rows);
 
+    _verify_footer();
+
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     std::string footer_buf;
     if (!_footer.SerializeToString(&footer_buf)) {
@@ -404,6 +409,16 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         _num_rows_written += chunk_num_rows;
     }
     return Status::OK();
+}
+
+void SegmentWriter::_verify_footer() {
+#if !defined(NDEBUG) || defined(BE_TEST)
+    std::set<uint32_t> unique_ids;
+    for (auto&& col : _footer.columns()) {
+        [[maybe_unused]] auto [iter, ok] = unique_ids.emplace(col.unique_id());
+        CHECK(ok) << "Segment footer contains duplicate column id=" << col.unique_id() << ": " << _footer.DebugString();
+    }
+#endif
 }
 
 } // namespace starrocks
