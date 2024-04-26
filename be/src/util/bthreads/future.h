@@ -115,6 +115,7 @@ public:
 
 private:
     friend class Promise<R>;
+    friend class SharedFuture<R>;
 
     explicit Future(std::shared_ptr<SharedState<R>> state) : BaseType(std::move(state)) {}
 };
@@ -150,6 +151,7 @@ public:
 
 private:
     friend class Promise<R&>;
+    friend class SharedFuture<R&>;
 
     explicit Future(std::shared_ptr<SharedState<R&>> state) : BaseType(std::move(state)) {}
 };
@@ -183,6 +185,7 @@ public:
 
 private:
     friend class Promise<void>;
+    friend class SharedFuture<void>;
 
     explicit Future(std::shared_ptr<SharedState<void>> state) : BaseType(std::move(state)) {}
 };
@@ -237,6 +240,7 @@ public:
 private:
     friend class Promise<R>;
     friend class Future<R>;
+    friend class FutureBase<R>;
 
     using BaseType = FutureBase<R>;
 
