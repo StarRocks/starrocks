@@ -559,6 +559,12 @@ struct TLakeScanNode {
   11: optional list<string> sort_key_column_names
   12: optional list<Exprs.TExpr> bucket_exprs
   13: optional list<TColumnAccessPath> column_access_paths
+
+  // physical optimize
+  25: optional bool sorted_by_keys_per_tablet = false
+  32: optional bool output_chunk_by_bucket
+  33: optional bool output_asc_hint
+  34: optional bool partition_order_hint
 }
 
 struct TEqJoinCondition {
