@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -153,6 +154,27 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
+<<<<<<< HEAD
+=======
+    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges);
+
+    bool could_split() const { return _could_split; }
+
+    bool could_split_physically() const { return _could_split_physically; }
+
+    int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
+    int64_t get_scan_dop() const { return scan_dop; }
+
+    // possible physical distribution optimize of data source
+    virtual bool sorted_by_keys_per_tablet() const { return false; }
+    virtual bool output_chunk_by_bucket() const { return false; }
+    virtual bool is_asc_hint() const { return true; }
+    virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
+
+>>>>>>> 5099b5fcc2 ([BugFix] fix unsupported bucket agg in shared-data mode (#44741))
 protected:
     std::vector<ExprContext*> _partition_exprs;
 };
