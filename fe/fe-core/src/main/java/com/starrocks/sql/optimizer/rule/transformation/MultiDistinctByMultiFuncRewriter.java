@@ -26,12 +26,12 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
@@ -135,11 +135,17 @@ public class MultiDistinctByMultiFuncRewriter {
 
         OptExpression result;
         if (hasAvg) {
+            ScalarOperator predicate = aggregationOperator.getPredicate();
+            if (predicate != null) {
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projections);
+                predicate = rewriter.rewrite(predicate);
+            }
+
             OptExpression aggOpt = OptExpression
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMapWithAvg)
-                                    .setPredicate(null)
+                                    .setPredicate(predicate)
                                     .build(),
                             input.getInputs());
             aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
@@ -149,13 +155,8 @@ public class MultiDistinctByMultiFuncRewriter {
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMap)
-                                    .setPredicate(null)
                                     .build(),
                             input.getInputs());
-        }
-
-        if (aggregationOperator.getPredicate() != null) {
-            result = OptExpression.create(new LogicalFilterOperator(aggregationOperator.getPredicate()), result);
         }
 
         return Lists.newArrayList(result);
