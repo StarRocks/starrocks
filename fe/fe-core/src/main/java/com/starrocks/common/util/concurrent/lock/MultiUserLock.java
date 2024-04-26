@@ -256,6 +256,8 @@ public class MultiUserLock extends Lock {
             }
             otherOwners.add(lockHolder);
         }
+
+        lockHolder.setLockAcquireTimeMs(System.currentTimeMillis());
     }
 
     @Override
@@ -331,6 +333,22 @@ public class MultiUserLock extends Lock {
         } else {
             otherWaiters.add(lockHolder);
         }
+    }
+
+    @Override
+    public List<LockHolder> cloneWaiters() {
+        List<LockHolder> waiters = new ArrayList<>();
+        if (firstWaiter != null) {
+            waiters.add(firstWaiter.clone());
+        }
+
+        if (otherWaiters != null) {
+            for (LockHolder lockHolder : otherWaiters) {
+                waiters.add(lockHolder.clone());
+            }
+        }
+
+        return waiters;
     }
 
     @Override

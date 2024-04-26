@@ -20,6 +20,9 @@ public class LockHolder implements Cloneable {
     private final LockType lockType;
     private int refCount;
 
+    /* The time Locker successfully acquire possession of the lock */
+    private long lockAcquireTimeMs;
+
     public LockHolder(Locker locker, LockType lockType) {
         this.locker = locker;
         this.lockType = lockType;
@@ -44,6 +47,14 @@ public class LockHolder implements Cloneable {
 
     public int getRefCount() {
         return refCount;
+    }
+
+    public long getLockAcquireTimeMs() {
+        return lockAcquireTimeMs;
+    }
+
+    public void setLockAcquireTimeMs(long lockAcquireTimeMs) {
+        this.lockAcquireTimeMs = lockAcquireTimeMs;
     }
 
     boolean isConflict(LockHolder lockHolderRequest) {

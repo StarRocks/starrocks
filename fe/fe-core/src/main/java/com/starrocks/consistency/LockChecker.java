@@ -110,8 +110,6 @@ public class LockChecker extends FrontendDaemon {
         return waiterInfos;
     }
 
-
-
     private void checkDeadlocks() {
         if (Config.lock_checker_enable_deadlock_check) {
             ThreadMXBean tmx = ManagementFactory.getThreadMXBean();

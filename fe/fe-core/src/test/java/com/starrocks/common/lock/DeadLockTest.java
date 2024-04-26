@@ -34,7 +34,7 @@ public class DeadLockTest {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
+        Config.slow_lock_threshold_ms = 0;
         Config.lock_manager_enable_resolve_deadlock = true;
     }
 
@@ -53,7 +53,7 @@ public class DeadLockTest {
                 Lists.newArrayList(testLocker1.lock(1L, LockType.WRITE)));
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        System.out.println(lockManager.dumpLock());
+        System.out.println(lockManager.dumpLockManager());
     }
 
     @Test
@@ -77,6 +77,6 @@ public class DeadLockTest {
                 Lists.newArrayList(new Pair<>(rid1, LockType.WRITE), new Pair<>(rid2, LockType.WRITE)),
                 Lists.newArrayList(testLockerFuture3, testLockerFuture4));
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        System.out.println(lockManager.dumpLock());
+        System.out.println(lockManager.dumpLockManager());
     }
 }
