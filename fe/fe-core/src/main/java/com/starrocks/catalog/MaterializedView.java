@@ -941,7 +941,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Table table = null;
             try {
-                table = MvUtils.getTableChecked(baseTableInfo);
+                Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
+                if (tableOptional.isPresent()) {
+                    table = tableOptional.get();
+                }
             } catch (Exception e) {
                 LOG.warn("failed to get base table {} of MV {}", baseTableInfo, this, e);
             }

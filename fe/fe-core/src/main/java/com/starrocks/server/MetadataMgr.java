@@ -514,7 +514,9 @@ public class MetadataMgr {
 
     public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
         Optional<Table> tableOpt = getTable(baseTableInfo);
-        if (tableOpt.isPresent()) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return tableOpt;
+        } else if (tableOpt.isPresent()) {
             Table table = tableOpt.get();
             String tableIdentifier = baseTableInfo.getTableIdentifier();
             if (tableIdentifier != null && tableIdentifier.equals(table.getTableIdentifier())) {
