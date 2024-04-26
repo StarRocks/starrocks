@@ -38,6 +38,9 @@ public class CallOperator extends ScalarOperator {
     // Ignore nulls.
     private boolean ignoreNulls = false;
 
+    // for nonDeterministicFunctions, to reuse it in common exprs
+    private int id = 0;
+
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments) {
         this(fnName, returnType, arguments, null);
     }
@@ -81,6 +84,10 @@ public class CallOperator extends ScalarOperator {
 
     public boolean isAggregate() {
         return fn != null && fn instanceof AggregateFunction;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     @Override
@@ -145,7 +152,7 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(fnName, arguments, isDistinct);
+        return Objects.hash(fnName, arguments, isDistinct, id);
     }
 
     @Override
@@ -157,11 +164,11 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
-                Objects.equals(arguments, other.arguments);
+                Objects.equals(arguments, other.arguments) &&
+                id == other.id;
     }
 
     @Override
@@ -178,6 +185,7 @@ public class CallOperator extends ScalarOperator {
         operator.fnName = this.fnName;
         operator.isDistinct = this.isDistinct;
         operator.ignoreNulls = this.ignoreNulls;
+        operator.id = this.id;
         return operator;
     }
 
