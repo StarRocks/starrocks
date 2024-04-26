@@ -1023,6 +1023,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        ctx.getSessionVariable().setEnableInsertStrict(false);
         LOG.info("start to refresh materialized view {}, query_id:{}", materializedView.getName(),
                 ctx.getQueryId());
         try {
