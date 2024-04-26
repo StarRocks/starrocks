@@ -69,11 +69,10 @@ public class RangePartitionDiff {
      * Merged => [p0, p1, p2, p3]
      * NOTE: for intersected partitions, they must be identical
      */
-    public static RangePartitionDiff merge(List<RangePartitionDiff> diffList) {
+    public static void checkRangePartitionAligned(List<RangePartitionDiff> diffList) {
         if (diffList.size() == 1) {
-            return diffList.get(0);
+            return;
         }
-        RangePartitionDiff result = new RangePartitionDiff();
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
         for (RangePartitionDiff diff : diffList) {
             for (Map.Entry<String, Range<PartitionKey>> add : diff.getAdds().entrySet()) {
@@ -91,13 +90,6 @@ public class RangePartitionDiff {
                 }
             }
             diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
-            result.getAdds().putAll(diff.getAdds());
-
-            //
-            result.getDeletes().putAll(diff.getDeletes());
-            result.getRollupToBasePartitionMap().putAll(diff.getRollupToBasePartitionMap());
         }
-        result.getDeletes().keySet().removeAll(result.getAdds().keySet());
-        return result;
     }
 }

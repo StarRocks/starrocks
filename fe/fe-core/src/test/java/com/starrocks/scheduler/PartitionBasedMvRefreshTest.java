@@ -173,7 +173,6 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                         Assert.assertTrue(plan != null);
                         taskRun = processor.getNextTaskRun();
-                        System.out.println(plan);
                         PlanTestBase.assertContains(plan, String.format("     TABLE: t1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=%s/3", t1PartitionNums.get(i)));
@@ -247,7 +246,6 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                         ExecPlan execPlan = mvContext.getExecPlan();
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                         taskRun = processor.getNextTaskRun();
-                        System.out.println(plan);
 
                         PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -301,7 +299,6 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                         Assert.assertTrue(plan != null);
                         taskRun = processor.getNextTaskRun();
-                        System.out.println(plan);
                         PlanTestBase.assertContains(plan, String.format("     TABLE: t1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=%s/3", t1PartitionNums.get(i)));
