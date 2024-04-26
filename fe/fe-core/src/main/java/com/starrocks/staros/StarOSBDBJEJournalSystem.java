@@ -31,6 +31,7 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,6 +69,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     public StarOSBDBJEJournalSystem(BDBJEJournal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
+        editLog = new EditLog(null);
     }
 
     public long getReplayId() {
@@ -185,6 +187,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
         } catch (Exception e) {
+            LOG.warn("got exception when replay star mgr journal", e);
             throw new StarException(ExceptionCode.JOURNAL, e.getMessage());
         } finally {
             if (cursor != null) {
@@ -205,7 +208,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
                 break;
             }
 
-            editLog.loadJournal(null /* GlobalStateMgr */, entity);
+            editLog.loadJournal(GlobalStateMgr.getCurrentState(), entity);
             replayedJournalId.incrementAndGet();
 
             LOG.debug("star mgr journal {} replayed.", replayedJournalId);
