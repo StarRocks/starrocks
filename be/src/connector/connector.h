@@ -169,11 +169,6 @@ public:
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges);
 
-    bool could_split() const { return _could_split; }
-
-    bool could_split_physically() const { return _could_split_physically; }
-
-    int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
     int64_t get_scan_dop() const { return scan_dop; }
 
     // possible physical distribution optimize of data source
@@ -184,9 +179,6 @@ public:
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
-    bool _could_split = false;
-    bool _could_split_physically = false;
-    int64_t splitted_scan_rows = 0;
     int64_t scan_dop = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;

@@ -227,6 +227,10 @@ protected:
     // for ut
     lake::TabletManager* _tablet_manager;
 
+    bool _could_split = false;
+    bool _could_split_physically = false;
+    int64_t splitted_scan_rows = 0;
+
 private:
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
