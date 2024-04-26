@@ -153,6 +153,11 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
+    virtual bool sorted_by_keys_per_tablet() const { return false; }
+    virtual bool output_chunk_by_bucket() const { return false; }
+    virtual bool is_asc_hint() const { return true; }
+    virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
 };
