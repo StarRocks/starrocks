@@ -168,7 +168,7 @@ ALTER TABLE t0 DROP PARTITIONS IF EXISTS START("2024-04-07") END("2024-04-10") E
 -- !result
 ALTER TABLE t0 DROP PARTITIONS START("2024-04-07") END("2024-04-10") EVERY (INTERVAL 1 DAY) ;
 -- result:
-E: (1507, 'Error in list of partitions to [pxxxx]')
+E: (1507, 'Error in list of partitions to [p20240407, p20240408, p20240409]')
 -- !result
 -- name: test_drop_recover_list_partition
 CREATE TABLE t1(k1 VARCHAR(100) NOT NULL, v1 INT)
