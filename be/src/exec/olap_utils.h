@@ -127,10 +127,10 @@ inline SQLFilterOp invert_olap_filter_type(const SQLFilterOp op) {
     return FILTER_IN;
 }
 
-template <bool Inverted>
+template <bool Negative>
 SQLFilterOp to_olap_filter_type(TExprOpcode::type type, bool opposite) {
     const auto op = to_olap_filter_type(type, opposite);
-    if constexpr (Inverted) {
+    if constexpr (Negative) {
         return invert_olap_filter_type(op);
     } else {
         return op;

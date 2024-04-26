@@ -123,29 +123,29 @@ private:
     Status build_olap_filters();
     Status build_scan_keys(bool unlimited, int32_t max_scan_key_num);
 
-    // If Type is OR, to convert OR to AND to utilize existing parsing logic, perform the `Inverted` operation
+    // If Type is OR, to convert OR to AND to utilize existing parsing logic, perform the `Negative` operation
     // in normalize_xxx_predicate and build_olap_filters. For example, `pred_c1_1 or pred_c1_2 or pred_c2_1 or pred_c2_2`
     // will be converted to `!(!pred_c1_1 and !pred_c1_2) or !(!pred_c2_1 and !pred_c2_2)`
     // The specific steps are as follows:
-    // 1. When normalizing predicates to value ranges, pass true to <Inverted> of each normalize_xxx_predicate.
-    // 2. When building olap filters by the normalized value ranges, pass true to <Inverted> of ColumnValueRange::to_olap_filter.
+    // 1. When normalizing predicates to value ranges, pass true to <Negative> of each normalize_xxx_predicate.
+    // 2. When building olap filters by the normalized value ranges, pass true to <Negative> of ColumnValueRange::to_olap_filter.
     template <LogicalType SlotType, typename RangeValueType>
     Status normalize_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+    template <LogicalType SlotType, typename RangeValueType, bool Negative>
     requires(!lt_is_date<SlotType>) Status
             normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
-    template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+    template <LogicalType SlotType, typename RangeValueType, bool Negative>
     requires lt_is_date<SlotType> Status normalize_in_or_equal_predicate(const SlotDescriptor& slot,
                                                                          ColumnValueRange<RangeValueType>* range);
 
-    template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+    template <LogicalType SlotType, typename RangeValueType, bool Negative>
     Status normalize_binary_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+    template <LogicalType SlotType, typename RangeValueType, bool Negative>
     Status normalize_join_runtime_filter(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+    template <LogicalType SlotType, typename RangeValueType, bool Negative>
     Status normalize_not_in_or_not_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     Status normalize_is_null_predicate(const SlotDescriptor& slot);

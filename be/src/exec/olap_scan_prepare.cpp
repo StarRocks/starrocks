@@ -64,7 +64,7 @@ static bool check_decimal_overflow(int precision, const ValueType& value) {
     }
 }
 
-template <bool Inverted, typename ValueType>
+template <bool Negative, typename ValueType>
 static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot, const Expr* expr, ExprContext* ctx,
                                 ValueType* value, SQLFilterOp* op, Status* status) {
     if (expr->get_num_children() != 2) {
@@ -126,9 +126,9 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     }
 
     if (expr->op() == TExprOpcode::EQ || expr->op() == TExprOpcode::NE) {
-        *op = to_olap_filter_type<Inverted>(expr->op(), false);
+        *op = to_olap_filter_type<Negative>(expr->op(), false);
     } else {
-        *op = to_olap_filter_type<Inverted>(expr->op(), reverse_op);
+        *op = to_olap_filter_type<Negative>(expr->op(), reverse_op);
     }
 
     if constexpr (std::is_same_v<ValueType, DateValue>) {
@@ -195,9 +195,9 @@ static std::vector<RawExprContainer> build_raw_expr_containers(const std::vector
     return containers;
 }
 
-template <bool Inverted>
+template <bool Negative>
 static TExprOpcode::type maybe_invert_in_and_equal_op(const TExprOpcode::type op) {
-    if constexpr (!Inverted) {
+    if constexpr (!Negative) {
         return op;
     } else {
         switch (op) {
@@ -338,9 +338,9 @@ StatusOr<PredicateCompoundNode<Type>> ChunkPredicateBuilder<E, Type>::get_predic
     return compound_node;
 }
 
-template <bool Inverted>
+template <bool Negative>
 static bool is_not_in(const auto* pred) {
-    if constexpr (Inverted) {
+    if constexpr (Negative) {
         return !pred->is_not_in();
     } else {
         return pred->is_not_in();
@@ -348,7 +348,7 @@ static bool is_not_in(const auto* pred) {
 };
 
 template <ExprContainer E, CompoundNodeType Type>
-template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
 requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize_in_or_equal_predicate(
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
     Status status;
@@ -361,7 +361,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
         const Expr* root_expr = _exprs[i].root();
 
         // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
-        if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Inverted>(root_expr->op())) {
+        if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Negative>(root_expr->op())) {
             const Expr* l = root_expr->get_child(0);
 
             if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
@@ -375,7 +375,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                     continue;
                 }
 
-                if (is_not_in<Inverted>(pred) || pred->null_in_set() ||
+                if (is_not_in<Negative>(pred) || pred->null_in_set() ||
                     pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                     continue;
                 }
@@ -392,13 +392,13 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
 
         // 2. Normalize eq conjuncts like 'where col = value'
         if (TExprNodeType::BINARY_PRED == root_expr->node_type() &&
-            FILTER_IN == to_olap_filter_type<Inverted>(root_expr->op(), false)) {
+            FILTER_IN == to_olap_filter_type<Negative>(root_expr->op(), false)) {
             using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
             SQLFilterOp op;
             ValueType value;
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok =
-                    get_predicate_value<Inverted>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -410,7 +410,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
 
 // explicit specialization for DATE.
 template <ExprContainer E, CompoundNodeType Type>
-template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
 requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_in_or_equal_predicate(
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
     Status status;
@@ -423,7 +423,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
         const Expr* root_expr = _exprs[i].root();
 
         // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
-        if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Inverted>(root_expr->op())) {
+        if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Negative>(root_expr->op())) {
             const Expr* l = root_expr->get_child(0);
             // TODO(zhuming): DATE column may be casted to double.
             if (l->type().type != starrocks::TYPE_DATE && l->type().type != starrocks::TYPE_DATETIME) {
@@ -450,7 +450,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                         continue;
                     }
 
-                    if (is_not_in<Inverted>(pred) || pred->null_in_set() ||
+                    if (is_not_in<Negative>(pred) || pred->null_in_set() ||
                         pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                         continue;
                     }
@@ -464,7 +464,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                 } else if (pred_type == starrocks::TYPE_DATE) {
                     const auto* pred = down_cast<const VectorizedInConstPredicate<starrocks::TYPE_DATE>*>(root_expr);
 
-                    if (is_not_in<Inverted>(pred) || pred->null_in_set() ||
+                    if (is_not_in<Negative>(pred) || pred->null_in_set() ||
                         pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                         continue;
                     }
@@ -484,12 +484,12 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
 
         // 2. Normalize eq conjuncts like 'where col = value'
         if (TExprNodeType::BINARY_PRED == root_expr->node_type() &&
-            FILTER_IN == to_olap_filter_type<Inverted>(root_expr->op(), false)) {
+            FILTER_IN == to_olap_filter_type<Negative>(root_expr->op(), false)) {
             SQLFilterOp op;
             DateValue value{0};
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok =
-                    get_predicate_value<Inverted>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<DateValue>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -500,7 +500,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
 }
 
 template <ExprContainer E, CompoundNodeType Type>
-template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
 Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDescriptor& slot,
                                                                   ColumnValueRange<RangeValueType>* range) {
     Status status;
@@ -522,7 +522,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDesc
         SQLFilterOp op;
         ValueType value;
         ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
-        bool ok = get_predicate_value<Inverted>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+        bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
         if (ok && range->add_range(op, static_cast<RangeValueType>(value)).ok()) {
             _normalized_exprs[i] = true;
         }
@@ -532,11 +532,11 @@ Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDesc
 }
 
 template <ExprContainer E, CompoundNodeType Type>
-template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
 Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotDescriptor& slot,
                                                                      ColumnValueRange<RangeValueType>* range) {
     // TODO(lzh): OR preidcate with runtime filters is not supported yet.
-    if constexpr (Inverted) {
+    if constexpr (Negative) {
         return Status::OK();
     }
 
@@ -628,7 +628,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
 }
 
 template <ExprContainer E, CompoundNodeType Type>
-template <LogicalType SlotType, typename RangeValueType, bool Inverted>
+template <LogicalType SlotType, typename RangeValueType, bool Negative>
 Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
     Status status;
@@ -644,12 +644,12 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
 
         // handle not equal
         if (root_expr->node_type() == TExprNodeType::BINARY_PRED &&
-            maybe_invert_in_and_equal_op<Inverted>(root_expr->op()) == TExprOpcode::NE) {
+            maybe_invert_in_and_equal_op<Negative>(root_expr->op()) == TExprOpcode::NE) {
             SQLFilterOp op;
             ValueType value;
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok =
-                    get_predicate_value<Inverted>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -657,7 +657,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
 
         // handle not in
         if (root_expr->node_type() == TExprNodeType::IN_PRED &&
-            maybe_invert_in_and_equal_op<Inverted>(root_expr->op()) == TExprOpcode::FILTER_NOT_IN) {
+            maybe_invert_in_and_equal_op<Negative>(root_expr->op()) == TExprOpcode::FILTER_NOT_IN) {
             const Expr* l = root_expr->get_child(0);
             if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
                 continue;
@@ -671,7 +671,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
                     continue;
                 }
 
-                if (!is_not_in<Inverted>(pred) || pred->null_in_set() ||
+                if (!is_not_in<Negative>(pred) || pred->null_in_set() ||
                     pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
                     continue;
                 }
@@ -725,15 +725,15 @@ template <ExprContainer E, CompoundNodeType Type>
 template <LogicalType SlotType, typename RangeValueType>
 Status ChunkPredicateBuilder<E, Type>::normalize_predicate(const SlotDescriptor& slot,
                                                            ColumnValueRange<RangeValueType>* range) {
-    constexpr bool Inverted = Type == CompoundNodeType::OR;
-    RETURN_IF_ERROR((normalize_in_or_equal_predicate<SlotType, RangeValueType, Inverted>(slot, range)));
-    RETURN_IF_ERROR((normalize_binary_predicate<SlotType, RangeValueType, Inverted>(slot, range)));
+    constexpr bool Negative = Type == CompoundNodeType::OR;
+    RETURN_IF_ERROR((normalize_in_or_equal_predicate<SlotType, RangeValueType, Negative>(slot, range)));
+    RETURN_IF_ERROR((normalize_binary_predicate<SlotType, RangeValueType, Negative>(slot, range)));
     // Execute normalize_not_in_or_not_equal_predicate after normalize_binary_predicate,
     // because the range generated by not in predicates cannot be merged with the range generated by binary predicates.
-    RETURN_IF_ERROR((normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType, Inverted>(slot, range)));
+    RETURN_IF_ERROR((normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType, Negative>(slot, range)));
     RETURN_IF_ERROR(normalize_is_null_predicate(slot));
     // Must handle join runtime filter last
-    RETURN_IF_ERROR((normalize_join_runtime_filter<SlotType, RangeValueType, Inverted>(slot, range)));
+    RETURN_IF_ERROR((normalize_join_runtime_filter<SlotType, RangeValueType, Negative>(slot, range)));
 
     return Status::OK();
 }
@@ -790,15 +790,15 @@ Status ChunkPredicateBuilder<E, Type>::normalize_expressions() {
 
 template <ExprContainer E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
-    constexpr bool Inverted = Type == CompoundNodeType::OR;
+    constexpr bool Negative = Type == CompoundNodeType::OR;
     olap_filters.clear();
 
     for (auto iter : column_value_ranges) {
         std::vector<TCondition> filters;
-        std::visit([&](auto&& range) { range.template to_olap_filter<Inverted>(filters); }, iter.second);
+        std::visit([&](auto&& range) { range.template to_olap_filter<Negative>(filters); }, iter.second);
         const bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
         if (empty_range) {
-            if constexpr (!Inverted) {
+            if constexpr (!Negative) {
                 return Status::EndOfFile("EOF, Filter by always false condition");
             } else {
                 auto not_null_filter =

@@ -204,13 +204,13 @@ TCondition ColumnValueRange<T>::to_olap_not_null_filter() const {
 }
 
 template <class T>
-template <bool Inverted>
+template <bool Negative>
 void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
     // If we have fixed range value, we generate in/not-in predicates.
     if (is_fixed_value_range()) {
         DCHECK(_fixed_op == FILTER_IN || _fixed_op == FILTER_NOT_IN);
         bool filter_in = (_fixed_op == FILTER_IN) ? true : false;
-        if constexpr (Inverted) {
+        if constexpr (Negative) {
             filter_in = !filter_in;
         }
         const std::string op = (filter_in) ? "*=" : "!=";
@@ -241,7 +241,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         low.__set_is_index_filter_only(_is_index_filter_only);
         if (_type_min != _low_value || FILTER_LARGER_OR_EQUAL != _low_op) {
             low.__set_column_name(_column_name);
-            if constexpr (Inverted) {
+            if constexpr (Negative) {
                 low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? "<<" : "<="));
             } else {
                 low.__set_condition_op((_low_op == FILTER_LARGER_OR_EQUAL ? ">=" : ">>"));
@@ -257,7 +257,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         high.__set_is_index_filter_only(_is_index_filter_only);
         if (_type_max != _high_value || FILTER_LESS_OR_EQUAL != _high_op) {
             high.__set_column_name(_column_name);
-            if constexpr (Inverted) {
+            if constexpr (Negative) {
                 high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? ">>" : ">="));
             } else {
                 high.__set_condition_op((_high_op == FILTER_LESS_OR_EQUAL ? "<=" : "<<"));
