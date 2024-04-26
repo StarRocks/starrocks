@@ -31,13 +31,15 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.Nullable;
 
+<<<<<<< HEAD
 import java.util.Iterator;
+=======
+import java.util.Collection;
+>>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
-import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class TaskRunManager implements MemoryTrackable {
@@ -61,6 +63,8 @@ public class TaskRunManager implements MemoryTrackable {
     private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock(true);
 
     public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
+        LOG.info("submit task run:{}", taskRun);
+
         // duplicate submit
         if (taskRun.getStatus() != null) {
             return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
@@ -117,8 +121,12 @@ public class TaskRunManager implements MemoryTrackable {
         }
         try {
             long taskId = taskRun.getTaskId();
+<<<<<<< HEAD
             PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
                     u -> Queues.newPriorityBlockingQueue());
+=======
+            Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+>>>>>>> f7e9ca5aff ([BugFix] [UT] Distinguish TaskRun by using unique taskRunId (#44748))
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
@@ -140,7 +148,7 @@ public class TaskRunManager implements MemoryTrackable {
                     // but other attributes may be different, such as priority, creation time.
                     // higher priority and create time will be result after merge is complete
                     // and queryId will be changed.
-                    if (!oldTaskRun.equals(taskRun)) {
+                    if (!oldTaskRun.isEqualTask(taskRun)) {
                         LOG.warn("failed to remove TaskRun definition is [{}]",
                                 taskRun);
                         continue;
@@ -165,20 +173,6 @@ public class TaskRunManager implements MemoryTrackable {
             taskRunUnlock();
         }
         return true;
-    }
-
-    // Because java PriorityQueue does not provide an interface for searching by element,
-    // so find it by code O(n), which can be optimized later
-    @Nullable
-    private TaskRun getTaskRun(PriorityBlockingQueue<TaskRun> taskRuns, TaskRun taskRun) {
-        TaskRun oldTaskRun = null;
-        for (TaskRun run : taskRuns) {
-            if (run.equals(taskRun)) {
-                oldTaskRun = run;
-                break;
-            }
-        }
-        return oldTaskRun;
     }
 
     // check if a running TaskRun is complete and remove it from running TaskRun map

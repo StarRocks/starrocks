@@ -4298,7 +4298,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                                     Assert.assertEquals(Sets.newHashSet("p1"),
                                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
-                                    Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getUUID());
+                                    Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getTaskRunId());
 
                                     jobID = taskRunStatus.getStartTaskRunId();
                                     {
@@ -4438,7 +4438,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                                 Assert.assertEquals(Sets.newHashSet("p1"),
                                         processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
-                                Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getUUID());
+                                Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getTaskRunId());
 
                                 // mock: set its state to FAILED
                                 taskRunStatus.setState(Constants.TaskRunState.FAILED);
