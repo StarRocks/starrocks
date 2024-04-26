@@ -69,7 +69,7 @@ After you have enabled spilling in the previous step, you can further set these 
 ```SQL
 SET enable_spill_to_remote_storage = true;
 
--- Replace <storage_volume_name> with the name of the storage volume with which you want to use.
+-- Replace <storage_volume_name> with the name of the storage volume which you want to use.
 SET spill_storage_volume = '<storage_volume_name>';
 ```
 
