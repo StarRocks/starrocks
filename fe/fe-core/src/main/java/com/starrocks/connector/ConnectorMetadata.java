@@ -32,6 +32,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -263,7 +264,7 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(AlterTableStmt stmt) throws UserException {
+    default void alterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
         Database db = getDb(dbName);
@@ -271,7 +272,7 @@ public interface ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt);
+        ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt, context);
         executor.execute();
     }
 

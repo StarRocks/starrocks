@@ -2321,16 +2321,17 @@ public class LocalMetastore implements ConnectorMetadata {
             table.onCreate(db);
 
             SecurityPolicyMgr securityManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+            ConnectContext context = ConnectContext.get();
             if (columnMaskingPolicyMap != null) {
                 for (Map.Entry<String, WithColumnMaskingPolicy> withColumnMaskingPolicy : columnMaskingPolicyMap.entrySet()) {
-                    securityManager.registerMaskingPolicyContext(new TableName(db.getFullName(), table.getName()),
+                    securityManager.registerMaskingPolicyContext(context, new TableName(db.getFullName(), table.getName()),
                             withColumnMaskingPolicy.getKey(), withColumnMaskingPolicy.getValue());
                 }
             }
 
             if (rowAccessPolicies != null) {
                 for (WithRowAccessPolicy withRowAccessPolicy : rowAccessPolicies) {
-                    securityManager.registerRowAccessPolicyContext(new TableName(db.getFullName(), table.getName()),
+                    securityManager.registerRowAccessPolicyContext(context, new TableName(db.getFullName(), table.getName()),
                             withRowAccessPolicy);
                 }
             }
@@ -3134,8 +3135,8 @@ public class LocalMetastore implements ConnectorMetadata {
      * including SchemaChangeHandler and RollupHandler
      */
     @Override
-    public void alterTable(AlterTableStmt stmt) throws UserException {
-        stateMgr.getAlterJobMgr().processAlterTable(stmt);
+    public void alterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
+        stateMgr.getAlterJobMgr().processAlterTable(stmt, context);
     }
 
     /**

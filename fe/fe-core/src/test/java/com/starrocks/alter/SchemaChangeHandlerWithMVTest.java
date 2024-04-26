@@ -100,7 +100,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             starRocksAssert.withRefreshedMaterializedView(mv);
 
             AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(alterColumn);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm, connectContext);
 
             Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
             waitAlterJobDone(alterJobs);

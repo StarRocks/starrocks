@@ -121,7 +121,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1  varchar(30);";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             // check mv invalid
@@ -144,7 +144,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1 bigint;";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             cluster.runSql("test", "alter materialized view test_cache_mv1 active;");

@@ -518,7 +518,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void processAlterTable(AlterTableStmt stmt) throws UserException {
+    public void processAlterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
 
@@ -630,7 +630,7 @@ public class AlterJobMgr {
             } else if (currentAlterOps.contains(AlterOpType.COMPACT)) {
                 needProcessOutsideDatabaseLock = true;
             } else {
-                ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt);
+                ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt, context);
                 executor.execute();
             }
         } finally {

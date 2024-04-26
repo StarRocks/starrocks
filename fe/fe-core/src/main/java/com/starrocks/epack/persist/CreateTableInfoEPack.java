@@ -4,6 +4,7 @@ package com.starrocks.epack.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.epack.authorization.MaskingPolicyContext;
 import com.starrocks.epack.authorization.RowAccessPolicyContext;
@@ -11,6 +12,8 @@ import com.starrocks.epack.authorization.TableUID;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,12 +33,16 @@ public class CreateTableInfoEPack extends CreateTableInfo {
                                 Map<String, WithColumnMaskingPolicy> maskingPolicyContextMap,
                                 List<WithRowAccessPolicy> withRowAccessPolicyList) {
         super(dbName, table, storageVolumeId);
-
+        ConnectContext context = new ConnectContext();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        if (table.isTemporaryTable()) {
+            context.setSessionId(((OlapTable) table).getSessionId());
+        }
         if (maskingPolicyContextMap != null) {
             applyOrRevokeMaskingPolicyLogs = new ArrayList<>();
             for (Map.Entry<String, WithColumnMaskingPolicy> m : maskingPolicyContextMap.entrySet()) {
                 applyOrRevokeMaskingPolicyLogs.add(new ApplyOrRevokeMaskingPolicyLog(
-                        TableUID.generate(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, table.getName()),
+                        TableUID.generate(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, table.getName()),
                         m.getKey(),
                         new MaskingPolicyContext(m.getValue().getPolicyId(), m.getValue().getUsingColumns()))
                 );
@@ -46,7 +53,7 @@ public class CreateTableInfoEPack extends CreateTableInfo {
             applyOrRevokeRowAccessPolicyLogs = new ArrayList<>();
             for (WithRowAccessPolicy withRowAccessPolicy : withRowAccessPolicyList) {
                 applyOrRevokeRowAccessPolicyLogs.add(new ApplyOrRevokeRowAccessPolicyLog(
-                        TableUID.generate(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, table.getName()),
+                        TableUID.generate(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, table.getName()),
                         new RowAccessPolicyContext(withRowAccessPolicy.getPolicyId(), withRowAccessPolicy.getOnColumns())));
             }
         }

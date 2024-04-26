@@ -18,6 +18,7 @@ public class AlterJobExecutorEPack extends AlterJobExecutor implements AstVisito
     @Override
     public Void visitApplyMaskingPolicyClause(ApplyMaskingPolicyClause alterClause, ConnectContext context) {
         GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyMaskingPolicyContext(
+                context,
                 new TableName(this.catalog, db.getFullName(), table.getName()),
                 alterClause.getMaskingColumn(),
                 alterClause.getWithColumnMaskingPolicy());
@@ -27,6 +28,7 @@ public class AlterJobExecutorEPack extends AlterJobExecutor implements AstVisito
     @Override
     public Void visitRevokeMaskingPolicyClause(RevokeMaskingPolicyClause alterClause, ConnectContext context) {
         GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeMaskingPolicyContext(
+                context,
                 this.catalog, db.getFullName(), table.getName(),
                 alterClause.getMaskingColumn());
         return null;
@@ -35,6 +37,7 @@ public class AlterJobExecutorEPack extends AlterJobExecutor implements AstVisito
     @Override
     public Void visitApplyRowAccessPolicyClause(ApplyRowAccessPolicyClause alterClause, ConnectContext context) {
         GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyRowAccessPolicyContext(
+                context,
                 new TableName(this.catalog, db.getFullName(), table.getName()),
                 alterClause.getRowAccessPolicyContext());
         return null;
@@ -44,10 +47,10 @@ public class AlterJobExecutorEPack extends AlterJobExecutor implements AstVisito
     public Void visitRevokeRowAccessPolicyClause(RevokeRowAccessPolicyClause alterClause, ConnectContext context) {
         if (alterClause.getOpType().equals(AlterOpType.REVOKE_ROW_ACCESS_POLICY)) {
             GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
-                    this.catalog, db.getFullName(), table.getName(), alterClause.getPolicyName());
+                    context, this.catalog, db.getFullName(), table.getName(), alterClause.getPolicyName());
         } else {
             GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeALLRowAccessPolicyContext(
-                    this.catalog, db.getFullName(), table.getName());
+                    context, this.catalog, db.getFullName(), table.getName());
         }
         return null;
     }

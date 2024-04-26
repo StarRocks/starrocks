@@ -37,11 +37,13 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
     protected AlterTableStmt stmt;
     protected final TableName tableName;
     protected List<Runnable> actions;
+    ConnectContext context;
 
-    public ConnectorAlterTableExecutor(AlterTableStmt stmt) {
+    public ConnectorAlterTableExecutor(AlterTableStmt stmt, ConnectContext context) {
         this.stmt = stmt;
         tableName = stmt.getTbl();
         actions = new ArrayList<>();
+        this.context = context;
     }
 
     public void checkConflict() throws DdlException {
@@ -54,7 +56,7 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
         List<AlterClause> alterClauses = stmt.getOps();
         try {
             for (AlterClause c : alterClauses) {
-                visit(c, null);
+                visit(c, context);
             }
         } catch (StarRocksConnectorException e) {
             throw new DdlException(e.getMessage(), e.getCause());
@@ -86,6 +88,7 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
         actions.add(() -> {
             ApplyMaskingPolicyClause applyMaskingPolicyClause = (ApplyMaskingPolicyClause) clause;
             GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyMaskingPolicyContext(
+                    context,
                     tableName,
                     applyMaskingPolicyClause.getMaskingColumn(),
                     applyMaskingPolicyClause.getWithColumnMaskingPolicy());
@@ -98,6 +101,7 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
         actions.add(() -> {
             RevokeMaskingPolicyClause revokeMaskingPolicyClause = (RevokeMaskingPolicyClause) clause;
             GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeMaskingPolicyContext(
+                    context,
                     tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
                     revokeMaskingPolicyClause.getMaskingColumn());
         });
@@ -109,6 +113,7 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
         actions.add(() -> {
             ApplyRowAccessPolicyClause modifyRowAccessPolicyClause = (ApplyRowAccessPolicyClause) clause;
             GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyRowAccessPolicyContext(
+                    context,
                     tableName, modifyRowAccessPolicyClause.getRowAccessPolicyContext());
         });
         return null;
@@ -122,10 +127,12 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
 
             if (opType == AlterOpType.REVOKE_ROW_ACCESS_POLICY) {
                 GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
+                        context,
                         tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
                         revokeRowAccessPolicyClause.getPolicyName());
             } else if (opType == AlterOpType.REVOKE_ALL_ROW_ACCESS_POLICY) {
                 GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeALLRowAccessPolicyContext(
+                        context,
                         tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
             }
         });

@@ -154,7 +154,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process agg add value column schema change
         String addValColStmtStr = "alter table test.sc_agg add column new_v1 int MAX default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt, connectContext);
         jobSize++;
         // check alter job, do not create job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
@@ -174,7 +174,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process agg add  key column schema change
         String addKeyColStmtStr = "alter table test.sc_agg add column new_k1 int default '1'";
         AlterTableStmt addKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addKeyColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addKeyColStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addKeyColStmt, connectContext);
 
         //check alter job
         jobSize++;
@@ -195,7 +195,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process agg drop value column schema change
         String dropValColStmtStr = "alter table test.sc_agg drop column new_v1";
         AlterTableStmt dropValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStmt, connectContext);
         jobSize++;
         //check alter job, do not create job
         LOG.info("alterJobs:{}", alterJobs);
@@ -216,14 +216,14 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         String dropKeyColStmtStr = "alter table test.sc_agg drop column new_k1";
         AlterTableStmt dropKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropKeyColStmtStr);
         Assertions.assertThrows(Exception.class,
-                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropKeyColStmt));
+                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropKeyColStmt, connectContext));
 
         LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
 
         //process agg drop value column with rollup schema change
         String dropRollUpValColStmtStr = "alter table test.sc_agg drop column max_dwell_time";
         AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropRollUpValColStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropRollUpValColStmt, connectContext);
         jobSize++;
         //check alter job, need create job
         LOG.info("alterJobs:{}", alterJobs);
@@ -262,7 +262,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq add value column schema change
         String addValColStmtStr = "alter table test.sc_uniq add column new_v1 int default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt, connectContext);
         jobSize++;
         //check alter job, do not create job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
@@ -283,7 +283,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq drop val column schema change
         String dropValColStmtStr = "alter table test.sc_uniq drop column new_v1";
         AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm, connectContext);
         jobSize++;
         //check alter job
         Assertions.assertEquals(jobSize, alterJobs.size());
@@ -320,7 +320,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq add value column schema change
         String addValColStmtStr = "alter table test.sc_dup add column new_v1 int default '0'";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt, connectContext);
         jobSize++;
         //check alter job, do not create job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
@@ -341,7 +341,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process uniq drop val column schema change
         String dropValColStmtStr = "alter table test.sc_dup drop column new_v1";
         AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(dropValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm, connectContext);
         jobSize++;
         //check alter job
         Assertions.assertEquals(jobSize, alterJobs.size());
@@ -417,12 +417,12 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //process set properties
         String addValColStmtStr = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = '3600');";
         AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt, connectContext);
 
         try {
             String addValColStmtStr2 = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = '-12');";
             AlterTableStmt addValColStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr2);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt2);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt2, connectContext);
         } catch (Exception e) {
             LOG.warn(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
@@ -431,7 +431,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         try {
             String addValColStmtStr3 = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = 'asd');";
             AlterTableStmt addValColStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr3);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt3);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt3, connectContext);
         } catch (Exception e) {
             LOG.warn(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));

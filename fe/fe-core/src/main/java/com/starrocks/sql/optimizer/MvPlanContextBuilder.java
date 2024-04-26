@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
@@ -30,6 +31,7 @@ public class MvPlanContextBuilder {
         // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
         // NPE in the planning.
         ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
         List<MvPlanContext> results = Lists.newArrayList();
         try (var guard = connectContext.bindScope()) {

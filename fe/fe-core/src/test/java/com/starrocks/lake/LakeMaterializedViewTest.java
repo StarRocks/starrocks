@@ -363,7 +363,7 @@ public class LakeMaterializedViewTest {
             String alterSql = "alter table base_table4 modify column k5 varchar(10)";
             AlterTableStmt
                     alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
 

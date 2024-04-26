@@ -38,7 +38,7 @@ public class MaterializedViewAnalyzerEPack {
 
             List<BaseTableInfo> baseTableInfoList = statement.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfoList) {
-                TableUID tableUID = TableUID.generate(baseTableInfo.getCatalogName(),
+                TableUID tableUID = TableUID.generate(context, baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), baseTableInfo.getTableName());
 
                 SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();

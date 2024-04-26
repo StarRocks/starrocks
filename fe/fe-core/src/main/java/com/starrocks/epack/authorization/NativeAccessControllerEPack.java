@@ -65,7 +65,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
     @Override
     public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
         SecurityPolicyMgr policyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
-        TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        TableUID tableUID = TableUID.generate(context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (!policyManager.hasTableAppliedPolicy(tableUID)) {
             return null;
         }
@@ -100,7 +100,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
     @Override
     public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
         SecurityPolicyMgr policyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
-        TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        TableUID tableUID = TableUID.generate(context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (!policyManager.hasTableAppliedPolicy(tableUID)) {
             return null;
         }

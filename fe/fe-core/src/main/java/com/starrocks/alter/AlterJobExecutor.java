@@ -347,7 +347,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             }
 
             MaterializedViewMgr.getInstance().stopMaintainMV(materializedView);
-            visit(stmt.getAlterTableClause());
+            visit(stmt.getAlterTableClause(), context);
             MaterializedViewMgr.getInstance().rebuildMaintainMV(materializedView);
             return null;
         } finally {

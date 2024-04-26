@@ -9,9 +9,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -68,7 +70,7 @@ public class TableUID {
         }
     }
 
-    public static TableUID generate(String catalogName, String dbName, String tableName) {
+    public static TableUID generate(ConnectContext ctx, String catalogName, String dbName, String tableName) {
         long catalogId;
 
         // Default to internal_catalog when no catalog explicitly selected.
@@ -90,11 +92,8 @@ public class TableUID {
         }
         String databaseUUID = database.getUUID();
 
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(catalogName, database.getOriginName(), tableName);
-        if (table == null) {
-            throw new SemanticException("cannot find table " + tableName + " in db " + dbName);
-        }
+        Table table = MetaUtils.getSessionAwareTable(
+                ctx, database, new TableName(catalogName, database.getOriginName(), tableName));
         String tblUUID = table.getUUID();
         return new TableUID(catalogId, databaseUUID, tblUUID);
     }

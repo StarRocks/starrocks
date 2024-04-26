@@ -54,8 +54,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private IcebergCatalog icebergCatalog;
     private Transaction transaction;
 
-    public IcebergAlterTableExecutor(AlterTableStmt stmt, org.apache.iceberg.Table table, IcebergCatalog icebergCatalog) {
-        super(stmt);
+    public IcebergAlterTableExecutor(AlterTableStmt stmt,
+                                     org.apache.iceberg.Table table, IcebergCatalog icebergCatalog, ConnectContext context) {
+        super(stmt, context);
         this.table = table;
         this.icebergCatalog = icebergCatalog;
     }

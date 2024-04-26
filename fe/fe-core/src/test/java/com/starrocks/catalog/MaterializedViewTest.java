@@ -739,11 +739,11 @@ public class MaterializedViewTest {
         String bloomfilterSql = "alter table test.index_mv_to_check set (\"bloom_filter_columns\"=\"k2\")";
 
         AlterTableStmt alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt, connectContext);
         waitForSchemaChangeAlterJobFinish();
 
         alterMVStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bloomfilterSql, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterMVStmt, connectContext);
         waitForSchemaChangeAlterJobFinish();
 
         Assert.assertEquals(QueryState.MysqlStateType.OK, connectContext.getState().getStateType());
@@ -782,7 +782,7 @@ public class MaterializedViewTest {
         AlterTableStmt alterViewStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(bitmapSql, connectContext);
         Assert.assertThrows("Do not support alter non-native table/materialized-view[index_view_to_check]",
                 DdlException.class,
-                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterViewStmt));
+                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterViewStmt, connectContext));
     }
 
     public void testCreateMV(String mvSql) throws Exception {

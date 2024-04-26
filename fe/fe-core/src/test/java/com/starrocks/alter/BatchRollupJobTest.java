@@ -86,7 +86,7 @@ public class BatchRollupJobTest {
         String stmtStr = "alter table db1.tbl1 add rollup r1(k1) duplicate key(k1), r2(k1, k2) " +
                 "duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt, ctx);
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
@@ -131,7 +131,7 @@ public class BatchRollupJobTest {
         String stmtStr = "alter table db1.tbl2 add rollup r1(k1) " +
                 "duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt, ctx);
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());

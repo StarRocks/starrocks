@@ -22,6 +22,7 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -407,9 +408,9 @@ public class SecurityPolicyMgr {
         }
     }
 
-    public void applyMaskingPolicyContext(TableName tableName, String columnName,
+    public void applyMaskingPolicyContext(ConnectContext ctx, TableName tableName, String columnName,
                                           WithColumnMaskingPolicy withColumnMaskingPolicy) {
-        TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
 
         doApplyMaskingPolicyContext(tableUID, columnName, new MaskingPolicyContext(withColumnMaskingPolicy.getPolicyId(),
                 withColumnMaskingPolicy.getUsingColumns()));
@@ -418,9 +419,9 @@ public class SecurityPolicyMgr {
                 withColumnMaskingPolicy.getUsingColumns())));
     }
 
-    public void registerMaskingPolicyContext(TableName tableName, String columnName,
+    public void registerMaskingPolicyContext(ConnectContext ctx, TableName tableName, String columnName,
                                              WithColumnMaskingPolicy withColumnMaskingPolicy) {
-        TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         doApplyMaskingPolicyContext(tableUID, columnName, new MaskingPolicyContext(withColumnMaskingPolicy.getPolicyId(),
                 withColumnMaskingPolicy.getUsingColumns()));
     }
@@ -452,8 +453,8 @@ public class SecurityPolicyMgr {
         }
     }
 
-    public void revokeMaskingPolicyContext(String catalog, String dbName, String tblName, String columnName) {
-        TableUID tableUID = TableUID.generate(catalog, dbName, tblName);
+    public void revokeMaskingPolicyContext(ConnectContext ctx, String catalog, String dbName, String tblName, String columnName) {
+        TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
         doRevokeMaskingPolicyContext(tableUID, columnName);
         GlobalStateMgr.getCurrentState().getEditLog().logRevokeMaskingPolicy(
                 new ApplyOrRevokeMaskingPolicyLog(tableUID, columnName, null));
@@ -470,8 +471,8 @@ public class SecurityPolicyMgr {
         });
     }
 
-    public void applyRowAccessPolicyContext(TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
-        TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+    public void applyRowAccessPolicyContext(ConnectContext ctx, TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
+        TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         RowAccessPolicyContext rowAccessPolicyContext =
                 new RowAccessPolicyContext(withRowAccessPolicy.getPolicyId(), withRowAccessPolicy.getOnColumns());
 
@@ -480,8 +481,8 @@ public class SecurityPolicyMgr {
                 .logApplyRowAccessPolicy(new ApplyOrRevokeRowAccessPolicyLog(tableUID, rowAccessPolicyContext));
     }
 
-    public void registerRowAccessPolicyContext(TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
-        TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+    public void registerRowAccessPolicyContext(ConnectContext ctx, TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
+        TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         doApplyRowAccessPolicyContext(tableUID,
                 new RowAccessPolicyContext(withRowAccessPolicy.getPolicyId(), withRowAccessPolicy.getOnColumns()));
     }
@@ -515,7 +516,8 @@ public class SecurityPolicyMgr {
         }
     }
 
-    public void revokeRowAccessPolicyContext(String catalog, String dbName, String tblName, PolicyName policyName) {
+    public void revokeRowAccessPolicyContext(ConnectContext ctx,
+                                             String catalog, String dbName, String tblName, PolicyName policyName) {
         SecurityPolicyMgr securityPolicyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName);
         if (policy == null) {
@@ -523,7 +525,7 @@ public class SecurityPolicyMgr {
         }
         long policyId = policy.getPolicyId();
 
-        TableUID tableUID = TableUID.generate(catalog, dbName, tblName);
+        TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
         policyContextMap.computeIfPresent(tableUID, (k, v) -> {
             v.revokeRowAccessPolicy(policyId);
             return v;
@@ -533,8 +535,8 @@ public class SecurityPolicyMgr {
                 new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(policyId, null)));
     }
 
-    public void revokeALLRowAccessPolicyContext(String catalog, String dbName, String tblName) {
-        TableUID tableUID = TableUID.generate(catalog, dbName, tblName);
+    public void revokeALLRowAccessPolicyContext(ConnectContext ctx, String catalog, String dbName, String tblName) {
+        TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
         policyContextMap.computeIfPresent(tableUID, (k, v) -> {
             v.clearRowAccessPolicy();
             return v;
