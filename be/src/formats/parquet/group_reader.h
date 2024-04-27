@@ -16,7 +16,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
 #include <atomic>
 #include <memory>
 #include <set>

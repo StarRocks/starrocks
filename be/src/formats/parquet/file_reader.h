@@ -15,7 +15,6 @@
 #pragma once
 
 #include <stddef.h>
-
 #include <cstdint>
 #include <memory>
 #include <set>

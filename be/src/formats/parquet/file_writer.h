@@ -33,7 +33,6 @@
 #include <parquet/schema.h>
 #include <parquet/types.h>
 #include <stdint.h>
-
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>

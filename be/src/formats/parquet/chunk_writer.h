@@ -28,7 +28,6 @@
 #include <parquet/exception.h>
 #include <stddef.h>
 #include <stdint.h>
-
 #include <functional>
 #include <memory>
 #include <utility>
