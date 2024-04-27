@@ -14,25 +14,57 @@
 
 #include "formats/parquet/file_reader.h"
 
+#include <glog/logging.h>
+#include <string.h>
+
+#include <algorithm>
+#include <atomic>
+#include <iterator>
+#include <map>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
+#include "block_cache/block_cache.h"
+#include "block_cache/kv_cache.h"
+#include "column/chunk.h"
+#include "column/column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/datum.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/config.h"
+#include "common/global_types.h"
+#include "common/logging.h"
 #include "common/status.h"
-#include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
+#include "formats/parquet/column_converter.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/parquet_types.h"
+#include "gutil/casts.h"
+#include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "util/coding.h"
-#include "util/defer_op.h"
+#include "util/hash_util.hpp"
 #include "util/memcmp.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {

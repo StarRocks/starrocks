@@ -19,25 +19,62 @@
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
+#include <arrow/result.h>
 #include <gen_cpp/DataSinks_types.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+#include <parquet/platform.h>
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "util/priority_thread_pool.hpp"
+
+namespace parquet {
+class FileMetaData;
+class ParquetFileWriter;
+class WriterProperties;
+} // namespace parquet
+namespace starrocks {
+class Chunk;
+class FileSystem;
+class PriorityThreadPool;
+class RuntimeState;
+namespace parquet {
+class ChunkWriter;
+class ParquetOutputStream;
+} // namespace parquet
+} // namespace starrocks
 
 namespace starrocks::formats {
 

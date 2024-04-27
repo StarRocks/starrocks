@@ -14,23 +14,46 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cstdint>
 #include <memory>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "block_cache/block_cache.h"
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
+#include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
+namespace tparquet {
+class ColumnMetaData;
+class ColumnOrder;
+class RowGroup;
+} // namespace tparquet
+
 namespace starrocks {
 class RandomAccessFile;
-
 struct HdfsScannerContext;
+class BlockCache;
+class SlotDescriptor;
+namespace io {
+class SharedBufferedInputStream;
+} // namespace io
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
+struct TypeDescriptor;
 
 } // namespace starrocks
 

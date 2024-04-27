@@ -14,7 +14,12 @@
 
 #include "formats/parquet/metadata.h"
 
+#include <glog/logging.h>
+#include <stdlib.h>
+
 #include <sstream>
+#include <string_view>
+#include <utility>
 
 #include "formats/parquet/schema.h"
 
