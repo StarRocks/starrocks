@@ -78,8 +78,9 @@ public:
 
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable();
 
-    static StatusOr<FileBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
-                                                  int32_t plan_node_id, const std::string& plan_node_name, uint64_t id);
+    static StatusOr<FileBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
+                                                  const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+                                                  const std::string& plan_node_name, uint64_t id);
 
 private:
     DirPtr _dir;
@@ -245,7 +246,8 @@ Status FileBlockManager::release_block(const BlockPtr& block) {
     return Status::OK();
 }
 
-StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(const DirPtr& dir, const TUniqueId& fragment_instance_id,
+StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(const DirPtr& dir,
+                                                                          const TUniqueId& fragment_instance_id,
                                                                           int32_t plan_node_id,
                                                                           const std::string& plan_node_name) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
