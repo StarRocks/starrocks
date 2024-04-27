@@ -27,6 +27,7 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 #include <stdint.h>
+
 #include <utility>
 
 #include "column/chunk.h"

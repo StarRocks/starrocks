@@ -31,6 +31,7 @@
 #include <parquet/types.h>
 #include <stddef.h>
 #include <stdint.h>
+
 #include <condition_variable>
 #include <functional>
 #include <future>
