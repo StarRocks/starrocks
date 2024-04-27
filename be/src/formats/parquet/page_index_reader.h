@@ -36,6 +36,7 @@
 
 namespace starrocks {
 class RandomAccessFile;
+
 namespace parquet {
 class ColumnReader;
 class GroupReader;

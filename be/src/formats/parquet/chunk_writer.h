@@ -45,6 +45,7 @@
 
 namespace parquet {
 class RowGroupWriter;
+
 namespace schema {
 class GroupNode;
 } // namespace schema

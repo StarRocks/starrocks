@@ -36,6 +36,7 @@ namespace starrocks {
 class SlotDescriptor;
 class TIcebergSchema;
 class TIcebergSchemaField;
+
 namespace parquet {
 class FileMetaData;
 struct ParquetField;

@@ -70,6 +70,7 @@ class Chunk;
 class FileSystem;
 class PriorityThreadPool;
 class RuntimeState;
+
 namespace parquet {
 class ChunkWriter;
 class ParquetOutputStream;

@@ -50,6 +50,7 @@ class ColumnPredicate;
 class ExprContext;
 class NullableColumn;
 class TIcebergSchemaField;
+
 namespace parquet {
 struct ParquetField;
 } // namespace parquet

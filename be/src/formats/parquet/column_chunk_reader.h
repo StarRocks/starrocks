@@ -40,6 +40,7 @@
 namespace starrocks {
 class BlockCompressionCodec;
 class NullableColumn;
+
 namespace io {
 class SeekableInputStream;
 } // namespace io

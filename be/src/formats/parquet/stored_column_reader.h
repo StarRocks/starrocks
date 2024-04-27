@@ -37,6 +37,7 @@ class ColumnChunk;
 namespace starrocks {
 class Column;
 class NullableColumn;
+
 namespace parquet {
 struct ParquetField;
 } // namespace parquet

@@ -47,6 +47,7 @@ class RandomAccessFile;
 struct HdfsScannerContext;
 class BlockCache;
 class SlotDescriptor;
+
 namespace io {
 class SharedBufferedInputStream;
 } // namespace io

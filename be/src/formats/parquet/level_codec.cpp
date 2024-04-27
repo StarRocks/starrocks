@@ -14,8 +14,6 @@
 
 #include "formats/parquet/level_codec.h"
 
-#include <stddef.h>
-
 #include "util/bit_stream_utils.inline.h"
 #include "util/bit_util.h"
 #include "util/coding.h"

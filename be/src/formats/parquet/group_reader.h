@@ -48,6 +48,7 @@ class RandomAccessFile;
 struct HdfsScanStats;
 class ExprContext;
 class TIcebergSchemaField;
+
 namespace parquet {
 class FileMetaData;
 } // namespace parquet
