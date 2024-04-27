@@ -14,6 +14,8 @@
 
 #include "exec/jni_scanner.h"
 
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -470,7 +472,7 @@ void JniScanner::update_jni_scanner_params() {
 class HiveJniScanner : public JniScanner {
 public:
     HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
-            : JniScanner(factory_class, params) {}
+            : JniScanner(std::move(factory_class), std::move(params)) {}
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
 

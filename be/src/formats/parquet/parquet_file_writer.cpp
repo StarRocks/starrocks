@@ -277,7 +277,7 @@ ParquetFileWriter::ParquetFileWriter(
         const std::string& location, std::unique_ptr<parquet::ParquetOutputStream> output_stream,
         const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
         std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators, TCompressionType::type compression_type,
-        const std::shared_ptr<ParquetWriterOptions>& writer_options, const std::function<void()> rollback_action,
+        const std::shared_ptr<ParquetWriterOptions>& writer_options, const std::function<void()>& rollback_action,
         PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _location(location),
           _output_stream(std::move(output_stream)),
@@ -501,7 +501,7 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> f
                                                    PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
-          _field_ids(field_ids),
+          _field_ids(std::move(field_ids)),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
