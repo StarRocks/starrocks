@@ -274,9 +274,20 @@
                         "data_source/catalog/query_external_data"
                     ]
                 },
+                {
+                    "type": "category",
+                    "label": "Data cache",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/data_cache"
+                    },
+                    "items": [
+                        "data_source/data_cache",
+                        "data_source/data_cache_observe"
+                    ]
+                },
                 "data_source/External_table",
                 "data_source/file_external_table",
-                "data_source/data_cache",
                 "data_source/datalake_faq"
             ]
         },
@@ -1700,9 +1711,20 @@
                         "data_source/catalog/query_external_data"
                     ]
                 },
+                {
+                    "type": "category",
+                    "label": "Data cache",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/data_cache"
+                    },
+                    "items": [
+                        "data_source/data_cache",
+                        "data_source/data_cache_observe"
+                    ]
+                },
                 "data_source/External_table",
                 "data_source/file_external_table",
-                "data_source/data_cache",
                 "data_source/datalake_faq"
             ]
         },
