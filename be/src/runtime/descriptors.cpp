@@ -374,6 +374,9 @@ const std::string& OdpsTableDescriptor::get_time_zone() const {
     return _time_zone;
 }
 
+KuduTableDescriptor::KuduTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {}
+
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
 
 bool HiveTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
@@ -397,6 +400,20 @@ int HiveTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) con
         ++idx;
     }
     return -1;
+}
+
+IcebergMetadataTableDescriptor::IcebergMetadataTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _hive_column_names = tdesc.hdfsTable.hive_column_names;
+    _hive_column_types = tdesc.hdfsTable.hive_column_types;
+}
+
+const std::string& IcebergMetadataTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+const std::string& IcebergMetadataTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
 }
 
 StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
@@ -722,6 +739,14 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::ODPS_TABLE: {
             desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
+            break;
+        }
+        case TTableType::LOGICAL_ICEBERG_METADATA_TABLE: {
+            desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
+            break;
+        }
+        case TTableType::KUDU_TABLE: {
+            desc = pool->add(new KuduTableDescriptor(tdesc, pool));
             break;
         }
         default:

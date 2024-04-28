@@ -46,12 +46,15 @@ import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.metadata.MetadataCollectJob;
+import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -80,8 +83,10 @@ import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -1261,5 +1266,45 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetaSpec icebergMetaSpec = metaSpec.cast();
         List<RemoteMetaSplit> splits = icebergMetaSpec.getSplits();
         Assert.assertEquals(1, splits.size());
+    }
+
+    @Test
+    public void testIcebergMetadataCollectJob() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        String createCatalog = "CREATE EXTERNAL CATALOG iceberg_catalog PROPERTIES(\"type\"=\"iceberg\", " +
+                "\"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        StarRocksAssert starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withCatalog(createCatalog);
+        mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.refresh();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableC;
+            }
+        };
+
+        long snapshotId = mockedNativeTableC.currentSnapshot().snapshotId();
+        MetadataCollectJob collectJob = new IcebergMetadataCollectJob("iceberg_catalog", "db", "table",
+                TResultSinkType.METADATA_ICEBERG, snapshotId, "");
+        collectJob.init(starRocksAssert.getCtx());
+        String expectedSql = "SELECT content, file_path, file_format, spec_id, partition_data, record_count, " +
+                "file_size_in_bytes, split_offsets, sort_id, equality_ids, file_sequence_number, data_sequence_number , " +
+                "column_stats FROM `iceberg_catalog`.`db`.`table$logical_iceberg_metadata` FOR VERSION AS OF 1 WHERE 1=1'";
+        Assert.assertEquals(expectedSql, collectJob.getSql());
+        Assert.assertNotNull(collectJob.getContext());
+        Assert.assertTrue(collectJob.getContext().isMetadataContext());
+        collectJob.asyncCollectMetadata();
+        Assert.assertNull(collectJob.getMetadataJobCoord());
+        Assert.assertTrue(collectJob.getResultQueue().isEmpty());
     }
 }

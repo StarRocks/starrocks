@@ -486,8 +486,14 @@ set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_clone_for_gin` (
   `id1` bigint(20) NOT NULL COMMENT "",
-  `text_column` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+  `text_column_1` varchar(255) NULL COMMENT "",
+  `text_column_2` varchar(255) NULL COMMENT "",
+  `text_column_3` varchar(255) NULL COMMENT "",
+  `text_column_4` varchar(255) NULL COMMENT "",
+  INDEX gin_none_1 (`text_column_1`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_2 (`text_column_2`) USING BITMAP,
+  INDEX gin_none_3 (`text_column_3`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_4 (`text_column_4`) USING BITMAP
 ) ENGINE=OLAP
 DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
@@ -498,7 +504,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
-INSERT INTO t_clone_for_gin VALUES (1, "abc"),(2, "ABC");
+INSERT INTO t_clone_for_gin VALUES (1, "abc","abc","abc","abc"),(2, "ABC","ABC","ABC","ABC");
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 
 function: set_first_tablet_bad_and_recover("t_clone_for_gin")
@@ -684,3 +690,24 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
 SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
 
 DROP TABLE t_disable_global_dict_rewrite;
+
+-- name: test_create_mv_with_match
+CREATE TABLE `t_create_mv_with_match` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
+CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
+function: wait_materialized_view_cancel()
+DROP TABLE t_create_mv_with_match;

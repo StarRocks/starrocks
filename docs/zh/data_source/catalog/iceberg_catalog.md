@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 5
 ---
 
 # Iceberg catalog
@@ -23,12 +24,12 @@ Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支�
 
 ## 使用说明
 
-- StarRocks 查询 Iceberg 数据时，支持 Parquet 和 ORC 文件格式，其中：
+StarRocks 查询 Iceberg 数据时，注意以下几点：
 
-  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
-  - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
-
-- Iceberg Catalog 支持查询 v1 表数据。自 3.0 版本起支持查询 ORC 格式的 v2 表数据，自 3.1 版本起支持查询 Parquet 格式的 v2 表数据。
+| **文件格式** | **压缩格式**                                   | **Iceberg 表版本**                                           |
+| ------------ | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet      | SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION      | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.1 版本起支持 position-delete，自3.1.10+、3.2.5+、3.3 版本起支持 equality-delete。</li></ul> |
+| ORC          | ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.0 版本起支持 position-delete，自3.1.8+、3.2.3+、3.3 版本起支持 equality-delete。</li></ul> |
 
 ## 准备工作
 
@@ -77,7 +78,8 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
-    StorageCredentialParams
+    StorageCredentialParams,
+    MetadataUpdateParams
 )
 ```
 
@@ -478,6 +480,15 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
     | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
     | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
     | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
+
+#### MetadataUpdateParams
+
+指定元数据缓存策略的一组参数。此组参数为可选。
+
+当前仅包含 `enable_iceberg_metadata_cache` 一个参数，用于指定是否缓存 Iceberg 表指针和分区名相关的数据。该参数自 3.2.1 版本起支持：
+
+- 在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。
+- 自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 
 ### 示例
 
@@ -980,7 +991,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Iceberg 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Iceberg 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。 |
+| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Iceberg 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) 控制。 |
 
 ### 示例
 
@@ -1141,9 +1152,3 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
-
-## 配置 Iceberg 表指针和分区名缓存
-
-您可以通过系统变量 [`enable_iceberg_metadata_cache`](../../reference/System_variable.md) 指定是否缓存 Iceberg 表指针和分区名相关的数据。该变量自 3.2.1 版本起支持。
-
-在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。

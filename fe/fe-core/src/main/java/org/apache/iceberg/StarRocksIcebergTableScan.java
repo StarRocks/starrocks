@@ -47,6 +47,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergApiConverter.mayHaveEqualityDeletes;
+
 public class StarRocksIcebergTableScan
         extends DataScan<TableScan, FileScanTask, CombinedScanTask> implements TableScan {
     private static final Logger LOG = LogManager.getLogger(StarRocksIcebergTableScan.class);
@@ -346,11 +348,6 @@ public class StarRocksIcebergTableScan
 
     private long totalSize(List<ManifestFile> manifests) {
         return manifests.stream().mapToLong(ManifestFile::length).sum();
-    }
-
-    private boolean mayHaveEqualityDeletes(Snapshot snapshot) {
-        String count = snapshot.summary().get(SnapshotSummary.TOTAL_EQ_DELETES_PROP);
-        return count == null || !count.equals("0");
     }
 
     private ResidualEvaluator newResidualEvaluator(PartitionSpec spec) {

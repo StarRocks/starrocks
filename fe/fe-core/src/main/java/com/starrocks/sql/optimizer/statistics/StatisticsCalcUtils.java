@@ -121,10 +121,12 @@ public class StatisticsCalcUtils {
                 // For example, a large amount of data LOAD may cause the number of rows to change greatly.
                 // This leads to very inaccurate row counts.
                 long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
+                Map<Long, TableStatistic> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getTableStatistics(table.getId(), selectedPartitions);
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
-                    TableStatistic tableStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                            .getTableStatistic(table.getId(), partition.getId());
+                    TableStatistic tableStatistic =
+                            tableStatisticMap.getOrDefault(partition.getId(), TableStatistic.unknown());
                     LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
                     if (tableStatistic.equals(TableStatistic.unknown())) {
                         partitionRowCount = partition.getRowCount();
@@ -182,14 +184,15 @@ public class StatisticsCalcUtils {
 
     private static long deltaRows(Table table, long totalRowCount) {
         long tblRowCount = 0L;
+        Map<Long, TableStatistic> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getTableStatistics(table.getId(), table.getPartitions());
+
         for (Partition partition : table.getPartitions()) {
             long partitionRowCount;
-            TableStatistic tableStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                    .getTableStatistic(table.getId(), partition.getId());
-            if (tableStatistic.equals(TableStatistic.unknown())) {
+            if (tableStatisticMap.containsKey(partition.getId())) {
                 partitionRowCount = partition.getRowCount();
             } else {
-                partitionRowCount = tableStatistic.getRowCount();
+                partitionRowCount = tableStatisticMap.get(partition.getId()).getRowCount();
             }
             tblRowCount += partitionRowCount;
         }

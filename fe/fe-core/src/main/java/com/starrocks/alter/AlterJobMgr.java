@@ -651,7 +651,9 @@ public class AlterJobMgr {
                 TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
                 TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
                 TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt);
+                ConnectContext ctx = new ConnectContext();
+                ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt, ctx);
             } else if (alterClause instanceof ModifyPartitionClause) {
                 ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                 Map<String, String> properties = clause.getProperties();

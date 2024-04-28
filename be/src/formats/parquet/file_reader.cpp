@@ -14,25 +14,57 @@
 
 #include "formats/parquet/file_reader.h"
 
+#include <glog/logging.h>
+#include <string.h>
+
+#include <algorithm>
+#include <atomic>
+#include <iterator>
+#include <map>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
+#include "block_cache/block_cache.h"
+#include "block_cache/kv_cache.h"
+#include "column/chunk.h"
+#include "column/column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/datum.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/config.h"
+#include "common/global_types.h"
+#include "common/logging.h"
 #include "common/status.h"
-#include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
+#include "formats/parquet/column_converter.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/parquet_types.h"
+#include "gutil/casts.h"
+#include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "util/coding.h"
-#include "util/defer_op.h"
+#include "util/hash_util.hpp"
 #include "util/memcmp.h"
+#include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -59,11 +91,13 @@ static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) 
 }
 
 static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group) {
-    if (row_group.__isset.file_offset) {
-        return row_group.file_offset;
-    }
     const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
-    return _get_column_start_offset(first_column);
+    int64_t offset = _get_column_start_offset(first_column);
+
+    if (row_group.__isset.file_offset) {
+        offset = std::min(offset, row_group.file_offset);
+    }
+    return offset;
 }
 
 static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
@@ -218,7 +252,7 @@ Status FileReader::_get_footer() {
     }
 
     BlockCache* cache = _cache;
-    CacheHandle cache_handle;
+    DataCacheHandle cache_handle;
     std::string metacache_key = _build_metacache_key();
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
@@ -241,6 +275,8 @@ Status FileReader::_get_footer() {
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
+        } else {
+            deleter();
         }
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
@@ -269,8 +305,12 @@ Status FileReader::_build_split_tasks() {
         }
         int64_t start_offset = _get_row_group_start_offset(row_group);
         int64_t end_offset = _get_row_group_end_offset(row_group);
+        if (start_offset >= end_offset) {
+            LOG(INFO) << "row group " << i << " is empty. start = " << start_offset << ", end = " << end_offset;
+            continue;
+        }
 #ifndef NDEBUG
-        DCHECK(start_offset < end_offset);
+        DCHECK(start_offset < end_offset) << "start = " << start_offset << ", end = " << end_offset;
         // there could be holes between row groups.
         // but this does not affect our scan range filter logic.
         // because in `_select_row_group`, we check if `start offset of row group` is in this range
@@ -437,6 +477,16 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
             *exist = false;
             return Status::OK();
         } else {
+            // When statistics is empty, column_meta->__isset.statistics is still true,
+            // but statistics.__isset.xxx may be false, so judgment is required here.
+            bool is_set_min_max =
+                    (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
+                    (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
+            if (!is_set_min_max) {
+                *exist = false;
+                return Status::OK();
+            }
+
             const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
             if (field == nullptr) {
                 LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
@@ -679,8 +729,6 @@ Status FileReader::_init_group_readers() {
 
 Status FileReader::_prepare_cur_row_group() {
     auto& r = _row_group_readers[_cur_row_group_idx];
-    // prepare row group
-    RETURN_IF_ERROR(r->prepare());
     // if coalesce read enabled, we have to
     // 0. clear last group memory
     // 1. allocate shared buffered input stream and
@@ -701,7 +749,8 @@ Status FileReader::_prepare_cur_row_group() {
         _group_reader_param.sb_stream = _sb_stream;
     }
 
-    return Status::OK();
+    // prepare row group
+    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {

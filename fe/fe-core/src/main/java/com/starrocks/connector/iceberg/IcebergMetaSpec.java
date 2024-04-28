@@ -22,10 +22,12 @@ import java.util.List;
 public class IcebergMetaSpec implements SerializedMetaSpec {
     private final String serializedTable;
     private final List<RemoteMetaSplit> splits;
+    private final boolean loadColumnStats;
 
-    public IcebergMetaSpec(String serializedTable, List<RemoteMetaSplit> splits) {
+    public IcebergMetaSpec(String serializedTable, List<RemoteMetaSplit> splits, boolean loadColumnStats) {
         this.serializedTable = serializedTable;
         this.splits = splits;
+        this.loadColumnStats = loadColumnStats;
     }
 
     @Override
@@ -36,6 +38,10 @@ public class IcebergMetaSpec implements SerializedMetaSpec {
     @Override
     public List<RemoteMetaSplit> getSplits() {
         return splits;
+    }
+
+    public boolean loadColumnStats() {
+        return loadColumnStats;
     }
 
 }

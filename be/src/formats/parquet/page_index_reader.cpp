@@ -14,13 +14,29 @@
 
 #include "formats/parquet/page_index_reader.h"
 
+#include <stddef.h>
+
+#include <algorithm>
+#include <utility>
+
+#include "column/chunk.h"
+#include "column/column.h"
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/parquet/column_converter.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding_plain.h"
+#include "formats/parquet/group_reader.h"
+#include "formats/parquet/schema.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
+#include "gutil/stringprintf.h"
+#include "runtime/types.h"
 #include "simd/simd.h"
+#include "util/slice.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {

@@ -177,7 +177,7 @@ SELECT /*+ SET_VAR
 
 ### cbo_eq_base_type
 
-* 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
+* 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。**该变量仅在进行 `=` 和 `!=` 比较时生效。**
 * 类型：String
 * 引入版本：v2.5.14
 
@@ -372,6 +372,12 @@ SELECT /*+ SET_VAR
 * 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
 * 默认值：false
 * 引入版本：v3.0
+
+### enable_spill_to_remote_storage
+
+* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 默认值：false
+* 引入版本：v3.3.0
 
 ### enable_strict_order_by
 
@@ -813,6 +819,12 @@ SELECT /*+ SET_VAR
 * `force`：无论内存使用情况如何，StarRocks 都会强制落盘所有相关算子的中间结果。
 
 此变量仅在变量 `enable_spill` 设置为 `true` 时生效。
+
+### spill_storage_volume
+
+* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 默认值：空字符串
+* 引入版本：v3.3.0
 
 ### SQL_AUTO_IS_NULL
 

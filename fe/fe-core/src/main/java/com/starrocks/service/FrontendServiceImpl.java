@@ -223,6 +223,8 @@ import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
@@ -2851,5 +2853,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setStatus(status);
         }
         return response;
+    }
+
+    @Override
+    public TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        return InformationSchemaDataSource.generateTemporaryTablesInfoResponse(request);
     }
 }

@@ -74,6 +74,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -839,10 +840,11 @@ public class StarRocksAssert {
 
         Task task = tm.getTask(TaskBuilder.getMvTaskName(mv.getId()));
         TaskRunManager taskRunManager = tm.getTaskRunManager();
-        TaskRun taskRun = taskRunManager.getRunnableTaskRun(task.getId());
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
         while (taskRun != null) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
-            taskRun = taskRunManager.getRunnableTaskRun(task.getId());
+            taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
         }
         return this;
     }

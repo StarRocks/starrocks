@@ -14,22 +14,30 @@
 
 #include "formats/parquet/group_reader.h"
 
-#include <memory>
-#include <sstream>
+#include <glog/logging.h>
 
-#include "column/column_helper.h"
+#include <algorithm>
+#include <memory>
+#include <utility>
+
+#include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -135,8 +143,13 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
 
             if (has_filter) {
-                RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, &chunk_filter, &lazy_chunk));
-                lazy_chunk->filter_range(chunk_filter, 0, count);
+                Range<uint64_t> lazy_read_range = r.filter(&chunk_filter);
+                // if all data is filtered, we have skipped early.
+                DCHECK(lazy_read_range.span_size() > 0);
+                Filter lazy_filter = {chunk_filter.begin() + lazy_read_range.begin() - r.begin(),
+                                      chunk_filter.begin() + lazy_read_range.end() - r.begin()};
+                RETURN_IF_ERROR(_read_range(_lazy_column_indices, lazy_read_range, &lazy_filter, &lazy_chunk));
+                lazy_chunk->filter_range(lazy_filter, 0, lazy_read_range.span_size());
             } else {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk));
             }

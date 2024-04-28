@@ -121,6 +121,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String QUERY_TIMEOUT = "query_timeout";
 
+    public static final String METADATA_COLLECT_QUERY_TIMEOUT = "metadata_collect_query_timeout";
+    public static final String ENABLE_METADATA_PROFILE = "enable_metadata_profile";
+
     /*
      * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
      * If pagecache is set by FE, a query whether to use pagecache follows the policy specified by FE.
@@ -840,6 +843,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
 
+    // metadata collect query timeout in second
+    @VariableMgr.VarAttr(name = METADATA_COLLECT_QUERY_TIMEOUT)
+    private int metadataCollectQueryTimeoutS = 60;
+
     @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
     private boolean usePageCache = true;
 
@@ -853,6 +860,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
+    private boolean enableMetadataProfile = false;
 
     // if true, will generate profile when load finished
     @VariableMgr.VarAttr(name = ENABLE_LOAD_PROFILE)
@@ -1688,7 +1698,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewPlanCache = true;
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
-    private boolean enableViewBasedMvRewrite = false;
+    private boolean enableViewBasedMvRewrite = true;
 
     @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
     private boolean enableCBOViewBasedMvRewrite = false;
@@ -2244,6 +2254,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setQueryDeliveryTimeoutS(int queryDeliveryTimeoutS) {
         this.queryDeliveryTimeoutS = queryDeliveryTimeoutS;
+    }
+
+    public int getMetadataCollectQueryTimeoutS() {
+        return metadataCollectQueryTimeoutS;
+    }
+
+    public void setMetadataCollectQueryTimeoutS(int metadataCollectQueryTimeoutS) {
+        this.metadataCollectQueryTimeoutS = metadataCollectQueryTimeoutS;
+    }
+
+    public boolean isEnableMetadataProfile() {
+        return enableMetadataProfile;
+    }
+
+    public void setEnableMetadataProfile(boolean enableMetadataProfile) {
+        this.enableMetadataProfile = enableMetadataProfile;
     }
 
     public int getQueryDeliveryTimeoutS() {
@@ -3724,6 +3750,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // used for rest api
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
+        tResult.setCatalog(catalog);
         tResult.setMem_limit(maxExecMemByte);
         tResult.setQuery_mem_limit(queryMemLimit);
         tResult.setSql_dialect(sqlDialect.toLowerCase());

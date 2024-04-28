@@ -29,6 +29,7 @@ public:
         const FSOptions* fs_options = nullptr;
         const HiveTableDescriptor* hive_table = nullptr;
         const THdfsScanRange* scan_range = nullptr;
+        const THdfsScanNode* scan_node = nullptr;
     };
 
     JniScanner(std::string factory_class, std::map<std::string, std::string> params)
@@ -114,6 +115,8 @@ private:
 std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options);
 
 } // namespace starrocks

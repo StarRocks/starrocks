@@ -216,9 +216,15 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
-Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
+StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
     DCHECK(_where_expr != nullptr);
-    ColumnPtr filter_col = _where_expr->evaluate(chunk.get()).value();
+    auto res = _where_expr->evaluate(chunk.get());
+    if (!res.ok()) {
+        std::stringstream ss;
+        ss << "execute where expr failed: " << res.status().message();
+        return Status::InternalError(ss.str());
+    }
+    ColumnPtr filter_col = std::move(res.value());
 
     size_t size = filter_col->size();
     Buffer<uint8_t> filter(size, 0);
@@ -247,7 +253,12 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         }
         if (_where_expr) {
-            auto filter = _execute_where_expr(base_chunk);
+            auto res = _execute_where_expr(base_chunk);
+            if (!res.ok()) {
+                LOG(WARNING) << res.status();
+                return false;
+            }
+            auto filter = std::move(res.value());
             // If no filtered rows are left, return directly
             if (SIMD::count_nonzero(filter) == 0) {
                 base_chunk->set_num_rows(0);

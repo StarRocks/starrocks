@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "block_cache/disk_space_monitor.h"
 #include "block_cache/kv_cache.h"
 #include "common/status.h"
@@ -42,7 +44,7 @@ public:
 
     // Write object to cache, the `ptr` is the object pointer.
     Status write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
-                        CacheHandle* handle, WriteCacheOptions* options = nullptr);
+                        DataCacheHandle* handle, WriteCacheOptions* options = nullptr);
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned. The offset and size must be aligned by block size.
@@ -55,7 +57,7 @@ public:
     // Read object from cache, the `handle` wraps the object pointer.
     // As long as the handle object is not destroyed and the user does not manully call the `handle->release()`
     // function, the corresponding pointer will never be freed by the cache system.
-    Status read_object(const CacheKey& cache_key, CacheHandle* handle, ReadCacheOptions* options = nullptr);
+    Status read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options = nullptr);
 
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);

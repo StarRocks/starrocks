@@ -793,13 +793,13 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
             if (tablet_schema != nullptr && !tablet_schema->indexes()->empty()) {
                 int segment_n = seg_id;
-                for (int index_id = 0; index_id < tablet_schema->indexes()->size(); index_id++) {
-                    const auto& index = (*(tablet_schema->indexes()))[index_id];
+                const auto& indexes = *tablet_schema->indexes();
+                for (const auto& index : indexes) {
                     if (index.index_type() == GIN) {
                         std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
-                                clone_dir, new_rowset_id.to_string(), segment_n, index_id);
+                                clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
                         std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
-                                clone_dir, old_rowset_id.to_string(), segment_n, index_id);
+                                clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
 
                         RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
                         std::set<std::string> files;

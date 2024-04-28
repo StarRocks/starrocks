@@ -96,6 +96,17 @@ Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, 
             timeout_ms);
 }
 
+Status SchemaHelper::get_temporary_tables_info(const std::string& ip, const int32_t port,
+                                               const TGetTemporaryTablesInfoRequest& request,
+                                               TGetTemporaryTablesInfoResponse* response, const int timeout_ms) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&request, &response](FrontendServiceConnection& client) {
+                client->getTemporaryTablesInfo(*response, request);
+            },
+            timeout_ms);
+}
+
 Status SchemaHelper::describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& request,
                                     TDescribeTableResult* result, const int timeout_ms) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(

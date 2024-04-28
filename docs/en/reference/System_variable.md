@@ -178,7 +178,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### cbo_eq_base_type
 
-* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
+* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
 * **Data type**: String
 * **Introduced in**: v2.5.14
 
@@ -374,6 +374,12 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Description**: Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
 * **Default**: false
 * **Introduced in**: v3.0
+
+### enable_spill_to_remote_storage
+
+* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Default**: false
+* **Introduced in**: v3.3.0
 
 ### enable_strict_order_by
 
@@ -798,6 +804,12 @@ The execution mode of intermediate result spilling. Valid values:
 * `force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.
 
 This variable takes effect only when the variable `enable_spill` is set to `true`.
+
+### spill_storage_volume
+
+* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Default**: Empty string
+* **Introduced in**: v3.3.0
 
 ### SQL_AUTO_IS_NULL
 
