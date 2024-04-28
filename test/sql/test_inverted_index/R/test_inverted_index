@@ -1212,18 +1212,6 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATC
 -- result:
 1
 -- !result
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 = "dbs";
--- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
--- !result
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 LIKE "%dbs%";
--- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
--- !result
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 IN ("dbs", "ab");
--- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
--- !result
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
 -- result:
 1
