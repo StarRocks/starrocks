@@ -19,9 +19,13 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 - `haystack`: 必填项，要比较的第一个字符串。必须是 VARCHAR 值，可以是列或常量值。
 - `needle`: 必填项，要比较的第二个字符串。必须是 VARCHAR 值，只能是常量值。
 
-    > - `needle` 的值大小不能大于 2^15，否则会抛出错误。
-    > - 如果 `haystack` 的大小大于 2^15，则此函数将返回 0。
-    > - 如果 `haystack` 或 `needle` 的大小小于 `gram_num`，则此函数将返回 0。
+    :::tip
+  
+    - `needle` 的值大小不能大于 2^15，否则会抛出错误。
+    - 如果 `haystack` 的大小大于 2^15，则此函数将返回 0。
+    - 如果 `haystack` 或 `needle` 的大小小于 `gram_num`，则此函数将返回 0。
+ 
+    :::
 
 - `gram_num`: 必填项，用于指定 gram 的数量。推荐值为 `4`。
 
