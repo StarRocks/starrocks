@@ -96,7 +96,8 @@ void Operator::set_precondition_ready(RuntimeState* state) {
     const auto& instance_runtime_filters = _factory->get_runtime_in_filters();
     _runtime_in_filters.insert(_runtime_in_filters.end(), instance_runtime_filters.begin(),
                                instance_runtime_filters.end());
-    VLOG_QUERY << "local in runtime filter num:" << _runtime_in_filters.size();
+    VLOG_QUERY << "plan_node_id:" << _plan_node_id << " sequence:" << _driver_sequence
+               << " local in runtime filter num:" << _runtime_in_filters.size() << " op:" << this->get_raw_name();
 }
 
 const LocalRFWaitingSet& Operator::rf_waiting_set() const {
