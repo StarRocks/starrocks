@@ -92,6 +92,7 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_FORMAT = "format";
     public static final String PROPERTY_COMPRESSION = "compression";
     public static final String PROPERTY_TARGET_MAX_FILE_SIZE = "target_max_file_size";
+    public static final String PROPERTY_SINGLE = "single";
     public static final String PROPERTY_PARTITION_BY = "partition_by";
 
     public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
@@ -105,6 +106,7 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
     public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
     public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    public static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
 
     private String path;
     private String format;
@@ -127,6 +129,9 @@ public class TableFunctionTable extends Table {
     private byte csvEscape;
     private long csvSkipHeader;
     private boolean csvTrimSpace;
+
+    // PARQUET format options
+    private boolean parquetUseLegacyEncoding = false;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -202,6 +207,7 @@ public class TableFunctionTable extends Table {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
         }
+        tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
         partitionColumnIDs.ifPresent(tTableFunctionTable::setPartition_column_ids);
         return tTableFunctionTable;
     }
@@ -526,7 +532,7 @@ public class TableFunctionTable extends Table {
         }
 
         // parse table function properties
-        String single = properties.getOrDefault("single", "false");
+        String single = properties.getOrDefault(PROPERTY_SINGLE, "false");
         if (!single.equalsIgnoreCase("true") && !single.equalsIgnoreCase("false")) {
             throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).",
                     single);
@@ -613,6 +619,16 @@ public class TableFunctionTable extends Table {
         }
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
             this.csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+        }
+
+        // parquet options
+        if (properties.containsKey(PROPERTY_PARQUET_USE_LEGACY_ENCODING)) {
+            String useLegacyEncoding = properties.getOrDefault(PROPERTY_PARQUET_USE_LEGACY_ENCODING, "false");
+            if (!useLegacyEncoding.equalsIgnoreCase("true") && !useLegacyEncoding.equalsIgnoreCase("false")) {
+                throw new SemanticException("got invalid parameter \"parquet.use_legacy_encoding\" = \"%s\", " +
+                        "expect a boolean value (true or false).", single);
+            }
+            this.parquetUseLegacyEncoding = useLegacyEncoding.equalsIgnoreCase("true");
         }
     }
 }
