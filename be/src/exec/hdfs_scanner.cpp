@@ -234,6 +234,8 @@ Status HdfsScanner::open_random_access_file() {
         _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
         _cache_input_stream->set_enable_async_populate_mode(_scanner_params.enable_datacache_async_populate_mode);
         _cache_input_stream->set_enable_cache_io_adaptor(_scanner_params.enable_datacache_io_adaptor);
+        _cache_input_stream->set_priority(_scanner_params.datacache_priortiy);
+        _cache_input_stream->set_ttl_seconds(_scanner_params.datacache_ttl_seconds);
         _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
         _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
         input_stream = _cache_input_stream;
@@ -364,6 +366,13 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
+        COUNTER_UPDATE(profile->datacache_block_buffer_bytes, stats.block_buffer_bytes);
+        COUNTER_UPDATE(profile->datacache_remote_io_bytes, stats.read_remote_bytes);
+        COUNTER_UPDATE(profile->datacache_local_io_bytes, stats.read_local_bytes);
+
+        auto* metrics = DataCacheHitRateMetrics::instance();
+        metrics->update_remote_io_bytes(stats.read_remote_bytes);
+        metrics->update_local_io_bytes(stats.read_local_bytes);
 
         if (_runtime_state->query_options().__isset.query_type &&
             _runtime_state->query_options().query_type == TQueryType::LOAD) {

@@ -50,6 +50,7 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     }
 
     starcache::WriteOptions opts;
+    opts.priority = options->priority;
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
     opts.async = options->async;

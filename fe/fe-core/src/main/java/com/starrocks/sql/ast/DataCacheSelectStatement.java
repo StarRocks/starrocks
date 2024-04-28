@@ -32,7 +32,8 @@ public class DataCacheSelectStatement extends DdlStmt {
     private boolean isVerbose = false;
     // real catalog of cache select table
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-    // TODO Support priority, ttl later
+    private int priority = 0;
+    private long ttlSeconds = 0;
 
     public DataCacheSelectStatement(InsertStmt insertStmt, Map<String, String> properties, NodePosition pos) {
         super(pos);
@@ -64,6 +65,22 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     public String getCatalog() {
         return this.catalog;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setTtlSeconds(long ttlSeconds) {
+        this.ttlSeconds = ttlSeconds;
+    }
+
+    public long getTtlSeconds() {
+        return ttlSeconds;
     }
 
     @Override

@@ -38,6 +38,7 @@ public class StatsConstants {
     public static final String EXTERNAL_FULL_STATISTICS_TABLE_NAME = "external_column_statistics";
     public static final String HISTOGRAM_STATISTICS_TABLE_NAME = "histogram_statistics";
     public static final String EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME = "external_histogram_statistics";
+    public static final String EXTERNAL_FREQUENCY_STATISTICS_TABLE_NAME = "external_frequency_statistics";
 
     public static final String INFORMATION_SCHEMA = "information_schema";
 

@@ -357,6 +357,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
+import com.starrocks.sql.ast.ShowDataCacheSelectRecommendationsStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -3340,6 +3341,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new DataCacheSelectStatement(insertStmt, properties, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitShowDataCacheSelectRecommendationsStatement(
+            StarRocksParser.ShowDataCacheSelectRecommendationsStatementContext ctx) {
+        return new ShowDataCacheSelectRecommendationsStmt(createPos(ctx));
     }
 
     // ----------------------------------------------- Export Statement ------------------------------------------------

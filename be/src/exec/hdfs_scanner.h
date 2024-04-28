@@ -129,6 +129,9 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* datacache_write_fail_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_block_buffer_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_block_buffer_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_block_buffer_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_remote_io_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_local_io_bytes = nullptr;
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
@@ -214,6 +217,8 @@ struct HdfsScannerParams {
     bool enable_populate_datacache = false;
     bool enable_datacache_async_populate_mode = false;
     bool enable_datacache_io_adaptor = false;
+    int32_t datacache_priortiy = 0;
+    int64_t datacache_ttl_seconds = 0;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;

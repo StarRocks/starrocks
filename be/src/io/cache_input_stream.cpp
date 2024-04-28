@@ -41,6 +41,7 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
     _block_size = _cache->block_size();
 
     _cache_key.resize(12);
+    _block_map_bitmap.resize(_size / _block_size + 1);
 
     char* data = _cache_key.data();
     uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
@@ -101,6 +102,7 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         block.buffer.copy_to(out, size, offset - block.offset);
         _stats.read_block_buffer_bytes += size;
         _stats.read_block_buffer_count += 1;
+        _update_read_local_metrics(block_id);
         return Status::OK();
     }
 
@@ -120,6 +122,7 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
                     _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
                                                           block_offset, load_size, sb);
                 }
+                _update_read_local_metrics(block_id);
                 return Status::OK();
             }
         }
@@ -147,6 +150,7 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         if (_enable_block_buffer) {
             block.buffer.copy_to(out, size, shift);
             block.offset = block_offset;
+            _stats.block_buffer_bytes += size;
             _block_map[block_id] = block;
         }
         _stats.read_cache_bytes += read_size;
@@ -154,6 +158,7 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
         _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
         _stats.read_cache_ns += read_cache_ns;
+        _update_read_local_metrics(block_id);
         if (_enable_cache_io_adaptor) {
             _cache->record_read_cache(read_size, read_cache_ns / 1000);
         }
@@ -169,6 +174,14 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         _deduplicate_shared_buffer(sb);
     }
 
+    // not found in local, read from remote
+    if (sb) {
+        for (size_t i = sb->offset; i < sb->offset + sb->size; i += _block_size) {
+            _update_read_remote_metrics(i / _block_size);
+        }
+    } else {
+        _update_read_remote_metrics(block_id);
+    }
     return Status::NotFound("Not Found");
 }
 
@@ -235,6 +248,8 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
     for (int64_t write_offset_cursor = offset; write_offset_cursor < write_end_offset;) {
         DCHECK(write_offset_cursor % _block_size == 0);
         WriteCacheOptions options{};
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
         options.async = _enable_async_populate_mode;
         const int64_t write_size = std::min(_block_size, write_end_offset - write_offset_cursor);
 
@@ -431,6 +446,8 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
         options.async = _enable_async_populate_mode;
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
         if (options.async) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer
@@ -462,6 +479,22 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         p += size;
     }
     return;
+}
+
+void CacheInputStream::_update_read_local_metrics(int64_t block_id) {
+    if (_block_map_bitmap.test(block_id)) {
+        return;
+    }
+    _block_map_bitmap.set(block_id, true);
+    _stats.read_local_bytes += _block_size;
+}
+
+void CacheInputStream::_update_read_remote_metrics(int64_t block_id) {
+    if (_block_map_bitmap.test(block_id)) {
+        return;
+    }
+    _block_map_bitmap.set(block_id, true);
+    _stats.read_remote_bytes += _block_size;
 }
 
 } // namespace starrocks::io

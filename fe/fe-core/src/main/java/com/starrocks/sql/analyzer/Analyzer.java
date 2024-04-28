@@ -125,6 +125,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
+import com.starrocks.sql.ast.ShowDataCacheSelectRecommendationsStmt;
 import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
@@ -798,6 +799,13 @@ public class Analyzer {
         @Override
         public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
             DataCacheStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataCacheSelectRecommendationsStmt(ShowDataCacheSelectRecommendationsStmt stmt,
+                                                                ConnectContext context) {
+            DataCacheStmtAnalyzer.analyze(stmt, context);
             return null;
         }
 

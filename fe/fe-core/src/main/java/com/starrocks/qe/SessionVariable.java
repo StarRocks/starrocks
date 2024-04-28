@@ -456,6 +456,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
     public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
     public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
+    public static final String ENABLE_DATACACHE_COPILOT = "enable_datacache_copilot";
+    public static final String DATACACHE_PRIORITY = "datacache_priority";
+    public static final String DATACACHE_TTL_SECONDS = "datacache_ttl_seconds";
 
     // The following configurations will be deprecated, and we use the `datacache` suffix instead.
     // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -1537,6 +1540,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_DATACACHE_COPILOT)
+    private boolean enableDataCacheCopilot = false;
+
+    @VariableMgr.VarAttr(name = DATACACHE_PRIORITY)
+    private int dataCachePriority = 0;
+    @VariableMgr.VarAttr(name = DATACACHE_TTL_SECONDS)
+    private long dataCacheTtlSeconds = 0;
+
     @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
@@ -2169,6 +2180,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableDataCacheIOAdaptor(boolean enableDataCacheIOAdaptor) {
         this.enableDataCacheIOAdaptor = enableDataCacheIOAdaptor;
+    }
+
+    public boolean isEnableDataCacheCopilot() {
+        return enableDataCacheCopilot;
+    }
+
+    public void setEnableDataCacheCopilot(boolean enableDataCacheCopilot) {
+        this.enableDataCacheCopilot = enableDataCacheCopilot;
+    }
+
+    public int getDataCachePriority() {
+        return dataCachePriority;
+    }
+
+    public void setDataCachePriority(int dataCachePriority) {
+        this.dataCachePriority = dataCachePriority;
+    }
+
+    public long getDataCacheTtlSeconds() {
+        return dataCacheTtlSeconds;
+    }
+
+    public void setDatacacheTtlSeconds(long dataCacheTtlSeconds) {
+        this.dataCacheTtlSeconds = dataCacheTtlSeconds;
     }
 
     public boolean isCboUseDBLock() {
@@ -3856,6 +3891,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
         tResult.setEnable_datacache_async_populate_mode(enableDataCacheAsyncPopulateMode);
         tResult.setEnable_datacache_io_adaptor(enableDataCacheIOAdaptor);
+        tResult.setDatacache_priority(dataCachePriority);
+        tResult.setDatacache_ttl_seconds(dataCacheTtlSeconds);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);

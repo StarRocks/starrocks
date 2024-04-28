@@ -22,6 +22,24 @@
 
 namespace starrocks {
 
+class DataCacheHitRateMetrics {
+public:
+    static DataCacheHitRateMetrics* instance() {
+        static DataCacheHitRateMetrics instance;
+        return &instance;
+    }
+
+    double hit_rate() const;
+
+    void update_remote_io_bytes(const int64_t bytes) { _remote_io_bytes.fetch_add(bytes, std::memory_order_relaxed); }
+
+    void update_local_io_bytes(const int64_t bytes) { _local_io_bytes.fetch_add(bytes, std::memory_order_relaxed); }
+
+private:
+    std::atomic<int64_t> _remote_io_bytes{0};
+    std::atomic<int64_t> _local_io_bytes{0};
+};
+
 class BlockCache {
 public:
     using CacheKey = std::string;

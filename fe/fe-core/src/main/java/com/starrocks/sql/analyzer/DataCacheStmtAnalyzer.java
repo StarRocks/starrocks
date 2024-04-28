@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.datacache.statistic.CachedFrequencyStatisticStorage;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,6 +36,7 @@ import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ShowDataCacheSelectRecommendationsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 
@@ -141,6 +143,24 @@ public class DataCacheStmtAnalyzer {
             statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault("verbose", "false")));
             // todo analyze ttl, priority later
 
+            Map<String, String> properties = statement.getProperties();
+            statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault("verbose", "false")));
+            statement.setTtlSeconds(Integer.parseInt(properties.getOrDefault("ttl", "0")));
+            statement.setPriority(Integer.parseInt(properties.getOrDefault("priority", "0")));
+
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataCacheSelectRecommendationsStmt(ShowDataCacheSelectRecommendationsStmt stmt,
+                                                                ConnectContext context) {
+            if (!context.getSessionVariable().isEnableDataCacheCopilot()) {
+                throw new SemanticException(
+                        "DataCache copilot(SET datacache_copilot=true) must be enabled before show recommendations.");
+            }
+            if (CachedFrequencyStatisticStorage.size() == 0) {
+                throw new SemanticException("DataCache copilot has no recommendation.");
+            }
             return null;
         }
     }

@@ -19,10 +19,13 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
+import com.starrocks.sql.ast.ShowDataCacheSelectRecommendationsStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.UtFrameUtils;
@@ -175,5 +178,24 @@ public class DataCachePlanTest extends PlanTestBase {
         String sql = "insert into blackhole() select * from hive0.datacache_db.multi_partition_table " +
                 "where l_shipdate>='1998-01-03'";
         assertPlanContains(sql, "BLACKHOLE TABLE SINK");
+    }
+
+    @Test
+    public void testDataCacheCopilot() throws Exception {
+        connectContext.getSessionVariable().setEnableDataCacheCopilot(true);
+
+        String executeSql = "select * from hive0.datacache_db.multi_partition_table;";
+        UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+
+        executeSql = "select age from hive0.datacache_db.multi_partition_table where l_shipdate='1998-01-03';";
+        UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+
+        ShowDataCacheSelectRecommendationsStmt showStmt = new ShowDataCacheSelectRecommendationsStmt(null);
+        ShowResultSet resultSet = ShowExecutor.execute(showStmt, connectContext);
+        for (List<String> rows : resultSet.getResultRows()) {
+            System.out.println(rows.get(0));
+        }
+
+        connectContext.getSessionVariable().setEnableDataCacheCopilot(false);
     }
 }

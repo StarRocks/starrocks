@@ -48,6 +48,8 @@ public class DataCacheSelectExecutor {
         // make sure all accessed data must be cached
         tmpSessionVariable.setEnableDataCacheAsyncPopulateMode(false);
         tmpSessionVariable.setEnableDataCacheIOAdaptor(false);
+        tmpSessionVariable.setDataCachePriority(statement.getPriority());
+        tmpSessionVariable.setDatacacheTtlSeconds(statement.getTtlSeconds());
         connectContext.setSessionVariable(tmpSessionVariable);
 
         InsertStmt insertStmt = statement.getInsertStmt();

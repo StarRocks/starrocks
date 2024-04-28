@@ -108,6 +108,12 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_datacache_io_adaptor) {
         _enable_datacache_io_adaptor = state->query_options().enable_datacache_io_adaptor;
     }
+    if (state->query_options().__isset.datacache_priority) {
+        _datacache_priority = state->query_options().datacache_priority;
+    }
+    if (state->query_options().__isset.datacache_ttl_seconds) {
+        _datacache_ttl_seconds = state->query_options().datacache_ttl_seconds;
+    }
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
     }
@@ -413,6 +419,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     if (_use_datacache) {
         static const char* prefix = "DataCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
+        _profile.runtime_profile->add_info_string("DataCachePriority", std::to_string(_datacache_priority));
+        _profile.runtime_profile->add_info_string("DataCacheTtlSeconds", std::to_string(_datacache_ttl_seconds));
         _profile.datacache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
@@ -438,6 +446,12 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_block_buffer_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
+        _profile.datacache_block_buffer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheBlockBufferBytes", TUnit::BYTES, prefix);
+        _profile.datacache_remote_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheRemoteIOBytes", TUnit::BYTES, prefix);
+        _profile.datacache_local_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheLocalIOBytes", TUnit::BYTES, prefix);
     }
 
     {
@@ -562,6 +576,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
     scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
+    scanner_params.datacache_priortiy = _datacache_priority;
+    scanner_params.datacache_ttl_seconds = _datacache_ttl_seconds;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;

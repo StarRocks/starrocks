@@ -270,6 +270,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
     }
 
+    private boolean createExternalFrequencyStatisticsTable(ConnectContext context) {
+        return true;
+    }
+
     private boolean createExternalHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create external histogram statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
@@ -361,6 +365,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return createExternalFullStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return createExternalHistogramStatisticsTable(context);
+        } else if (tableName.equals(StatsConstants.EXTERNAL_FREQUENCY_STATISTICS_TABLE_NAME)) {
+            return createExternalFrequencyStatisticsTable(context);
         } else {
             throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
         }
@@ -401,6 +407,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+        // refreshStatisticsTable(StatsConstants.EXTERNAL_FREQUENCY_STATISTICS_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();

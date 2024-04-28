@@ -20,6 +20,7 @@
 #include "block_cache/block_cache.h"
 #include "block_cache/io_buffer.h"
 #include "io/shared_buffered_input_stream.h"
+#include "util/bitmap.h"
 
 namespace starrocks::io {
 
@@ -44,6 +45,10 @@ public:
         int64_t write_cache_fail_bytes = 0;
         int64_t read_block_buffer_bytes = 0;
         int64_t read_block_buffer_count = 0;
+        int64_t block_buffer_bytes = 0;
+
+        int64_t read_remote_bytes = 0;
+        int64_t read_local_bytes = 0;
     };
 
     explicit CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream, const std::string& filename,
@@ -71,6 +76,9 @@ public:
 
     void set_enable_cache_io_adaptor(bool v) { _enable_cache_io_adaptor = v; }
 
+    void set_priority(const int8_t priority) { _priority = priority; }
+    void set_ttl_seconds(const uint64_t ttl_seconds) { _ttl_seconds = ttl_seconds; }
+
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
@@ -94,6 +102,8 @@ private:
     Status _populate_to_cache(const int64_t offset, const int64_t size, char* src);
     void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count, const SharedBufferPtr& sb);
     void _deduplicate_shared_buffer(const SharedBufferPtr& sb);
+    void _update_read_remote_metrics(int64_t block_id);
+    void _update_read_local_metrics(int64_t block_id);
 
     std::string _cache_key;
     std::string _filename;
@@ -110,6 +120,10 @@ private:
     BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;
+    int8_t _priority = 0;
+    uint64_t _ttl_seconds = 0;
+
+    BitMap _block_map_bitmap;
 };
 
 } // namespace starrocks::io

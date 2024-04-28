@@ -34,13 +34,61 @@
 
 #pragma once
 
-#include "gutil/strings/fastmem.h"
 #include "util/bit_util.h"
 
 namespace starrocks {
 
 // Return the number of bytes necessary to store the given number of bits.
-inline size_t BitmapSize(size_t num_bits) {
+inline size_t BitmapSize(const size_t num_bits) {
     return (num_bits + 7) / 8;
 }
+
+class BitMap {
+public:
+    BitMap() : _size(0), _bits(BitmapSize(0), 0) {}
+    explicit BitMap(const size_t n) : _size(n), _bits(BitmapSize(n), 0) {}
+
+    void resize(const size_t n) {
+        _size = n;
+        _bits.resize(BitmapSize(n), 0);
+    }
+
+    void set(const size_t pos, const bool value) {
+        if (pos >= _size) return;
+        if (value) {
+            _bits[pos / 8] |= (1 << (pos % 8));
+        } else {
+            _bits[pos / 8] &= ~(1 << (pos % 8));
+        }
+    }
+
+    bool test(const size_t pos) const {
+        if (pos >= _size) return false;
+        return (_bits[pos / 8] & (1 << (pos % 8))) != 0;
+    }
+
+    // count the number of bits set to true (vectorized version)
+    size_t count() const {
+        size_t count = 0;
+        for (size_t i = 0; i < _bits.size(); ++i) {
+            count += BitUtil::popcount(_bits[i]);
+        }
+        return count;
+    }
+
+    size_t size() const { return _size; }
+
+    std::string debug_string() const {
+        std::stringstream ss;
+        for (size_t i = 0; i < _size; ++i) {
+            ss << test(i);
+        }
+        return ss.str();
+    }
+
+private:
+    size_t _size;
+    std::vector<uint8_t> _bits;
+};
+
 } // namespace starrocks

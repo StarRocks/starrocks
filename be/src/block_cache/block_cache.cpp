@@ -39,6 +39,15 @@ namespace fs = std::filesystem;
 // block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
 
+double DataCacheHitRateMetrics::hit_rate() const {
+    const int64_t local_io_bytes = _local_io_bytes.load(std::memory_order_relaxed);
+    const int64_t remote_io_bytes = _remote_io_bytes.load(std::memory_order_relaxed);
+    if ((local_io_bytes + remote_io_bytes) == 0) {
+        return 0;
+    }
+    return static_cast<double>(_local_io_bytes) / (local_io_bytes + remote_io_bytes);
+}
+
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
     return &cache;

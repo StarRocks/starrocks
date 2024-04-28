@@ -838,6 +838,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitShowDataCacheSelectRecommendationsStmt(ShowDataCacheSelectRecommendationsStmt stmt, C context) {
+        return visitShowStatement(stmt, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     default R visitExportStatement(ExportStmt statement, C context) {

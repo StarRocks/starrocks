@@ -143,6 +143,8 @@ void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
                         ? 0.0
                         : std::round(double(metrics.detail_l1->hit_count) / double(total_reads) * 100.0) / 100.0;
         root.AddMember("hit_rate", rapidjson::Value(hit_rate), allocator);
+        const double real_hit_rate = std::round(DataCacheHitRateMetrics::instance()->hit_rate() * 100.0) / 100.0;
+        root.AddMember("real_hit_rate", rapidjson::Value(real_hit_rate), allocator);
 
         root.AddMember("hit_bytes", rapidjson::Value(metrics.detail_l1->hit_bytes), allocator);
         root.AddMember("miss_bytes", rapidjson::Value(metrics.detail_l1->miss_bytes), allocator);

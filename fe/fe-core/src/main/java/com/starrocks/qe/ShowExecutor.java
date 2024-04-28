@@ -106,6 +106,9 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.datacache.statistic.AccessItem;
+import com.starrocks.datacache.statistic.CacheSelectSQLBuilder;
+import com.starrocks.datacache.statistic.CachedFrequencyStatisticStorage;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -182,6 +185,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
+import com.starrocks.sql.ast.ShowDataCacheSelectRecommendationsStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -2249,6 +2253,20 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt statement, ConnectContext context) {
             return new ShowResultSet(statement.getMetaData(), DataCacheMgr.getInstance().getShowResultSetRows());
+        }
+
+        @Override
+        public ShowResultSet visitShowDataCacheSelectRecommendationsStmt(ShowDataCacheSelectRecommendationsStmt stmt,
+                                                                         ConnectContext context) {
+            List<AccessItem> accessItems = CachedFrequencyStatisticStorage.exportMostAccessedTables(20);
+            List<List<String>> rows = new ArrayList<>();
+            for (AccessItem accessItem : accessItems) {
+                List<String> row = new ArrayList<>();
+                row.add(CacheSelectSQLBuilder.buildCacheSelectSQL(accessItem));
+                row.add(String.valueOf(accessItem.getAccessFrequency()));
+                rows.add(row);
+            }
+            return new ShowResultSet(stmt.getMetaData(), rows);
         }
 
         @Override
