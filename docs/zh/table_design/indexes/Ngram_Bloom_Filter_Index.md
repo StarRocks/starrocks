@@ -53,7 +53,7 @@ PROPERTIES ("replication_num"= "1");
 
 其他建表相关的参数解释，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
-## 查看 N-Gram Bloom Filter 索引
+### 查看 N-Gram Bloom Filter 索引
 
 您可以使用 [SHOW CREATE TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) 或 [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation/SHOW_INDEX.md) 来查看表的所有索引。由于索引创建是异步的，因此只有在索引创建成功后才能看到相应的索引。
 
@@ -62,7 +62,7 @@ SHOW CREATE TABLE table1;
 SHOW INDEX FROM table1;
 ```
 
-## 修改 N-Gram Bloom Filter 索引
+### 修改 N-Gram Bloom Filter 索引
 
 您可以使用 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句添加和删除 N-Gram Bloom Filter 索引。
 
