@@ -252,11 +252,6 @@ void LoadChannelMgr::_start_load_channels_clean() {
     if (auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager(); lake_tablet_manager != nullptr) {
         lake_tablet_manager->clean_in_writing_data_size();
     }
-
-    // this log print every 1 min, so that we could observe the mem consumption of load process
-    // on this Backend
-    LOG(INFO) << "Memory consumption(bytes) limit=" << _mem_tracker->limit()
-              << " current=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption();
 }
 
 std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {
