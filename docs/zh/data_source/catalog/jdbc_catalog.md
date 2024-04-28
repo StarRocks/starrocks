@@ -10,7 +10,7 @@ JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执�
 
 此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
 
-目前 JDBC Catalog 支持 MySQL 和 PostgreSQL。
+目前 JDBC Catalog 支持 MySQL 和 PostgreSQL 和 Oracle。
 
 ## 前提条件
 
@@ -84,6 +84,17 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
+ 
+CREATE EXTERNAL CATALOG jdbc2
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521:ORCL",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver"
+);
 ```
 
 ## 查看 JDBC Catalog
@@ -147,3 +158,7 @@ DROP Catalog jdbc0;
 系统返回 "Malformed database URL, failed to parse the main URL sections" 报错应该如何处理？
 
 该报错通常是由于 `jdbc_uri` 中传入的 URI 有误而引起的。请检查并确保传入的 URI 是否正确无误。参见本文“[PROPERTIES](#properties)”小节相关的参数说明。
+
+Oracle catalog 查询报错 ERROR 1064 (HY000): 不支持的字符集 (在类路径中添加 orai18n.jar): ZHS16GBK 异常如何处理？
+
+下载 [orai18n.jar](https://repo1.maven.org/maven2/com/oracle/database/nls/orai18n/19.18.0.0/orai18n-19.18.0.0.jar) 并放到 FE 的 lib 目录下即可。
