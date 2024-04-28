@@ -712,15 +712,15 @@ As shown above, `agg_mv5` contains the data from partitions `p1` to `p7`, and th
 
 From v3.1.0 onwards, StarRocks supports creating materialized views based on views. Subsequent queries against the views can be rewritten if they are of the SPJG pattern. By default, queries against views are automatically transcribed into queries against the base tables of the views and then transparently matched and rewritten.
 
-However, in real-world scenarios, data analysts may perform data modeling upon complicated, nested views, which cannot be directly transcribed. As a result, materialized views created based on such views cannot rewrite queries. To improve its capability in the preceding scenario, StarRocks optimizes the view-based materialized view query rewrite logic from v3.3.0 onwards.
+However, in real-world scenarios, data analysts may perform data modeling upon complex, nested views, which cannot be directly transcribed. As a result, materialized views created based on such views cannot rewrite queries. To improve its capability in the preceding scenario, StarRocks optimizes the view-based materialized view query rewrite logic from v3.3.0 onwards.
 
 ### Fundamentals
 
-In the previous query rewrite logic, StarRocks will transcribe queries against the view into queries against the base tables of the view. Query rewrite will encounter failures if the execution plan of the transcribed query mismatches the SPJG pattern.
+In the previous query rewrite logic, StarRocks will transcribe queries against a view into queries against the base tables of the view. Query rewrite will encounter failures if the execution plan of the transcribed query mismatches the SPJG pattern.
 
 To solve this problem, StarRocks introduces a new operator - LogicalViewScanOperator, to simplify the structure of the execution plan tree without transcribing the query. This operator seeks to match the execution plan tree with the SPJG pattern, therefore facilitating query rewrite.
 
-The following example lists a query with an AGGREGATE sub-query, a view built upon the sub-query, the transcribed query based on the view, and the materialized built upon the view:
+The following example lists a query with an AGGREGATE sub-query, a view built upon the sub-query, the transcribed query based on the view, and the materialized view built upon the view:
 
 ```SQL
 -- Original query:
@@ -1061,7 +1061,7 @@ In terms of view-based materialized view query rewrite, StarRocks currently has 
 - Currently, StarRocks does not support Partition Union rewrite.
 - Query rewrite is not supported if the view contains random functions, including rand(), random(), uuid(), and sleep().
 - Query rewrite is not supported if the view contains columns with same names. You must assign different aliases for columns with the same names.
-- Views that used to create a materialized view must contain at least one column of the following data types: integer types, date types, and string types. For example, you cannot create a materialized that queries the view, because `total_cost` is a DOUBLE-type column.
+- Views that are used to create a materialized view must contain at least one column of the following data types: integer types, date types, and string types. For example, you cannot create a materialized that queries the view, because `total_cost` is a DOUBLE-type column.
 
   ```SQL
   CREATE VIEW v1 
