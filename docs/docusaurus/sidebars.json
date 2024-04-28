@@ -1958,8 +1958,7 @@
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
-                        },
-                        "administration/management/BackendBlacklist"
+                        }
                     ]
                 },
                 "administration/Data_recovery",
