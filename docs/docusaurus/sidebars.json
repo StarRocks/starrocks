@@ -277,6 +277,7 @@
                 "data_source/External_table",
                 "data_source/file_external_table",
                 "data_source/data_cache",
+                "data_source/data_cache_warmup",
                 "data_source/datalake_faq"
             ]
         },
@@ -1703,6 +1704,7 @@
                 "data_source/External_table",
                 "data_source/file_external_table",
                 "data_source/data_cache",
+                "data_source/data_cache_warmup",
                 "data_source/datalake_faq"
             ]
         },
