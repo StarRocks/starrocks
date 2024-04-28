@@ -240,7 +240,19 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     if (task_or.ok()) {
         auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
+<<<<<<< HEAD
         status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
+=======
+        ThreadPool* flush_pool = nullptr;
+        if (config::lake_enable_compaction_async_write) {
+            // CAUTION: we reuse delta writer's memory table flush pool here
+            flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
+            if (UNLIKELY(flush_pool == nullptr)) {
+                return Status::InternalError("Get memory table flush pool failed");
+            }
+        }
+        status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+>>>>>>> 67469aa64a ([Enhancement] Using separate memtable flush executor for shared-data mode (#44535))
     } else {
         status.update(task_or.status());
     }
