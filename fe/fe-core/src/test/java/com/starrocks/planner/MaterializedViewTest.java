@@ -912,13 +912,44 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testAggregateWithGroupByKeyExpr() {
+    public void testAggregateWithGroupByKeyExpr1() {
+        setTracLogModule("MV");
         testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
                 "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
                 .contains("  0:OlapScanNode\n" +
                         "     TABLE: mv0")
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 14> : abs(9: empid)\n" +
+                        "  |  ")
+                .contains("  2:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(11: total)\n" +
+                        "  |  group by: 14: abs, 10: deptno");
+    }
+
+    @Test
+    public void testAggregateWithGroupByKeyExpr2() {
+        testRewriteOK("select empid, deptno," +
+                        " sum(salary) as total, " +
+                        " min(salary) as min_total, " +
+                        " max(salary) as max_total, " +
+                        " count(salary) + 1 as cnt" +
+                        " from emps group by empid, deptno ",
+                "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
+                .contains("  0:OlapScanNode\n" +
+                        "     TABLE: mv0")
+                // only contains required columns from mv scan operator.
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 16> : abs(9: empid)\n" +
+                        "  |  ")
                 .contains("  2:AGGREGATE (update serialize)\n" +
                         "  |  STREAMING\n" +
                         "  |  output: sum(11: total)\n" +
@@ -2176,6 +2207,58 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "where emps.empid = 1";
         testRewriteFail(mv, query);
         connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK16() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where dependents.name = 'name1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK17() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " join dependents using (empid)\n"
+                + "where dependents.name = 'name1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK18() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "full outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " full join dependents using (empid)\n"
+                + "where emps.empid = '1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK19() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "full outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " inner join dependents using (empid)\n"
+                + "where emps.empid = '1'";
+        testRewriteOK(mv, query);
     }
 
     @Test

@@ -378,6 +378,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         routineLoadJob.firstResumeTimestamp = 0;
         routineLoadJob.autoResumeLock = false;
         routineLoadJob.updateState(RoutineLoadJob.JobState.NEED_SCHEDULE, null, false /* not replay */);
+        routineLoadJob.clearOtherMsg();
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId())
                 .add("current_state", routineLoadJob.getState())
                 .add("user", ConnectContext.get().getQualifiedUser())

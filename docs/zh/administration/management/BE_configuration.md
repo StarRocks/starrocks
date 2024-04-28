@@ -3524,7 +3524,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### lake_vacuum_retry_min_delay_ms
 
-- 默认值：10
+- 默认值：100
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
@@ -4342,7 +4342,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### lake_vacuum_min_batch_delete_size
 
-- 默认值：1000
+- 默认值：100
 - 类型：Int
 - 单位：
 - 是否动态：是

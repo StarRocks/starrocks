@@ -1049,6 +1049,29 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return tableProperty.getMvQueryRewriteSwitch().isEnable();
     }
 
+    /**
+     * Whether this mv can be used for transparent rewrite configured by.
+     * @return: true if it is configured to enable transparent rewrite, otherwise false.
+     */
+    public boolean isEnableTransparentRewrite() {
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return true;
+        }
+        return tableProperty.getMvTransparentRewriteMode().isEnable();
+    }
+
+    /**
+     * @return the transparent rewrite mode of the materialized view
+     */
+    public TableProperty.MVTransparentRewriteMode getTransparentRewriteMode() {
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return TableProperty.MVTransparentRewriteMode.defaultValue();
+        }
+        return tableProperty.getMvTransparentRewriteMode();
+    }
+
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
         if (!isLoadTriggeredRefresh()) {
             return false;

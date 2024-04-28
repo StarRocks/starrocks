@@ -63,6 +63,8 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
+
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* range) override;

@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateR
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
+import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
@@ -163,7 +164,7 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         // prepare for optimizer
-        prepare(connectContext, columnRefFactory);
+        prepare(connectContext, columnRefFactory, logicOperatorTree);
 
         // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
         logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
@@ -223,8 +224,6 @@ public class Optimizer {
         Memo memo = context.getMemo();
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-        // collect all olap scan operator
-        collectAllLogicalOlapScanOperators(logicOperatorTree, rootTaskContext);
 
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
@@ -303,7 +302,9 @@ public class Optimizer {
         memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
-    private void prepare(ConnectContext connectContext, ColumnRefFactory columnRefFactory) {
+    private void prepare(ConnectContext connectContext,
+                         ColumnRefFactory columnRefFactory,
+                         OptExpression logicOperatorTree) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();
@@ -312,6 +313,10 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         context.setQueryTables(queryTables);
         context.setUpdateTableId(updateTableId);
+
+        // collect all olap scan operator
+        collectAllLogicalOlapScanOperators(logicOperatorTree, context);
+
     }
 
     private void prepareMvRewrite(ConnectContext connectContext, OptExpression logicOperatorTree,
@@ -354,6 +359,17 @@ public class Optimizer {
             context.setEnableLeftRightJoinEquivalenceDerive(true);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         }
+    }
+
+    /**
+     * Rewrite transparent materialized view.
+     */
+    private OptExpression transparentMVRewrite(OptExpression tree, TaskContext rootTaskContext) {
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new MaterializedViewTransparentRewriteRule());
+        if (MvUtils.isOptHasAppliedRule(tree, Operator.OP_TRANSPARENT_MV_BIT)) {
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        }
+        return tree;
     }
 
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
@@ -425,6 +441,9 @@ public class Optimizer {
         if (sessionVariable.isEnableFineGrainedRangePredicate()) {
             ruleRewriteAtMostOnce(tree, rootTaskContext, RuleSetType.FINE_GRAINED_RANGE_PREDICATE);
         }
+
+        // rewrite transparent materialized view
+        tree = transparentMVRewrite(tree, rootTaskContext);
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
@@ -517,6 +536,7 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
@@ -830,10 +850,10 @@ public class Optimizer {
         return expression;
     }
 
-    private void collectAllLogicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
+    private void collectAllLogicalOlapScanOperators(OptExpression tree, OptimizerContext optimizerContext) {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
-        rootTaskContext.setAllLogicalOlapScanOperators(Collections.unmodifiableList(list));
+        optimizerContext.setAllLogicalOlapScanOperators(Collections.unmodifiableList(list));
     }
 
     private void collectAllPhysicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {

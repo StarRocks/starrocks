@@ -19,11 +19,13 @@
 #include "storage/del_vector.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_compaction_state.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
@@ -52,6 +54,10 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
     _index_cache.set_capacity(update_mem_limit);
+
+    const int64_t block_cache_mem_limit =
+            update_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, block_cache_mem_limit);
 }
 
 UpdateManager::~UpdateManager() {
@@ -66,6 +72,22 @@ inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
 
 Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
     return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
+}
+
+PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
+        : _cache(new_lru_cache(cache_limit)) {
+    _mem_tracker = std::make_unique<MemTracker>(cache_limit, "lake_persistent_index_block_cache", mem_tracker);
+}
+
+void PersistentIndexBlockCache::update_memory_usage() {
+    std::lock_guard<std::mutex> lg(_mutex);
+    size_t current_mem_usage = _cache->get_memory_usage();
+    if (_memory_usage > current_mem_usage) {
+        _mem_tracker->release(_memory_usage - current_mem_usage);
+    } else {
+        _mem_tracker->consume(current_mem_usage - _memory_usage);
+    }
+    _memory_usage = current_mem_usage;
 }
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
@@ -87,6 +109,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
+    _block_cache->update_memory_usage();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
         _index_cache.remove(index_entry);
@@ -170,6 +193,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (const auto& one_delete : state.auto_increment_deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
     }
+    _block_cache->update_memory_usage();
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -343,6 +367,7 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
         return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
     op(index);
+    _block_cache->update_memory_usage();
 
     return Status::OK();
 }
@@ -417,8 +442,8 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 
     std::shared_ptr<FileSystem> fs;
     auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
-                                         const TabletSchemaCSPtr& tablet_schema,
-                                         const std::vector<uint32_t>& rowids) -> Status {
+                                         const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
+                                         const std::vector<uint32_t>& read_column_ids) -> Status {
         FileInfo file_info{.path = tablet->segment_location(segment_info.path)};
         if (segment_info.size.has_value()) {
             file_info.size = segment_info.size;
@@ -438,8 +463,8 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_info));
         iter_opts.read_file = read_file.get();
-        for (auto i = 0; i < column_ids.size(); ++i) {
-            const TabletColumn& col = tablet_schema->column(column_ids[i]);
+        for (auto i = 0; i < read_column_ids.size(); ++i) {
+            const TabletColumn& col = tablet_schema->column(read_column_ids[i]);
             ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
@@ -459,7 +484,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
                                                  metadata.version(), rssid));
         }
         // use 0 segment_id is safe, because we need not get either delvector or dcg here
-        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, tablet_schema, rowids));
+        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, tablet_schema, rowids, column_ids));
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
@@ -468,9 +493,11 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         }
         uint32_t segment_id = auto_increment_state->segment_id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
+        const std::vector<uint32_t> auto_increment_col_partial_id(1, auto_increment_state->id);
 
         RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{.path = op_write.rowset().segments(segment_id)}, segment_id,
-                                                  auto_increment_state->schema, rowids));
+                                                  // use partial segment column offset id to get the column
+                                                  auto_increment_state->schema, rowids, auto_increment_col_partial_id));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
     VLOG(2) << "UpdateManager get_column_values " << cost_str.str();
@@ -569,10 +596,62 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
     return num_dels;
 }
 
+bool UpdateManager::_use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id) {
+    // Is config enable ?
+    if (!config::enable_light_pk_compaction_publish) {
+        return false;
+    }
+    // Is rows mapper file exist?
+    auto filename_st = lake_rows_mapper_filename(tablet_id, txn_id);
+    if (!filename_st.ok()) {
+        return false;
+    }
+    return fs::path_exist(filename_st.value());
+}
+
+Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                                       const TabletMetadata& metadata, const Tablet& tablet,
+                                                       IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                       int64_t base_version) {
+    // 1. init some state
+    auto& index = index_entry->value();
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
+    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
+                         tablet_schema);
+    vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
+    // get max rowset id in input rowsets
+    uint32_t max_rowset_id =
+            *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+
+    // 2. update primary index, and generate delete info.
+    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
+            &metadata, &output_rowset, this, builder, &index, txn_id, base_version, &segment_id_to_add_dels, &delvecs);
+    RETURN_IF_ERROR(resolver->execute());
+    // 3. update TabletMeta and write to meta file
+    for (auto&& each : delvecs) {
+        builder->append_delvec(each.second, each.first);
+    }
+    builder->apply_opcompaction(op_compaction, max_rowset_id);
+    RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
+
+    TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
+    TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
+    TRACE_COUNTER_INCREMENT("input_rowsets_size", op_compaction.input_rowsets_size());
+
+    _print_memory_stats();
+
+    return Status::OK();
+}
+
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                                  const TabletMetadata& metadata, const Tablet& tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
+    if (_use_light_publish_primary_compaction(tablet.id(), txn_id)) {
+        return light_publish_primary_compaction(op_compaction, txn_id, metadata, tablet, index_entry, builder,
+                                                base_version);
+    }
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
@@ -622,6 +701,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         delvecs.emplace_back(rssid, dv);
         compaction_state.release_segments(i);
     }
+    _block_cache->update_memory_usage();
 
     // 3. update TabletMeta and write to meta file
     for (auto&& each : delvecs) {
@@ -803,6 +883,10 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
+    // no need to preload if using light compaction publish
+    if (StorageEngine::instance()->enable_light_pk_compaction_publish()) {
+        return;
+    }
     // no need to preload if output rowset is empty.
     const int segments_size = txnlog.op_compaction().output_rowset().segments_size();
     if (segments_size <= 0) return;

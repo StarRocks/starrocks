@@ -100,6 +100,26 @@ inline ColumnPB create_int_value_pb(int32_t id, const std::string& agg_method = 
     return col;
 }
 
+inline ColumnPB create_bigint_value_pb(int32_t id, const std::string& agg_method = "SUM", bool is_nullable = true,
+                                       const std::string& default_value = "", bool is_bf_column = false,
+                                       bool has_bitmap_index = false) {
+    ColumnPB col;
+    col.set_unique_id(id);
+    col.set_name(std::to_string(id));
+    col.set_type("BIGINT");
+    col.set_is_key(false);
+    col.set_aggregation(agg_method);
+    col.set_is_nullable(is_nullable);
+    col.set_length(8);
+    col.set_index_length(8);
+    if (!default_value.empty()) {
+        col.set_default_value(default_value);
+    }
+    col.set_is_bf_column(is_bf_column);
+    col.set_has_bitmap_index(has_bitmap_index);
+    return col;
+}
+
 inline TabletColumn create_int_value(int32_t id, StorageAggregateType agg_method = STORAGE_AGGREGATE_SUM,
                                      bool is_nullable = true, const std::string default_value = "",
                                      bool is_bf_column = false, bool has_bitmap_index = false) {

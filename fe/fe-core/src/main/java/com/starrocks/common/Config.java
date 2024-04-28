@@ -143,6 +143,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+    @ConfField(mutable = true)
+    public static int slow_lock_stack_trace_reserve_levels = 15;
+
     @ConfField
     public static String custom_config_dir = "/conf";
 
@@ -343,7 +346,7 @@ public class Config extends ConfigBase {
      * It will run every *task_check_interval_second* to do background job.
      */
     @ConfField
-    public static int task_check_interval_second = 4 * 3600; // 4 hours
+    public static int task_check_interval_second = 1 * 3600; // 1 hour
 
     /**
      * for task set expire time
@@ -850,6 +853,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;
 
+    @ConfField(mutable = true)
+    public static boolean lake_use_combined_txn_log = false;
+
     /**
      * The thrift server max worker threads
      */
@@ -1184,6 +1190,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "whether to collect metrics for materialized view by default")
     public static boolean enable_materialized_view_metrics_collect = true;
+
+    @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
+               "build ast tree in materialized view initialization")
+    public static boolean enable_materialized_view_text_based_rewrite = true;
 
     /**
      * When the materialized view fails to start FE due to metadata problems,
@@ -1656,24 +1666,6 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_column_level_privilege = false;
 
     /**
-     * The authentication_chain configuration specifies the sequence of security integrations
-     * that will be used to authenticate a user. Each security integration in the chain will be
-     * tried in the order they are defined until one of them successfully authenticates the user.
-     * The configuration should specify a list of names of the security integrations
-     * that will be used in the chain.
-     * <p>
-     * For example, if user specifies the value with {"ldap", "native"}, SR will first try to authenticate
-     * a user whose authentication info may exist in a ldap server, if failed, SR will continue trying to
-     * authenticate the user to check whether it's a native user in SR, i.e. it's created by SR and
-     * its authentication info is stored in SR metadata.
-     * <p>
-     * For more information about security integration, you can refer to
-     * {@link com.starrocks.authentication.SecurityIntegration}
-     */
-    @ConfField(mutable = true)
-    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
-
-    /**
      * ldap server host for authentication_ldap_simple
      */
     @ConfField(mutable = true)
@@ -2141,7 +2133,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
+    public static int iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
      * size of iceberg table refresh pool
@@ -2741,10 +2733,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int pipe_listener_interval_millis = 1000;
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int pipe_scheduler_interval_millis = 1000;
+    @ConfField(mutable = true, comment = "default poll interval of pipe")
+    public static int pipe_default_poll_interval_s = 60 * 5;
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
@@ -2860,18 +2854,7 @@ public class Config extends ConfigBase {
      * Whether to use table level lock
      */
     @ConfField
-    public static boolean lock_manager_enable_loading_using_fine_granularity_lock = false;
-
-    /**
-     * when a lock cannot be obtained, we cannot determine whether it is because the required
-     * lock is being used normally or if a deadlock has occurred.
-     * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
-     * is used to control the waiting time before deadlock detection.
-     * If a lock is obtained during this period, there is no need to perform deadlock detection.
-     * Avoid frequent and unnecessary deadlock detection due to lock contention
-     */
-    @ConfField(mutable = true)
-    public static long lock_manager_dead_lock_detection_delay_time_ms = 3000; // 3s
+    public static boolean lock_manager_enable_using_fine_granularity_lock = false;
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
@@ -2924,4 +2907,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
+
+    @ConfField(mutable = true)
+    public static boolean show_execution_groups = true;
 }

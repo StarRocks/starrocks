@@ -221,19 +221,27 @@ size_t JsonColumn::size() const {
 }
 
 size_t JsonColumn::capacity() const {
-    size_t s = SuperClass::capacity();
-    for (const auto& col : _flat_columns) {
-        s += col->capacity();
+    if (is_flat_json()) {
+        size_t s = 0;
+        for (const auto& col : _flat_columns) {
+            s += col->capacity();
+        }
+        return s;
+    } else {
+        return SuperClass::capacity();
     }
-    return s;
 }
 
 size_t JsonColumn::byte_size(size_t from, size_t size) const {
-    size_t s = SuperClass::byte_size(from, size);
-    for (const auto& col : _flat_columns) {
-        s += col->byte_size(from, size);
+    if (is_flat_json()) {
+        size_t s = 0;
+        for (const auto& col : _flat_columns) {
+            s += col->byte_size(from, size);
+        }
+        return s;
+    } else {
+        return SuperClass::byte_size(from, size);
     }
-    return s;
 }
 
 void JsonColumn::append_value_multiple_times(const void* value, size_t count) {
@@ -263,16 +271,22 @@ void JsonColumn::append_default(size_t count) {
 }
 
 void JsonColumn::resize(size_t n) {
-    BaseClass::resize(n);
-    for (auto& col : _flat_columns) {
-        col->resize(n);
+    if (is_flat_json()) {
+        for (auto& col : _flat_columns) {
+            col->resize(n);
+        }
+    } else {
+        BaseClass::resize(n);
     }
 }
 
 void JsonColumn::assign(size_t n, size_t idx) {
-    BaseClass::assign(n, idx);
-    for (auto& col : _flat_columns) {
-        col->assign(n, idx);
+    if (is_flat_json()) {
+        for (auto& col : _flat_columns) {
+            col->assign(n, idx);
+        }
+    } else {
+        BaseClass::assign(n, idx);
     }
 }
 
@@ -293,7 +307,7 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        init_flat_columns(other_json->_flat_column_paths);
+        init_flat_columns(other_json->_flat_column_paths, other_json->_flat_column_types);
     }
 
     if (is_flat_json()) {
@@ -303,6 +317,7 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
 
         for (size_t i = 0; i < _flat_columns.size(); i++) {
             DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
+            DCHECK_EQ(_flat_column_types[i], other_json->flat_column_types()[i]);
             _flat_columns[i]->append(*other_json->get_flat_field(i), offset, count);
         }
     } else {

@@ -188,6 +188,7 @@ public class OlapTableSink extends DataSink {
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
+            tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
@@ -305,7 +306,7 @@ public class OlapTableSink extends DataSink {
             columns.addAll(indexMeta.getSchema().stream().map(Column::getPhysicalName).collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
-                tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
                 columnsDesc.add(tColumn);
             }

@@ -60,10 +60,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setStartTime(startTime);
         schemaChangeJob.setWarehouseId(warehouseId);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
+        schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
             long originIndexId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
-            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PRFIX + table.getIndexNameById(originIndexId);
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameById(originIndexId);
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 

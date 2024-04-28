@@ -16,10 +16,12 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
@@ -34,6 +36,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class LakeTableAsyncFastSchemaChangeJobTest {
@@ -136,7 +139,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         job.getInfo(infoList);
         Assert.assertEquals(1, infoList.size());
         List<Comparable> info = infoList.get(0);
-        Assert.assertEquals(13, info.size());
+        Assert.assertEquals(14, info.size());
         Assert.assertEquals(job.getJobId(), info.get(0));
         Assert.assertEquals(table.getName(), info.get(1));
         Assert.assertEquals(TimeUtils.longToTimeString(job.createTimeMs), info.get(2));
@@ -150,22 +153,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals(job.getJobState().name(), info.get(9));
         Assert.assertEquals(job.errMsg, info.get(10));
         Assert.assertEquals(job.getTimeoutMs() / 1000, info.get(12));
-    }
-
-    @Test
-    public void testTimeout() throws Exception {
-        LakeTable table = createTable(connectContext, "CREATE TABLE t2(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
-        int timeoutBackup = Config.max_create_table_timeout_second;
-        Config.max_create_table_timeout_second = 0;
-        alterTable(connectContext, "ALTER TABLE t2 ADD COLUMN c1 DOUBLE");
-        AlterJobV2 job = getAlterJob(table);
-        job.run();
-        Config.max_create_table_timeout_second = timeoutBackup;
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
-        Assert.assertEquals(1, table.getIndexIdToMeta().size());
-        Assert.assertEquals(1, table.getBaseSchema().size());
+        Assert.assertEquals("default_warehouse", info.get(13));
     }
 
     @Test
@@ -213,5 +201,94 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals("c0", table.getBaseSchema().get(0).getName());
         Assert.assertEquals(1, table.getBaseSchema().get(1).getUniqueId());
         Assert.assertEquals("c1", table.getBaseSchema().get(1).getName());
+    }
+
+    @Test
+    public void testSortKey() throws Exception {
+        LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key(c0 INT, c1 BIGINT) PRIMARY KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c1)");
+        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+
+        {
+            mustAlterTable(table, "ALTER TABLE t_test_sort_key ADD COLUMN c2 BIGINT");
+            List<Column> columns = table.getBaseSchema();
+            Assert.assertEquals(3, columns.size());
+            Assert.assertEquals("c0", columns.get(0).getName());
+            Assert.assertEquals(0, columns.get(0).getUniqueId());
+            Assert.assertEquals("c1", columns.get(1).getName());
+            Assert.assertEquals(1, columns.get(1).getUniqueId());
+            Assert.assertEquals("c2", columns.get(2).getName());
+            Assert.assertEquals(2, columns.get(2).getUniqueId());
+            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        }
+        oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        {
+            mustAlterTable(table, "ALTER TABLE t_test_sort_key DROP COLUMN c2");
+            List<Column> columns = table.getBaseSchema();
+            Assert.assertEquals(2, columns.size());
+            Assert.assertEquals("c0", columns.get(0).getName());
+            Assert.assertEquals(0, columns.get(0).getUniqueId());
+            Assert.assertEquals("c1", columns.get(1).getName());
+            Assert.assertEquals(1, columns.get(1).getUniqueId());
+            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        }
+    }
+
+    @Test
+    public void testSortKeyIndexesChanged() throws Exception {
+        LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key_index_changed" +
+                "(c0 INT, c1 BIGINT, c2 BIGINT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c2)");
+        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+
+        {
+            mustAlterTable(table, "ALTER TABLE t_test_sort_key_index_changed DROP COLUMN c1");
+            List<Column> columns = table.getBaseSchema();
+            Assert.assertEquals(2, columns.size());
+            Assert.assertEquals("c0", columns.get(0).getName());
+            Assert.assertEquals(0, columns.get(0).getUniqueId());
+            Assert.assertEquals("c2", columns.get(1).getName());
+            Assert.assertEquals(2, columns.get(1).getUniqueId());
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+            Assert.assertTrue(indexMeta.getSchemaId() > oldSchemaId);
+            Assert.assertEquals(Arrays.asList(1), indexMeta.getSortKeyIdxes());
+            Assert.assertEquals(Arrays.asList(2), indexMeta.getSortKeyUniqueIds());
+        }
+    }
+
+    @Test
+    public void testModifyColumnType() throws Exception {
+        LakeTable table = createTable(connectContext, "CREATE TABLE t_modify_type" +
+                "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
+                "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
+                "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
+        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        {
+            mustAlterTable(table, "ALTER TABLE t_modify_type MODIFY COLUMN c1 BIGINT, MODIFY COLUMN c2 VARCHAR(10)," +
+                    "MODIFY COLUMN c3 DATETIME");
+            List<Column> columns = table.getBaseSchema();
+            Assert.assertEquals(4, columns.size());
+
+            Assert.assertEquals("c0", columns.get(0).getName());
+            Assert.assertEquals(0, columns.get(0).getUniqueId());
+            Assert.assertEquals(ScalarType.INT, columns.get(0).getType());
+
+            Assert.assertEquals("c1", columns.get(1).getName());
+            Assert.assertEquals(1, columns.get(1).getUniqueId());
+            Assert.assertEquals(ScalarType.BIGINT, columns.get(1).getType());
+
+            Assert.assertEquals("c2", columns.get(2).getName());
+            Assert.assertEquals(2, columns.get(2).getUniqueId());
+            Assert.assertEquals(PrimitiveType.VARCHAR, columns.get(2).getType().getPrimitiveType());
+            Assert.assertEquals(10, ((ScalarType) columns.get(2).getType()).getLength());
+
+            Assert.assertEquals("c3", columns.get(3).getName());
+            Assert.assertEquals(3, columns.get(3).getUniqueId());
+            Assert.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
+
+            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        }
     }
 }

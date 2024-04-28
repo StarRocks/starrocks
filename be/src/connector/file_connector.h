@@ -16,7 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "connector_sink/connector_chunk_sink.h"
+#include "connector_chunk_sink.h"
 #include "exec/file_scanner.h"
 
 namespace starrocks::connector {

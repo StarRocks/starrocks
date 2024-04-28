@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -172,6 +173,7 @@ public class InsertAnalyzer {
         } else {
             targetColumns = new ArrayList<>();
             Set<String> requiredKeyColumns = table.getBaseSchema().stream().filter(Column::isKey)
+                    .filter(c -> c.getDefaultValueType() == Column.DefaultValueType.NULL)
                     .filter(c -> !c.isAutoIncrement()).map(c -> c.getName().toLowerCase()).collect(Collectors.toSet());
             for (String colName : insertStmt.getTargetColumnNames()) {
                 Column column = table.getColumn(colName);
@@ -319,7 +321,11 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(

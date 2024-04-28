@@ -370,7 +370,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
-        std::vector<uint32_t> unique_column_ids;
+        std::vector<ColumnUID> unique_column_ids;
         for (const auto& iter : *chunk_changer->get_gc_exprs()) {
             ColumnUID unique_id = new_tablet_schema->column(iter.first).unique_id();
             unique_column_ids.emplace_back(unique_id);
@@ -404,7 +404,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
 
         // Get DeltaColumnGroup for current cols file
         auto dcg = std::make_shared<DeltaColumnGroup>();
-        std::vector<std::vector<uint32_t>> dcg_column_ids{unique_column_ids};
+        std::vector<std::vector<ColumnUID>> dcg_column_ids{unique_column_ids};
         std::vector<std::string> dcg_column_files{file_name(segment_writer->segment_path())};
         dcg->init(version, dcg_column_ids, dcg_column_files);
         dcgs.emplace_back(dcg);
@@ -717,14 +717,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     // Create a new tablet schema, should merge with dropped columns in light schema change
-    TabletSchemaSPtr base_tablet_schema = std::make_shared<TabletSchema>();
-    base_tablet_schema->copy_from(base_tablet->tablet_schema());
+    TabletSchemaCSPtr base_tablet_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        base_tablet_schema->clear_columns();
-        for (const auto& column : request.columns) {
-            base_tablet_schema->append_column(TabletColumn(column));
-        }
-        base_tablet_schema->generate_sort_key_idxes();
+        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), request.columns);
+    } else {
+        base_tablet_schema = base_tablet->tablet_schema();
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
 
@@ -856,6 +853,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
+                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
+            }
             if (rowsets_to_change.back() == nullptr) {
                 std::vector<Version> base_tablet_versions;
                 base_tablet->list_versions(&base_tablet_versions);

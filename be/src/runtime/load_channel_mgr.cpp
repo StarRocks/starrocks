@@ -41,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+#include "storage/lake/tablet_manager.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -245,6 +246,11 @@ void LoadChannelMgr::_start_load_channels_clean() {
     for (auto& channel : timeout_channels) {
         channel->abort();
         LOG(INFO) << "Deleted timeout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
+    }
+
+    // clean load in writing data size
+    if (auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager(); lake_tablet_manager != nullptr) {
+        lake_tablet_manager->clean_in_writing_data_size();
     }
 
     // this log print every 1 min, so that we could observe the mem consumption of load process

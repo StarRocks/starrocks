@@ -308,7 +308,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                 index_pb->set_index_type(IndexType::GIN);
 
                 const auto& index_col_name = index.columns[0];
-                const auto& mit = column_map.find(index_col_name);
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
 
                 // TODO: Fix abnormal scenes when index column can not be found
                 if (mit != column_map.end()) {

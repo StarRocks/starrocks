@@ -79,7 +79,7 @@ public class MVRewriteValidator {
         List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
         // To avoid queries that query the materialized view directly, only consider materialized views
         // that are not used in rewriting before.
-        Set<Long> beforeTableIds = taskContext.getAllLogicalOlapScanOperators().stream()
+        Set<Long> beforeTableIds = optimizerContext.getAllLogicalOlapScanOperators().stream()
                 .map(op -> op.getTable().getId())
                 .collect(Collectors.toSet());
         if (CollectionUtils.isNotEmpty(mvs)) {
@@ -98,6 +98,7 @@ public class MVRewriteValidator {
         if (!isUpdateMaterializedViewMetrics(connectContext)) {
             return;
         }
+
         // update considered metrics
         if (CollectionUtils.isNotEmpty(optimizerContext.getCandidateMvs())) {
             for (MaterializationContext mvContext : optimizerContext.getCandidateMvs()) {
@@ -129,7 +130,7 @@ public class MVRewriteValidator {
         }
 
         List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
-        Set<Long> beforeTableIds = taskContext.getAllLogicalOlapScanOperators().stream()
+        Set<Long> beforeTableIds = taskContext.getOptimizerContext().getAllLogicalOlapScanOperators().stream()
                 .map(op -> op.getTable().getId())
                 .collect(Collectors.toSet());
 

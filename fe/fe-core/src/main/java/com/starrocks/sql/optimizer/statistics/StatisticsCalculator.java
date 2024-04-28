@@ -26,6 +26,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
@@ -69,10 +70,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
@@ -104,9 +107,11 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -438,6 +443,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
+    public Void visitLogicalIcebergMetadataScan(LogicalIcebergMetadataScanOperator node, ExpressionContext context) {
+        return computeMetadataScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalIcebergMetadataScan(PhysicalIcebergMetadataScanOperator node, ExpressionContext context) {
+        return computeMetadataScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeMetadataScanNode(Operator node, ExpressionContext context,
+                                         Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+
+        return visitOperator(node, context);
+    }
+
+    @Override
     public Void visitLogicalFileScan(LogicalFileScanOperator node, ExpressionContext context) {
         return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
     }
@@ -501,6 +529,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
             context.setStatistics(stats);
         }
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalKuduScan(LogicalKuduScanOperator node, ExpressionContext context) {
+        return computeKuduScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalKuduScan(PhysicalKuduScanOperator node, ExpressionContext context) {
+        return computeKuduScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeKuduScanNode(Operator node, ExpressionContext context, Table table,
+            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = ((KuduTable) table).getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
+            context.setStatistics(stats);
+        }
+
         return visitOperator(node, context);
     }
 

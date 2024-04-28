@@ -16,9 +16,9 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "connector_sink/hive_chunk_sink.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
+#include "hive_chunk_sink.h"
 
 namespace starrocks::connector {
 
@@ -102,6 +102,7 @@ private:
     // for hiveTable/fileTable with avro/rcfile/sequence format
     HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
     HdfsScanner* _create_odps_jni_scanner(const FSOptions& options);
+    HdfsScanner* _create_kudu_jni_scanner(const FSOptions& options);
     Status _check_all_slots_nullable();
 
     // =====================================

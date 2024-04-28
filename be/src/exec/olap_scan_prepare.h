@@ -19,6 +19,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "storage/olap_runtime_range_pruner.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
 
 namespace starrocks {
 class RuntimeState;
@@ -26,6 +27,8 @@ class RuntimeState;
 class RuntimeFilterProbeCollector;
 class PredicateParser;
 class ColumnPredicate;
+using ColumnPredicatePtr = std::unique_ptr<ColumnPredicate>;
+using ColumnPredicatePtrs = std::vector<ColumnPredicatePtr>;
 
 class OlapScanConjunctsManager {
 public:
@@ -54,7 +57,7 @@ private:
 public:
     static Status eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
 
-    Status get_column_predicates(PredicateParser* parser, std::vector<std::unique_ptr<ColumnPredicate>>* preds);
+    StatusOr<PredicateTree> get_predicate_tree(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
 
     Status get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges);
 
@@ -68,6 +71,8 @@ public:
 private:
     friend struct ColumnRangeBuilder;
     friend class ConjunctiveTestFixture;
+
+    Status get_column_predicates(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
 
     Status normalize_conjuncts();
     Status build_olap_filters();

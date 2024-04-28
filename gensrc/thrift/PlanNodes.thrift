@@ -61,7 +61,7 @@ enum TPlanNodeType {
   META_SCAN_NODE,
   ANALYTIC_EVAL_NODE,
   OLAP_REWRITE_NODE,
-  KUDU_SCAN_NODE, // Deprecated
+  KUDU_SCAN_NODE,
   FILE_SCAN_NODE,
   EMPTY_SET_NODE,
   UNION_NODE,
@@ -132,6 +132,7 @@ struct TInternalScanRange {
   12: optional bool fill_data_cache = true;
   // used for per-bucket compute optimize
   13: optional i32 bucket_sequence
+  14: optional i64 gtid
 }
 
 enum TFileFormatType {
@@ -363,6 +364,20 @@ struct THdfsScanRange {
 
     // delete columns slots like iceberg equality delete column slots
     21: optional list<Types.TSlotId> delete_column_slot_ids;
+
+    22: optional bool use_iceberg_jni_metadata_reader
+
+    // for metadata table split (eg: iceberg manifest file bean)
+    23: optional string serialized_split
+
+    // whether to use JNI scanner to read data of kudu table
+    24: optional bool use_kudu_jni_reader
+
+    // kudu master addresses
+    25: optional string kudu_master
+
+    // kudu scan token
+    26: optional string kudu_scan_token
 }
 
 struct TBinlogScanRange {
@@ -525,6 +540,7 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+  35: optional bool enable_prune_column_after_index_filter
 }
 
 struct TJDBCScanNode {
@@ -552,6 +568,12 @@ struct TLakeScanNode {
   11: optional list<string> sort_key_column_names
   12: optional list<Exprs.TExpr> bucket_exprs
   13: optional list<TColumnAccessPath> column_access_paths
+
+  // physical optimize
+  25: optional bool sorted_by_keys_per_tablet = false
+  32: optional bool output_chunk_by_bucket
+  33: optional bool output_asc_hint
+  34: optional bool partition_order_hint
 }
 
 struct TEqJoinCondition {
@@ -978,7 +1000,7 @@ struct TExchangeNode {
   3: optional i64 offset
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
-  5: optional bool enable_parallel_merge;
+  5: optional bool enable_parallel_merge
 }
 
 // This contains all of the information computed by the plan as part of the resource
@@ -1060,6 +1082,15 @@ struct THdfsScanNode {
     16: optional bool use_partition_column_value_only;
 
     17: optional Types.TTupleId mor_tuple_id;
+
+    // serialized static metadata table
+    18: optional string serialized_table;
+
+    // serialized lake format predicate for data skipping
+    19: optional string serialized_predicate;
+
+    // if load column statistics for metadata table scan
+    20: optional bool load_column_stats;
 }
 
 struct TProjectNode {

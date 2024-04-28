@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
+import java.util.List;
 import java.util.Set;
 
 public abstract class Lock {
@@ -32,4 +33,6 @@ public abstract class Lock {
     public abstract Set<LockHolder> cloneOwners();
 
     public abstract void removeWaiter(Locker locker, LockType lockType);
+
+    public abstract List<LockHolder> cloneWaiters();
 }

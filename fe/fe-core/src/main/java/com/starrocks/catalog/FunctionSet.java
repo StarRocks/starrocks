@@ -105,6 +105,8 @@ public class FunctionSet {
     public static final String UTC_TIME = "utc_time";
     public static final String LOCALTIME = "localtime";
     public static final String LOCALTIMESTAMP = "localtimestamp";
+
+    public static final String WEEK = "week";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -497,6 +499,7 @@ public class FunctionSet {
     public static final String UNNEST = "unnest";
 
     public static final String CONNECTION_ID = "connection_id";
+    public static final String SESSION_ID = "session_id";
 
     public static final String CATALOG = "catalog";
 
@@ -702,6 +705,7 @@ public class FunctionSet {
 
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
             .add(CONNECTION_ID)
+            .add(SESSION_ID)
             .add(CATALOG)
             .add(DATABASE)
             .add(SCHEMA)

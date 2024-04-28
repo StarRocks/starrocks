@@ -44,15 +44,11 @@ public:
 
     [[nodiscard]] Status seek_to_first() override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord);
+    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
 
     ordinal_t get_current_ordinal() const override;
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override {
-        return Status::NotSupported("");
-    }
+    ordinal_t num_rows() const override;
 
 private:
     ColumnId _cid;

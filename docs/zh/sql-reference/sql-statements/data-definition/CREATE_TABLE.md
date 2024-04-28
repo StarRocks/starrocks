@@ -161,7 +161,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 **从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
 
-**从 3.2 版本起，支持直接在 Hive catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Hive 表中。参见 [创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)。**
+**从 3.2 版本起，支持直接在 Hive Catalog 内创建 Parquet 格式的表，并支持通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Parquet 格式的 Hive 表中。从 3.3 版本起，支持直接在 Hive Catalog 中创建 ORC 及 Textfile 格式的表，并支持通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 ORC 及 Textfile 格式的 Hive 表中。参见[创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)和[向 Hive 表中插入数据](../../../data_source/catalog/hive_catalog.md#向-hive-表中插入数据)。**
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -756,11 +756,11 @@ PROPERTIES (
 
 #### 设置 fast schema evolution
 
-`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
+`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。
 
 > **NOTE**
 >
-> - StarRocks 存算分离集群不支持该参数。
+> - StarRocks 存算一体集群自 v3.2.0 版本起支持该参数，存算分离集群自 v3.3.0 起支持该参数。
 > - 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution)。
 
 ## 示例

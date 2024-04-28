@@ -96,7 +96,7 @@ int64_t calculate_retry_delay(int64_t attempted_retries) {
     return min_delay * (1 << attempted_retries);
 }
 
-Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& paths) {
+Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> paths) {
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
@@ -115,29 +115,40 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
         return Status::OK();
     }
 
-    auto wait_duration = config::experimental_lake_wait_per_delete_ms;
-    if (wait_duration > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
-    }
-
-    if (config::lake_print_delete_log) {
-        for (size_t i = 0, n = paths.size(); i < n; i++) {
-            LOG(INFO) << "Deleting " << paths[i] << "(" << (i + 1) << '/' << n << ')';
+    auto delete_single_batch = [fs](std::span<const std::string> batch) -> Status {
+        auto wait_duration = config::experimental_lake_wait_per_delete_ms;
+        if (wait_duration > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
         }
-    }
 
-    auto t0 = butil::gettimeofday_us();
-    auto st = delete_files_with_retry(fs, paths);
-    if (st.ok()) {
-        auto t1 = butil::gettimeofday_us();
-        g_del_file_latency << (t1 - t0);
-        g_deleted_files << paths.size();
-        VLOG(5) << "Deleted " << paths.size() << " files cost " << (t1 - t0) << "us";
-    } else {
-        g_del_fails << 1;
-        LOG(WARNING) << "Fail to delete: " << st;
+        if (config::lake_print_delete_log) {
+            for (size_t i = 0, n = batch.size(); i < n; i++) {
+                LOG(INFO) << "Deleting " << batch[i] << "(" << (i + 1) << '/' << n << ')';
+            }
+        }
+
+        auto t0 = butil::gettimeofday_us();
+        auto st = delete_files_with_retry(fs, batch);
+        if (st.ok()) {
+            auto t1 = butil::gettimeofday_us();
+            g_del_file_latency << (t1 - t0);
+            g_deleted_files << batch.size();
+            VLOG(5) << "Deleted " << batch.size() << " files cost " << (t1 - t0) << "us";
+        } else {
+            g_del_fails << 1;
+            LOG(WARNING) << "Fail to delete: " << st;
+        }
+        return st;
+    };
+
+    auto batch_size = int64_t{config::lake_vacuum_min_batch_delete_size};
+    auto batch_count = static_cast<int64_t>((paths.size() + batch_size - 1) / batch_size);
+    for (auto i = int64_t{0}; i < batch_count; i++) {
+        auto begin = paths.begin() + (i * batch_size);
+        auto end = std::min(begin + batch_size, paths.end());
+        RETURN_IF_ERROR(delete_single_batch(std::span<const std::string>(begin, end)));
     }
-    return st;
+    return Status::OK();
 }
 
 // AsyncFileDeleter
@@ -388,6 +399,11 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
             }
         } else if (is_txn_slog(entry.name)) {
             auto [tablet_id, txn_id] = parse_txn_slog_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
+        } else if (is_combined_txn_log(entry.name)) {
+            auto txn_id = parse_combined_txn_log_filename(entry.name);
             if (txn_id >= min_active_txn_id) {
                 return true;
             }

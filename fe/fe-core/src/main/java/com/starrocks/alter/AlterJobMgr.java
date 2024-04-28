@@ -191,7 +191,7 @@ public class AlterJobMgr {
         db.checkQuota();
 
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -234,7 +234,7 @@ public class AlterJobMgr {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("drop materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -651,7 +651,9 @@ public class AlterJobMgr {
                 TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
                 TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
                 TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt);
+                ConnectContext ctx = new ConnectContext();
+                ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt, ctx);
             } else if (alterClause instanceof ModifyPartitionClause) {
                 ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                 Map<String, String> properties = clause.getProperties();
@@ -867,7 +869,7 @@ public class AlterJobMgr {
                                          Map<String, String> properties)
             throws DdlException, AnalysisException {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTableState.NORMAL) {

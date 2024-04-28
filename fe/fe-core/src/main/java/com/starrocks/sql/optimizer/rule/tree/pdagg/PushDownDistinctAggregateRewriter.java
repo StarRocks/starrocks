@@ -86,103 +86,6 @@ public class PushDownDistinctAggregateRewriter {
         return hasRewrite;
     }
 
-    // After rewrite, the post-rewrite tree must replace the old slotId with the new one,
-    // ColumnRefRemapping is used to keep the mapping: old slotId->new slotId
-    public static class ColumnRefRemapping {
-        private final Map<ColumnRefOperator, ColumnRefOperator> remapping;
-        private Optional<ReplaceColumnRefRewriter> cachedReplacer = Optional.empty();
-        private Optional<ColumnRefSet> cachedColumnRefSet = Optional.empty();
-        public static final ColumnRefRemapping EMPTY_REMAPPING = new ColumnRefRemapping();
-
-        public ColumnRefRemapping() {
-            remapping = Maps.newHashMap();
-        }
-
-        public ColumnRefRemapping(Map<ColumnRefOperator, ColumnRefOperator> remapping) {
-            this.remapping = remapping;
-        }
-
-        public void combine(ColumnRefRemapping other) {
-            remapping.putAll(other.remapping);
-            cachedReplacer = Optional.empty();
-            cachedColumnRefSet = Optional.empty();
-        }
-
-        public ReplaceColumnRefRewriter getReplacer() {
-            if (!cachedReplacer.isPresent()) {
-                ReplaceColumnRefRewriter replacer =
-                        new ReplaceColumnRefRewriter(remapping.entrySet().stream().collect(
-                                Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)), true);
-                cachedReplacer = Optional.of(replacer);
-            }
-            return cachedReplacer.get();
-        }
-
-        public ColumnRefSet getColumnRefSet() {
-            if (!cachedColumnRefSet.isPresent()) {
-                cachedColumnRefSet = Optional.of(new ColumnRefSet(remapping.keySet()));
-            }
-            return cachedColumnRefSet.get();
-        }
-
-        public boolean isEmpty() {
-            return remapping.isEmpty();
-        }
-    }
-
-    private static class RewriteInfo {
-        private boolean rewritten = false;
-        private ColumnRefRemapping remapping;
-        private OptExpression op;
-
-        public AggregatePushDownContext getCtx() {
-            return ctx;
-        }
-
-        public void setCtx(AggregatePushDownContext ctx) {
-            this.ctx = ctx;
-        }
-
-        private AggregatePushDownContext ctx;
-
-        public static final RewriteInfo NOT_REWRITE = new RewriteInfo(false, null, null, null);
-
-        public RewriteInfo(boolean rewritten, ColumnRefRemapping remapping,
-                           OptExpression op, AggregatePushDownContext ctx) {
-            this.rewritten = rewritten;
-            this.remapping = remapping;
-            this.op = op;
-            this.ctx = ctx;
-        }
-
-        public boolean hasRewritten() {
-            return rewritten;
-        }
-
-        public void setRewritten(boolean rewritten) {
-            this.rewritten = rewritten;
-        }
-
-        public Optional<ColumnRefRemapping> getRemapping() {
-            if (!rewritten || remapping.isEmpty()) {
-                return Optional.empty();
-            }
-            return Optional.of(remapping);
-        }
-
-        public void setRemapping(ColumnRefRemapping remapping) {
-            this.remapping = remapping;
-        }
-
-        public Optional<OptExpression> getOp() {
-            return rewritten ? Optional.of(op) : Optional.empty();
-        }
-
-        public void setOp(OptExpression op) {
-            this.op = op;
-        }
-    }
-
     private class PreVisitor extends OptExpressionVisitor<AggregatePushDownContext, AggregatePushDownContext> {
         // Default visit method short-circuit top-down visiting
         @Override
@@ -333,12 +236,12 @@ public class PushDownDistinctAggregateRewriter {
     // 2. put new-created OptExpression into RewriteInfo by invoke RewriteInfo.setOp if the new
     // OptExpression is created.
     // 3. return input RewriteInfo as return value if you want to rewrite upper nodes.
-    private class PostVisitor extends OptExpressionVisitor<RewriteInfo, RewriteInfo> {
+    private class PostVisitor extends OptExpressionVisitor<AggRewriteInfo, AggRewriteInfo> {
 
         // Default visit method do nothing but just pass the RewriteInfo to its parent
         @Override
-        public RewriteInfo visit(OptExpression optExpression, RewriteInfo rewriteInfo) {
-            if (rewriteInfo != RewriteInfo.NOT_REWRITE) {
+        public AggRewriteInfo visit(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
+            if (rewriteInfo != AggRewriteInfo.NOT_REWRITE) {
                 rewriteInfo.setOp(optExpression);
             }
             return rewriteInfo;
@@ -360,10 +263,10 @@ public class PushDownDistinctAggregateRewriter {
         }
 
         @Override
-        public RewriteInfo visitLogicalTableScan(OptExpression optExpression, RewriteInfo rewriteInfo) {
+        public AggRewriteInfo visitLogicalTableScan(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
             AggregatePushDownContext ctx = rewriteInfo.getCtx();
             if (ctx.groupBys.isEmpty() || ctx.aggregations.isEmpty()) {
-                return RewriteInfo.NOT_REWRITE;
+                return AggRewriteInfo.NOT_REWRITE;
             }
             List<ColumnRefOperator> groupBys = ctx.groupBys.values().stream().map(ScalarOperator::getUsedColumns)
                     .flatMap(colSet -> colSet.getStream().map(factory::getColumnRef)).distinct()
@@ -394,13 +297,13 @@ public class PushDownDistinctAggregateRewriter {
                     LogicalAggregationOperator.builder().setAggregations(newAggregations).setType(AggType.GLOBAL)
                             .setGroupingKeys(groupBys).setPartitionByColumns(groupBys).build();
             OptExpression optAggOp = OptExpression.create(newAggOp, optExpression);
-            return new RewriteInfo(true, new ColumnRefRemapping(remapping), optAggOp, ctx);
+            return new AggRewriteInfo(true, new AggColumnRefRemapping(remapping), optAggOp, ctx);
         }
 
         @Override
-        public RewriteInfo visitLogicalProject(OptExpression optExpression, RewriteInfo rewriteInfo) {
+        public AggRewriteInfo visitLogicalProject(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
             if (!rewriteInfo.getRemapping().isPresent()) {
-                return RewriteInfo.NOT_REWRITE;
+                return AggRewriteInfo.NOT_REWRITE;
             }
             ReplaceColumnRefRewriter replacer = rewriteInfo.getRemapping().get().getReplacer();
             LogicalProjectOperator projectOp = optExpression.getOp().cast();
@@ -409,7 +312,7 @@ public class PushDownDistinctAggregateRewriter {
             columnRefSet.union(getReferencedColumnRef(projectOp.getColumnRefMap().values()));
 
             if (!rewriteInfo.getRemapping().get().getColumnRefSet().isIntersect(columnRefSet)) {
-                return RewriteInfo.NOT_REWRITE;
+                return AggRewriteInfo.NOT_REWRITE;
             }
 
             Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
@@ -423,16 +326,16 @@ public class PushDownDistinctAggregateRewriter {
         }
 
         @Override
-        public RewriteInfo visitLogicalWindow(OptExpression optExpression, RewriteInfo rewriteInfo) {
+        public AggRewriteInfo visitLogicalWindow(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
             LogicalWindowOperator windowOp = optExpression.getOp().cast();
             if (!rewriteInfo.getRemapping().isPresent()) {
-                return RewriteInfo.NOT_REWRITE;
+                return AggRewriteInfo.NOT_REWRITE;
             }
 
             ReplaceColumnRefRewriter replacer = rewriteInfo.getRemapping().get().getReplacer();
             ColumnRefSet columnRefSet = getReferencedColumnRef(new ArrayList<>(windowOp.getWindowCall().values()));
             if (!rewriteInfo.getRemapping().get().getColumnRefSet().isIntersect(columnRefSet)) {
-                return RewriteInfo.NOT_REWRITE;
+                return AggRewriteInfo.NOT_REWRITE;
             }
             Map<ColumnRefOperator, CallOperator> newWindowCalls = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : windowOp.getWindowCall().entrySet()) {
@@ -452,8 +355,8 @@ public class PushDownDistinctAggregateRewriter {
         }
 
         @Override
-        public RewriteInfo visitLogicalAggregate(OptExpression optExpression, RewriteInfo rewriteInfo) {
-            return RewriteInfo.NOT_REWRITE;
+        public AggRewriteInfo visitLogicalAggregate(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
+            return AggRewriteInfo.NOT_REWRITE;
         }
     }
 
@@ -467,27 +370,27 @@ public class PushDownDistinctAggregateRewriter {
     }
 
     // process each child to gather and merge RewriteInfo
-    private RewriteInfo processChildren(OptExpression optExpression,
-                                        AggregatePushDownContext context) {
+    private AggRewriteInfo processChildren(OptExpression optExpression,
+                                           AggregatePushDownContext context) {
         if (optExpression.getInputs().isEmpty()) {
-            return new RewriteInfo(false, null, null, context);
+            return new AggRewriteInfo(false, null, null, context);
         }
 
-        List<RewriteInfo> childRewriteInfoList =
+        List<AggRewriteInfo> childRewriteInfoList =
                 optExpression.getInputs().stream().map(input -> process(input, context)).collect(
                         Collectors.toList());
 
-        if (childRewriteInfoList.stream().noneMatch(RewriteInfo::hasRewritten)) {
-            return RewriteInfo.NOT_REWRITE;
+        if (childRewriteInfoList.stream().noneMatch(AggRewriteInfo::hasRewritten)) {
+            return AggRewriteInfo.NOT_REWRITE;
         }
 
         // merge ColumnRefMapping generated by each child into a total one
-        Iterator<RewriteInfo> nextRewriteInfo = childRewriteInfoList.iterator();
+        Iterator<AggRewriteInfo> nextRewriteInfo = childRewriteInfoList.iterator();
         optExpression.getInputs().replaceAll(input -> nextRewriteInfo.next().getOp().orElse(input));
-        ColumnRefRemapping combinedRemapping = new ColumnRefRemapping();
+        AggColumnRefRemapping combinedRemapping = new AggColumnRefRemapping();
         childRewriteInfoList.forEach(rewriteInfo -> rewriteInfo.getRemapping().ifPresent(
                 combinedRemapping::combine));
-        return new RewriteInfo(true, combinedRemapping, optExpression, context);
+        return new AggRewriteInfo(true, combinedRemapping, optExpression, context);
     }
 
     // Check current opt to see whether push distinct agg down or not using PreVisitor
@@ -504,7 +407,7 @@ public class PushDownDistinctAggregateRewriter {
 
     // Rewrite current opt according to rewriteInfo using PostVisitor, short-circuit if
     // rewriteInfo is RewriteInfo.NOT_REWRITE
-    private RewriteInfo processPost(OptExpression opt, RewriteInfo rewriteInfo) {
+    private AggRewriteInfo processPost(OptExpression opt, AggRewriteInfo rewriteInfo) {
         return opt.getOp().accept(postVisitor, opt, rewriteInfo);
     }
 
@@ -513,8 +416,8 @@ public class PushDownDistinctAggregateRewriter {
     // 1. processPre: check whether visiting should stop or not, collect info used to rewrite the node.
     // 2. processChildren: visit children of current node, merge infos from children into final one.
     // 3. processPost: rewrite current node.
-    private RewriteInfo process(OptExpression opt, AggregatePushDownContext context) {
+    private AggRewriteInfo process(OptExpression opt, AggregatePushDownContext context) {
         return processPre(opt, context).map(ctx -> processPost(opt, processChildren(opt, ctx)))
-                .orElse(RewriteInfo.NOT_REWRITE);
+                .orElse(AggRewriteInfo.NOT_REWRITE);
     }
 }

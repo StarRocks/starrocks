@@ -24,6 +24,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
 
 namespace starrocks {
@@ -53,7 +54,7 @@ public:
     void add_pipeline(const OpFactories& operators, ExecutionGroupRawPtr execution_group) {
         // TODO: refactor Pipelines to PipelineRawPtrs
         _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators, execution_group));
-        execution_group->add_pipeline(_pipelines.back());
+        execution_group->add_pipeline(_pipelines.back().get());
         _subscribe_pipeline_event(_pipelines.back().get());
     }
 
@@ -167,6 +168,7 @@ public:
     void pop_dependent_pipeline();
 
     ExecutionGroups execution_groups() { return std::move(_execution_groups); }
+    Pipelines pipelines() { return std::move(_pipelines); }
 
 private:
     void _subscribe_pipeline_event(Pipeline* pipeline);
@@ -209,7 +211,7 @@ public:
     // Build pipeline from exec node tree
     OpFactories decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node);
 
-    ExecutionGroups build();
+    std::pair<ExecutionGroups, Pipelines> build();
 
 private:
     PipelineBuilderContext& _context;

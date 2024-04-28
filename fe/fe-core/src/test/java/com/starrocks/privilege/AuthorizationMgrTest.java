@@ -1561,7 +1561,8 @@ public class AuthorizationMgrTest {
     @Test
     public void testGrantOnCatalog() throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create external catalog test_catalog properties (\"type\"=\"iceberg\")", ctx), ctx);
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user test_catalog_user", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(

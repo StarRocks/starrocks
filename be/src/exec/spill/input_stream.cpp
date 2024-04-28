@@ -18,6 +18,7 @@
 #include <memory>
 #include <utility>
 
+#include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
@@ -130,7 +131,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }
@@ -212,8 +213,9 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(workgroup::YieldContext& 
     if (has_chunk()) {
         return read_from_buffer();
     }
-    CHECK(!_is_prefetching);
-    return _input_stream->get_next(yield_ctx, ctx);
+    // if prefetch failed, return empty chunk
+    DCHECK(false);
+    return std::make_unique<Chunk>();
 }
 
 Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
@@ -260,7 +262,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }

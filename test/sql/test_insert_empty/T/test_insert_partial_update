@@ -28,3 +28,10 @@ primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" 
 insert into test3 values(1, 'v0', 1), (2, 'v2', 2);
 insert into test3 (pk, v1) values(1, 11), (3, 3);
 select * from test3 order by pk;
+
+-- update without order by column
+create table test4 (pk bigint NOT NULL, v0 string not null, v1 int not null default '0')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 order by (v1) PROPERTIES("replication_num" = "1");
+
+insert into test4 values(1, 'v0', 1), (2, 'v2', 2);
+insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');

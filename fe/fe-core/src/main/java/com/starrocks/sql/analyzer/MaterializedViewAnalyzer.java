@@ -129,6 +129,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.MYSQL,
                     Table.TableType.PAIMON,
                     Table.TableType.ODPS,
+                    Table.TableType.KUDU,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
                     Table.TableType.HIVE_VIEW);
@@ -251,6 +252,11 @@ public class MaterializedViewAnalyzer {
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
+
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
+            if (hasTemporaryTable) {
+                throw new SemanticException("Materialized view can't base on temporary table");
+            }
 
             // convert queryStatement to sql and set
             statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));

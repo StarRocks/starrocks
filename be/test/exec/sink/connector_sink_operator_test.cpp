@@ -21,8 +21,8 @@
 #include <future>
 #include <thread>
 
-#include "connector_sink/connector_chunk_sink.h"
-#include "connector_sink/hive_chunk_sink.h"
+#include "connector/connector_chunk_sink.h"
+#include "connector/hive_chunk_sink.h"
 #include "formats/utils.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"

@@ -14,20 +14,17 @@
 
 #include "formats/parquet/chunk_writer.h"
 
-#include <parquet/arrow/writer.h>
+#include <parquet/file_writer.h>
+#include <parquet/schema.h>
 
-#include <utility>
+#include <algorithm>
+#include <numeric>
 
-#include "column/array_column.h"
 #include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
-#include "column/vectorized_fwd.h"
-#include "exprs/expr.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/column_chunk_writer.h"
 #include "formats/parquet/level_builder.h"
-#include "util/defer_op.h"
 
 namespace starrocks::parquet {
 

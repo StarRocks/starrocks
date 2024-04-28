@@ -32,9 +32,11 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.IcebergMetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.KuduScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
@@ -153,6 +155,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitMultiPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinPushDownRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
@@ -176,6 +179,8 @@ public class RuleSet {
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
             new OdpsScanImplementationRule(),
+            new IcebergMetadataScanImplementationRule(),
+            new KuduScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -234,6 +239,7 @@ public class RuleSet {
                 MergeLimitDirectRule.FILE_SCAN,
                 MergeLimitDirectRule.PAIMON_SCAN,
                 MergeLimitDirectRule.ODPS_SCAN,
+                MergeLimitDirectRule.KUDU_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -258,6 +264,7 @@ public class RuleSet {
                 ExternalScanPartitionPruneRule.ES_SCAN,
                 ExternalScanPartitionPruneRule.PAIMON_SCAN,
                 ExternalScanPartitionPruneRule.ODPS_SCAN,
+                ExternalScanPartitionPruneRule.KUDU_SCAN,
                 new LimitPruneTabletsRule()
         ));
 
@@ -274,6 +281,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
                 PruneHDFSScanColumnRule.PAIMON_SCAN,
                 PruneHDFSScanColumnRule.ODPS_SCAN,
+                PruneScanColumnRule.KUDU_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
@@ -303,6 +311,8 @@ public class RuleSet {
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.PAIMON_SCAN,
+                PushDownPredicateScanRule.ICEBERG_METADATA_SCAN,
+                PushDownPredicateScanRule.KUDU_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
@@ -398,7 +408,8 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.MULTI_TABLE_MV_REWRITE, ImmutableList.of(
                 AggregateJoinRule.getInstance(),
-                OnlyJoinRule.getInstance()
+                OnlyJoinRule.getInstance(),
+                AggregateJoinPushDownRule.getInstance()
         ));
 
         REWRITE_RULES.put(RuleSetType.ALL_MV_REWRITE, Stream.concat(
@@ -413,6 +424,7 @@ public class RuleSet {
                 PruneEmptyScanRule.ICEBERG_SCAN,
                 PruneEmptyScanRule.PAIMON_SCAN,
                 PruneEmptyScanRule.ODPS_SCAN,
+                PruneEmptyScanRule.KUDU_SCAN,
                 PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
                 PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
                 new PruneEmptyDirectRule(),

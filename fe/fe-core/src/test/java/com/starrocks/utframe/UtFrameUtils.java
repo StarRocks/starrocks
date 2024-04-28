@@ -199,6 +199,7 @@ public class UtFrameUtils {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
+        ctx.setSessionId(UUIDUtil.genUUID());
         return ctx;
     }
 

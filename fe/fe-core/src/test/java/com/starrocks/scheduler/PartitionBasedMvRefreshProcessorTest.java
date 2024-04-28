@@ -57,7 +57,6 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
@@ -570,10 +569,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     initAndExecuteTaskRun(taskRun);
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-                    TaskRun run = tm.getTaskRunManager().getRunnableTaskRun(taskId);
+                    TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+                    TaskRun run = taskRunScheduler.getRunnableTaskRun(taskId);
                     Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), run.getStatus().getPriority());
 
-                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                    while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
                     }
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
@@ -2202,7 +2202,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     taskRun.getProcessor();
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+            Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
         }
 
         {
@@ -2216,7 +2216,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     taskRun.getProcessor();
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
 
             Config.enable_materialized_view_spill = true;
         }
@@ -2246,7 +2246,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                 taskRun.getProcessor();
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+        Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
     }
 
     @Test
@@ -2894,7 +2894,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         mockedJDBCMetadata.initPartitions();
 
         // get base table partitions
-        List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1");
+        List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", -1);
         Assert.assertEquals(4, baseParNames.size());
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
@@ -3779,8 +3779,10 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-                    Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
-                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                    TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+                    Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
+
+                    while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
                     }
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
@@ -4298,7 +4300,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                                     Assert.assertEquals(Sets.newHashSet("p1"),
                                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
-                                    Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getUUID());
+                                    Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getTaskRunId());
 
                                     jobID = taskRunStatus.getStartTaskRunId();
                                     {
@@ -4438,7 +4440,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                                 Assert.assertEquals(Sets.newHashSet("p1"),
                                         processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
-                                Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getUUID());
+                                Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getTaskRunId());
 
                                 // mock: set its state to FAILED
                                 taskRunStatus.setState(Constants.TaskRunState.FAILED);

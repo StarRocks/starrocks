@@ -43,15 +43,15 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     private List<String> partitions;
     private Map<String, Long> initialPositions = Maps.newHashMap();
 
-    public PulsarTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs, long timeToExecuteMs,
+    public PulsarTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs, long timeToExecuteMs,
                           List<String> partitions, Map<String, Long> initialPositions, long tastTimeoutMs) {
-        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs, tastTimeoutMs);
+        super(id, job, taskScheduleIntervalMs, timeToExecuteMs, tastTimeoutMs);
         this.partitions = partitions;
         this.initialPositions.putAll(initialPositions);
     }
 
     public PulsarTaskInfo(long timeToExecuteMs, PulsarTaskInfo pulsarTaskInfo, Map<String, Long> initialPositions) {
-        super(UUID.randomUUID(), pulsarTaskInfo.getJobId(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
+        super(UUID.randomUUID(), pulsarTaskInfo.getJob(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
                 timeToExecuteMs, pulsarTaskInfo.getBeId(), pulsarTaskInfo.getTimeoutMs());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);
@@ -67,17 +67,12 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
 
     @Override
     public boolean readyToExecute() throws UserException {
-        RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
-        if (routineLoadJob == null) {
-            return false;
-        }
-
         // Got initialPositions, we need to execute even there's no backlogs
         if (!initialPositions.isEmpty()) {
             return true;
         }
 
-        PulsarRoutineLoadJob pulsarRoutineLoadJob = (PulsarRoutineLoadJob) routineLoadJob;
+        PulsarRoutineLoadJob pulsarRoutineLoadJob = (PulsarRoutineLoadJob) job;
         Map<String, Long> backlogNums = PulsarUtil.getBacklogNums(pulsarRoutineLoadJob.getServiceUrl(),
                 pulsarRoutineLoadJob.getTopic(), pulsarRoutineLoadJob.getSubscription(),
                 ImmutableMap.copyOf(pulsarRoutineLoadJob.getConvertedCustomProperties()),
@@ -107,13 +102,13 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
 
     @Override
     public TRoutineLoadTask createRoutineLoadTask() throws UserException {
-        PulsarRoutineLoadJob routineLoadJob = (PulsarRoutineLoadJob) routineLoadManager.getJob(jobId);
+        PulsarRoutineLoadJob routineLoadJob = (PulsarRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
         TRoutineLoadTask tRoutineLoadTask = new TRoutineLoadTask();
         TUniqueId queryId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         tRoutineLoadTask.setId(queryId);
-        tRoutineLoadTask.setJob_id(jobId);
+        tRoutineLoadTask.setJob_id(routineLoadJob.getId());
         tRoutineLoadTask.setTxn_id(txnId);
         Database database = GlobalStateMgr.getCurrentState().getDb(routineLoadJob.getDbId());
         if (database == null) {

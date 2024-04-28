@@ -141,10 +141,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
 
     // all shadow indexes should have this prefix in name
-    public static final String SHADOW_NAME_PRFIX = "__starrocks_shadow_";
-    // before version 1.18, use "__doris_shadow_" as shadow index prefix
-    // check "__doris_shadow_" to prevent compatibility problems
-    public static final String SHADOW_NAME_PRFIX_V1 = "__doris_shadow_";
+    public static final String SHADOW_NAME_PREFIX = "__starrocks_shadow_";
 
     public SchemaChangeHandler() {
         super("schema change");
@@ -410,6 +407,8 @@ public class SchemaChangeHandler extends AlterHandler {
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+        // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
+        boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
@@ -600,7 +599,7 @@ public class SchemaChangeHandler extends AlterHandler {
                  * And if the column type is not changed, the same column name is still to the same column type,
                  * so no need to add prefix.
                  */
-                modColumn.setName(SHADOW_NAME_PRFIX + originalModColumnName);
+                modColumn.setName(SHADOW_NAME_PREFIX + originalModColumnName);
             }
 
             if (KeysType.AGG_KEYS == olapTable.getKeysType() || KeysType.UNIQUE_KEYS == olapTable.getKeysType() ||
@@ -645,7 +644,16 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for handling other indices
 
-        return false;
+        // fast schema evolution supports the conversion of scalar types to decimal types, but does not support the conversion
+        // of decimal types to other scale types, due to the fact that the precision and scale of the decimal are not recorded
+        // in the segment file
+        if (modColumn.isKey() || !modColumn.getType().isScalarType()
+                || oriColumn.isKey()
+                || !oriColumn.getType().isScalarType()
+                || oriColumn.getType().isDecimalOfAnyVersion()) {
+            fastSchemaEvolution = false;
+        }
+        return fastSchemaEvolution;
     }
 
     // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
@@ -1392,6 +1400,18 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(ConnectContext.get().getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds);
+
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+
+            jobBuilder.withWarehouse(warehouseId);
+        }
 
         long tableId = olapTable.getId();
         Long alterIndexId = olapTable.getBaseIndexId();
@@ -2226,7 +2246,7 @@ public class SchemaChangeHandler extends AlterHandler {
     public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.READ)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
             throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
         }
         TableProperty tableProperty;
@@ -2458,13 +2478,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx).shallowCopy();
                 List<Column> originSchema = currentIndexMeta.getSchema();
 
-                if (hasMv && indexSchema.size() < originSchema.size()) {
-                    // drop column
-                    List<Column> differences = originSchema.stream().filter(element ->
-                            !indexSchema.contains(element)).collect(Collectors.toList());
-                    // can just drop one column one time, so just one element in differences
-                    int dropIdx = originSchema.indexOf(differences.get(0));
-                    modifiedColumns.add(originSchema.get(dropIdx).getName());
+                if (hasMv) {
+                    modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, indexSchema));
                 }
 
                 List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();
@@ -2604,6 +2619,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .build();
             job.setIndexTabletSchema(indexId, indexName, schemaInfo);
         }
+        job.setWarehouseId(schemaChangeData.getWarehouseId());
         return job;
     }
 

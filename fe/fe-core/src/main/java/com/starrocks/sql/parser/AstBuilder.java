@@ -107,6 +107,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -168,6 +169,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
@@ -195,8 +197,12 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
@@ -233,6 +239,7 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -439,7 +446,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
-import com.starrocks.sql.common.EngineType;
+import com.starrocks.transaction.GtidGenerator;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -453,6 +460,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -465,6 +474,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -712,6 +722,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<ColumnDef> columnDefs = null;
         if (context.columnDesc() != null) {
             columnDefs = getColumnDefs(context.columnDesc());
+        }
+        if (context.TEMPORARY() != null) {
+            return new CreateTemporaryTableStmt(
+                    context.IF() != null,
+                    false,
+                    tableName,
+                    columnDefs,
+                    context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
+                    context.engineDesc() == null ? "" :
+                            ((Identifier) visit(context.engineDesc().identifier())).getValue(),
+                    context.charsetDesc() == null ? null :
+                            ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
+                    context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
+                    context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), columnDefs),
+                    context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                    properties,
+                    extProperties,
+                    context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                    context.rollupDesc() == null ?
+                            null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
+                    context.orderByDesc() == null ? null :
+                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                    .stream().map(Identifier::getValue).collect(toList()),
+                    NodePosition.ZERO);
+
         }
 
         return new CreateTableStmt(
@@ -966,32 +1001,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitCreateTemporaryTableStatement(StarRocksParser.CreateTemporaryTableStatementContext context) {
-        if (!Config.enable_experimental_temporary_table) {
-            throw new SemanticException(
-                    "Temporary table feature is experimental and disabled by default, could be enabled through " +
-                            ": admin set frontend config('enable_experimental_temporary_table' = 'true')");
-        }
-        CreateTableStmt createTableStmt = new CreateTableStmt(
-                false,
-                false,
-                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
-                null,
-                EngineType.defaultEngine().name(),
-                null,
-                null,
-                null,
-                new HashMap<>(),
-                null,
-                null);
-
-        return new CreateTableAsSelectStmt(
-                createTableStmt,
-                null,
-                (QueryStatement) visit(context.queryStatement()));
-    }
-
-    @Override
     public ParseNode visitCreateTableAsSelectStatement(StarRocksParser.CreateTableAsSelectStatementContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -1007,6 +1016,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (partitionDesc instanceof ListPartitionDesc && context.partitionDesc().LIST() == null) {
                 ((ListPartitionDesc) partitionDesc).setAutoPartitionTable(true);
             }
+        }
+
+        if (context.TEMPORARY() != null) {
+            CreateTemporaryTableStmt createTemporaryTableStmt = new CreateTemporaryTableStmt(
+                    context.IF() != null,
+                    false,
+                    qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
+                    null,
+                    context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
+                    "",
+                    null,
+                    context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
+                    partitionDesc,
+                    context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                    properties,
+                    null,
+                    context.comment() == null ? null :
+                            ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                    null,
+                    context.orderByDesc() == null ? null :
+                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                    .stream().map(Identifier::getValue).collect(toList())
+            );
+
+            List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+            return new CreateTemporaryTableAsSelectStmt(
+                    createTemporaryTableStmt,
+                    columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
+                    (QueryStatement) visit(context.queryStatement()),
+                    createPos(context));
         }
 
         CreateTableStmt createTableStmt = new CreateTableStmt(
@@ -1046,6 +1085,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 (DistributionDesc) visit(context.distributionDesc());
         Map<String, String> properties = getProperties(context.properties());
 
+        if (context.TEMPORARY() != null) {
+            return new CreateTemporaryTableLikeStmt(context.IF() != null,
+                    qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
+                    qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
+                    partitionDesc, distributionDesc, properties,
+                    createPos(context));
+        }
+
         return new CreateTableLikeStmt(context.IF() != null,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
@@ -1070,11 +1117,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropTableStatement(StarRocksParser.DropTableStatementContext context) {
         boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        boolean isTemporary = context.TEMPORARY() != null;
         boolean force = context.FORCE() != null;
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        if (isTemporary) {
+            return new DropTemporaryTableStmt(ifExists, targetTableName, force);
+        }
         return new DropTableStmt(ifExists, targetTableName, false, force, createPos(context));
     }
+
+    @Override
+    public ParseNode visitCleanTemporaryTableStatement(StarRocksParser.CleanTemporaryTableStatementContext context) {
+        String sessionId = ((StringLiteral) visit(context.string())).getStringValue();
+        try {
+            return new CleanTemporaryTableStmt(UUID.fromString(sessionId));
+        } catch (Throwable e) {
+            throw new ParsingException("invalid session id format");
+        }
+    }
+
+
 
     @Override
     public ParseNode visitRecoverTableStatement(StarRocksParser.RecoverTableStatementContext context) {
@@ -1124,6 +1187,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()), catalog, pos);
         } else {
             return new ShowTableStmt(database, isVerbose, null, null, catalog, pos);
+        }
+    }
+
+    @Override
+    public ParseNode visitShowTemporaryTablesStatement(StarRocksParser.ShowTemporaryTablesStatementContext context) {
+        String database = null;
+        String catalog = null;
+        // catalog.db
+        if (context.qualifiedName() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            List<String> parts = qualifiedName.getParts();
+            if (parts.size() == 2) {
+                catalog = qualifiedName.getParts().get(0);
+                database = qualifiedName.getParts().get(1);
+            } else if (parts.size() == 1) {
+                database = qualifiedName.getParts().get(0);
+            }
+        }
+
+        NodePosition pos = createPos(context);
+
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowTemporaryTableStmt(database, stringLiteral.getValue(), null, catalog, pos);
+        } else if (context.expression() != null) {
+            return new ShowTemporaryTableStmt(database, null, (Expr) visit(context.expression()), catalog, pos);
+        } else {
+            return new ShowTemporaryTableStmt(database, null, null, catalog, pos);
         }
     }
 
@@ -1466,13 +1557,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        if (desc.interval() != null) {
-            var intervalLiteral = (IntervalLiteral) visit(desc.interval());
+        if (desc.taskInterval() != null) {
+            var intervalLiteral = (IntervalLiteral) visit(desc.taskInterval());
             if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
                 String exprSql = intervalLiteral.getValue().toSql();
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
-                        createPos(desc.interval()));
-
+                        createPos(desc.taskInterval()));
             }
 
             long period = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
@@ -1481,8 +1571,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
                         intervalLiteral.getUnitIdentifier().getDescription());
             } catch (DdlException e) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(intervalLiteral.toString(),
-                        "INTERVAL "), createPos(desc.interval()));
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(
+                        intervalLiteral.getUnitIdentifier().getDescription(),
+                        "INTERVAL "), createPos(desc.taskInterval()));
             }
             schedule.setPeriod(period);
             schedule.setTimeUnit(timeUnit);
@@ -1510,15 +1601,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
+        DataCacheSelectStatement dataCacheSelectStmt = null;
         if (context.createTableAsSelectStatement() != null) {
             createTableAsSelectStmt = (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
         } else if (context.insertStatement() != null) {
             insertStmt = (InsertStmt) visit(context.insertStatement());
+        } else if (context.dataCacheSelectStatement() != null) {
+            dataCacheSelectStmt = (DataCacheSelectStatement) visit(context.dataCacheSelectStatement());
         }
 
         int startIndex = 0;
         if (createTableAsSelectStmt != null) {
             startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        } else if (dataCacheSelectStmt != null) {
+            startIndex = context.dataCacheSelectStatement().start.getStartIndex();
         } else {
             startIndex = context.insertStatement().start.getStartIndex();
         }
@@ -1533,6 +1629,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         SubmitTaskStmt res;
         if (createTableAsSelectStmt != null) {
             res = new SubmitTaskStmt(taskName, startIndex, createTableAsSelectStmt, pos);
+        } else if (dataCacheSelectStmt != null) {
+            res = new SubmitTaskStmt(taskName, startIndex, dataCacheSelectStmt, pos);
         } else {
             res = new SubmitTaskStmt(taskName, startIndex, insertStmt, pos);
         }
@@ -3200,6 +3298,50 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ClearDataCacheRulesStmt(createPos(ctx));
     }
 
+    @Override
+    public ParseNode visitDataCacheSelectStatement(StarRocksParser.DataCacheSelectStatementContext ctx) {
+        // cache select only support select one table at a time
+        // create a single table relation
+        TableRelation tableRelation = null;
+        {
+            QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+            tableRelation = new TableRelation(tableName);
+        }
+
+        // create select items
+        List<SelectListItem> selectItems = visit(ctx.selectItem(), SelectListItem.class);
+        SelectList selectList = new SelectList(selectItems, false);
+
+        // create query relation based on tableRelation and selectItems
+        QueryRelation queryRelation = new SelectRelation(
+                selectList,
+                tableRelation,
+                (Expr) visitIfPresent(ctx.where),
+                null,
+                null,
+                createPos(ctx));
+
+
+        // create queryStatement based on queryRelation
+        QueryStatement queryStatement = new QueryStatement(queryRelation);
+
+        // Convert queryStatement into InsertStmt(`INSERT INTO BLACKHOLE() SELECT xxx FROM TBL`)
+        InsertStmt insertStmt = new InsertStmt(queryStatement, createPos(ctx));
+
+        // properties
+        Map<String, String> properties = new HashMap<>();
+        if (ctx.properties() != null) {
+            List<Property> propertyList = visit(ctx.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                // ignore case sensitive
+                properties.put(property.getKey().toLowerCase(), property.getValue().toLowerCase());
+            }
+        }
+
+        return new DataCacheSelectStatement(insertStmt, properties, createPos(ctx));
+    }
+
     // ----------------------------------------------- Export Statement ------------------------------------------------
     @Override
     public ParseNode visitExportStatement(StarRocksParser.ExportStatementContext context) {
@@ -4682,6 +4824,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             tableRelation.setTemporalClause(sb.toString());
         }
 
+        if (context.BEFORE() != null) {
+            String ts = ((StringLiteral) visit(context.ts)).getStringValue();
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            try {
+                tableRelation.setGtid(GtidGenerator.getGtid(dateFormat.parse(ts).getTime()));
+            } catch (ParseException e) {
+                tableRelation.setGtid(Long.parseLong(ts));
+            }
+        }
+
         return tableRelation;
     }
 
@@ -5948,6 +6100,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_ID)) {
+            return new InformationFunction(FunctionSet.SESSION_ID.toUpperCase());
+        }
+
         if (functionName.equals(FunctionSet.MAP)) {
             List<Expr> exprs;
             if (context.expression() != null) {
@@ -6461,9 +6617,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitTaskInterval(StarRocksParser.TaskIntervalContext context) {
+        return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from),
+                createPos(context));
+    }
+
+    @Override
     public ParseNode visitInterval(StarRocksParser.IntervalContext context) {
         return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTaskUnitIdentifier(StarRocksParser.TaskUnitIdentifierContext context) {
+        return new UnitIdentifier(context.getText(), createPos(context));
     }
 
     @Override

@@ -99,14 +99,14 @@ public:
         }
     }
 
-    // used in local colocate runtime filter
+    // used in local group colocate runtime filter
     void set_or_concat(JoinRuntimeFilter* rf, int32_t driver_sequence) {
         std::lock_guard guard(_mutex);
         if (_runtime_filter == nullptr) {
             _runtime_filter = rf;
-            _runtime_filter->colocate_filter().resize(_num_colocate_partition);
+            _runtime_filter->group_colocate_filter().resize(_num_colocate_partition);
         }
-        _runtime_filter->colocate_filter()[driver_sequence] = rf;
+        _runtime_filter->group_colocate_filter()[driver_sequence] = rf;
     }
 
     JoinRuntimeFilter* runtime_filter() { return _runtime_filter; }
@@ -158,7 +158,8 @@ public:
     //  - partition_by_exprs only one column but differ with probe_expr;
     // When pushing down runtime filters(probe_exprs) but partition_by_exprs are not changed
     // which may cause wrong results.
-    bool can_push_down_runtime_filter() { return _partition_by_exprs_contexts.empty(); }
+    // colocate runtime filter should not be pushed down.
+    bool can_push_down_runtime_filter() { return _partition_by_exprs_contexts.empty() && !_is_group_colocate_rf; }
     bool is_probe_slot_ref(SlotId* slot_id) const {
         Expr* probe_expr = _probe_expr_ctx->root();
         if (!probe_expr->is_slotref()) return false;
@@ -178,10 +179,11 @@ public:
 
     const JoinRuntimeFilter* runtime_filter(int32_t driver_sequence) const {
         auto runtime_filter = _runtime_filter.load();
-        if (runtime_filter != nullptr && runtime_filter->is_colocate_filter()) {
+        if (runtime_filter != nullptr && runtime_filter->is_group_colocate_filter()) {
+            DCHECK(_is_group_colocate_rf);
             DCHECK_GE(driver_sequence, 0);
-            DCHECK_LT(driver_sequence, runtime_filter->colocate_filter().size());
-            return runtime_filter->colocate_filter()[driver_sequence];
+            DCHECK_LT(driver_sequence, runtime_filter->group_colocate_filter().size());
+            return runtime_filter->group_colocate_filter()[driver_sequence];
         }
         return runtime_filter;
     }
@@ -204,6 +206,8 @@ private:
     int8_t _join_mode;
     bool _is_topn_filter = false;
     bool _skip_wait = false;
+    // Indicates that the runtime filter was built from the colocate group execution build side.
+    bool _is_group_colocate_rf = false;
     std::vector<ExprContext*> _partition_by_exprs_contexts;
 
     std::atomic<const JoinRuntimeFilter*> _runtime_filter = nullptr;

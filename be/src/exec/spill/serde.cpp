@@ -34,7 +34,7 @@ public:
     ~ColumnarSerde() override = default;
 
     Status prepare() override {
-        RACE_DETECT(detect_prepare, var1);
+        RACE_DETECT(detect_prepare);
         if (_encode_context == nullptr) {
             auto column_number = _parent->chunk_builder().column_number();
             auto encode_level = _parent->options().encode_level;
@@ -55,6 +55,7 @@ private:
     static constexpr int32_t SEQUENCE_OFFSET = 0;
     static constexpr int32_t ATTACHMENT_SIZE_OFFSET = SEQUENCE_OFFSET + sizeof(int32_t);
     static constexpr int32_t HEADER_SIZE = ATTACHMENT_SIZE_OFFSET + sizeof(int64_t);
+    static constexpr int32_t SEQUENCE_MAGIC_ID = 0xface;
 
     size_t _max_serialized_size(const ChunkPtr& chunk) const;
 
@@ -112,7 +113,7 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         // header|attachment...
         // i32 sequence_id|i64 chunk size|encode level|attachment(column data)...
         char header_buffer[HEADER_SIZE];
-        UNALIGNED_STORE32(header_buffer + SEQUENCE_OFFSET, output->next_sequence_id());
+        UNALIGNED_STORE32(header_buffer + SEQUENCE_OFFSET, SEQUENCE_MAGIC_ID);
 
         size_t encode_level_sizes = columns.size() * sizeof(int32_t);
         size_t max_serialized_size = _max_serialized_size(chunk);
@@ -173,9 +174,8 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
 
     int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);
     int32_t attachment_size = UNALIGNED_LOAD32(header_buffer + ATTACHMENT_SIZE_OFFSET);
-    int32_t next_sequence_id = reader->next_sequence_id();
-    if (sequence_id != next_sequence_id) {
-        return Status::InternalError(fmt::format("sequence id mismatch {} vs {}", sequence_id, next_sequence_id));
+    if (sequence_id != SEQUENCE_MAGIC_ID) {
+        return Status::InternalError(fmt::format("sequence id mismatch {} vs {}", sequence_id, SEQUENCE_MAGIC_ID));
     }
 
     auto chunk = _chunk_builder();

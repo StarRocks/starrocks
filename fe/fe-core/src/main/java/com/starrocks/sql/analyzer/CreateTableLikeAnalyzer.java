@@ -17,12 +17,14 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -43,7 +45,14 @@ public class CreateTableLikeAnalyzer {
         Table table = MetaUtils.getTable(existedDbTbl);
 
         List<String> createTableStmt = Lists.newArrayList();
-        AstToStringBuilder.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
+
+        if (stmt instanceof CreateTemporaryTableLikeStmt) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("temporary table only support olap engine");
+            }
+        }
+        AstToStringBuilder.getDdlStmt(stmt.getDbName(), table, createTableStmt, null,
+                null, false, false, stmt instanceof CreateTemporaryTableLikeStmt);
         if (createTableStmt.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
         }

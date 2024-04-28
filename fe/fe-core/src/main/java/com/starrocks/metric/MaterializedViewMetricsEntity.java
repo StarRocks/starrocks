@@ -28,6 +28,7 @@ import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -63,6 +64,9 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     public LongCounterMetric counterQueryHitTotal;
     // increased once the materialized view is used in the final plan no matter it is queried directly or rewritten.
     public LongCounterMetric counterQueryMaterializedViewTotal;
+    // increased if the materialized view is successes to be rewritten from query by text based rewrite, and it will increase
+    // the counter query hit total.
+    public LongCounterMetric counterQueryTextBasedMatchedTotal;
 
     // gauge
     // the current pending refresh jobs for the materialized view
@@ -126,6 +130,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         counterQueryMatchedTotal = new LongCounterMetric("mv_query_total_matched_count", MetricUnit.REQUESTS,
                 "total matched materialized view's query count");
         metrics.add(counterQueryMatchedTotal);
+        // text based rewrite
+        counterQueryTextBasedMatchedTotal = new LongCounterMetric("mv_query_total_text_based_matched_count",
+                MetricUnit.REQUESTS, "total text based matched materialized view's query count");
+        metrics.add(counterQueryTextBasedMatchedTotal);
 
         // histogram metrics
         try {
@@ -151,7 +159,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                return taskManager.getTaskRunManager().getPendingTaskRunCount(taskId);
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+                return taskRunScheduler.getTaskIdPendingTaskRunCount(taskId);
             }
         };
         metrics.add(counterRefreshPendingJobs);
@@ -169,7 +178,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                if (taskManager.getTaskRunManager().containsTaskInRunningTaskRunMap(taskId)) {
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunManager().getTaskRunScheduler();
+                if (taskRunScheduler.isTaskRunning(taskId)) {
                     return 1L;
                 } else {
                     return 0L;
@@ -297,6 +307,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     @Override
     public void increaseQueryMatchedCount(long count) {
         this.counterQueryMatchedTotal.increase(count);
+    }
+
+    @Override
+    public void increaseQueryTextBasedMatchedCount(long count) {
+        this.counterQueryTextBasedMatchedTotal.increase(count);
     }
 
     @Override

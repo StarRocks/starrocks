@@ -282,6 +282,12 @@ public enum ErrorCode {
     ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
             "Partition '%s' has sub partitions, should specify the partition id"),
     ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
+    ERR_NO_DEFAULT_STORAGE_VOLUME(5506, new byte[] {'5', '5', '0', '0', '0'},
+            "The default storage volume does not exist. " +
+                    "A default storage volume can be created by following these steps: " +
+                    "1. Create a storage volume. 2. Set the storage volume as default"),
+    ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
+                "Can not enable replicated storage when the table has GIN"),
 
     /**
      * 5600 - 5699: DML operation failure

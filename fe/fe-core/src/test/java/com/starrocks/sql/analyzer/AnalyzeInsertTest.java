@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -23,11 +24,15 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -100,27 +105,27 @@ public class AnalyzeInsertTest {
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-
-        new Expectations(metadata) {
-            {
-                metadata.getDb(anyString, anyString);
-                result = new Database();
-                minTimes = 0;
-
-                metadata.getTable(anyString, anyString, anyString);
-                result = null;
-                minTimes = 0;
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String catalogName, String tableName) {
+                return new Database();
+            }
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return null;
             }
         };
         analyzeFail("insert into iceberg_catalog.db.err_tbl values (1)",
                 "Table err_tbl is not found");
 
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString, anyString);
-                result = icebergTable;
-                minTimes = 0;
-
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -142,16 +147,21 @@ public class AnalyzeInsertTest {
     @Test
     public void testPartitionedIcebergTable(@Mocked IcebergTable icebergTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String catalogName, String databaseName) {
+                return new Database();
+            }
+
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
-                result = new Database();
-                minTimes = 0;
-
-                metadata.getTable(anyString, anyString, anyString);
-                result = icebergTable;
-                minTimes = 0;
-
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -222,11 +232,14 @@ public class AnalyzeInsertTest {
 
     @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
-        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadata) {
-            {
-                metadata.getTable(anyString, anyString, anyString);
-                result = hiveTable;
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String catalogName, String databaseName) {
+                return null;
+            }
+            @Mock
+            public Table getSessionAwareTable(ConnectContext conntext, Database database, TableName tableName) {
+                return hiveTable;
             }
         };
 

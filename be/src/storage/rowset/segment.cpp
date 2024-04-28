@@ -47,6 +47,7 @@
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
@@ -396,7 +397,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
-        return _column_readers.at(id)->new_iterator(path);
+        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path));
+        if (_column_readers[id]->column_type() == column.type()) {
+            return source_iter;
+        } else {
+            auto nullable = _column_readers[id]->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                 column.scale());
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+        }
     } else if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
@@ -471,4 +481,12 @@ size_t Segment::mem_usage() const {
     }
     return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
 }
+
+StatusOr<int64_t> Segment::get_data_size() const {
+    if (_segment_file_info.size.has_value()) {
+        return _segment_file_info.size.value();
+    }
+    return _fs->get_file_size(_segment_file_info.path);
+}
+
 } // namespace starrocks

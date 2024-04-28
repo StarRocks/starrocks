@@ -313,9 +313,8 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
     local_shuffle_source->set_could_local_shuffle(true);
     local_shuffle_source->set_degree_of_parallelism(physical_dop);
     add_pipeline(pred_operators);
-    // switch to new execution group
-    _execution_groups.emplace_back(std::make_shared<NormalExecutionGroup>());
-    _current_execution_group = _execution_groups.back().get();
+    // switch to new normal group
+    _current_execution_group = _normal_exec_group;
 
     return {local_shuffle_source};
 }
@@ -528,8 +527,8 @@ OpFactories PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentConte
     return operators;
 }
 
-ExecutionGroups PipelineBuilder::build() {
-    return _context.execution_groups();
+std::pair<ExecutionGroups, Pipelines> PipelineBuilder::build() {
+    return {_context.execution_groups(), _context.pipelines()};
 }
 
 } // namespace starrocks::pipeline

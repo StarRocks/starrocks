@@ -19,6 +19,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ParseNode;
@@ -30,6 +31,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -43,6 +46,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -69,6 +73,13 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Ma
 public class TextMatchBasedRewriteRule extends Rule {
     private static final Logger LOG = LogManager.getLogger(TextMatchBasedRewriteRule.class);
 
+    // Supported rewrite operator types in the sub-query to match with the specified operator types
+    public static final Set<OperatorType> SUPPORTED_REWRITE_OPERATOR_TYPES = ImmutableSet.of(
+            OperatorType.LOGICAL_PROJECT,
+            OperatorType.LOGICAL_UNION,
+            OperatorType.LOGICAL_LIMIT,
+            OperatorType.LOGICAL_FILTER
+    );
     private final ConnectContext connectContext;
     private final StatementBase stmt;
     private final Map<Operator, ParseNode> optToAstMap;
@@ -250,6 +261,9 @@ public class TextMatchBasedRewriteRule extends Rule {
                 // do: text match based mv rewrite
                 OptExpression rewritten = doTextMatchBasedRewrite(context, mvPlanContext, mv, input);
                 if (rewritten != null) {
+                    IMaterializedViewMetricsEntity mvEntity =
+                            MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
+                    mvEntity.increaseQueryTextBasedMatchedCount(1L);
                     OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: {}", REWRITE_SUCCESS);
                     return rewritten;
                 }
@@ -374,34 +388,21 @@ public class TextMatchBasedRewriteRule extends Rule {
             return children;
         }
 
+        private boolean isReachLimit() {
+            return subQueryTextMatchCount++ > mvSubQueryTextMatchMaxCount;
+        }
+
         @Override
         public OptExpression visit(OptExpression optExpression, ConnectContext connectContext) {
-            List<OptExpression> children = visitChildren(optExpression, connectContext);
-            return OptExpression.create(optExpression.getOp(), children);
-        }
-
-        @Override
-        public OptExpression visitLogicalProject(OptExpression optExpression, ConnectContext connectContext) {
-            if (subQueryTextMatchCount++ > mvSubQueryTextMatchMaxCount) {
-                return optExpression;
-            }
-
-            OptExpression rewritten = doRewrite(optExpression);
-            if (rewritten != null) {
-                return rewritten;
-            }
-            List<OptExpression> children = visitChildren(optExpression, connectContext);
-            return OptExpression.create(optExpression.getOp(), children);
-        }
-
-        @Override
-        public OptExpression visitLogicalUnion(OptExpression optExpression, ConnectContext connectContext) {
-            if (subQueryTextMatchCount++ > mvSubQueryTextMatchMaxCount) {
-                return optExpression;
-            }
-            OptExpression rewritten = doRewrite(optExpression);
-            if (rewritten != null) {
-                return rewritten;
+            LogicalOperator op = (LogicalOperator) optExpression.getOp();
+            if (SUPPORTED_REWRITE_OPERATOR_TYPES.contains(op.getOpType())) {
+                if (isReachLimit()) {
+                    return optExpression;
+                }
+                OptExpression rewritten = doRewrite(optExpression);
+                if (rewritten != null) {
+                    return rewritten;
+                }
             }
             List<OptExpression> children = visitChildren(optExpression, connectContext);
             return OptExpression.create(optExpression.getOp(), children);

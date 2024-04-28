@@ -550,7 +550,6 @@ INSTANTIATE_TEST_SUITE_P(
                 // nested array
                 std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[3]", R"( NULL )"),
-                std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[-1]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][1]", R"( 2 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][2]", R"( 3 )"),
