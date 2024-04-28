@@ -1082,6 +1082,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
 - 引入版本：v3.3.0
 
+##### black_host_history_sec
+
+- 默认值：2 * 60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- 默认值：5
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：黑名单中的 BE 节点允许连接失败的上限。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -4771,28 +4789,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
 - 引入版本：-
-
-<!--
-##### black_host_history_sec
-
-- 默认值：2 * 60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- 默认值：5
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### jdbc_connection_pool_size
 
