@@ -40,6 +40,8 @@ public class DataCacheSelectExecutor {
         SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
         // clone an new session variable
         SessionVariable tmpSessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        // overwrite catalog
+        tmpSessionVariable.setCatalog(statement.getCatalog());
         // force enable datacache and populate
         tmpSessionVariable.setEnableScanDataCache(true);
         tmpSessionVariable.setEnablePopulateDataCache(true);

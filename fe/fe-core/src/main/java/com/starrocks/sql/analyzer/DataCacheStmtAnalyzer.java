@@ -135,6 +135,7 @@ public class DataCacheStmtAnalyzer {
             if (CatalogMgr.isInternalCatalog(tableName.getCatalog()) && RunMode.isSharedNothingMode()) {
                 throw new SemanticException("Currently cache select is not supported in local olap table");
             }
+            statement.setCatalog(tableName.getCatalog());
 
             Map<String, String> properties = statement.getProperties();
             statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault("verbose", "false")));

@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.parser.NodePosition;
@@ -29,6 +30,8 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     // Set after DataCacheAnalyzer analyze properties
     private boolean isVerbose = false;
+    // real catalog of cache select table
+    private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // TODO Support priority, ttl later
 
     public DataCacheSelectStatement(InsertStmt insertStmt, Map<String, String> properties, NodePosition pos) {
@@ -53,6 +56,14 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     public boolean isVerbose() {
         return isVerbose;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
+    }
+
+    public String getCatalog() {
+        return this.catalog;
     }
 
     @Override
