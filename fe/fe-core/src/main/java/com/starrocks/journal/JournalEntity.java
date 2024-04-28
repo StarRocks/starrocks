@@ -114,6 +114,7 @@ import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
+import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -344,6 +345,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_PARTITION: {
                 data = DropPartitionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_PARTITIONS: {
+                data = DropPartitionsInfo.read(in);
                 isRead = true;
                 break;
             }

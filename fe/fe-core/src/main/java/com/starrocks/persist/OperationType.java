@@ -621,6 +621,8 @@ public class OperationType {
     public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
     @IgnorableOnReplayFailed
     public static final short OP_RECOVER_PARTITION_VERSION = 10245;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_PARTITIONS = 10246;
 
     // new privilege, all ends with V2
 
