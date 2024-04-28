@@ -118,7 +118,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
@@ -1714,8 +1713,6 @@ public class StmtExecutor {
 
     private void sendStmtPrepareOK(PrepareStmt prepareStmt) throws IOException {
         // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html#sect_protocol_com_stmt_prepare_response
-        QueryStatement query = (QueryStatement) prepareStmt.getInnerStmt();
-        int numColumns = query.getQueryRelation().getRelationFields().size();
         int numParams = prepareStmt.getParameters().size();
         serializer.reset();
         // 0x00 OK
@@ -1723,7 +1720,7 @@ public class StmtExecutor {
         // statement_id
         serializer.writeInt4(Integer.valueOf(prepareStmt.getName()));
         // num_columns
-        serializer.writeInt2(numColumns);
+        serializer.writeInt2(0);
         // num_params
         serializer.writeInt2(numParams);
         // reserved_1
@@ -1740,17 +1737,6 @@ public class StmtExecutor {
             for (int i = 0; i < colNames.size(); ++i) {
                 serializer.reset();
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
-                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
-            }
-            MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
-            eofPacket.writeTo(serializer);
-            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
-        }
-
-        if (numColumns > 0) {
-            for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
-                serializer.reset();
-                serializer.writeField(field.getName(), field.getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
