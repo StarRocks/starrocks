@@ -300,7 +300,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     使用指定的 key 列和指定的数值范围进行分区。
 
     - 分区名称的命名要求，参见[系统限制](../../../reference/System_limit.md)。
-    - 3.0.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.0.0 起，支持 Range 分区列为时间戳和字符串类型。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md)。
+    - 3.0.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.0.0 起，支持 Range 分区列为时间戳和字符串类型。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
     - 分区为左闭右开区间，首个分区的左边界为最小值。
     - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
