@@ -649,6 +649,11 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
 
             tablet_mgr->metacache()->erase(log_path);
         }
+        for (auto&& info : request.txn_infos()) {
+            auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
+                                                    : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
+            files_to_delete.emplace_back(log_path);
+        }
     }
 
     delete_files_async(files_to_delete);
