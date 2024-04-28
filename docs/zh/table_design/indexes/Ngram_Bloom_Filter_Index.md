@@ -100,7 +100,7 @@ ALTER TABLE table1 DROP INDEX new_index_name;
 
 ### ngram_search_case_insensitive
 
-该函数的使用方式与 `ngram_search` 相同，但在创建 N-Gram Bloom Filter 索引时必须设置 `case_sensitive` 为 `false`：
+ngram_search_case_insensitive 对小大写敏感外之外，除此之外，该函数的使用方式与 `ngram_search` 相同。在创建 N-Gram Bloom Filter 索引时必须设置 `case_sensitive` 为 `false`：
 
 ```SQL
 CREATE TABLE test.table1
