@@ -678,7 +678,6 @@ void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
         for (const auto& slot : _equality_delete_slots) {
             if (!id_to_slots.contains(slot->id())) {
                 const auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-                column->reserve(n);
                 (*chunk)->append_column(column, slot->id());
             }
         }
