@@ -626,7 +626,7 @@ public class TableFunctionTable extends Table {
             String useLegacyEncoding = properties.getOrDefault(PROPERTY_PARQUET_USE_LEGACY_ENCODING, "false");
             if (!useLegacyEncoding.equalsIgnoreCase("true") && !useLegacyEncoding.equalsIgnoreCase("false")) {
                 throw new SemanticException("got invalid parameter \"parquet.use_legacy_encoding\" = \"%s\", " +
-                        "expect a boolean value (true or false).", single);
+                        "expect a boolean value (true or false).", useLegacyEncoding);
             }
             this.parquetUseLegacyEncoding = useLegacyEncoding.equalsIgnoreCase("true");
         }
