@@ -142,7 +142,7 @@ private:
                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                     const CallbackFunction& write_leaf_callback);
 
-    template <typename cpp_type>
+    template <bool use_int96_timestamp_encoding>
     Status _write_datetime_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                         const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                         const CallbackFunction& write_leaf_callback);

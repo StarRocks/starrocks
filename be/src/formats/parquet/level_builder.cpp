@@ -133,9 +133,9 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
     }
     case TYPE_DATETIME: {
         if (_use_int96_timestamp_encoding) {
-            return _write_datetime_column_chunk<::parquet::Int96>(ctx, type_desc, node, col, write_leaf_callback);
+            return _write_datetime_column_chunk<true>(ctx, type_desc, node, col, write_leaf_callback);
         } else {
-            return _write_datetime_column_chunk<int64_t>(ctx, type_desc, node, col, write_leaf_callback);
+            return _write_datetime_column_chunk<false>(ctx, type_desc, node, col, write_leaf_callback);
         }
     }
     case TYPE_CHAR:
@@ -245,6 +245,7 @@ Status LevelBuilder::_write_decimal_to_flba_column_chunk(const LevelBuilderConte
                                                          const TypeDescriptor& type_desc,
                                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                                          const CallbackFunction& write_leaf_callback) {
+    static_assert(lt_is_decimal<lt>);
     const auto* data_col = get_raw_data_column<lt>(col);
     const auto* null_col = get_raw_null_column(col);
 
@@ -341,7 +342,7 @@ Status LevelBuilder::_write_time_column_chunk(const LevelBuilderContext& ctx, co
     return Status::OK();
 }
 
-template <typename cpp_type>
+template <bool use_int96_timestamp_encoding>
 Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                                   const CallbackFunction& write_leaf_callback) {
@@ -353,13 +354,12 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
     auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
+    using cpp_type = std::conditional_t<use_int96_timestamp_encoding, ::parquet::Int96, int64_t>;
     auto values = new cpp_type[col->size()];
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
-        if constexpr (std::is_same_v<cpp_type, int64_t>) {
-            values[i] = data_col[i].to_unix_second() * 1000;
-        } else if constexpr (std::is_same_v<cpp_type, ::parquet::Int96>) {
+        if constexpr (use_int96_timestamp_encoding) {
             // normalize to utc
             auto timestamp = timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, _offset);
             auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
@@ -367,7 +367,7 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
             *date = timestamp::to_julian(timestamp);
             *nanosecond = timestamp::to_time(timestamp) * 1000;
         } else {
-            CHECK(false) << "unreachable";
+            values[i] = data_col[i].to_unix_second() * 1000;
         }
     }
 
