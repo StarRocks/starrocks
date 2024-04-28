@@ -1327,7 +1327,7 @@ public class OlapScanNode extends ScanNode {
             // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
             // maybe invalid.
             Preconditions.checkState(tabletToPartitionMap.containsKey(tabletId),
-                    String.format("Invalid tablet id: '%s'", tabletId));
+                    "Invalid tablet id: '" + tabletId + "'");
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }
