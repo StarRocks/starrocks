@@ -17,6 +17,7 @@ displayed_sidebar: "Chinese"
 
 - [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md)（从 v3.0 开始支持）
 - [INSERT](./INSERT.md)（从 v3.0 开始支持）
+- [CACHE SELECT](../../../data_source/data_cache_warmup.md)（从 v3.3 开始支持）
 
 您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
 
