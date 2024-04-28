@@ -95,9 +95,14 @@ public:
     }
 
     void set_status(const Status& status) {
-        if (status.ok()) return;
+        if (status.ok()) {
+            return;
+        }
+
         std::lock_guard l(_status_lock);
-        if (_status.ok()) _status = status;
+        if (_status.ok()) {
+            _status = status;
+        }
     }
 
 private:
@@ -132,6 +137,10 @@ public:
     // init should be called after storage engine is opened,
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
+
+    Status init_for_lake_table(const std::vector<DataDir*>& data_dirs);
+
+    static int calc_max_threads_for_lake_table(const std::vector<DataDir*>& data_dirs);
 
     // dynamic update max threads num
     Status update_max_threads(int max_threads);

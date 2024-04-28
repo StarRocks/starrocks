@@ -375,4 +375,28 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
     ASSERT_TRUE(flush_token->wait().ok());
 }
 
+TEST_F(MemTableFlushExecutorTest, testMemtableFlushStatusNotOk) {
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushStatusNotOk";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    ASSERT_TRUE(flush_token->status().ok());
+
+    flush_token->set_status(Status::OK());
+    ASSERT_TRUE(flush_token->status().ok());
+
+    flush_token->set_status(Status::NotSupported("Not Suppoted"));
+    ASSERT_FALSE(flush_token->status().ok());
+
+    flush_token->_flush_memtable(nullptr, nullptr);
+
+    ASSERT_TRUE(MemTableFlushExecutor::calc_max_threads_for_lake_table(data_dirs) > 0);
+}
+
 } // namespace starrocks

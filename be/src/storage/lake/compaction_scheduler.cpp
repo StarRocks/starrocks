@@ -303,7 +303,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         ThreadPool* flush_pool = nullptr;
         if (config::lake_enable_compaction_async_write) {
             // CAUTION: we reuse delta writer's memory table flush pool here
-            flush_pool = StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+            flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
             if (UNLIKELY(flush_pool == nullptr)) {
                 return Status::InternalError("Get memory table flush pool failed");
             }
