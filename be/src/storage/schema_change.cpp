@@ -914,7 +914,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
     read_params.chunk_size = config::vector_chunk_size;
     if (sc_params.sc_directly) {
         // If the segments of rowset is overlapping, will should use heap merge,
-        // otherwise the Otherwise ShortKeyIndex is not ordered
+        // otherwise the rows is not ordered by short key.
         read_params.sorted_by_keys_per_tablet = true;
     }
 
