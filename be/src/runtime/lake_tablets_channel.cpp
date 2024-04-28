@@ -38,7 +38,6 @@
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
-#include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"

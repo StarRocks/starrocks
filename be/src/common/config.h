@@ -588,6 +588,10 @@ CONF_mDouble(storage_high_usage_disk_protect_ratio, "0.1"); // 10%
 // Number of thread for flushing memtable per store.
 CONF_mInt32(flush_thread_num_per_store, "2");
 
+// Number of thread for flushing memtable per store in shared-data mode.
+// Default value is cpu cores * 2
+CONF_mInt32(lake_flush_thread_num_per_store, "0");
+
 // Config for tablet meta checkpoint.
 CONF_mInt32(tablet_meta_checkpoint_min_new_rowsets_num, "10");
 CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");

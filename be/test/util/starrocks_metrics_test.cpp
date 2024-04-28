@@ -322,6 +322,7 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("segment_flush_bytes_total"));
     assert_threadpool_metrics_register("async_delta_writer", instance);
     assert_threadpool_metrics_register("memtable_flush", instance);
+    assert_threadpool_metrics_register("lake_memtable_flush", instance);
     assert_threadpool_metrics_register("segment_replicate", instance);
     assert_threadpool_metrics_register("segment_flush", instance);
     assert_threadpool_metrics_register("update_apply", instance);
