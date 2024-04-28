@@ -18,6 +18,10 @@ import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> 5b00b70c4a ([Enhancement] Support to batch drop partitions (#43539))
 
 // clause which is used to add one column to
 public class DropPartitionClause extends AlterTableClause {
@@ -26,6 +30,8 @@ public class DropPartitionClause extends AlterTableClause {
     // true if this is to drop a temp partition
     private final boolean isTempPartition;
     private final boolean forceDrop;
+    private final PartitionDesc partitionDesc;
+    private final List<String> partitionNames;
 
     //Object Resolved by Analyzer
     private List<String> resolvedPartitionNames;
@@ -41,6 +47,32 @@ public class DropPartitionClause extends AlterTableClause {
         this.partitionName = partitionName;
         this.isTempPartition = isTempPartition;
         this.forceDrop = forceDrop;
+        this.partitionDesc = null;
+        this.partitionNames = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, List<String> partitionNames, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.needTableStable = false;
+        this.forceDrop = forceDrop;
+        this.partitionDesc = null;
+        this.partitionNames = partitionNames;
+    }
+
+    public DropPartitionClause(boolean ifExists, PartitionDesc partitionDesc, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.needTableStable = false;
+        this.forceDrop = forceDrop;
+        this.partitionDesc = partitionDesc;
+        this.partitionNames = null;
     }
 
     public List<String> getResolvedPartitionNames() {
@@ -65,6 +97,18 @@ public class DropPartitionClause extends AlterTableClause {
 
     public boolean isForceDrop() {
         return forceDrop;
+    }
+
+    public boolean hasMultiPartitions() {
+        return partitionDesc != null;
+    }
+
+    public PartitionDesc getPartitionDesc() {
+        return partitionDesc;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
     }
 
     @Override

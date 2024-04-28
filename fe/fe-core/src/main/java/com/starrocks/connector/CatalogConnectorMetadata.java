@@ -262,9 +262,15 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
         normal.addPartitions(ctx, db, tableName, addPartitionClause);
+=======
+    public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
+            throws DdlException {
+        normal.addPartitions(db, tableName, addPartitionClause);
+>>>>>>> 5b00b70c4a ([Enhancement] Support to batch drop partitions (#43539))
     }
 
     @Override

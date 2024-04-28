@@ -271,6 +271,11 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayDropPartition(info);
                     break;
                 }
+                case OperationType.OP_DROP_PARTITIONS: {
+                    DropPartitionsInfo info = (DropPartitionsInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDropPartitions(info);
+                    break;
+                }
                 case OperationType.OP_MODIFY_PARTITION:
                 case OperationType.OP_MODIFY_PARTITION_V2: {
                     ModifyPartitionInfo info = (ModifyPartitionInfo) journal.getData();
@@ -1407,6 +1412,10 @@ public class EditLog {
 
     public void logDropPartition(DropPartitionInfo info) {
         logEdit(OperationType.OP_DROP_PARTITION, info);
+    }
+
+    public void logDropPartitions(DropPartitionsInfo info) {
+        logEdit(OperationType.OP_DROP_PARTITIONS, info);
     }
 
     public void logErasePartition(long partitionId) {

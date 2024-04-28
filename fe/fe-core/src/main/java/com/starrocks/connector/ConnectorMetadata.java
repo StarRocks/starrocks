@@ -285,8 +285,13 @@ public interface ConnectorMetadata {
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
     }
 
+<<<<<<< HEAD
     default void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
+=======
+    default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
+            throws DdlException {
+>>>>>>> 5b00b70c4a ([Enhancement] Support to batch drop partitions (#43539))
     }
 
     default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {

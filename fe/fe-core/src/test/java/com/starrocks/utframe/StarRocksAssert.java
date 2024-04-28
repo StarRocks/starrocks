@@ -293,25 +293,27 @@ public class StarRocksAssert {
         utCreateTableWithRetry(createTableStmt, connectContext);
     }
 
-    // retry 3 times when create table in ut to avoid
-    // table creation timeout caused by heavy load of testing machine
-    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt, ConnectContext ctx) throws Exception {
-        int retryTime = 0;
-        final int MAX_RETRY_TIME = 3;
+    public static void utDropTableWithRetry(DropTableStmt dropTableStmt) throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.setDatabase(dropTableStmt.getDbName());
+        utDropTableWithRetry(dropTableStmt, connectContext);
+    }
 
-        while (retryTime < MAX_RETRY_TIME) {
+    @FunctionalInterface
+    public interface RetryableOperation {
+        void execute(int retryTime) throws Exception;
+    }
+
+    // retry 3 times when operator table in ut to avoid
+    // table operation timeout caused by heavy load of testing machine
+    public static void executeWithRetry(RetryableOperation operation, String operationMsg, int maxRetryTime) throws Exception {
+        int retryTime = 0;
+        while (retryTime < maxRetryTime) {
             try {
-                CreateTableStmt createTableStmtCopied = createTableStmt;
-                if (retryTime > 0) {
-                    // copy `createTableStmt` after the first retry, because the state of `createTableStmt`
-                    // may change and throw different error after retry
-                    createTableStmtCopied = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
-                            createTableStmt.getOrigStmt().originStmt, ctx);
-                }
-                GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmtCopied);
+                operation.execute(retryTime);
                 break;
             } catch (Exception e) {
-                if (retryTime == MAX_RETRY_TIME - 1) {
+                if (retryTime == maxRetryTime - 1) {
                     if (e.getCause() instanceof DdlException) {
                         throw new DdlException(e.getMessage());
                     } else if (e.getCause() instanceof SemanticException) {
@@ -323,11 +325,33 @@ public class StarRocksAssert {
                     }
                 }
                 retryTime++;
-                System.out.println("ut create table failed with " + retryTime + " time retry, msg: " +
+                System.out.println(operationMsg + " failed with " + retryTime + " time retry, msg: " +
                         e.getMessage() + ", " + Arrays.toString(e.getStackTrace()));
                 Thread.sleep(500);
             }
         }
+    }
+
+    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt, ConnectContext ctx) throws Exception {
+        executeWithRetry((retryTime) -> {
+            CreateTableStmt createTableStmtCopied = createTableStmt;
+            if (retryTime > 0) {
+                createTableStmtCopied = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                        createTableStmt.getOrigStmt().originStmt, ctx);
+            }
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmtCopied);
+        }, "Create Table", 3);
+    }
+
+    public static void utDropTableWithRetry(DropTableStmt dropTableStmt, ConnectContext ctx) throws Exception {
+        executeWithRetry((retryTime) -> {
+            DropTableStmt dropTableStmtCopied = dropTableStmt;
+            if (retryTime > 0) {
+                dropTableStmtCopied = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                        dropTableStmt.getOrigStmt().originStmt, ctx);
+            }
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmtCopied);
+        }, "Drop Table", 3);
     }
 
     public StarRocksAssert withTable(String sql) throws Exception {

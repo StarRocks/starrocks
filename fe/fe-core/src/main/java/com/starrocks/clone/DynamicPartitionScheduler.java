@@ -283,7 +283,24 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, null, null, false));
             } else {
                 // construct distribution desc
+<<<<<<< HEAD
                 DistributionDesc distributionDesc = createDistributionDesc(olapTable, dynamicPartitionProperty);
+=======
+                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+                DistributionDesc distributionDesc = null;
+                if (distributionInfo instanceof HashDistributionInfo) {
+                    HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+                    List<String> distColumnNames = new ArrayList<>();
+                    for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
+                        distColumnNames.add(distributionColumn.getName());
+                    }
+                    distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
+                            distColumnNames);
+                } else if (distributionInfo instanceof RandomDistributionInfo) {
+                    distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
+                }
+
+>>>>>>> 5b00b70c4a ([Enhancement] Support to batch drop partitions (#43539))
                 // add partition according to partition desc and distribution desc
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
             }
@@ -474,7 +491,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(ctx,
                                 db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
+<<<<<<< HEAD
                 } catch (Exception e) {
+=======
+                } catch (DdlException e) {
+>>>>>>> 5b00b70c4a ([Enhancement] Support to batch drop partitions (#43539))
                     recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
                 }
             }

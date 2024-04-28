@@ -292,6 +292,7 @@ public enum ErrorCode {
                     "A default storage volume can be created by following these steps: " +
                     "1. Create a storage volume. 2. Set the storage volume as default"),
     ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
+<<<<<<< HEAD
             "Can not enable replicated storage when the table has GIN"),
     ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
     ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
@@ -303,6 +304,13 @@ public enum ErrorCode {
             "Can not rename column in internal database: %s"),
     ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
             "Can not rename column of table in %s state"),
+=======
+                "Can not enable replicated storage when the table has GIN"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(5507, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch drop partition only support RangePartitionInfo"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]"),
+>>>>>>> 5b00b70c4a ([Enhancement] Support to batch drop partitions (#43539))
 
     /**
      * 5600 - 5699: DML operation failure

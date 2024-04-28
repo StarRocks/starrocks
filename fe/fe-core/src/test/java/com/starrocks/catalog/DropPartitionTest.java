@@ -42,13 +42,17 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class DropPartitionTest {
@@ -62,13 +66,7 @@ public class DropPartitionTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database test;";
-        String createTableStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
-                + "PARTITION BY RANGE(d1) (PARTITION p20210201 VALUES [('2021-02-01'), ('2021-02-02')),"
-                + "PARTITION p20210202 VALUES [('2021-02-02'), ('2021-02-03')),"
-                + "PARTITION p20210203 VALUES [('2021-02-03'), ('2021-02-04'))) distributed by hash(k1) "
-                + "buckets 1 properties('replication_num' = '1');";
         createDb(createDbStmtStr);
-        createTable(createTableStr);
     }
 
     private static void waitPartitionClearFinished(long id, long time) {
@@ -85,13 +83,24 @@ public class DropPartitionTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
     }
-
-    private static void createTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    @Before
+    public void createTable() throws Exception {
+        String createTableStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
+                + "PARTITION BY RANGE(d1) (PARTITION p20210201 VALUES [('2021-02-01'), ('2021-02-02')),"
+                + "PARTITION p20210202 VALUES [('2021-02-02'), ('2021-02-03')),"
+                + "PARTITION p20210203 VALUES [('2021-02-03'), ('2021-02-04'))) distributed by hash(k1) "
+                + "buckets 1 properties('replication_num' = '1');";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableStr, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
+    @After
+    public void dropTable() throws Exception {
+        String dropTableStr = "drop table if exists test.tbl1 force";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropTableStr, connectContext);
+        StarRocksAssert.utDropTableWithRetry(dropTableStmt);
+    }
 
-    private static void dropPartition(String sql) throws Exception {
+    private void dropPartition(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         DDLStmtExecutor.execute(alterTableStmt, connectContext);
     }
@@ -157,5 +166,126 @@ public class DropPartitionTest {
         partition = table.getPartition("p20210203");
         Assert.assertEquals(1, replicaList.size());
         Assert.assertNull(partition);
+    }
+
+    @Test
+    public void testNormalDropMultiRangePartition() throws Exception {
+        String dbName = "test";
+        String tableName = "tbl1";
+        String dropPartitionSql = "alter table %s.%s DROP PARTITIONS " +
+                "IF EXISTS START(\"2021-02-01\") END(\"2021-02-03\") EVERY (INTERVAL 1 DAY);";
+        checkNormalDropPartitions(dbName, tableName, dropPartitionSql);
+    }
+
+    @Test
+    public void testForceDropMultiRangePartition() throws Exception {
+        String dropPartitionSql = "alter table test.tbl1 DROP PARTITIONS " +
+                "IF EXISTS START(\"2021-02-01\") END(\"2021-02-03\") EVERY (INTERVAL 1 DAY) force;";
+        checkForceDropPartitions(dropPartitionSql);
+    }
+
+    @Test
+    public void testNormalDropIdentifierListPartition() throws Exception {
+        String dbName = "test";
+        String tableName = "tbl1";
+        String dropPartitionSql = "alter table %s.%s DROP PARTITIONS " +
+                "IF EXISTS (p20210201,p20210202) ";
+        checkNormalDropPartitions(dbName, tableName, dropPartitionSql);
+    }
+
+    @Test
+    public void testForceDropIdentifierListPartition() throws Exception {
+        String dropPartitionSql = "alter table test.tbl1 DROP PARTITIONS " +
+                "IF EXISTS (p20210201,p20210202) force;";
+        checkForceDropPartitions(dropPartitionSql);
+    }
+
+    private void checkNormalDropPartitions(String dbName, String tableName, String dropPartitionSql) throws Exception {
+        List<String> partitionNames = new ArrayList<>();
+        partitionNames.add("p20210201");
+        partitionNames.add("p20210202");
+        List<Long> tabletIds = new ArrayList<>();
+        for (String partitionName : partitionNames) {
+            Table table = getTable(dbName, tableName);
+            Partition partition = table.getPartition(partitionName);
+            long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            tabletIds.add(tabletId);
+        }
+        dropPartition(String.format(dropPartitionSql, dbName, tableName));
+        for (int i = 0; i < partitionNames.size(); i++) {
+            String partitionName = partitionNames.get(i);
+            long tabletId = tabletIds.get(i);
+            checkBeforeDrop(dbName, tableName, partitionName, tabletId);
+            checkAfterRecover(dbName, tableName, partitionName);
+        }
+    }
+
+    private void checkForceDropPartitions(String dropPartitionSql) throws Exception {
+        List<String> partitionNames = new ArrayList<>();
+        List<Long> tabletIds = new ArrayList<>();
+        String dbName = "test";
+        String tableName = "tbl1";
+        partitionNames.add("p20210201");
+        partitionNames.add("p20210202");
+        for (String partitionName : partitionNames) {
+            Table table = getTable(dbName, tableName);
+            Partition partition = table.getPartition(partitionName);
+            long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            tabletIds.add(tabletId);
+        }
+        dropPartition(dropPartitionSql);
+        Table table = getTable(dbName, tableName);
+        for (int i = 0; i < partitionNames.size(); i++) {
+            String partitionName = partitionNames.get(i);
+            long tabletId = tabletIds.get(i);
+            List<Replica> replicaList =
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+            Partition partition = table.getPartition(partitionName);
+            Assert.assertFalse(replicaList.isEmpty());
+            Assert.assertNull(partition);
+            String recoverPartitionSql = "recover partition %s from test.tbl1";
+            RecoverPartitionStmt recoverPartitionStmt =
+                    (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(String.format(recoverPartitionSql,
+                            partitionName), connectContext);
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    String.format("No partition named '%s' in recycle bin that belongs to table '%s'", partitionName, "tbl1"),
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
+        }
+        //该方法会立马删除partition
+        GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        for (int i = 0; i < partitionNames.size(); i++) {
+            long tabletId = tabletIds.get(i);
+            List<Replica> replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+            Assert.assertTrue(replicaList.isEmpty());
+        }
+    }
+
+    private void checkBeforeDrop(String dbName, String tableName, String partitionName, long tabletId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        List<Replica> replicaList =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        Partition partition = table.getPartition(partitionName);
+        Assert.assertEquals(1, replicaList.size());
+        Assert.assertNull(partition);
+    }
+
+    private void checkAfterRecover(String dbName, String tableName, String partitionName) throws Exception {
+        Partition partition = recoverPartition(dbName, tableName, partitionName);
+        Assert.assertNotNull(partition);
+        Assert.assertEquals(partitionName, partition.getName());
+    }
+
+    private Partition recoverPartition(String db, String table, String partitionName) throws Exception {
+        String recoverPartitionSql = String.format("recover partition %s from %s.%s", partitionName, db, table);
+        RecoverPartitionStmt recoverPartitionStmt =
+                (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt);
+        return getTable(db, table).getPartition(partitionName);
+    }
+
+    private Table getTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        return (OlapTable) db.getTable(tableName);
     }
 }
