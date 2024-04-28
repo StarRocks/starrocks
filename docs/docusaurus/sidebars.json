@@ -274,9 +274,25 @@
                         "data_source/catalog/query_external_data"
                     ]
                 },
+                {
+                    "type": "category",
+                    "label": "Data cache",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/data_cache"
+                    },
+                    "items": [
+                        "data_source/data_cache",
+                        "data_source/data_cache_warmup",
+                        "data_source/data_cache_observe"
+                    ]
+                },
                 "data_source/External_table",
                 "data_source/file_external_table",
+<<<<<<< HEAD
                 "data_source/data_cache",
+=======
+>>>>>>> 3ce1331a33 ([Doc] add doc for 3.3 cache observability (#44908))
                 "data_source/datalake_faq"
             ]
         },
@@ -1700,9 +1716,25 @@
                         "data_source/catalog/query_external_data"
                     ]
                 },
+                {
+                    "type": "category",
+                    "label": "Data cache",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/data_cache"
+                    },
+                    "items": [
+                        "data_source/data_cache",
+                        "data_source/data_cache_warmup",
+                        "data_source/data_cache_observe"
+                    ]
+                },
                 "data_source/External_table",
                 "data_source/file_external_table",
+<<<<<<< HEAD
                 "data_source/data_cache",
+=======
+>>>>>>> 3ce1331a33 ([Doc] add doc for 3.3 cache observability (#44908))
                 "data_source/datalake_faq"
             ]
         },
