@@ -4,6 +4,31 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.11
+
+发布日期：2024 年 4 月 28 日
+
+### 行为变更
+
+- 禁止删除系统数据库 `information_schema` 中的视图。[#43556](https://github.com/StarRocks/starrocks/pull/43556)
+- 主键表的排序键（由 ORDER BY 语句指定）中不再支持指定重复的列。[#43374](https://github.com/StarRocks/starrocks/pull/43374)
+
+### 功能优化
+
+- 支持读取 Iceberg 中 Equality Delete 的 Parquet 文件。[#42489](https://github.com/StarRocks/starrocks/pull/42489)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。[#44061](https://github.com/StarRocks/starrocks/pull/44061)
+- `str_to_map` 函数使用时可能会导致 BE crash。[#43930](https://github.com/StarRocks/starrocks/pull/43930)
+- 使用 Routine Load 导入数据时，执行 `show proc '/routine_loads'` 会卡住，是因为内部有死锁问题。[#44249](https://github.com/StarRocks/starrocks/pull/44249)
+- 主键表的 Persistent Index 在使用中可能会因为内部并发控制问题而导致 BE crash。[#43720](https://github.com/StarRocks/starrocks/pull/43720)
+- 通过 `leaderFE_IP:8030` 界面查到的 `pending_task_run_count` 数据错误，当前统计的是 Pending+Running 的总数，而不是 Pending 的任务数。同时，从 `followerFE_IP:8030` 查不到 `refresh_pending` 监控指标的信息。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 查询 `information_schema.task_runs` 会频繁失败。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 一些含有 CTE 的 SQL 查询时会报 `Invalid plan: PhysicalTopNOperator` 错误。[#44185](https://github.com/StarRocks/starrocks/pull/44185)
+
 ## 3.1.10（已下线）
 
 发布日期：2024 年 3 月 29 日
