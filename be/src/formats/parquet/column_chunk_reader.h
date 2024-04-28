@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -26,13 +28,22 @@
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
 #include "formats/parquet/page_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 class BlockCompressionCodec;
+class NullableColumn;
+
+namespace io {
+class SeekableInputStream;
+} // namespace io
 } // namespace starrocks
 
 namespace starrocks::parquet {
