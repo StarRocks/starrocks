@@ -16,11 +16,20 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
+import io.delta.kernel.Table;
+import io.delta.kernel.TableNotFoundException;
+import io.delta.kernel.client.TableClient;
+import io.delta.kernel.internal.SnapshotImpl;
+import io.delta.kernel.internal.TableImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.hadoop.conf.Configuration;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -76,5 +85,46 @@ public class DeltaUtilsTest {
 
         DeltaUtils.checkTableFeatureSupported(new Protocol(3, 7, Lists.newArrayList(),
                 Lists.newArrayList()), metadata);
+    }
+
+    @Test
+    public void testConvertDeltaToSRTableWithException1() {
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("Failed to find Delta table for catalog.db.tbl");
+
+        new MockUp<Table>() {
+            @mockit.Mock
+            public Table forPath(TableClient tableClient, String path) throws TableNotFoundException {
+                throw new TableNotFoundException("Table not found");
+            }
+        };
+
+        DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
+                new Configuration(), 0);
+    }
+
+    @Test
+    public void testConvertDeltaToSRTableWithException2() {
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("Failed to get latest snapshot for catalog.db.tbl");
+        Table table = new Table() {
+            public Table forPath(TableClient tableClient, String path) {
+                return this;
+            }
+            @Override
+            public SnapshotImpl getLatestSnapshot(TableClient tableClient) {
+                throw new RuntimeException("Failed to get latest snapshot");
+            }
+        };
+
+        new MockUp<TableImpl>() {
+            @Mock
+            public Table forPath(TableClient tableClient, String path) {
+                return table;
+            }
+        };
+
+        DeltaUtils.convertDeltaToSRTable("catalog", "db", "tbl", "path",
+                new Configuration(), 0);
     }
 }
