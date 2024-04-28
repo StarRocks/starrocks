@@ -38,6 +38,7 @@
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
+#include "util/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -243,6 +244,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     if (ScanOperator* scan = source_scan_operator()) {
         scan->begin_driver_process();
     }
+    WARN_IF_TIMEOUT(fmt::format("worker id:{}, driver:{}", worker_id, this->to_readable_string()));
 
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
