@@ -127,7 +127,8 @@ public:
     StatusOr<ByteBufferPtr> read() override;
 
 private:
-    const size_t DEFAULT_DECOMPRESS_BUFFER_SIZE = 32 * 1024 * 1024;
+    const size_t DEFAULT_DECOMPRESS_BUFFER_SIZE = 1024 * 1024;
+    const size_t MAX_DECOMPRESS_BUFFER_SIZE = 128 * 1024 * 1024;
     TCompressionType::type _compression_type;
     ByteBufferPtr _decompressed_buffer;
     std::unique_ptr<StreamCompression> _decompressor;

@@ -282,6 +282,7 @@ CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<S
         : StreamLoadPipeReader(std::move(pipe)), _compression_type(compression_type) {}
 
 StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
+    size_t buffer_size = DEFAULT_DECOMPRESS_BUFFER_SIZE;
     if (_decompressor == nullptr) {
         auto compression = CompressionUtils::to_compression_pb(_compression_type);
         if (compression == CompressionTypePB::UNKNOWN_COMPRESSION) {
@@ -291,7 +292,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     }
 
     if (_decompressed_buffer == nullptr) {
-        _decompressed_buffer = ByteBuffer::allocate(DEFAULT_DECOMPRESS_BUFFER_SIZE);
+        _decompressed_buffer = ByteBuffer::allocate(buffer_size);
     }
 
     ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
@@ -310,9 +311,11 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
 
     std::list<ByteBufferPtr> pieces;
     size_t pieces_size = 0;
+    // read all pieces
     while (!stream_end) {
-        // read all pieces
-        auto piece = ByteBuffer::allocate(DEFAULT_DECOMPRESS_BUFFER_SIZE);
+        // buffer size grows exponentially
+        buffer_size = buffer_size < MAX_DECOMPRESS_BUFFER_SIZE ? buffer_size * 2 : MAX_DECOMPRESS_BUFFER_SIZE;
+        auto piece = ByteBuffer::allocate(buffer_size);
         RETURN_IF_ERROR(_decompressor->decompress(
                 reinterpret_cast<uint8_t*>(buf->ptr) + total_bytes_read, buf->remaining() - total_bytes_read,
                 &bytes_read, reinterpret_cast<uint8_t*>(piece->ptr), piece->capacity, &bytes_written, &stream_end));
