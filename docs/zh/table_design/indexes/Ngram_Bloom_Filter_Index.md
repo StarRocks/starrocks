@@ -17,7 +17,7 @@ N-Gram Bloom Filter 索引是一种特殊的 [Bloom Filter 索引](./Bloomfilter
 ## 使用说明
 
 - 您可以为明细表或主键表的所有字符串列创建 N-Gram Bloom Filter 索引。对于聚合表或更新，只能为 Key 列创建 N-Gram Bloom Filter 索引。
-- N-Gram Bloom Filter 索引可以用于以下数据类型的列：字符串类型（CHAR、STRING 和 VARCHAR）。
+- N-Gram Bloom Filter 索引可以用于字符串类型（CHAR、STRING 和 VARCHAR）的列。
 - 要确定查询是否命中 N-Gram Bloom Filter 索引，可以查看查询的 Profile 中的 `BloomFilterFilterRows` 字段。
 - 对于单个列，只能创建 Bloom Filter 或 N-Gram Bloom Filter 其中一种类型的索引。
 
