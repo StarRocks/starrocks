@@ -121,6 +121,8 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             for (Map.Entry<TUniqueId, Long> entry : monitorQueryMap.entrySet()) {
                 if (now > entry.getValue()) {
                     LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
+                    // put profile upload task into profile-worker threadPool, so we can get the most complete profile in FE
+                    getCoordinator(entry.getKey()).finishProfileUpload();
                     unregisterQuery(entry.getKey());
                     monitorQueryMap.remove(entry.getKey());
                 }

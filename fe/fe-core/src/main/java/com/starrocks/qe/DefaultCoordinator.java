@@ -1143,4 +1143,8 @@ public class DefaultCoordinator extends Coordinator {
             queryProfile.getQueryProfile().addChild(profile);
         }
     }
+
+    public void finishProfileUpload() {
+        queryProfile.finishAllInstances(Status.OK);
+    }
 }
