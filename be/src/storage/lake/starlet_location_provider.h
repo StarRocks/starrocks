@@ -32,7 +32,7 @@ public:
 
     std::string root_location(int64_t tablet_id) const override;
 
-    StatusOr<std::string> real_location(std::string virtual_path) const override;
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override;
 };
 
 } // namespace starrocks::lake

@@ -47,7 +47,7 @@ public:
     // NOTE: you should *NOT* use the real path to read and write objects, otherwise reading and writing
     // may fail or the behavior does not meet expectations (I know this sounds strange, but this is the
     // truth).
-    virtual StatusOr<std::string> real_location(std::string virtual_path) const { return virtual_path; };
+    virtual StatusOr<std::string> real_location(const std::string& virtual_path) const { return virtual_path; };
 
     std::string metadata_root_location(int64_t tablet_id) const {
         return join_path(root_location(tablet_id), kMetadataDirectoryName);
