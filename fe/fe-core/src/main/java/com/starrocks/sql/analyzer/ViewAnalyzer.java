@@ -60,7 +60,10 @@ public class ViewAnalyzer {
                 }
             }.visit(stmt.getQueryStatement());
             Analyzer.analyze(stmt.getQueryStatement(), context);
-
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
             String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
@@ -93,6 +96,10 @@ public class ViewAnalyzer {
                     }
                 }.visit(alterViewClause.getQueryStatement());
                 Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+                boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
+                if (hasTemporaryTable) {
+                    throw new SemanticException("View can't base on temporary table");
+                }
 
                 List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
                         alterViewClause.getColWithComments());

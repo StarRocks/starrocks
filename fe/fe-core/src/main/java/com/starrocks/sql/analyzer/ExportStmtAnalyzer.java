@@ -69,11 +69,15 @@ public class ExportStmtAnalyzer {
             TableName tableName = statement.getTableRef().getName();
             // make sure catalog, db, table
             MetaUtils.normalizationTableName(context, tableName);
-            Table table = MetaUtils.getTable(context, tableName);
+            Table table = MetaUtils.getSessionAwareTable(context, null, tableName);
             if (table.getType() == Table.TableType.OLAP &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE ||
                             ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
+            }
+            if (table.isTemporaryTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Do not support exporting temporary table");
             }
             statement.setTblName(tableName);
             PartitionNames partitionNames = statement.getTableRef().getPartitionNames();

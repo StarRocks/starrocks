@@ -101,7 +101,7 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
             MetaUtils.normalizationTableName(session, statement.getTableName());
-            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
 
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
@@ -171,7 +171,7 @@ public class AnalyzeStmtAnalyzer {
                     String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
                             session.getDatabase() : tbl.getDb();
                     tbl.setDb(dbName);
-                    Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
                     if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
                             !analyzeTable.isOdpsTable()) {
                         throw new SemanticException("Analyze external table only support hive, iceberg and odps table",
@@ -191,7 +191,7 @@ public class AnalyzeStmtAnalyzer {
                 } else if (null != statement.getTableName().getTbl()) {
                     MetaUtils.normalizationTableName(session, statement.getTableName());
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
-                    Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, statement.getTableName());
 
                     if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
                         throw new SemanticException("Don't support analyze external table created by resource mapping");
@@ -260,7 +260,7 @@ public class AnalyzeStmtAnalyzer {
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
                 List<Expr> columns = statement.getColumns();
-                Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
                 if (!isSupportedHistogramAnalyzeTableType(analyzeTable)) {
                     throw new SemanticException("Can't create histogram statistics on table type is %s",
                             analyzeTable.getType().name());
@@ -352,7 +352,7 @@ public class AnalyzeStmtAnalyzer {
                 statement.setExternal(true);
             }
 
-            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
             List<Expr> columns = statement.getColumns();
             List<String> realColumnNames = Lists.newArrayList();
             for (Expr column : columns) {

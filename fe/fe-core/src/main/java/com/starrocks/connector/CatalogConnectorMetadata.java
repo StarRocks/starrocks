@@ -251,8 +251,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
-        normal.truncateTable(truncateTableStmt);
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
+        normal.truncateTable(truncateTableStmt, context);
     }
 
     @Override

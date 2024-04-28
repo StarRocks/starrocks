@@ -25,6 +25,10 @@ public class DropTableStmt extends DdlStmt {
     private final boolean isView;
     private final boolean forceDrop;
 
+    // used to mark whether it should be treated as a temporary table to distinguish subsequent processing logic,
+    // it should be set during analysis phase
+    private boolean temporaryTableMark = false;
+
     public DropTableStmt(boolean ifExists, TableName tableName, boolean forceDrop) {
         this(ifExists, tableName, false, forceDrop, NodePosition.ZERO);
     }
@@ -71,6 +75,14 @@ public class DropTableStmt extends DdlStmt {
 
     public boolean isForceDrop() {
         return this.forceDrop;
+    }
+
+    public void setTemporaryTableMark(boolean mark) {
+        this.temporaryTableMark = mark;
+    }
+
+    public boolean getTemporaryTableMark() {
+        return temporaryTableMark;
     }
 
     @Override

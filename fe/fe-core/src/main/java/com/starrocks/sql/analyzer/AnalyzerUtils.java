@@ -713,6 +713,12 @@ public class AnalyzerUtils {
         return nonOlapTables.isEmpty();
     }
 
+    public static boolean hasTemporaryTables(StatementBase statementBase) {
+        Map<TableName, Table> tables = new HashMap<>();
+        new AnalyzerUtils.TableCollector(tables).visit(statementBase);
+        return tables.values().stream().anyMatch(t -> t.isTemporaryTable());
+    }
+
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
