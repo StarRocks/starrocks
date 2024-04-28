@@ -141,6 +141,10 @@ export LIBHDFS_OPTS=$final_java_opt
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
 export LIBHDFS_OPTS="$LIBHDFS_OPTS -Xrs"
 
+# add custom_libs to CLASSPATH
+for f in $STARROCKS_HOME/custom_lib/*.jar; do
+    CLASSPATH=$f:${CLASSPATH}
+done
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH

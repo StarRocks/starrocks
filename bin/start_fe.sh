@@ -163,6 +163,10 @@ fi
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
 done
+# add custom_libs to CLASSPATH
+for f in $STARROCKS_HOME/custom_lib/*.jar; do
+    CLASSPATH=$f:${CLASSPATH}
+done
 export CLASSPATH=${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
 
 pidfile=$PID_DIR/fe.pid
