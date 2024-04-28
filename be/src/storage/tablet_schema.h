@@ -180,8 +180,6 @@ public:
         return mem_usage;
     }
 
-    bool is_support_checksum() const;
-
 private:
     inline static const std::string kEmptyDefaultValue;
     constexpr static uint8_t kIsKeyShift = 0;

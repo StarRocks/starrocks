@@ -77,18 +77,8 @@ Status EngineChecksumTask::_compute_checksum() {
         return Status::OK();
     }
 
-    std::vector<uint32_t> return_columns;
     auto tablet_schema = tablet->tablet_schema();
-
-    size_t num_columns = tablet_schema->num_columns();
-    for (size_t i = 0; i < num_columns; ++i) {
-        const auto& column = tablet_schema->column(i);
-        if (column.is_support_checksum()) {
-            return_columns.push_back(i);
-        }
-    }
-
-    Schema schema = ChunkHelper::convert_schema(tablet_schema, return_columns);
+    Schema schema = ChunkHelper::convert_schema(tablet_schema);
 
     TabletReader reader(tablet, Version(0, _version), schema);
 

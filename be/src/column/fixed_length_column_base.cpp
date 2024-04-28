@@ -269,6 +269,8 @@ int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const
                 xor_checksum ^= src[i];
             }
         }
+    } else if constexpr (std::is_floating_point_v<T>) {
+        // do nothing
     }
 
     return xor_checksum;
