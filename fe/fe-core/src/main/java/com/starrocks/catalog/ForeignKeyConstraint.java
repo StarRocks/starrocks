@@ -177,10 +177,13 @@ public class ForeignKeyConstraint {
             long dbId = Long.parseLong(db);
             long tableId = Long.parseLong(table);
             Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-            Preconditions.checkArgument(database != null, "BaseInfo's db %s should not null", dbId);
+            if (database == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo's db %s should not null", dbId));
+            }
             Table baseTable = database.getTable(tableId);
-            Preconditions.checkArgument(baseTable != null,
-                    "BaseInfo's baseTable %s should not null", tableId);
+            if (baseTable == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo' base table %s should not null", tableId));
+            }
             baseTableInfo = new BaseTableInfo(dbId, database.getFullName(), baseTable.getName(), tableId);
         } else {
             baseTableInfo = new BaseTableInfo(catalogName, db, table, tableIdentifier);
