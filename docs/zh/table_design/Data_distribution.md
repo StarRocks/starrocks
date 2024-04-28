@@ -261,7 +261,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   <TabItem value="example1" label="分区列为时间戳" default>
 
   ```SQL
-  -- 10 位的时间戳类型，例如：1703832553
+  -- 精确到秒的 10 位时间戳，例如：1703832553
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
@@ -278,7 +278,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   DISTRIBUTED BY HASH(site_id)
   ;
   
-  -- 13 位的时间戳类型，例如：1703832553219
+  -- 精确到毫秒的 13 位时间戳，例如：1703832553219
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
@@ -459,7 +459,6 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
     PARTITION BY RANGE (datekey) (
         START ("1") END ("10") EVERY (1),
         START ("10") END ("100") EVERY (10)
-
     )
     DISTRIBUTED BY HASH(site_id);
     ```
@@ -473,7 +472,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   <TabItem value="example1" label="分区列为时间戳" default>
 
   ```SQL
-  -- 10 位的时间戳类型，例如：1703832553
+  -- 精确到秒的 10 位时间戳，例如：1703832553
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
@@ -482,10 +481,10 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
       pv BIGINT DEFAULT '0'
     )
   PARTITION BY RANGE(from_unixtime(event_time)) (
-  START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+      START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
   )
   DISTRIBUTED BY HASH(site_id);
-  -- 13 位的时间戳类型，例如：1703832553219
+  -- 精确到毫秒的 13 位时间戳，例如：1703832553219
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
@@ -494,7 +493,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
       pv BIGINT DEFAULT '0'
   )
   PARTITION BY RANGE(from_unixtime_ms(event_time))(
-  START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+      START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
   )
   DISTRIBUTED BY HASH(site_id);
   ```
@@ -511,7 +510,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
          pv BIGINT DEFAULT '0'
   )
     PARTITION BY RANGE(str2date(event_time, '%Y-%m-%d'))(
-    START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+        START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
     )
     DISTRIBUTED BY HASH(site_id);
     ```
