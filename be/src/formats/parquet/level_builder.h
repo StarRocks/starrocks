@@ -21,20 +21,31 @@
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 #include <gen_cpp/DataSinks_types.h>
+#include <glog/logging.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <functional>
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "types/logical_type.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::parquet {

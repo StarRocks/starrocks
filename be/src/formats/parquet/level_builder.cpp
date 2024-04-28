@@ -14,20 +14,24 @@
 
 #include "formats/parquet/level_builder.h"
 
-#include <parquet/arrow/writer.h>
+#include <fmt/core.h>
 
-#include <functional>
+#include <string>
 #include <utility>
 
 #include "column/array_column.h"
+#include "column/column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/struct_column.h"
-#include "column/vectorized_fwd.h"
-#include "common/logging.h"
-#include "exprs/expr.h"
+#include "column/type_traits.h"
+#include "common/compiler_util.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "gutil/endian.h"
+#include "types/date_value.h"
 #include "util/defer_op.h"
 
 namespace starrocks::parquet {

@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 

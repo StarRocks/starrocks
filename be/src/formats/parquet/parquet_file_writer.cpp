@@ -14,29 +14,34 @@
 
 #include "formats/parquet/parquet_file_writer.h"
 
-#include <arrow/buffer.h>
-#include <arrow/io/file.h>
-#include <parquet/arrow/writer.h>
+#include <fmt/core.h>
+#include <glog/logging.h>
+#include <parquet/exception.h>
+#include <parquet/file_writer.h>
+#include <parquet/metadata.h>
+#include <parquet/parquet_version.h>
+#include <parquet/properties.h>
+#include <parquet/statistics.h>
 #include <runtime/current_thread.h>
 
 #include <future>
+#include <ostream>
+#include <utility>
 
-#include "column/array_column.h"
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/logging.h"
-#include "exprs/expr.h"
 #include "formats/file_writer.h"
+#include "formats/parquet/chunk_writer.h"
+#include "formats/parquet/file_writer.h"
 #include "formats/utils.h"
-#include "runtime/exec_env.h"
+#include "fs/fs.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 #include "util/debug_util.h"
-#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/runtime_profile.h"
-#include "util/slice.h"
+
+namespace starrocks {
+class Chunk;
+} // namespace starrocks
 
 namespace starrocks::formats {
 
@@ -322,7 +327,7 @@ StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_t
 }
 
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::_make_schema(
-        const vector<std::string>& column_names, const vector<TypeDescriptor>& type_descs,
+        const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
         const std::vector<FileColumnId>& file_column_ids) {
     ::parquet::schema::NodeVector fields;
     for (int i = 0; i < type_descs.size(); i++) {

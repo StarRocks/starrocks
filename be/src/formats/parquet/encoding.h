@@ -14,8 +14,12 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/parquet_types.h"

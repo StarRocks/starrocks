@@ -14,23 +14,38 @@
 
 #include "formats/parquet/column_converter.h"
 
-#include <memory>
-#include <utility>
+#include <cctz/time_zone.h>
+#include <glog/logging.h>
+#include <stdint.h>
+#include <string.h>
 
-#include "column/array_column.h"
+#include <chrono>
+#include <memory>
+#include <sstream>
+#include <utility>
+#include <vector>
+
 #include "column/binary_column.h"
+#include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "formats/parquet/schema.h"
-#include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/types.h"
 #include "gutil/casts.h"
+#include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/decimalv2_value.h"
+#include "runtime/time_types.h"
+#include "runtime/types.h"
+#include "storage/olap_common.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "util/bit_util.h"
-#include "util/logging.h"
-#include "util/runtime_profile.h"
+#include "util/decimal_types.h"
+#include "util/int96.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::parquet {

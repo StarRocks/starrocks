@@ -14,8 +14,25 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "formats/parquet/page_index_reader.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "storage/range.h"
+
+namespace starrocks {
+class Column;
+class NullableColumn;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 

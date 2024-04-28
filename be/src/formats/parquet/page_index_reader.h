@@ -14,15 +14,36 @@
 
 #pragma once
 
+#include <stdint.h>
+
+#include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "common/global_types.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/expr_context.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/schema.h"
+#include "gen_cpp/parquet_types.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/types.h"
 #include "storage/range.h"
+
+namespace starrocks {
+class RandomAccessFile;
+
+namespace parquet {
+class ColumnReader;
+class GroupReader;
+struct ParquetField;
+} // namespace parquet
+struct TypeDescriptor;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 

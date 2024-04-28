@@ -14,7 +14,13 @@
 
 #include "meta_helper.h"
 
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
+#include <boost/iterator/iterator_facade.hpp>
+
+#include "formats/parquet/metadata.h"
+#include "formats/parquet/schema.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks::parquet {
 

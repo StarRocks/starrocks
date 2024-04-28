@@ -14,15 +14,34 @@
 
 #pragma once
 
+#include <glog/logging.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <ostream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
+
+namespace starrocks {
+class SlotDescriptor;
+class TIcebergSchema;
+class TIcebergSchemaField;
+
+namespace parquet {
+class FileMetaData;
+struct ParquetField;
+} // namespace parquet
+} // namespace starrocks
 
 namespace starrocks::parquet {
 

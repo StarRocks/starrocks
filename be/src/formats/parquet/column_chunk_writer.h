@@ -26,6 +26,7 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+#include <stdint.h>
 
 #include <utility>
 
@@ -34,6 +35,10 @@
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
+
+namespace parquet {
+class ColumnWriter;
+} // namespace parquet
 
 namespace starrocks::parquet {
 
