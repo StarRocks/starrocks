@@ -225,7 +225,7 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     }
 
     auto* pred_source_op = source_operator(pred_operators);
-    int64_t limit_size = _recent_limit_size(pred_operators);
+    int64_t limit_size = _prev_limit_size(pred_operators);
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
@@ -265,7 +265,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
     }
 
     auto* pred_source_op = source_operator(pred_operators);
-    int64_t limit_size = _recent_limit_size(pred_operators);
+    int64_t limit_size = _prev_limit_size(pred_operators);
 
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
                                                               config::local_exchange_buffer_mem_limit_per_driver);
@@ -308,7 +308,7 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
     int logical_dop = source_op->degree_of_parallelism();
 
     // check should interpolate limit operator
-    int64_t limit_size = _recent_limit_size(pred_operators);
+    int64_t limit_size = _prev_limit_size(pred_operators);
 
     auto mem_mgr =
             std::make_shared<ChunkBufferMemoryManager>(logical_dop, config::local_exchange_buffer_mem_limit_per_driver);
