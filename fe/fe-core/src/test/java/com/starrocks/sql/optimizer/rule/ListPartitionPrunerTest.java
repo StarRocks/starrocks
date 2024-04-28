@@ -444,6 +444,36 @@ public class ListPartitionPrunerTest {
     }
 
     @Test
+    public void testStringCastInPredicate() throws AnalysisException {
+        // string_col="1"   1
+        // string_col="2"  2
+        // string_col="3"   3
+
+        ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
+
+        // column -> partition values
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                Maps.newConcurrentMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> stringPartitionValuesMap = new ConcurrentSkipListMap<>();
+        columnToPartitionValuesMap.put(stringColumn, stringPartitionValuesMap);
+        stringPartitionValuesMap.put(new StringLiteral("1"), Sets.newHashSet(1L));
+        stringPartitionValuesMap.put(new StringLiteral("2"), Sets.newHashSet(2L));
+        stringPartitionValuesMap.put(new StringLiteral("3"), Sets.newHashSet(3L));
+
+        Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+        columnToNullPartitions.put(stringColumn, Sets.newHashSet(9L));
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList();
+        ListPartitionPruner pruner =
+                new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+        conjuncts.clear();
+        conjuncts.add(new InPredicateOperator(new CastOperator(Type.INT, stringColumn),
+                ConstantOperator.createInt(2),
+                ConstantOperator.createInt(3)));
+        Assert.assertEquals(2, pruner.prune().size());
+    }
+
+    @Test
     public void testSpecifyPartition() throws AnalysisException {
         // 2 partition columns
         // int_col1=0/int_col2=10    0
