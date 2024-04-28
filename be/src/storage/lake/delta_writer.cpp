@@ -452,7 +452,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
             }
             // generate rewrite segment names to avoid gc in rewrite operation
             for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                op_write->add_rewrite_segments(gen_segment_filename(_txn_id, _tablet_id));
             }
         }
         // handle condition update
@@ -476,7 +476,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
 
             if (op_write->rewrite_segments_size() == 0) {
                 for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id, _tablet_id));
                 }
             }
         }

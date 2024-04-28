@@ -79,7 +79,7 @@ void HorizontalGeneralTabletWriter::close() {
 
 Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     DCHECK(_schema != nullptr);
-    auto name = gen_segment_filename(_txn_id);
+    auto name = gen_segment_filename(_txn_id, _tablet_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->segment_location(_tablet_id, name)));
     SegmentWriterOptions opts;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
@@ -257,7 +257,7 @@ void VerticalGeneralTabletWriter::close() {
 StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
-    auto name = gen_segment_filename(_txn_id);
+    auto name = gen_segment_filename(_txn_id, _tablet_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->segment_location(_tablet_id, name)));
     SegmentWriterOptions opts;
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);

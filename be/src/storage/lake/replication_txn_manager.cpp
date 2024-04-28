@@ -404,9 +404,10 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
     }
 
     std::string rowset_id = rowset_meta.rowset_id().to_string();
+    auto tablet_id = rowset_meta.tablet_id();
     for (int64_t segment_id = 0; segment_id < rowset_meta.num_segments(); ++segment_id) {
         std::string old_segment_filename = rowset_id + '_' + std::to_string(segment_id) + ".dat";
-        std::string new_segment_filename = gen_segment_filename(transaction_id);
+        std::string new_segment_filename = gen_segment_filename(transaction_id, tablet_id);
 
         rowset_metadata->add_segments(new_segment_filename);
         auto pair = filename_map->emplace(std::move(old_segment_filename), std::move(new_segment_filename));

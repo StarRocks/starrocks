@@ -76,7 +76,7 @@ public:
 protected:
     // Return the new generated segment file name
     std::string generate_segment_file(int64_t txn_id) {
-        auto seg_name = lake::gen_segment_filename(txn_id);
+        auto seg_name = lake::gen_segment_filename(txn_id, _tablet_id);
         auto seg_path = _tablet_mgr->segment_location(_tablet_id, seg_name);
         ASSIGN_OR_ABORT(auto f, fs::new_writable_file(seg_path));
         CHECK_OK(f->append(seg_path));
