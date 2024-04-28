@@ -129,7 +129,8 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
-                const auto* column_reader = segment->column(column_index);
+                auto uid = _tablet_schema->column(column_index).unique_id();
+                const auto* column_reader = segment->column_with_uid(uid);
                 if (column_reader == nullptr) {
                     continue;
                 }
