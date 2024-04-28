@@ -280,7 +280,7 @@ public interface ConnectorMetadata {
     }
 
     default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
     }
 
     default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {

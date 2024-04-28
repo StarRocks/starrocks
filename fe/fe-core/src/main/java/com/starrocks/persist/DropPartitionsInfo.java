@@ -31,9 +31,9 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package com.starrocks.persist;
 
-import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -42,29 +42,31 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
-public class DropPartitionInfo implements Writable {
+public class DropPartitionsInfo implements Writable {
     @SerializedName(value = "dbId")
     private Long dbId;
     @SerializedName(value = "tableId")
     private Long tableId;
-    @SerializedName(value = "partitionName")
-    private String partitionName;
     @SerializedName(value = "isTempPartition")
     private boolean isTempPartition = false;
     @SerializedName(value = "forceDrop")
     private boolean forceDrop = false;
+    @SerializedName(value = "partitionNames")
+    private List<String> partitionNames = new ArrayList<>();
 
-    private DropPartitionInfo() {
+    private DropPartitionsInfo() {
     }
 
-    public DropPartitionInfo(Long dbId, Long tableId, String partitionName, boolean isTempPartition,
-                             boolean forceDrop) {
+    public DropPartitionsInfo(Long dbId, Long tableId, boolean isTempPartition, boolean forceDrop, List<String> partitionNames) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.partitionName = partitionName;
         this.isTempPartition = isTempPartition;
         this.forceDrop = forceDrop;
+        this.partitionNames = partitionNames;
     }
 
     public Long getDbId() {
@@ -75,10 +77,6 @@ public class DropPartitionInfo implements Writable {
         return tableId;
     }
 
-    public String getPartitionName() {
-        return partitionName;
-    }
-
     public boolean isTempPartition() {
         return isTempPartition;
     }
@@ -87,9 +85,17 @@ public class DropPartitionInfo implements Writable {
         return forceDrop;
     }
 
-    public static DropPartitionInfo read(DataInput in) throws IOException {
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionNames(List<String> partitionNames) {
+        this.partitionNames = partitionNames;
+    }
+
+    public static DropPartitionsInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropPartitionInfo.class);
+        return GsonUtils.GSON.fromJson(json, DropPartitionsInfo.class);
     }
 
     @Override
@@ -99,25 +105,20 @@ public class DropPartitionInfo implements Writable {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hashCode(dbId, tableId, partitionName);
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        DropPartitionsInfo that = (DropPartitionsInfo) o;
+        return isTempPartition == that.isTempPartition && forceDrop == that.forceDrop && Objects.equals(dbId, that.dbId) &&
+                Objects.equals(tableId, that.tableId) && Objects.equals(partitionNames, that.partitionNames);
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (!(obj instanceof DropPartitionInfo)) {
-            return false;
-        }
-
-        DropPartitionInfo info = (DropPartitionInfo) obj;
-
-        return (dbId.equals(info.dbId))
-                && (tableId.equals(info.tableId))
-                && (partitionName.equals(info.partitionName))
-                && (isTempPartition == info.isTempPartition)
-                && (forceDrop == info.forceDrop);
+    public int hashCode() {
+        return Objects.hash(dbId, tableId, isTempPartition, forceDrop, partitionNames);
     }
 }
