@@ -283,6 +283,7 @@
                     },
                     "items": [
                         "data_source/data_cache",
+                        "data_source/data_cache_warmup",
                         "data_source/data_cache_observe"
                     ]
                 },
@@ -1720,6 +1721,7 @@
                     },
                     "items": [
                         "data_source/data_cache",
+                        "data_source/data_cache_warmup",
                         "data_source/data_cache_observe"
                     ]
                 },
