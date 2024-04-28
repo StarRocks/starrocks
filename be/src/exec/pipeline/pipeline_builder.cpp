@@ -525,7 +525,7 @@ void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
 }
 
-int64_t PipelineBuilderContext::_recent_limit_size(const OpFactories& pred_operators) {
+int64_t PipelineBuilderContext::_prev_limit_size(const OpFactories& pred_operators) {
     for (auto it = pred_operators.rbegin(); it != pred_operators.rend(); ++it) {
         if (auto limit = dynamic_cast<LimitOperatorFactory*>(it->get())) {
             return limit->limit();
@@ -538,7 +538,7 @@ int64_t PipelineBuilderContext::_recent_limit_size(const OpFactories& pred_opera
 
 void PipelineBuilderContext::_try_interpolate_limit_operator(int32_t plan_node_id, OpFactories& pred_operators,
                                                              int64_t limit_size) {
-    if (limit_size >= 0) {
+    if (limit_size >= 0 && limit_size < config::pipline_limit_max_delivery) {
         pred_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(next_operator_id(), plan_node_id, limit_size));
     }
