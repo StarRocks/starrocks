@@ -129,7 +129,7 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
 
    - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
-   - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
+   - `ranger.plugin.starrocks.policy.rest.url`: Change to the address of the Ranger Admin.
 
    If you need to modify other configurations, refer to official documentation of Apache Ranger. For example, you can modify `ranger.plugin.starrocks.policy.pollIntervalM` to change the interval for pulling policy changes.
 
