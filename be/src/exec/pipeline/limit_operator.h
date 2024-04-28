@@ -59,6 +59,8 @@ public:
         return std::make_shared<LimitOperator>(this, _id, _plan_node_id, driver_sequence, _limit);
     }
 
+    int64_t limit() const { return _limit; }
+
 private:
     std::atomic<int64_t> _limit;
 };

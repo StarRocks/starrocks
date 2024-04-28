@@ -297,7 +297,8 @@ public:
 
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
-    void mark_precondition_ready(RuntimeState* runtime_state);
+    void mark_precondition_ready();
+    bool precondition_prepared() const { return _precondition_prepared; }
     void start_timers();
     void stop_timers();
     int64_t get_active_time() const { return _active_timer->value(); }
@@ -364,6 +365,10 @@ public:
         }
     }
 
+    bool has_precondition() const {
+        return !_local_rf_holders.empty() || !_dependencies.empty() || !_global_rf_descriptors.empty();
+    }
+
     std::string get_preconditions_block_reasons() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
             return std::string(dependencies_block() ? "(dependencies," : "(") +
@@ -391,7 +396,7 @@ public:
 
             // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
             //  This writing method is a bit tricky, and when there is a better way, replace it
-            mark_precondition_ready(_runtime_state);
+            mark_precondition_ready();
 
             RETURN_IF_ERROR(check_short_circuit());
             if (_state == DriverState::PENDING_FINISH) {
@@ -488,6 +493,7 @@ protected:
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
+    bool _precondition_prepared = false;
 
     mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
     bool _all_local_rf_ready = false;
