@@ -189,6 +189,11 @@ public class HiveMetastoreOperations {
             LOG.error("Failed to create table {}.{}", dbName, tableName);
             boolean shouldDelete;
             try {
+                if (tableExists(dbName, tableName)) {
+                    LOG.warn("Table {}.{} already exists. But some error occur such as accessing meta service timeout",
+                            dbName, table, e);
+                    return true;
+                }
                 FileSystem fileSystem = FileSystem.get(URI.create(tablePath.toString()), hadoopConf);
                 shouldDelete = !fileSystem.listLocatedStatus(tablePath).hasNext();
                 if (shouldDelete) {
