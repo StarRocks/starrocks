@@ -228,6 +228,8 @@ public:
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
+    MemTableFlushExecutor* lake_memtable_flush_executor() { return _lake_memtable_flush_executor.get(); }
+
     SegmentReplicateExecutor* segment_replicate_executor() { return _segment_replicate_executor.get(); }
 
     SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
@@ -461,6 +463,8 @@ private:
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
+
+    std::unique_ptr<MemTableFlushExecutor> _lake_memtable_flush_executor;
 
     std::unique_ptr<SegmentReplicateExecutor> _segment_replicate_executor;
 
