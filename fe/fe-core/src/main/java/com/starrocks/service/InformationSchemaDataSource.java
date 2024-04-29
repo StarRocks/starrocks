@@ -288,14 +288,7 @@ public class InformationSchemaDataSource {
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
-<<<<<<< HEAD
-        tableConfigInfo.setPartition_key(partitionKeySb.toString());
-=======
         tableConfigInfo.setPartition_key(partitionKeySb.length() > 0 ? partitionKeySb.toString() : DEFAULT_EMPTY_STRING);
-
-        // Distribution info
-        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
->>>>>>> 30bf9fd00e ([BugFix] Fix partition_key is empty when query list partition  (#44631))
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
