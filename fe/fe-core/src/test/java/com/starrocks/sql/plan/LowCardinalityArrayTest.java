@@ -103,6 +103,40 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "\"compression\" = \"LZ4\"    \n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `s4` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int NULL,    \n" +
+                "  `a1` array<string> NULL COMMENT \"\",    \n" +
+                "  `a2` array<string> NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "UNIQUE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",    \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"false\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `s5` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int MAX NULL,    \n" +
+                "  `a1` array<string> REPLACE NULL COMMENT \"\",    \n" +
+                "  `a2` array<string> REPLACE NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "AGGREGATE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",    \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"false\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
@@ -465,6 +499,24 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     }
 
     @Test
+    public void testCaseWhen() throws Exception {
+        String sql = "select case when S_ADDRESS[1] = '5-LOW' " +
+                "then 2 when S_ADDRESS[1] = '3-MEDIUM' then 1 else 0 end " +
+                "from supplier_nullable";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "DictDecode(10: S_ADDRESS, [CASE WHEN <place-holder> = '5-LOW' THEN 2 " +
+                "WHEN <place-holder> = '3-MEDIUM' THEN 1 ELSE 0 END], 10: S_ADDRESS[1])");
+
+        sql = "select case when S_ADDRESS[1] = '5-LOW' " +
+                "then 2 when S_ADDRESS[2] = '3-MEDIUM' then 1 else 0 end " +
+                "from supplier_nullable";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "CASE " +
+                "WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '5-LOW'], 10: S_ADDRESS[1]) THEN 2 " +
+                "WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '3-MEDIUM'], 10: S_ADDRESS[2]) THEN 1 ELSE 0 END");
+    }
+
+    @Test
     public void testArrayToStringProject() throws Exception {
         String sql = "select MIN(x2), LOWER(x1) from (" +
                 "   select HEX(ARRAY_SLICE(S_ADDRESS, 1, 2)[0]) as x1, " +
@@ -598,4 +650,36 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  returnTypes: [INT, INT, VARCHAR]");
     }
 
+    @Test
+    public void testAggreagateOrUnique() throws Exception {
+        String sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
+                "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
+                "from s4 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
+                "    19: DictDefine(18: a2, [<place-holder>])\n" +
+                "    20: DictDefine(17: a1, [<place-holder>])\n" +
+                "    21: DictDefine(17: a1, [<place-holder>])\n" +
+                "    22: DictDefine(18: a2, [<place-holder>])\n" +
+                "    23: DictDefine(17: a1, [<place-holder>])\n" +
+                "    24: DictDefine(18: a2, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 19> : <string id 6>"));
+
+        sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
+                "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
+                "from s5 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
+                "    19: DictDefine(18: a2, [<place-holder>])\n" +
+                "    20: DictDefine(17: a1, [<place-holder>])\n" +
+                "    21: DictDefine(17: a1, [<place-holder>])\n" +
+                "    22: DictDefine(18: a2, [<place-holder>])\n" +
+                "    23: DictDefine(17: a1, [<place-holder>])\n" +
+                "    24: DictDefine(18: a2, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 19> : <string id 6>"));
+    }
 }
