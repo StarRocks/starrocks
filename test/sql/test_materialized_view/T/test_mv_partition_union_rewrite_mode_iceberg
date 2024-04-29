@@ -7,6 +7,7 @@ properties
     "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
 );
 
+set new_planner_optimize_timeout=10000;
 set materialized_view_union_rewrite_mode = 3;
 
 -- create iceberg table
