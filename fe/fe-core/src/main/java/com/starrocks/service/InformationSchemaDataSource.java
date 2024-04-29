@@ -269,17 +269,13 @@ public class InformationSchemaDataSource {
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
-        if (partitionInfo.isRangePartition()) {
-            int idx = 0;
-            for (Column column : partitionInfo.getPartitionColumns()) {
-                if (idx != 0) {
-                    partitionKeySb.append(", ");
-                }
-                partitionKeySb.append("`").append(column.getName()).append("`");
-                idx++;
+        int idx = 0;
+        for (Column column : partitionInfo.getPartitionColumns()) {
+            if (idx != 0) {
+                partitionKeySb.append(", ");
             }
-        } else {
-            partitionKeySb.append(DEFAULT_EMPTY_STRING);
+            partitionKeySb.append("`").append(column.getName()).append("`");
+            idx++;
         }
 
         // PRIMARY KEYS
@@ -292,7 +288,7 @@ public class InformationSchemaDataSource {
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
-        tableConfigInfo.setPartition_key(partitionKeySb.toString());
+        tableConfigInfo.setPartition_key(partitionKeySb.length() > 0 ? partitionKeySb.toString() : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
