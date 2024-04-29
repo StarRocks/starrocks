@@ -97,12 +97,13 @@ Status FPE::encrypt(std::string_view num_str, const std::vector<uint8_t>& key, c
 
     int res = ff1_ctx_create(&ctx, key.data(), key.size(), TWEAK, sizeof(TWEAK), 0, SIZE_MAX, radix);
     if (res != 0) {
+        LOG(WARNING) << "ff1_ctx_create failed";
         return Status::RuntimeError("ff1_ctx_create failed");
     }
     res = ff1_encrypt(ctx, buffer, fixed_num_str.empty() ? std::string(num_str).c_str() : fixed_num_str.c_str(),
                       nullptr, 0);
     if (res != 0) {
-        return Status::RuntimeError("ff1_encrypt failed");
+        return Status::RuntimeError("fpe_encrypt failed");
     }
 
     return Status::OK();
@@ -116,11 +117,12 @@ Status FPE::decrypt(std::string_view num_str, const std::vector<uint8_t>& key, c
 
     int res = ff1_ctx_create(&ctx, key.data(), key.size(), TWEAK, sizeof(TWEAK), 0, SIZE_MAX, radix);
     if (res != 0) {
+        LOG(WARNING) << "ff1_ctx_create failed";
         return Status::RuntimeError("ff1_ctx_create failed");
     }
     res = ff1_decrypt(ctx, buffer, std::string(num_str).c_str(), nullptr, 0);
-    if (res != 0) {
-        return Status::RuntimeError("ff1_decrypt failed");
+    if (UNLIKELY(res != 0)) {
+        return Status::RuntimeError("fpe_decrpyt failed");
     }
 
     return Status::OK();

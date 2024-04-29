@@ -446,7 +446,6 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
         value.resize(src_size);
         RETURN_IF_ERROR(
                 FPE::encrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
-
         result.append(Slice(value));
     }
 
@@ -490,8 +489,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
         std::string value;
         auto src_size = src_value.size > FPE::MIN_LENGTH ? src_value.size : FPE::MIN_LENGTH;
         value.resize(src_size);
-        RETURN_IF_ERROR(
-                FPE::decrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
+        std::string_view src_value_view((char*)src_value.data, src_value.size);
+        RETURN_IF_ERROR(FPE::decrypt(src_value_view, key, value.data(), length));
         result.append(Slice(value));
     }
 
@@ -529,7 +528,10 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt(FunctionContext* ctx, const
 
         auto src_value = src_viewer.value(row);
         std::string value;
-        RETURN_IF_ERROR(FPE::encrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value));
+        Status status = FPE::encrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value);
+        if (!status.ok()) {
+            return Status::RuntimeError("fpe_encrypt failed, value is :" + std::string(src_value));
+        }
 
         result.append(Slice(value));
     }
@@ -569,7 +571,11 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt(FunctionContext* ctx, const
         auto src_value = src_viewer.value(row);
 
         std::string value;
-        RETURN_IF_ERROR(FPE::decrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value));
+        Status status = FPE::decrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value);
+        if (!status.ok()) {
+            return Status::RuntimeError("fpe_decrpyt failed, maybe because this value:" + std::string(src_value) +
+                                        " is not encrypted correctly");
+        }
 
         result.append(Slice(value));
     }
