@@ -239,6 +239,7 @@ public:
     uint32_t num_update_files() const { return rowset_meta()->get_num_update_files(); }
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
+    bool is_overlapped() const { return rowset_meta()->is_segments_overlapping(); }
 
     const TabletSchemaCSPtr tablet_schema() { return rowset_meta()->tablet_schema(); }
 

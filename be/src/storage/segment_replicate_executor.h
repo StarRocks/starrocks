@@ -36,8 +36,6 @@ class PTabletInfo;
 class FileSystem;
 struct DeltaWriterOptions;
 
-using DeltaWriterOptions = starrocks::DeltaWriterOptions;
-
 class ReplicateChannel {
 public:
     ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id);
