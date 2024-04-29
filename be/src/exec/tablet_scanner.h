@@ -87,7 +87,6 @@ private:
     ObjectPool _pool;
     std::vector<ExprContext*> _conjunct_ctxs;
     PredicateTree _pred_tree;
-    ConjunctivePredicates _predicates;
     std::vector<uint8_t> _selection;
 
     // for release memory.

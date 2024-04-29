@@ -93,6 +93,7 @@ Expr::Expr(const Expr& expr)
           _opcode(expr._opcode),
           _is_slotref(expr._is_slotref),
           _is_nullable(expr._is_nullable),
+          _is_monotonic(expr._is_monotonic),
           _type(expr._type),
           _output_scale(expr._output_scale),
           _fn(expr._fn),
