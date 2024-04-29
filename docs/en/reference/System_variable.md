@@ -228,15 +228,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 4
 * **Introduced in**: v3.2.5, v3.3.0
 
-<<<<<<< HEAD
-=======
-### enable_force_rule_based_mv_rewrite
-
-* **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
-* **Default**: true
-* **Introduced in**: v3.3.0
-
->>>>>>> f0003d4dab ([Doc] Add 3.3 MV-related params (#44870))
 ### enable_view_based_mv_rewrite
 
 * **Description**: Whether to enable query rewrite for logical view-based materialized views. If this item is set to `true`, the logical view is used as a unified node to rewrite the queries against itself for better performance. If this item is set to `false`, the system transcribes the queries against logical views into queries against physical tables or materialized views and then rewrites them.
