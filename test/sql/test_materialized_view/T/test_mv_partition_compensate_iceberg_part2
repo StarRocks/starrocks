@@ -43,6 +43,7 @@ create database db_${uuid0};
 use db_${uuid0};
 
 -- Test partition compensate without partition expression
+set new_planner_optimize_timeout=10000;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY str2date(dt, '%Y-%m-%d')
 REFRESH DEFERRED MANUAL AS 
