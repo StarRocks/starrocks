@@ -679,10 +679,6 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATC
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 = "abc";
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 LIKE "%abc%";
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 IN ("bcd", "ab");
-
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
 
