@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # Data distribution
@@ -201,14 +202,14 @@ You only need to configure a partition expression (a time function expression or
 
 Range partitioning is suitable for storing simple, contiguous data, such as time series data, or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
 
-You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and partitioning column value ranges. During data loading, StarRocks assigns the data to the corresponding partitions based on the range to which the data partitioning column values belong.
+You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the range to which the data partitioning column values belong.
 
-As for the data type of partitioning columns, prior to v3.3.0, Range partitioning only supported partitioning columns of date and integer types. Since v3.3.0, partitioning columns supports to be timestamps and strings. When explicitly defining the mapping relationship between partitions and partitioning column value ranges, you need to first use functions to convert partitioning column values of timestamp or strings into dates, and then divide the partitions based on the converted dates.
+As for the data type of partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, partitioning column values support to be timestamps and strings. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use functions to convert partitioning column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
 
 :::info
 
-- If the partitioning column value is a timestamp, you need to use the from_unixtime or from_unixtime_ms function to convert the timestamp to date when dividing the partitions. When the from_unixtime function is used, the partitioning column only supports INT and BIGINT types. When using the from_unixtime_ms function is used, the partitioning column only supports BIGINT type.
-- If the partitioning column value is a string (STRING, VARCHAR, or CHAR types), you need to use the str2date function to convert the string to date type when dividing the partitions.
+- If the partitioning column value is a timestamp, you need to use the from_unixtime or from_unixtime_ms function to convert the timestamp to the date when dividing the partitions. When the from_unixtime function is used, the partitioning column only supports INT and BIGINT types. When using the from_unixtime_ms function is used, the partitioning column only supports BIGINT type.
+- If the partitioning column value is a string (STRING, VARCHAR, or CHAR types), you need to use the str2date function to convert the string to the date when dividing the partitions.
 
 :::
 
@@ -256,7 +257,7 @@ Define the mapping relationship between each partition and the range of partitio
 
 - **The partition column values are timestamps and strings (supported since v3.3.0).**
   
-  When explicitly defining the mapping relationship between  partitions and the range of partition column values, you need to use a function to convert the partition column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
+  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you need to use a function to convert the partition column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
 
   <Tabs groupId="manual partitioning">
   <TabItem value="example1" label="The partition column values are timestamps" default>
@@ -327,7 +328,7 @@ Different from the automatic partition creation ability provided by the expressi
 
 ##### Create multiple partitions in batch
 
-Multiple partitions can be created  in batch at and after table creation. You can specify the start and end time for all the partitions created in batch in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is right hand half open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
+Multiple partitions can be created in batch at and after table creation. You can specify the start and end time for all the partitions created in batch in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is right hand half open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
 
 - **The partitioning column is of date type.**
 
@@ -339,20 +340,18 @@ Multiple partitions can be created  in batch at and after table creation. You ca
   In the following example, the partitions created in batch start from `2021-01-01` and ends、 on `2021-01-04`, with a partition increment of one day:  
 
     ```SQL
-  CREATE TABLE site_access (
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (
-      START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES ("replication_num" = "3" );
+    CREATE TABLE site_access (
+        datekey DATE,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id);
     ```
 
   It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
@@ -370,26 +369,21 @@ Multiple partitions can be created  in batch at and after table creation. You ca
 
 You can create batches of date partitions with different incremental intervals by specifying different incremental intervals in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
 
-  ```SQL
-  CREATE TABLE site_access(
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey)
-  (
-      START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
-      START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
-      START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES(
-      "replication_num" = "3"
-  );
+    ```SQL
+    CREATE TABLE site_access (
+        datekey DATE,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
+        START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
+        START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id);
     ```
 
   It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
@@ -407,6 +401,8 @@ You can create batches of date partitions with different incremental intervals b
   PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
   )
   ```
+  </TabItem>
+  </Tabs>
 
 - **The partitioning column is of integer type.**
 
@@ -421,40 +417,35 @@ You can create batches of date partitions with different incremental intervals b
 
   In the following example, the range of all the partition starts from `1` and ends at `5`, with a partition increment of `1`:
 
-  ```SQL
-  CREATE TABLE site_access (
-      datekey INT,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES ("replication_num" = "3");
-  ```
+    ```SQL
+    CREATE TABLE site_access (
+        datekey INT,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("1") END ("5") EVERY (1)
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
 
   It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
-  ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-  PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-  PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-  PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-  PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-  PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-  PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-  PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-  PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-  )
+    ```SQL
+    PARTITION BY RANGE (datekey) (
+        PARTITION p1 VALUES [("1"), ("2")),
+        PARTITION p2 VALUES [("2"), ("3")),
+        PARTITION p3 VALUES [("3"), ("4")),
+        PARTITION p4 VALUES [("4"), ("5"))
+    )
     ```
 
   </TabItem>
   <TabItem value="example2" label="with different numerical intervals">
+
   You can create batches of numerical partitions with different incremental intervals by specifying different incremental intervals in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
 
     ```SQL
@@ -479,7 +470,7 @@ You can create batches of date partitions with different incremental intervals b
 - **The partition column values are timestamps and strings (supported since v3.3.0).**
 
   <Tabs groupId="batch partitioning(timestamp and string)">
-  <TabItem value="example1" label="The partition column values are timestamps" default>
+  <TabItem value="example1" label="The partitioning column values are timestamps" default>
 
   ```SQL
   -- A 10-digit timestamp accurate to seconds, for example: 1703832553.
@@ -509,7 +500,7 @@ You can create batches of date partitions with different incremental intervals b
   ```
 
   </TabItem>
-  <TabItem value="example2" label="The partition column values are strings">
+  <TabItem value="example2" label="The partitioning column values are strings">
 
     ```SQL
     CREATE TABLE site_access (
@@ -527,15 +518,6 @@ You can create batches of date partitions with different incremental intervals b
 
   </TabItem>
   </Tabs>
-
-##### Create multiple partitions in batch after a table is created
-
-  After a table is created, you can use the ALTER TABLE statement to add partitions in. The syntax is similar to that of creating multiple partitions in batch at table creation. You need to configure `START`, `END`, and `EVERY` in the `ADD PARTITIONS` clause.
-
-  ```SQL
-  ALTER TABLE site_access 
-  ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
-  ```
 
 #### List partitioning (since v3.1)
 
