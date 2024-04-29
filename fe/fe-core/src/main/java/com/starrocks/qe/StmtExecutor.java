@@ -1747,8 +1747,7 @@ public class StmtExecutor {
         serializer.writeInt1(0);
         // warning_count
         serializer.writeInt2(0);
-        // metadata follows
-        serializer.writeInt1(1);
+
         context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
 
         if (numParams > 0) {
@@ -1759,6 +1758,7 @@ public class StmtExecutor {
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
@@ -1770,6 +1770,7 @@ public class StmtExecutor {
                 serializer.writeField(field.getName(), field.getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
