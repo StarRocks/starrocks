@@ -1033,6 +1033,11 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to role role2", ctx), ctx);
 
+        Set<String> allPredecessorRoleNames =
+                manager.getAllPredecessorRoleNames(manager.getRoleIdByNameNoLock("role1"));
+        System.out.println(allPredecessorRoleNames);
+        Assert.assertTrue(allPredecessorRoleNames.contains("role0"));
+
         // role inheritance depth
         Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[2]));
         Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
