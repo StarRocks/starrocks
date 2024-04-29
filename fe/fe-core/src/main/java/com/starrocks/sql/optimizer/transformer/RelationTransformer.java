@@ -104,6 +104,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
@@ -581,7 +582,6 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         } else if (Table.TableType.ODPS.equals(node.getTable().getType())) {
             scanOperator = new LogicalOdpsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
-
         } else if (Table.TableType.METADATA.equals(node.getTable().getType())) {
             MetadataTable metadataTable = (MetadataTable) node.getTable();
             if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
@@ -594,6 +594,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                 throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),
                         ErrorType.UNSUPPORTED);
             }
+        } else if (Table.TableType.KUDU.equals(node.getTable().getType())) {
+            scanOperator = new LogicalKuduScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalSchemaScanOperator(node.getTable(),
