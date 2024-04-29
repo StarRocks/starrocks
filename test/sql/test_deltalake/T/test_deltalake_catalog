@@ -9,7 +9,7 @@ select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is null;
 
 -- test struct column is not null
-select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is not null;
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is not null order by col_tinyint;
 
 -- test partition prune with boolean type
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = true;
@@ -38,5 +38,8 @@ select col_tinyint,col_array,col_map,col_struct from delta_test_${uuid0}.delta_o
 -- test timestamp
 select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_timestamp = '2024-04-24 12:00:00';
 select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_timestamp >= '2024-04-24 12:00:00' and col_timestamp < '2024-04-27 12:00:00';
+
+-- test column mapping
+select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 
 drop catalog delta_test_${uuid0}
