@@ -22,8 +22,8 @@ Currently, the FILES() function supports the following data sources and file for
   - Microsoft Azure Blob Storage
 - **File formats:**
   - Parquet
-  - ORC (Currently not supported for unloading data)
-  - CSV (Currently not supported for unloading data)
+  - ORC
+  - CSV
 
 ## Syntax
 
