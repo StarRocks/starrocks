@@ -96,6 +96,7 @@ private:
                                               const std::string& new_name);
 
     bool _end_with(const std::string& str, const std::string& match);
+    bool _contains(const std::string& str, const std::string& match);
 
     bool _is_index_files(const std::string& str);
 
