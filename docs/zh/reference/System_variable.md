@@ -208,27 +208,6 @@ SELECT /*+ SET_VAR
 * 单位：毫秒
 * 类型：Long
 
-<<<<<<< HEAD
-=======
-### enable_materialized_view_text_match_rewrite
-
-* 描述：是否启用基于文本的物化视图改写。当此项设置为 `true` 时，优化器将查询与现有的物化视图进行比较。如果物化视图定义的抽象语法树与查询或其子查询的抽象语法树匹配，则会对查询进行改写。
-* 默认值：true
-* 引入版本：v3.2.5，v3.3.0
-
-### materialized_view_subuqery_text_match_max_count
-
-* 描述：指定系统比对查询的子查询是否与物化视图定义匹配的最大次数。
-* 默认值：4
-* 引入版本：v3.2.5，v3.3.0
-
-### enable_force_rule_based_mv_rewrite
-
-* 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
-* 默认值：true
-* 引入版本：v3.3
-
->>>>>>> f0003d4dab ([Doc] Add 3.3 MV-related params (#44870))
 ### enable_view_based_mv_rewrite
 
 * 描述：是否为基于逻辑视图创建的物化视图启用查询改写。如果此项设置为 `true`，则逻辑视图被用作统一节点进行查询改写，从而获得更好的性能。如果此项设置为 `false`，则系统将针对逻辑视图的查询展开变为针对物理表或物化视图的查询，然后进行改写。
