@@ -137,8 +137,7 @@ public:
     SchemaChangeHandler() = default;
     ~SchemaChangeHandler() = default;
 
-    // schema change v2, it will not set alter task in base tablet
-    Status process_alter_tablet_v2(const TAlterTabletReqV2& request);
+    Status process_alter_tablet(const TAlterTabletReqV2& request);
 
     void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
 
@@ -146,10 +145,10 @@ private:
     Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                        std::vector<Version>* versions_to_be_changed);
 
-    Status _do_process_alter_tablet_v2(const TAlterTabletReqV2& request);
+    Status _do_process_alter_tablet(const TAlterTabletReqV2& request);
 
-    Status _do_process_alter_tablet_v2_normal(const TAlterTabletReqV2& request, SchemaChangeParams& sc_params,
-                                              const TabletSharedPtr& base_tablet, const TabletSharedPtr& new_tablet);
+    Status _do_process_alter_tablet_normal(const TAlterTabletReqV2& request, SchemaChangeParams& sc_params,
+                                           const TabletSharedPtr& base_tablet, const TabletSharedPtr& new_tablet);
 
     Status _validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request);
 
