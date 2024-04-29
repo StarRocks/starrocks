@@ -30,7 +30,7 @@ Currently, the FILES() function supports the following data sources and file for
 - **Data loading**:
 
   ```SQL
-  FILES( data_location , data_format [, StorageCredentialParams ] [, columns_from_path ] )
+  FILES( data_location , data_format [, format_type_options ] [, StorageCredentialParams ] [, columns_from_path ] )
   ```
 
 - **Data unloading**:
@@ -96,6 +96,69 @@ The URI used to access the files. You can specify a path or a file.
 ### data_format
 
 The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
+
+### format_type_options
+
+Specifies the data format options for a specific data file format.
+
+#### format_type_options
+
+Example for the CSV format:
+
+```SQL
+"format"="csv",
+"auto_detect_sample_files"="1",
+"auto_detect_sample_rows"="1",
+"csv.column_separator"=",",
+"csv.enclose"='"',
+"csv.skip_header"="1",
+"csv.escape"="\\"
+```
+
+##### auto_detect_sample_files
+
+Specifies the number of data files to sample in each batch. StarRocks will infer the final schema of the data file based on the sampling result.
+
+##### auto_detect_sample_rows
+
+Specifies the number of rows to sample in each data file. For CSV and JSON formats, StarRocks will infer the schema of a data file the data based on the sampled rows.
+
+##### csv.column_separator
+
+Specifies the column separator used  when the data file is in CSV format. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality.
+
+Tasks that use Files() are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (`\`) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
+
+> **NOTE**
+>
+> - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+
+##### csv.enclose
+
+Specifies the character that is used to wrap the field values in the data file according to RFC4180 when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).
+
+All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.
+
+If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file.
+
+##### csv.skip_header
+
+Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.
+
+In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
+The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement.
+
+##### csv.escape
+
+Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.
+
+> **NOTE**
+>
+> The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.
+> Two examples are as follows:
+> - When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
+> - Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
 
 ### StorageCredentialParams
 
