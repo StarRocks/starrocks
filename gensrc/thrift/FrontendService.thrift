@@ -900,6 +900,12 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
+<<<<<<< HEAD
+=======
+    56: optional string payload_compression_type 
+
+    101: optional string warehouse   // begin from 101, in case of conflict with other's change
+>>>>>>> c94a2ca58e ([Feature] Stream load supports compression (#43732))
 }
 
 struct TStreamLoadPutResult {
