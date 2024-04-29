@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
@@ -216,6 +217,21 @@ public class BinaryPredicate extends Predicate implements Writable {
         BinaryPredicate binaryPredicate = new BinaryPredicate();
         binaryPredicate.readFields(in);
         return binaryPredicate;
+    }
+
+    public Pair<SlotRef, Expr> createSlotAndLiteralPair() {
+        Expr leftExpr = getChild(0);
+        Expr rightExpr = getChild(1);
+        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
+                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) leftExpr;
+            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
+        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
+                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) rightExpr;
+            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
+        }
+        return null;
     }
 
     @Override
