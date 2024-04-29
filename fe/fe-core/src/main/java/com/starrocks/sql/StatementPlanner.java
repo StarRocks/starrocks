@@ -87,8 +87,8 @@ public class StatementPlanner {
             session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
 
             // Note: we only could get the olap table after Analyzing phase
-            boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (stmt instanceof QueryStatement) {
+                boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 ExecPlan plan;
@@ -102,12 +102,7 @@ public class StatementPlanner {
                 setOutfileSink(queryStmt, plan);
                 return plan;
             } else if (stmt instanceof InsertStmt) {
-                InsertStmt insertStmt = (InsertStmt) stmt;
-                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-                boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
-                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
-                        !session.getSessionVariable().isCboUseDBLock();
-                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
+                return planInsertStmt(dbs, (InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -120,6 +115,23 @@ public class StatementPlanner {
         }
 
         return null;
+    }
+
+    public static ExecPlan planInsertStmt(Map<String, Database> dbs,
+                                          InsertStmt insertStmt,
+                                          ConnectContext connectContext) {
+        // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetrye
+        boolean useOptimisticLock = isLockFreeInsertStmt(insertStmt, connectContext);
+        return new InsertPlanner(dbs, useOptimisticLock).plan(insertStmt, connectContext);
+    }
+
+    private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
+                                                ConnectContext connectContext) {
+        boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
+        boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+        boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(insertStmt);
+        return isOnlyOlapTableQueries && isSelect && isLeader &&
+                !connectContext.getSessionVariable().isCboUseDBLock();
     }
 
     private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
