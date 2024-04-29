@@ -300,7 +300,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     使用指定的 key 列和指定的数值范围进行分区。
 
     - 分区名称的命名要求，参见[系统限制](../../../reference/System_limit.md)。
-    - 3.0.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.0.0 起，支持 Range 分区列为时间戳和字符串类型。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
+    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持 Range 分区列值为时间戳和字符串。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
     - 分区为左闭右开区间，首个分区的左边界为最小值。
     - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
@@ -424,7 +424,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     说明：
     用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
 
-    - 3.0.0 之前，分区列仅支持日期类型和整数类型。自 3.0.0 起，支持 Range 分区列为时间戳和字符串类型。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md)。
+    - 3.3.0 之前，分区列仅支持日期类型和整数类型。自 3.3.0 起，支持 Range 分区列值为时间戳和字符串。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md)。
     - 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
     - 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     - 仅支持指定一列作为分区列。
