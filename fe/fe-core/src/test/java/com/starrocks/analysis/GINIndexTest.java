@@ -31,11 +31,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
@@ -82,6 +84,15 @@ public class GINIndexTest extends PlanTestBase {
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), "???");
                 }}, KeysType.DUP_KEYS),
                 "Only support clucene implement for now");
+
+        Config.run_mode = "shared_data";
+        RunMode.detectRunMode();
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
+                "The inverted index does not support shared data mode");
+        Config.run_mode = "shared_nothing";
+        RunMode.detectRunMode();
 
         Assertions.assertThrows(
                 SemanticException.class,
