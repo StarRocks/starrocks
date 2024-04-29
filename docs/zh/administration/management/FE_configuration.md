@@ -1158,26 +1158,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启异步物化视图功能。`TRUE` 表示开启。从 2.5.2 版本开始，该功能默认开启。2.5.2 版本之前默认值为 `FALSE`。
 - 引入版本：v2.4
 
-<<<<<<< HEAD
-=======
-##### enable_colocate_mv_index
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。
-- 引入版本：v3.2.0
-
-##### default_mv_refresh_immediate
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
-- 引入版本：v3.2.3
-
 ##### enable_materialized_view_metrics_collect
 
 - 默认值：true
@@ -1187,16 +1167,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否默认收集异步物化视图的监控指标。
 - 引入版本：v3.1.11，v3.2.5
 
-##### enable_materialized_view_text_based_rewrite
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否默认启用基于文本的查询改写。如果此项设置为 `true`，则系统在创建异步物化视图时构建抽象语法树。
-- 引入版本：v3.2.5
-
->>>>>>> f0003d4dab ([Doc] Add 3.3 MV-related params (#44870))
 ##### enable_mv_automatic_active_check
 
 - 默认值：true
