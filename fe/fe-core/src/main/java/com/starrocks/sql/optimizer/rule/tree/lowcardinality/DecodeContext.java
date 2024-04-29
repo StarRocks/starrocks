@@ -297,7 +297,7 @@ class DecodeContext {
         }
 
         private ScalarOperator processArrayAnchor(ScalarOperator expr) {
-            if (array2StringAnchor.isPresent()) {
+            if (array2StringAnchor.isPresent() && !array2StringAnchor.get().equals(expr)) {
                 return expr;
             }
 
