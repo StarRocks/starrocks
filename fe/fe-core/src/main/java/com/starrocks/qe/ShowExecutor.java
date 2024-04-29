@@ -229,6 +229,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -324,7 +325,7 @@ public class ShowExecutor {
 
                         AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                         mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                            Table baseTable = baseTableInfo.getTable();
+                            Table baseTable = MvUtils.getTableChecked(baseTableInfo);
                             // TODO: external table should check table action after AuthorizationManager support it.
                             if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
                                 try {
