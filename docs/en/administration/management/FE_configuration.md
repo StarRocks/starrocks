@@ -1252,8 +1252,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: whether to collect metrics for materialized view by default.
-- Introduced in: v3.1.11
+- Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
+- Introduced in: v3.1.11, v3.2.5
 
 ##### enable_materialized_view_text_based_rewrite
 
@@ -1261,7 +1261,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: whether to enable text based rewrite by default, if true it will build ast tree in materialized view initialization.
+- Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
 - Introduced in: v3.2.5
 
 ##### enable_mv_automatic_active_check
