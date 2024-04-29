@@ -213,7 +213,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         if (!finishedTablets.isEmpty()) {
             txnState.setTabletCommitInfos(finishedTablets);
         }
-        if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
+        if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos()) || txnState.isUseCombinedTxnLog()) {
             abortTxnSkipCleanup(txnState);
         } else {
             abortTxnWithCleanup(txnState);
