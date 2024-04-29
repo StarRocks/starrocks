@@ -82,12 +82,12 @@ None	None
 -- !result
 select * from t2;
 -- result:
-4	a	Value4	60
 None	a	Value3	60
 2	a	Value2	60
-5	a	Value5	60
 5	a	Value6	60
+5	a	Value5	60
 1	a	Value1	60
+4	a	Value4	60
 -- !result
 select /*+ set_user_variable(@a = (select max(c3) from t1)) */ /*+ set_user_variable(@b = (select min(c3) from t1)) */ @a, @b from t1;
 -- result:
@@ -257,4 +257,39 @@ select @test;
 set @test= (select cast(50 as time));
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Can't set variable with type TIME.")
+-- !result
+set @test= ["{\"m\":{\"cal\":[{\"thur\":{\"use\":true,\"shift\":{\"begin\":0,\"end\":36}},\"id\":\"ID1\"}]}}", "{\"\\a\"}"];
+-- result:
+-- !result
+select @test = ["{\"m\":{\"cal\":[{\"thur\":{\"use\":true,\"shift\":{\"begin\":0,\"end\":36}},\"id\":\"ID1\"}]}}", "{\"\\a\"}"];
+-- result:
+1
+-- !result
+set @test= concat(upper('a'), '\\', '"', '\'', 'b');
+-- result:
+-- !result
+select @test = concat(upper('a'), '\\', '"', '\'', 'b');
+-- result:
+1
+-- !result
+set @test = ["abc\\"];
+-- result:
+-- !result
+select @test = ["abc\\"];
+-- result:
+1
+-- !result
+set @test = ["abc'"];
+-- result:
+-- !result
+select @test = ["abc'"];
+-- result:
+1
+-- !result
+set @test = ["abc\\'"];
+-- result:
+-- !result
+select @test = ["abc\\'"];
+-- result:
+1
 -- !result
