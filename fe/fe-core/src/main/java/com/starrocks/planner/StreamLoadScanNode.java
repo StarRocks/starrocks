@@ -53,8 +53,8 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Config;
+import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -386,6 +386,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             rangeDesc.setStart_offset(0);
             rangeDesc.setSize(-1);
             rangeDesc.setNum_of_columns_from_file(paramCreateContext.tupleDescriptor.getSlots().size());
+            rangeDesc.setCompression_type(streamLoadInfo.getPayloadCompressionType());
             brokerScanRange.addToRanges(rangeDesc);
             brokerScanRange.setBroker_addresses(Lists.newArrayList());
             if (needAssignBE) {

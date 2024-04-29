@@ -169,9 +169,10 @@ struct TBrokerRangeDesc {
     // columns parsed from file path should be after the columns read from file
     10: optional list<string> columns_from_path
     //  it's usefull when format_type == FORMAT_JSON
-    11: optional bool strip_outer_array;
-    12: optional string jsonpaths;
-    13: optional string json_root;
+    11: optional bool strip_outer_array
+    12: optional string jsonpaths
+    13: optional string json_root
+    14: optional Types.TCompressionType compression_type
 }
 
 enum TObjectStoreType {
