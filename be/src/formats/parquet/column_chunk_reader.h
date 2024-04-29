@@ -73,6 +73,9 @@ public:
 
     Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
+        if (_no_null()) {
+            return _cur_decoder->next_batch(n, content_type, dst);
+        }
         size_t idx = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];
@@ -130,6 +133,11 @@ private:
     Status _try_load_dictionary();
 
     Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
+
+    bool _no_null() {
+        return metadata().__isset.statistics && metadata().statistics.__isset.null_count &&
+               metadata().statistics.null_count == 0;
+    }
 
 private:
     enum PageParseState {
