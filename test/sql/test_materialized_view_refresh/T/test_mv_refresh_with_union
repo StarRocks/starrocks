@@ -71,8 +71,8 @@ union all
 select * from t2;
 function: wait_async_materialized_view_finish("test_mv1")
 select k1, count(1) from test_mv1 group by k1 order by k1;
-
 drop materialized view test_mv1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
@@ -83,8 +83,8 @@ union all
 select * from t2;
 refresh materialized view  test_mv1 with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
-
 drop materialized view test_mv1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
@@ -95,8 +95,8 @@ union all
 select * from t2;
 refresh materialized view  test_mv1 partition start('2020-10-01') end ('2020-10-30') force with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
-
 drop materialized view test_mv1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
@@ -107,6 +107,7 @@ union all
 select * from t2;
 refresh materialized view  test_mv1 partition start('2020-10-21') end ('2020-10-23') force with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
+drop materialized view test_mv1;
 
 drop table t1;
 drop table t2;
@@ -169,8 +170,8 @@ union all
 select * from t2;
 function: wait_async_materialized_view_finish("test_mv1")
 select k1, count(1) from test_mv1 group by k1 order by k1;
-
 drop materialized view test_mv1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY date_trunc('day', `k1`)
 DISTRIBUTED BY HASH(`k1`)
@@ -181,8 +182,8 @@ union all
 select * from t2;
 refresh materialized view  test_mv1 with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
-
 drop materialized view test_mv1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
@@ -193,8 +194,8 @@ union all
 select * from t2;
 refresh materialized view  test_mv1 partition start('2020-10-01') end ('2020-10-30') force with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
-
 drop materialized view test_mv1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY `k1`
 DISTRIBUTED BY HASH(`k1`)
@@ -205,6 +206,7 @@ union all
 select * from t2;
 refresh materialized view  test_mv1 partition start('2020-10-21') end ('2020-10-23') force with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
+drop materialized view test_mv1;
 
 drop table t1;
 drop table t2;

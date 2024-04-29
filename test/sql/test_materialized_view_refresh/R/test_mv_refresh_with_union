@@ -156,6 +156,9 @@ select k1, count(1) from test_mv1 group by k1 order by k1;
 2020-10-21	1
 2020-10-22	2
 -- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
 drop table t1;
 -- result:
 -- !result
@@ -306,6 +309,9 @@ select k1, count(1) from test_mv1 group by k1 order by k1;
 -- result:
 2020-10-21	1
 2020-10-22	2
+-- !result
+drop materialized view test_mv1;
+-- result:
 -- !result
 drop table t1;
 -- result:
