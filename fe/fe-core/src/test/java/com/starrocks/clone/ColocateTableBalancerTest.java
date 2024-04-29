@@ -231,6 +231,7 @@ public class ColocateTableBalancerTest {
         } finally {
             Config.tablet_sched_repair_delay_factor_second = oldVal;
             Config.tablet_sched_disable_colocate_overall_balance = false;
+            ColocateTableBalancer.ignoreSingleReplicaCheck = false;
         }
     }
 

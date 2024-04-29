@@ -1023,6 +1023,13 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 leftBound = -1;
             }
 
+            LOG.info("groupId: {}, unavailableBeIds: {}, availableBeIds: {}, " +
+                            "flatBackendsPerBucketSeq: {}, srcBeId: {}, hasUnavailableBe: {}, " +
+                            "decommissionedBackends: {}, backendWithReplicaNum: {}, leftBound: {}",
+                    groupId, unavailableBeIds, availableBeIds,
+                    flatBackendsPerBucketSeq, srcBeId, hasUnavailableBe,
+                    decommissionedBackends, backendWithReplicaNum, leftBound);
+
             int j = backendWithReplicaNum.size() - 1;
             boolean isThisRoundChanged = false;
             INNER:
