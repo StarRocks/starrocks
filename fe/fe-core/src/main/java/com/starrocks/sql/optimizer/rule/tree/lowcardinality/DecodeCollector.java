@@ -457,7 +457,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                     .getColumnStatistic(table, column.getName());
             // Condition 2: the varchar column is low cardinality string column
-            if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
+            if (!column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                     columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
                 LOG.debug("{} isn't low cardinality string column", column.getName());
                 continue;
