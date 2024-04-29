@@ -101,7 +101,17 @@ The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
 
 Specifies the data format options for a specific data file format.
 
-#### format_type_options
+#### Universal format_type_options
+
+##### auto_detect_sample_files
+
+Specifies the number of data files to sample in each batch. StarRocks will infer the final schema of the data file based on the sampling result.
+
+##### auto_detect_sample_rows
+
+Specifies the number of rows to sample in each data file. For CSV and JSON formats, StarRocks will infer the schema of a data file the data based on the sampled rows.
+
+#### CSV-related format_type_options
 
 Example for the CSV format:
 
@@ -114,14 +124,6 @@ Example for the CSV format:
 "csv.skip_header"="1",
 "csv.escape"="\\"
 ```
-
-##### auto_detect_sample_files
-
-Specifies the number of data files to sample in each batch. StarRocks will infer the final schema of the data file based on the sampling result.
-
-##### auto_detect_sample_rows
-
-Specifies the number of rows to sample in each data file. For CSV and JSON formats, StarRocks will infer the schema of a data file the data based on the sampled rows.
 
 ##### csv.column_separator
 
