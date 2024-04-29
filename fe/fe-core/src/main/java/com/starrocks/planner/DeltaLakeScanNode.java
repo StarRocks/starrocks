@@ -25,12 +25,15 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -49,6 +52,8 @@ import io.delta.kernel.data.Row;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
+import io.delta.kernel.internal.SnapshotImpl;
+import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
@@ -137,6 +142,8 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
+        DeltaUtils.checkTableFeatureSupported(((SnapshotImpl) deltaLakeTable.getDeltaSnapshot()).getProtocol(),
+                deltaMetadata);
 
         preProcessConjuncts(deltaMetadata.getSchema());
         List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
@@ -155,6 +162,11 @@ public class DeltaLakeScanNode extends ScanNode {
 
             for (CloseableIterator<Row> rows = scanFileBatch.getRows(); rows.hasNext(); ) {
                 Row row = rows.next();
+                DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(row);
+                if (dv != null) {
+                    ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
+                            "Delta table feature [deletion vectors] is not supported");
+                }
                 FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(row);
                 Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(row);
                 List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
