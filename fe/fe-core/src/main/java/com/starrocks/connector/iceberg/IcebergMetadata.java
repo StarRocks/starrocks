@@ -165,15 +165,18 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final ExecutorService jobPlanningExecutor;
     private final ExecutorService refreshOtherFeExecutor;
     private final IcebergMetricsReporter metricsReporter;
+    private final IcebergCatalogProperties catalogProperties;
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor) {
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           IcebergCatalogProperties catalogProperties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
         this.metricsReporter = new IcebergMetricsReporter();
         this.jobPlanningExecutor = jobPlanningExecutor;
         this.refreshOtherFeExecutor = refreshOtherFeExecutor;
+        this.catalogProperties = catalogProperties;
     }
 
     @Override
@@ -487,7 +490,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         String serializedTable = SerializationUtil.serializeToBase64(new SerializableTable(nativeTable, fileIO));
         boolean loadColumnStats = enableCollectColumnStatistics() ||
-                (!deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot));
+                (!deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
+                        catalogProperties.enableDistributedPlanLoadColumnStatsWithEqDelete());
 
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
     }
