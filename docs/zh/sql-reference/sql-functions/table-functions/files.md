@@ -29,7 +29,7 @@ displayed_sidebar: "Chinese"
 - **导入**:
 
   ```SQL
-  FILES( data_location , data_format [, StorageCredentialParams ] [, columns_from_path ] )
+  FILES( data_location , data_format [, format_type_options ] [, StorageCredentialParams ] [, columns_from_path ] )
   ```
 
 - **导出**:
@@ -96,6 +96,72 @@ displayed_sidebar: "Chinese"
 ### data_format
 
 数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
+
+### format_type_options
+
+用于指定特定数据文件格式的选项。
+
+#### 通用 format_type_options
+
+##### auto_detect_sample_files
+
+指定每批次中要抽样的数据文件数量。StarRocks 将根据抽样结果推断数据文件的最终 Schema。
+
+##### auto_detect_sample_rows
+
+指定每个数据文件要抽样的行数。对于 CSV 和 JSON 格式，StarRocks 将根据抽样的行推断当前数据文件的 Schema。
+
+#### CSV format_type_options
+
+CSV 格式示例：
+
+```SQL
+"format"="csv",
+"auto_detect_sample_files"="1",
+"auto_detect_sample_rows"="1",
+"csv.column_separator"=",",
+"csv.enclose"='"',
+"csv.skip_header"="1",
+"csv.escape"="\\"
+```
+
+##### csv.column_separator
+
+用于指定源数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败。
+
+需要注意的是，Files() 任务通过 MySQL 协议提交请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果源数据文件是 Hive 文件，这里必须传入 `\\x01`。
+
+> **说明**
+>
+> - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+> - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
+
+##### csv.enclose
+
+根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。
+
+被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。
+
+如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。
+
+##### csv.skip_header
+
+用于指定跳过 CSV 文件最开头的几行数据。取值类型：INTEGER。默认值：`0`。
+
+在某些 CSV 文件里，最开头的几行数据会用来定义列名、列类型等元数据信息。通过设置该参数，可以使 StarRocks 在导入数据时忽略 CSV 文件的前面几行。例如，如果设置该参数为 `1`，则 StarRocks 会在导入数据时忽略 CSV 文件的第一行。
+
+这里的行所使用的分隔符须与您在导入语句中所设定的行分隔符一致。
+
+##### csv.escape
+
+指定 CSV 文件用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。
+
+> **说明**
+>
+> `escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。
+> 以下为两个示例：
+> - 当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。
+> - 假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。
 
 ### StorageCredentialParams
 
