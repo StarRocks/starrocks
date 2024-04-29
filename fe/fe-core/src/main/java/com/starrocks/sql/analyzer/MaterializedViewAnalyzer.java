@@ -925,7 +925,7 @@ public class MaterializedViewAnalyzer {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 if (table.isNativeTableOrMaterializedView()) {
                     Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
-                    if (!tableOptional.isEmpty()) {
+                    if (tableOptional.isEmpty()) {
                         continue;
                     }
                     if (tableOptional.get().equals(table)) {
