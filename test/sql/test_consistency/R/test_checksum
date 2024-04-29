@@ -18,7 +18,7 @@ insert into t1 values (100, 10.1, named_struct("a", bitmap_from_string("1"), "b"
 -- !result
 
 [UC]tablets=show tablets from t1;
-shell: curl ${url}/api/checksum?tablet_id=${tablets[0][0]}&version=2
+shell: curl -u root: "${url}/api/checksum?tablet_id=${tablets[0][0]}&version=2"
 -- result:
 100
 -- !result

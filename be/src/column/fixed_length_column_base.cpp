@@ -269,9 +269,6 @@ int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const
                 xor_checksum ^= src[i];
             }
         }
-    } else if constexpr (std::is_floating_point_v<T>) {
-        // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
-        // a fixed value, so these two types are ignored in calculating checksum.
     }
 
     return xor_checksum;
