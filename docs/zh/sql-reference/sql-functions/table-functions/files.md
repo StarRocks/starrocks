@@ -21,8 +21,8 @@ displayed_sidebar: "Chinese"
   - Microsoft Azure Blob Storage
 - **文件格式：**
   - Parquet
-  - ORC（暂不支持数据导出）
-  - CSV（暂不支持数据导出）
+  - ORC
+  - CSV
 
 ## 语法
 
