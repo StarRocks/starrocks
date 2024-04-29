@@ -23,6 +23,7 @@ Currently, the FILES() function supports the following data sources and file for
 - **File formats:**
   - Parquet
   - ORC (Currently not supported for unloading data)
+  - CSV (Currently not supported for unloading data)
 
 ## Syntax
 
@@ -94,7 +95,7 @@ The URI used to access the files. You can specify a path or a file.
 
 ### data_format
 
-The format of the data file. Valid values: `parquet` and `orc`.
+The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
 
 ### StorageCredentialParams
 
