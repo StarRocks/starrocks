@@ -53,9 +53,10 @@ struct ByteBuffer {
     }
 
     static ByteBufferPtr reallocate(const ByteBufferPtr& old_ptr, size_t new_size) {
+        if (new_size <= old_ptr->capacity) return old_ptr;
+
         ByteBufferPtr ptr(new ByteBuffer(new_size));
-        auto sz = std::min(old_ptr->pos, new_size);
-        ptr->put_bytes(old_ptr->ptr, sz);
+        ptr->put_bytes(old_ptr->ptr, old_ptr->pos);
         return ptr;
     }
 
