@@ -757,7 +757,7 @@ bool SnapshotLoader::_end_with(const std::string& str, const std::string& match)
 }
 
 bool SnapshotLoader::_contains(const std::string& str, const std::string& match) {
-    if (str.size() >= match.size() && str.find(match) != std::string::npos) {
+    if (str.find(match) != std::string::npos) {
         return true;
     }
     return false;
