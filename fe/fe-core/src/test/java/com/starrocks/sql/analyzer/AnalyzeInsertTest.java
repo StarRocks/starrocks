@@ -352,9 +352,9 @@ public class AnalyzeInsertTest {
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"uncompressed\", \n" +
-                        "\t\"parquet.use_legacy_encoding\"=\"false-false\" ) \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"f\" ) \n" +
                         "select \"abc\" as k1, 123 as k2",
-                "got invalid parameter \"parquet.use_legacy_encoding\" = \"false-false\", expect a boolean value (true or false).");
+                "got invalid parameter \"parquet.use_legacy_encoding\" = \"f\", expect a boolean value (true or false).");
 
         analyzeSuccess("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
