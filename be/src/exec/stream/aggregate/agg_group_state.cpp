@@ -316,7 +316,7 @@ Status AggGroupState::write(RuntimeState* state, StreamChunkPtr* result_chunk, C
     // Need mock slot id
     auto new_result_chunk = std::make_shared<Chunk>();
     int32_t slot_id = 0;
-    for (auto col : (*result_chunk)->columns()) {
+    for (const auto& col : (*result_chunk)->columns()) {
         new_result_chunk->append_column(col, slot_id++);
     }
     if (StreamChunkConverter::has_ops_column(*result_chunk)) {

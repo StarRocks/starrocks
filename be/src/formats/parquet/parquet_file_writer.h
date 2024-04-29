@@ -99,7 +99,7 @@ public:
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type,
                       const std::shared_ptr<ParquetWriterOptions>& writer_options,
-                      const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                      const std::function<void()>& rollback_action, PriorityThreadPool* executors,
                       RuntimeState* runtime_state);
 
     ~ParquetFileWriter() override;

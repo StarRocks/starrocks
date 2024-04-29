@@ -119,7 +119,7 @@ FailPoint* FailPointRegistry::get(const std::string& name) {
     return iter->second;
 }
 
-void FailPointRegistry::iterate(std::function<void(FailPoint*)> callback) {
+void FailPointRegistry::iterate(const std::function<void(FailPoint*)>& callback) {
     for (const auto& [_, fp] : _fps) {
         callback(fp);
     }

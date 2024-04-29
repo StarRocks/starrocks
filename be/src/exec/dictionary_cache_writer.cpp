@@ -55,7 +55,8 @@ Status DictionaryCacheWriter::prepare() {
     return Status::OK();
 }
 
-Status DictionaryCacheWriter::append_chunk(ChunkPtr chunk, std::atomic_bool* terminate_flag /*finish or cancel*/) {
+Status DictionaryCacheWriter::append_chunk(const ChunkPtr& chunk,
+                                           std::atomic_bool* terminate_flag /*finish or cancel*/) {
     if (chunk != nullptr) {
         if (chunk->num_rows() == 0) {
             return Status::OK();

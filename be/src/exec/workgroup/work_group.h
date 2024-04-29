@@ -277,7 +277,7 @@ public:
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
     using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
-    void for_each_workgroup(WorkGroupConsumer consumer) const;
+    void for_each_workgroup(const WorkGroupConsumer& consumer) const;
 
     void incr_num_running_sq_drivers() { _num_running_sq_drivers++; }
     void decr_num_running_sq_drivers() { _num_running_sq_drivers--; }
