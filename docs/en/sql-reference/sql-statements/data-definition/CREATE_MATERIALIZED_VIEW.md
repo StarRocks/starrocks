@@ -278,6 +278,10 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `false` (Default value): Disable query rewrite for external catalog-based materialized views.
 
   Because strong data consistency is not guaranteed between base tables and external catalog-based materialized views, this feature is set to `false` by default. When this feature is enabled, the materialized view is used for query rewrite in accordance with the rule specified in `query_rewrite_consistency`.
+- `enable_query_rewrite`: Whether to use the materialized view for query rewrite. When there are many materialized views, query rewrite based on materialized views can impact the optimizer's time consumption. With this property, you can control whether the materialized view can be used for query rewrite. This feature is supported from v3.3.0 onwards. Valid values:
+  - `default` (Default): The system will not perform semantic checks on the materialized view, but only the SPJG-type materialized views can be used for query rewrite. Note that if the text-based query rewrite is enabled, non-SPJG-type materialized views can also be used for query rewrite.
+  - `true`: The system will perform semantic checks when creating or modifying the materialized view. If the materialized view is not eligible for query rewrite (that is, the definition of the materialized view is not an SPJG-type query), a failure will be returned.
+  - `false`: The materialized view will not be used for query rewrite.
 
 > **CAUTION**
 >
