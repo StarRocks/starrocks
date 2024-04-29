@@ -536,7 +536,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (index.getIndexType() == IndexDef.IndexType.GIN) {
                 if (index.getColumns().contains(oriColumn.getName()) &&
                         !modColumn.getType().isStringType()) {
-                    throw new DdlException("Can't not modify a Column with Gin into Non-String type");
+                    throw new DdlException("Cannot modify a column with GIN into non-string type");
                 }
             }
         }
