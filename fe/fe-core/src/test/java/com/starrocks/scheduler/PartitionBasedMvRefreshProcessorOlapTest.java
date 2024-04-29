@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -68,6 +69,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -602,7 +604,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
 
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    if (!baseTableInfo.getTable().isOlapTable()) {
+                    Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
+                    if (tableOptional.isEmpty() || !tableOptional.get().isOlapTable()) {
                         continue;
                     }
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
@@ -655,7 +658,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 Map<Long, TableSnapshotInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    if (!baseTableInfo.getTable().isOlapTable()) {
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
+                    if (!table.isOlapTable()) {
                         continue;
                     }
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
@@ -717,7 +721,11 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 Map<Long, TableSnapshotInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    if (!baseTableInfo.getTable().isOlapTable()) {
+                    Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
+                    if (tableOptional.isEmpty()) {
+                        continue;
+                    }
+                    if (!tableOptional.get().isOlapTable()) {
                         continue;
                     }
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
@@ -818,7 +826,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 Map<Long, TableSnapshotInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    if (!baseTableInfo.getTable().isOlapTable()) {
+                    Table table = MvUtils.getTableChecked(baseTableInfo);
+                    if (!table.isOlapTable()) {
                         continue;
                     }
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
