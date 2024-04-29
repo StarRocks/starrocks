@@ -23,6 +23,7 @@
 #include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
+#include "util/compression/stream_compression.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
 
@@ -82,7 +83,7 @@ private:
 class JsonReader {
 public:
     JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
-               bool strict_mode, std::vector<SlotDescriptor*> slot_descs);
+               bool strict_mode, std::vector<SlotDescriptor*> slot_descs, const TBrokerRangeDesc& range_desc);
 
     ~JsonReader();
 
@@ -158,6 +159,8 @@ private:
     char* _payload = nullptr;
     size_t _payload_size = 0;
     size_t _payload_capacity = 0;
+
+    TBrokerRangeDesc _range_desc;
 };
 
 } // namespace starrocks
