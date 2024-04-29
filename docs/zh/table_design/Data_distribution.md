@@ -445,7 +445,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   </TabItem>
   <TabItem value="example2" label="分区数值间隔不同">
 
-    支持针对不同的数值分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定数值间隔。一个数值分区区间，按照对应 EVERY 子句定义的数值间隔，批量创建分区，例如：
+    支持针对不同的数值分区区间（数值分区区间不能相重合），使用不同的 EVERY 子句指定数值间隔。一个数值分区区间，按照对应 EVERY 子句定义的数值间隔，批量创建分区，例如：
 
     ```SQL
     CREATE TABLE site_access (
@@ -466,10 +466,10 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   </TabItem>
   </Tabs>
 
-- 分区列为时间戳和字符串类型（自 3.3.0 起支持）
+- 分区列值为时间戳和字符串类型（自 3.3.0 起支持）
 
   <Tabs groupId="batch partitioning(timestamp and string)">
-  <TabItem value="example1" label="分区列为时间戳" default>
+  <TabItem value="example1" label="分区列值为时间戳" default>
 
   ```SQL
   -- 精确到秒的 10 位时间戳，例如：1703832553
