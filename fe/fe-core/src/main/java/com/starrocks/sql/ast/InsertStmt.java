@@ -385,6 +385,7 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException("partition column does not support type of " + type);
         }
 
-        return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, targetMaxFileSize, props);
+        return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, targetMaxFileSize,
+                props);
     }
 }

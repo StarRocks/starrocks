@@ -1055,9 +1055,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
         auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
                 context->next_operator_id(), target_table.path, target_table.file_format, target_table.compression_type,
-                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names,
-                max_file_size, thrift_sink.table_function_table_sink.cloud_configuration,
-                fragment_ctx);
+                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names, max_file_size,
+                thrift_sink.table_function_table_sink.cloud_configuration, fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         size_t sink_dop = request.pipeline_sink_dop();

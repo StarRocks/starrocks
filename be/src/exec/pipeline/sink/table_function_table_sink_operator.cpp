@@ -233,10 +233,10 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 OperatorPtr TableFunctionTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<TableFunctionTableSinkOperator>(
-            this, _id, _plan_node_id, driver_sequence, _path, _file_format, _compression_type, _output_exprs,
-            _partition_exprs, _partition_column_names, _max_file_size, _cloud_conf, _fragment_ctx,
-            _parquet_file_schema);
+    return std::make_shared<TableFunctionTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _path,
+                                                            _file_format, _compression_type, _output_exprs,
+                                                            _partition_exprs, _partition_column_names, _max_file_size,
+                                                            _cloud_conf, _fragment_ctx, _parquet_file_schema);
 }
 
 void TableFunctionTableSinkOperatorFactory::close(RuntimeState* state) {
