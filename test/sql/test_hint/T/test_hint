@@ -160,9 +160,6 @@ select @test = ["abc'"];
 set @test = ["abc\\'"];
 select @test = ["abc\\'"];
 
-set @test = concat(upper('a'), '\'', '\\' 'b', '"');
-select @test = concat(upper('a'), '\'', '\\' 'b', '"');
-
 
 
 

@@ -257,8 +257,6 @@ select @test;
 set @test= (select cast(50 as time));
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Can't set variable with type TIME.")
-<<<<<<< HEAD
-=======
 -- !result
 set @test= ["{\"m\":{\"cal\":[{\"thur\":{\"use\":true,\"shift\":{\"begin\":0,\"end\":36}},\"id\":\"ID1\"}]}}", "{\"\\a\"}"];
 -- result:
@@ -294,13 +292,4 @@ set @test = ["abc\\'"];
 select @test = ["abc\\'"];
 -- result:
 1
--- !result
-set @test = concat(upper('a'), '\'', '\\' 'b', '"');
--- result:
-E: (1064, "Getting syntax error at line 1, column 42. Detail message: Unexpected input ''b'', the most similar input is {',', ')'}.")
--- !result
-select @test = concat(upper('a'), '\'', '\\' 'b', '"');
--- result:
-E: (1064, "Getting syntax error at line 1, column 45. Detail message: Unexpected input ''b'', the most similar input is {',', ')'}.")
->>>>>>> c38a0fcb80 ([BugFix] fix not processing escape character (#44812))
 -- !result
