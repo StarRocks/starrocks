@@ -22,6 +22,7 @@ displayed_sidebar: "Chinese"
 - **文件格式：**
   - Parquet
   - ORC（暂不支持数据导出）
+  - CSV（暂不支持数据导出）
 
 ## 语法
 
@@ -94,7 +95,7 @@ displayed_sidebar: "Chinese"
 
 ### data_format
 
-数据文件的格式。有效值：`parquet` 和 `orc`。
+数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
 
 ### StorageCredentialParams
 
