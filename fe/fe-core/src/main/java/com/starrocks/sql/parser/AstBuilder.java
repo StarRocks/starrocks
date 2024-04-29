@@ -197,6 +197,7 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
@@ -1466,13 +1467,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        if (desc.interval() != null) {
-            var intervalLiteral = (IntervalLiteral) visit(desc.interval());
+        if (desc.taskInterval() != null) {
+            var intervalLiteral = (IntervalLiteral) visit(desc.taskInterval());
             if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
                 String exprSql = intervalLiteral.getValue().toSql();
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
-                        createPos(desc.interval()));
-
+                        createPos(desc.taskInterval()));
             }
 
             long period = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
@@ -1481,8 +1481,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
                         intervalLiteral.getUnitIdentifier().getDescription());
             } catch (DdlException e) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(intervalLiteral.toString(),
-                        "INTERVAL "), createPos(desc.interval()));
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(
+                        intervalLiteral.getUnitIdentifier().getDescription(),
+                        "INTERVAL "), createPos(desc.taskInterval()));
             }
             schedule.setPeriod(period);
             schedule.setTimeUnit(timeUnit);
@@ -1510,15 +1511,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
+        DataCacheSelectStatement dataCacheSelectStmt = null;
         if (context.createTableAsSelectStatement() != null) {
             createTableAsSelectStmt = (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
         } else if (context.insertStatement() != null) {
             insertStmt = (InsertStmt) visit(context.insertStatement());
+        } else if (context.dataCacheSelectStatement() != null) {
+            dataCacheSelectStmt = (DataCacheSelectStatement) visit(context.dataCacheSelectStatement());
         }
 
         int startIndex = 0;
         if (createTableAsSelectStmt != null) {
             startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        } else if (dataCacheSelectStmt != null) {
+            startIndex = context.dataCacheSelectStatement().start.getStartIndex();
         } else {
             startIndex = context.insertStatement().start.getStartIndex();
         }
@@ -1533,6 +1539,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         SubmitTaskStmt res;
         if (createTableAsSelectStmt != null) {
             res = new SubmitTaskStmt(taskName, startIndex, createTableAsSelectStmt, pos);
+        } else if (dataCacheSelectStmt != null) {
+            res = new SubmitTaskStmt(taskName, startIndex, dataCacheSelectStmt, pos);
         } else {
             res = new SubmitTaskStmt(taskName, startIndex, insertStmt, pos);
         }
@@ -3198,6 +3206,50 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitClearDataCacheRulesStatement(StarRocksParser.ClearDataCacheRulesStatementContext ctx) {
         return new ClearDataCacheRulesStmt(createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitDataCacheSelectStatement(StarRocksParser.DataCacheSelectStatementContext ctx) {
+        // cache select only support select one table at a time
+        // create a single table relation
+        TableRelation tableRelation = null;
+        {
+            QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+            tableRelation = new TableRelation(tableName);
+        }
+
+        // create select items
+        List<SelectListItem> selectItems = visit(ctx.selectItem(), SelectListItem.class);
+        SelectList selectList = new SelectList(selectItems, false);
+
+        // create query relation based on tableRelation and selectItems
+        QueryRelation queryRelation = new SelectRelation(
+                selectList,
+                tableRelation,
+                (Expr) visitIfPresent(ctx.where),
+                null,
+                null,
+                createPos(ctx));
+
+
+        // create queryStatement based on queryRelation
+        QueryStatement queryStatement = new QueryStatement(queryRelation);
+
+        // Convert queryStatement into InsertStmt(`INSERT INTO BLACKHOLE() SELECT xxx FROM TBL`)
+        InsertStmt insertStmt = new InsertStmt(queryStatement, createPos(ctx));
+
+        // properties
+        Map<String, String> properties = new HashMap<>();
+        if (ctx.properties() != null) {
+            List<Property> propertyList = visit(ctx.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                // ignore case sensitive
+                properties.put(property.getKey().toLowerCase(), property.getValue().toLowerCase());
+            }
+        }
+
+        return new DataCacheSelectStatement(insertStmt, properties, createPos(ctx));
     }
 
     // ----------------------------------------------- Export Statement ------------------------------------------------
@@ -6461,9 +6513,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitTaskInterval(StarRocksParser.TaskIntervalContext context) {
+        return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from),
+                createPos(context));
+    }
+
+    @Override
     public ParseNode visitInterval(StarRocksParser.IntervalContext context) {
         return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTaskUnitIdentifier(StarRocksParser.TaskUnitIdentifierContext context) {
+        return new UnitIdentifier(context.getText(), createPos(context));
     }
 
     @Override

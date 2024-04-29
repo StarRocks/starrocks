@@ -17,7 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeConstants;
-import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
+import com.starrocks.statistic.MockHistogramStatisticStorage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
@@ -44,7 +44,7 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
 
         int scale = 100;
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
     }
 
     @ParameterizedTest

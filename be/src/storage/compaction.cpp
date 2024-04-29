@@ -158,8 +158,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
                                                const TabletSchemaCSPtr& tablet_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    auto merge_tablet_schema = std::shared_ptr<TabletSchema>(TabletSchema::copy(tablet_schema));
-    TabletReader reader(_tablet, _output_rs_writer->version(), merge_tablet_schema, schema);
+    TabletReader reader(_tablet, _output_rs_writer->version(), tablet_schema, schema);
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");

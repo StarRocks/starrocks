@@ -51,7 +51,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
 }
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                           std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema)
+                           std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaCSPtr* tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
@@ -73,7 +73,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
     _tablet_schema = !tablet_schema ? _tablet->tablet_schema() : tablet_schema;
 }
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema,
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaCSPtr& tablet_schema,
                            Schema schema)
         : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {
     _tablet_schema = tablet_schema;
@@ -140,22 +140,35 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
     auto keys = ChunkHelper::new_chunk(pk_schema, 1);
-    PredicateMap pushdown_predicates;
     size_t num_pk_eq_predicates = 0;
-    for (const ColumnPredicate* pred : _reader_params->predicates) {
-        auto column_id = pred->column_id();
-        if (column_id < tablet_schema->num_key_columns() && pred->type() == PredicateType::kEQ) {
-            auto& column = keys->get_column_by_id(column_id);
-            if (column->size() != 0) {
-                return Status::NotSupported(
-                        strings::Substitute("multiple eq predicates on same pk column columnId=$0", column_id));
-            }
-            column->append_datum(pred->value());
-            num_pk_eq_predicates++;
-        } else {
-            pushdown_predicates[pred->column_id()].emplace_back(pred);
-        }
+
+    PredicateAndNode pushdown_pred_root;
+    overloaded visitor{
+            [&](const PredicateColumnNode& child_node) {
+                const auto* col_pred = child_node.col_pred();
+                const auto cid = col_pred->column_id();
+                if (cid < tablet_schema->num_key_columns() && col_pred->type() == PredicateType::kEQ) {
+                    auto& column = keys->get_column_by_id(cid);
+                    if (column->size() != 0) {
+                        return Status::NotSupported(
+                                strings::Substitute("multiple eq predicates on same pk column columnId=$0", cid));
+                    }
+                    column->append_datum(col_pred->value());
+                    num_pk_eq_predicates++;
+                } else {
+                    pushdown_pred_root.add_child(child_node);
+                }
+                return Status::OK();
+            },
+            [&]<CompoundNodeType Type>(const PredicateCompoundNode<Type>& child_node) {
+                pushdown_pred_root.add_child(child_node);
+                return Status::OK();
+            },
+    };
+    for (const auto& child : _reader_params->pred_tree.root().children()) {
+        RETURN_IF_ERROR(child.visit(visitor));
     }
+
     if (num_pk_eq_predicates != tablet_schema->num_key_columns()) {
         return Status::NotSupported(strings::Substitute("should have eq predicates on all pk columns current: $0 < $1",
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
@@ -189,7 +202,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     RETURN_IF_ERROR(_tablet->updates()->get_rowset_and_segment_idx_by_rssid(rssid, &rowset, &segment_idx));
 
     RowsetReadOptions rs_opts;
-    rs_opts.predicates = pushdown_predicates;
+    rs_opts.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     rs_opts.sorted = false;
     rs_opts.reader_type = _reader_params->reader_type;
     rs_opts.chunk_size = _reader_params->chunk_size;
@@ -259,8 +272,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
-    rs_opts.predicates = _pushdown_predicates;
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
+    rs_opts.pred_tree = params.pred_tree;
+    auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
                                                                      &rs_opts.predicates_for_zone_map));
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
@@ -283,6 +297,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
     rs_opts.asc_hint = _is_asc_hint;
+    rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
@@ -462,9 +477,6 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 }
 
 Status TabletReader::_init_predicates(const TabletReaderParams& params) {
-    for (const ColumnPredicate* pred : params.predicates) {
-        _pushdown_predicates[pred->column_id()].emplace_back(pred);
-    }
     return Status::OK();
 }
 

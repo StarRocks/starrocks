@@ -18,7 +18,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "connector_sink/connector_chunk_sink.h"
+#include "connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
@@ -85,6 +85,10 @@ public:
     };
     void update_profile(const Profile& profile);
     void set_morsel(pipeline::ScanMorsel* morsel) { _morsel = morsel; }
+
+    void set_driver_sequence(size_t driver_sequence) {
+        runtime_bloom_filter_eval_context.driver_sequence = driver_sequence;
+    }
 
 protected:
     int64_t _read_limit = -1; // no limit

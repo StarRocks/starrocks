@@ -136,10 +136,12 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     auto new_tablet_meta2 = publish_single_version(tablet_id, 4, txn_id2);
     ASSERT_OK(new_tablet_meta2.status());
     ASSERT_EQ(false, new_tablet_meta2.value()->enable_persistent_index());
+#ifdef USE_STAROS
     data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
     ASSERT_TRUE(data_dir != nullptr);
     ASSERT_ERROR(FileSystem::Default()->path_exists(data_dir->get_persistent_index_path() + "/" +
                                                     std::to_string(tablet_id)));
+#endif
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
@@ -177,21 +179,6 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
     auto new_tablet_meta2 = publish_single_version(tablet_id, 3, txn_id2);
     ASSERT_OK(new_tablet_meta2.status());
     ASSERT_EQ(true, new_tablet_meta2.value()->enable_persistent_index());
-}
-
-TEST_F(AlterTabletMetaTest, test_alter_not_persistent_index) {
-    lake::SchemaChangeHandler handler(_tablet_mgr.get());
-    TUpdateTabletMetaInfoReq update_tablet_meta_req;
-    int64_t txn_id = 1;
-    update_tablet_meta_req.__set_txn_id(txn_id);
-
-    TTabletMetaInfo tablet_meta_info;
-    auto tablet_id = _tablet_metadata->id();
-    tablet_meta_info.__set_tablet_id(tablet_id);
-    tablet_meta_info.__set_meta_type(TTabletMetaType::INMEMORY);
-
-    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
-    ASSERT_ERROR(handler.process_update_tablet_meta(update_tablet_meta_req));
 }
 
 } // namespace starrocks::lake

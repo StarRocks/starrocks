@@ -95,6 +95,8 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
         params->grouping_exprs = tnode.agg_node.grouping_exprs;
         params->aggregate_functions = tnode.agg_node.aggregate_functions;
         params->intermediate_aggr_exprs = tnode.agg_node.intermediate_aggr_exprs;
+        params->enable_pipeline_share_limit =
+                tnode.agg_node.__isset.enable_pipeline_share_limit ? tnode.agg_node.enable_pipeline_share_limit : false;
         break;
     }
     default:
@@ -1313,6 +1315,31 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
         hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
                                           &_tmp_agg_states);
     });
+}
+
+void Aggregator::build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown,
+                                bool agg_group_by_with_limit) {
+    if (agg_group_by_with_limit && _params->enable_pipeline_share_limit) {
+        _build_hash_map_with_shared_limit(chunk_size, shared_limit_countdown);
+        return;
+    }
+    build_hash_map(chunk_size, agg_group_by_with_limit);
+}
+
+void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown) {
+    auto start_size = _hash_map_variant.size();
+    if (_hash_map_variant.size() >= _limit || shared_limit_countdown.load(std::memory_order_relaxed) <= 0) {
+        build_hash_map_with_selection(chunk_size);
+        return;
+    } else {
+        _streaming_selection.assign(chunk_size, 0);
+    }
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
+                                          &_tmp_agg_states);
+    });
+    shared_limit_countdown.fetch_sub(_hash_map_variant.size() - start_size, std::memory_order_relaxed);
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {

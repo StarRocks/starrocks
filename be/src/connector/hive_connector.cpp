@@ -16,7 +16,6 @@
 
 #include <filesystem>
 
-#include "connector_sink/hive_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -24,6 +23,7 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
+#include "hive_chunk_sink.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -101,6 +101,12 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     if (state->query_options().__isset.enable_populate_datacache) {
         _enable_populate_datacache = state->query_options().enable_populate_datacache;
+    }
+    if (state->query_options().__isset.enable_datacache_async_populate_mode) {
+        _enable_datacache_aync_populate_mode = state->query_options().enable_datacache_async_populate_mode;
+    }
+    if (state->query_options().__isset.enable_datacache_io_adaptor) {
+        _enable_datacache_io_adaptor = state->query_options().enable_datacache_io_adaptor;
     }
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
@@ -478,259 +484,6 @@ void HiveDataSource::_init_rf_counters() {
     }
 }
 
-static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
-    for (int i = 0; i < type.children.size(); i++) {
-        const auto& t = type.children[i];
-        if (t.is_unknown_type()) continue;
-        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
-        if (t.is_complex_type()) {
-            build_nested_fields(t, p, sb);
-        } else {
-            sb->append(p);
-            sb->append(",");
-        }
-    }
-}
-
-static std::string build_fs_options_properties(const FSOptions& options) {
-    const TCloudConfiguration* cloud_configuration = options.cloud_configuration;
-    static constexpr char KV_SEPARATOR = 0x1;
-    static constexpr char PROP_SEPARATOR = 0x2;
-    std::string data;
-
-    if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                data += cloud_property.key;
-                data += KV_SEPARATOR;
-                data += cloud_property.value;
-                data += PROP_SEPARATOR;
-            }
-        } else {
-            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
-                data += key;
-                data += KV_SEPARATOR;
-                data += value;
-                data += PROP_SEPARATOR;
-            }
-        }
-    }
-
-    if (data.size() > 0 && data.back() == PROP_SEPARATOR) {
-        data.pop_back();
-    }
-    return data;
-}
-
-HdfsScanner* HiveDataSource::_create_hudi_jni_scanner(const FSOptions& options) {
-    const auto& scan_range = _scan_range;
-    const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
-    auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
-    std::string partition_full_path = partition_desc->location();
-
-    std::string required_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-
-    std::string nested_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-
-    std::string delta_file_paths;
-    if (!scan_range.hudi_logs.empty()) {
-        for (const std::string& log : scan_range.hudi_logs) {
-            delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
-            delta_file_paths.append(",");
-        }
-        delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
-    }
-
-    std::string data_file_path;
-    if (scan_range.relative_path.empty()) {
-        data_file_path = "";
-    } else {
-        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
-    }
-
-    std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["base_path"] = hudi_table->get_base_path();
-    jni_scanner_params["hive_column_names"] = hudi_table->get_hive_column_names();
-    jni_scanner_params["hive_column_types"] = hudi_table->get_hive_column_types();
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["instant_time"] = hudi_table->get_instant_time();
-    jni_scanner_params["delta_file_paths"] = delta_file_paths;
-    jni_scanner_params["data_file_path"] = data_file_path;
-    jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
-    jni_scanner_params["serde"] = hudi_table->get_serde_lib();
-    jni_scanner_params["input_format"] = hudi_table->get_input_format();
-    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
-    jni_scanner_params["time_zone"] = hudi_table->get_time_zone();
-
-    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
-HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options) {
-    const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
-
-    std::string required_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-    std::string nested_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-    std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
-    jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
-    jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
-
-    std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
-HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) {
-    const auto& scan_range = _scan_range;
-    static const char* serde_property_prefix = "SerDe.";
-
-    std::string required_fields;
-    for (auto const& slot : _materialize_slots) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-
-    std::string nested_fields;
-    for (auto slot : _materialize_slots) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-
-    std::string data_file_path;
-    std::string hive_column_names;
-    std::string hive_column_types;
-    std::string serde;
-    std::string input_format;
-    std::map<std::string, std::string> serde_properties;
-    std::string time_zone;
-
-    if (dynamic_cast<const FileTableDescriptor*>(_hive_table)) {
-        const auto* file_table = dynamic_cast<const FileTableDescriptor*>(_hive_table);
-
-        data_file_path = scan_range.full_path;
-
-        hive_column_names = file_table->get_hive_column_names();
-        hive_column_types = file_table->get_hive_column_types();
-        serde = file_table->get_serde_lib();
-        input_format = file_table->get_input_format();
-        time_zone = file_table->get_time_zone();
-    } else {
-        const auto* hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
-
-        auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
-        std::string partition_full_path = partition_desc->location();
-        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
-
-        hive_column_names = hdfs_table->get_hive_column_names();
-        hive_column_types = hdfs_table->get_hive_column_types();
-        serde = hdfs_table->get_serde_lib();
-        input_format = hdfs_table->get_input_format();
-        serde_properties = hdfs_table->get_serde_properties();
-        time_zone = hdfs_table->get_time_zone();
-    }
-
-    std::map<std::string, std::string> jni_scanner_params;
-
-    jni_scanner_params["hive_column_names"] = hive_column_names;
-    jni_scanner_params["hive_column_types"] = hive_column_types;
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["data_file_path"] = data_file_path;
-    jni_scanner_params["block_offset"] = std::to_string(scan_range.offset);
-    jni_scanner_params["block_length"] = std::to_string(scan_range.length);
-    jni_scanner_params["serde"] = serde;
-    jni_scanner_params["input_format"] = input_format;
-    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
-    jni_scanner_params["time_zone"] = time_zone;
-
-    for (const auto& pair : serde_properties) {
-        jni_scanner_params[serde_property_prefix + pair.first] = pair.second;
-    }
-
-    std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
-
-    HdfsScanner* scanner = _pool.add(new HiveJniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
-HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) {
-    const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
-    std::string required_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-    std::string nested_fields;
-    for (auto slot : _tuple_desc->slots()) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-    std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["project_name"] = odps_table->get_database_name();
-    jni_scanner_params["table_name"] = odps_table->get_table_name();
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params.insert(_scan_range.odps_split_infos.begin(), _scan_range.odps_split_infos.end());
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["time_zone"] = odps_table->get_time_zone();
-
-    const AliyunCloudConfiguration aliyun_cloud_configuration =
-            CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
-    AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
-    jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
-    jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;
-    jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
-
-    std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_profile.open_file_timer);
 
@@ -807,6 +560,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     scanner_params.use_datacache = _use_datacache;
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
+    scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
+    scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;
@@ -827,47 +582,44 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
     }
 
+    JniScanner::CreateOptions jni_scanner_create_options = {
+            .fs_options = &fsOptions, .hive_table = _hive_table, .scan_range = &scan_range};
+
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
-        scanner = _pool.add(new HdfsPartitionScanner());
+        scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
-        scanner = _create_paimon_jni_scanner(fsOptions);
+        scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {
-        scanner = _create_hudi_jni_scanner(fsOptions);
+        scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
-        scanner = _create_odps_jni_scanner(fsOptions);
+        scanner = create_odps_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
-        scanner = _pool.add(new HdfsParquetScanner());
+        scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;
-        scanner = _pool.add(new HdfsOrcScanner());
+        scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
-        scanner = _pool.add(new HdfsTextScanner());
+        scanner = new HdfsTextScanner();
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
-        scanner = _create_hive_jni_scanner(fsOptions);
+        scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
+    if (scanner == nullptr) {
+        return Status::InternalError("create hdfs scanner failed");
+    }
+    _pool.add(scanner);
+
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
-        if (scanner->is_jni_scanner()) {
-            return st;
-        }
-
-        auto msg = fmt::format("file = {}", native_file_path);
-
-        // After catching the AWS 404 file not found error and returning it to the FE,
-        // the FE will refresh the file information of table and re-execute the SQL operation.
-        if (st.is_io_error() && st.message().find("404") != std::string_view::npos) {
-            st = Status::RemoteFileNotFound(st.message());
-        }
-        return st.clone_and_append(msg);
+        return scanner->reinterpret_status(st);
     }
     _scanner = scanner;
     return Status::OK();

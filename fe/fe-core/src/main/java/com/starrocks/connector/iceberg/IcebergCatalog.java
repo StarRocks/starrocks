@@ -15,7 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -30,8 +30,10 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
@@ -80,10 +82,10 @@ public interface IcebergCatalog {
 
     default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
-        List<String> partitionNames = Lists.newArrayList();
+        Set<String> partitionNames = Sets.newHashSet();
 
         if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
-            return partitionNames;
+            return new ArrayList<>();
         }
 
         TableScan tableScan = icebergTable.newScan().planWith(executorService);
@@ -93,14 +95,15 @@ public interface IcebergCatalog {
             while (fileScanTaskIterator.hasNext()) {
                 FileScanTask scanTask = fileScanTaskIterator.next();
                 StructLike partition = scanTask.file().partition();
-                partitionNames.add(convertIcebergPartitionToPartitionName(scanTask.spec(), partition));
+                String partitionName = convertIcebergPartitionToPartitionName(scanTask.spec(), partition);
+                partitionNames.add(partitionName);
             }
         } catch (IOException e) {
             throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
                     dbName, tableName), e);
         }
 
-        return partitionNames;
+        return new ArrayList<>(partitionNames);
     }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {

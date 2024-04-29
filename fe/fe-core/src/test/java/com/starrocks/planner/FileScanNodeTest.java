@@ -28,6 +28,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
@@ -49,6 +50,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -454,5 +456,53 @@ public class FileScanNodeTest {
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(5).format_type);
         Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(6).format_type);
+    }
+
+    @Test
+    public void testNoFilesFound() {
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        fileStatusesList.add(Lists.newArrayList());
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 0, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2",
+                "hdfs://127.0.0.1:9001/file3", "hdfs://127.0.0.1:9001/file4");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, null, null, null, "csv", false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "filePaths", files);
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
+        scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+                "No files were found matching the pattern(s) or path(s): " +
+                        "'hdfs://127.0.0.1:9001/file1, hdfs://127.0.0.1:9001/file2, hdfs://127.0.0.1:9001/file3, ...'",
+                () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
+    }
+
+    @Test
+    public void testNoFilesFoundOnePath() {
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        fileStatusesList.add(Lists.newArrayList());
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 0, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file*");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, null, null, null, "csv", false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "filePaths", files);
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
+        scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+                "No files were found matching the pattern(s) or path(s): 'hdfs://127.0.0.1:9001/file*'",
+                () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
     }
 }

@@ -196,14 +196,14 @@ bool DeltaWriterImpl::is_immutable() const {
 }
 
 Status DeltaWriterImpl::check_immutable() {
-    if (_immutable_tablet_size > 0) {
-        ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
-        if (tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
+    if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
+        if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
             _is_immutable.store(true, std::memory_order_relaxed);
+            _tablet_manager->remove_in_writing_data_size(_tablet_id);
         }
         VLOG(1) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
                 << ", immutable_tablet_size=" << _immutable_tablet_size
-                << ", data_size=" << tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id)
+                << ", data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
     }
     return Status::OK();
@@ -220,8 +220,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-            _tablet_writer =
-                    std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema, _txn_id);
+            _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
+                                                                        _txn_id, nullptr, false /** no compaction**/);
         } else {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
                                                                              _txn_id);
@@ -259,23 +259,16 @@ inline Status DeltaWriterImpl::flush_async() {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
         st = _flush_token->submit(std::move(_mem_table), false, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
-            if (seg) {
-                _tablet_manager->add_in_writing_data_size(_tablet_id, _txn_id, seg->data_size());
-            }
-            if (_immutable_tablet_size > 0) {
-                auto res = _tablet_manager->get_tablet(_tablet_id);
-                if (!res.ok()) {
-                    LOG(WARNING) << "get tablet failed, tablet=" << _tablet_id << ", txn=" << _txn_id
-                                 << ", status=" << res.status();
-                    return;
+            if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
+                if (seg) {
+                    _tablet_manager->add_in_writing_data_size(_tablet_id, seg->data_size());
                 }
-                auto& tablet = res.value();
-                if (tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
+                if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
                     _is_immutable.store(true, std::memory_order_relaxed);
+                    _tablet_manager->remove_in_writing_data_size(_tablet_id);
                 }
                 VLOG(1) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
                         << " _immutable_tablet_size=" << _immutable_tablet_size << ", segment_size=" << seg->data_size()
-                        << ", tablet_data_size=" << tablet.data_size()
                         << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                         << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
             }
@@ -296,6 +289,7 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
         _tablet_schema = std::move(res).value();
         return Status::OK();
     } else if (res.status().is_not_found()) {
+        LOG(WARNING) << "No schema file of id=" << _schema_id << " for tablet=" << _tablet_id;
         // schema file does not exist, fetch tablet schema from tablet metadata
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         return Status::OK();
@@ -588,10 +582,6 @@ void DeltaWriterImpl::close() {
     _tablet_schema.reset();
     _write_schema.reset();
     _merge_condition.clear();
-
-    if (_immutable_tablet_size > 0) {
-        _tablet_manager->remove_in_writing_data_size(_tablet_id, _txn_id);
-    }
 }
 
 std::vector<FileInfo> DeltaWriterImpl::files() const {

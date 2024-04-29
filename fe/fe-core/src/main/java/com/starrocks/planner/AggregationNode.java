@@ -270,6 +270,7 @@ public class AggregationNode extends PlanNode {
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
+        msg.agg_node.setEnable_pipeline_share_limit(ConnectContext.get().getSessionVariable().getEnableAggregationPipelineShareLimit());
     }
 
     protected String getDisplayLabelDetail() {

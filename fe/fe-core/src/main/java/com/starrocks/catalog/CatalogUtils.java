@@ -23,10 +23,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -92,24 +91,18 @@ public class CatalogUtils {
     }
 
     // Used to temporarily disable some command on lake table and remove later.
-    public static void checkIsLakeTable(String dbName, String tableName) throws AnalysisException {
+    public static void checkIsLakeTable(String dbName, String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return;
         }
 
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                return;
-            }
-            if (table.isCloudNativeTable()) {
-                throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            return;
+        }
+        if (table.isCloudNativeTable()) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
         }
     }
 
@@ -180,8 +173,8 @@ public class CatalogUtils {
     }
 
     public static void checkTempPartitionConflict(List<Partition> partitionList,
-                                               List<Partition> tempPartitionList,
-                                               ListPartitionInfo listPartitionInfo) throws DdlException {
+                                                  List<Partition> tempPartitionList,
+                                                  ListPartitionInfo listPartitionInfo) throws DdlException {
         Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
         Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>> newListMap = new HashMap<>(listMap);

@@ -19,6 +19,7 @@
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
+#include "runtime/current_thread.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {
@@ -33,11 +34,12 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.enable_disk_checksum = options.enable_checksum;
     opt.max_concurrent_writes = options.max_concurrent_inserts;
     opt.enable_os_page_cache = !options.enable_direct_io;
+    opt.scheduler_thread_ratio_per_cpu = options.scheduler_threads_per_cpu;
+    opt.max_flying_memory_mb = options.max_flying_memory_mb;
+    _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
+    opt.cache_adaptor = _cache_adaptor.get();
     opt.instance_name = "dla_cache";
-    if (options.enable_cache_adaptor) {
-        _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
-        opt.cache_adaptor = _cache_adaptor.get();
-    }
+    _enable_tiered_cache = options.enable_tiered_cache;
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));
 }
@@ -46,11 +48,25 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     if (!options) {
         return to_status(_cache->set(key, buffer.const_raw_buf(), nullptr));
     }
+
     starcache::WriteOptions opts;
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
-    auto st = to_status(_cache->set(key, buffer.const_raw_buf(), &opts));
-    if (st.ok()) {
+    opts.async = options->async;
+    opts.keep_alive = options->allow_zero_copy;
+    opts.callback = options->callback;
+    opts.mode = _enable_tiered_cache ? starcache::WriteOptions::WriteMode::WRITE_BACK
+                                     : starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+    Status st;
+    {
+        // The memory when writing starcache is no longer recorded to the query memory.
+        // Because we free the memory in other threads in starcache library, which is hard to track.
+        // It is safe because we limit the flying memory in starcache, also, this behavior
+        // doesn't affect the process memory tracker.
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        st = to_status(_cache->set(key, buffer.const_raw_buf(), &opts));
+    }
+    if (st.ok() && !opts.async) {
         options->stats.write_mem_bytes = opts.stats.write_mem_bytes;
         options->stats.write_disk_bytes = opts.stats.write_disk_bytes;
     }
@@ -65,7 +81,11 @@ Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, s
     starcache::WriteOptions opts;
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
-    auto st = to_status(_cache->set_object(key, ptr, size, deleter, handle, &opts));
+    Status st;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        st = to_status(_cache->set_object(key, ptr, size, deleter, handle, &opts));
+    }
     if (st.ok()) {
         options->stats.write_mem_bytes = size;
     }
@@ -78,9 +98,9 @@ Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
         return to_status(_cache->read(key, off, size, &buffer->raw_buf(), nullptr));
     }
     starcache::ReadOptions opts;
-    if (_cache_adaptor) {
-        opts.use_adaptor = true;
-    }
+    opts.use_adaptor = options->use_adaptor;
+    opts.mode = _enable_tiered_cache ? starcache::ReadOptions::ReadMode::READ_BACK
+                                     : starcache::ReadOptions::ReadMode::READ_THROUGH;
     auto st = to_status(_cache->read(key, off, size, &buffer->raw_buf(), &opts));
     if (st.ok()) {
         options->stats.read_mem_bytes = opts.stats.read_mem_bytes;
@@ -104,6 +124,19 @@ Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle
 Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
+}
+
+Status StarCacheWrapper::update_mem_quota(size_t quota_bytes) {
+    return to_status(_cache->update_mem_quota(quota_bytes));
+}
+
+Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    std::vector<starcache::DirSpace> disk_spaces;
+    disk_spaces.reserve(spaces.size());
+    for (auto& dir : spaces) {
+        disk_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
+    }
+    return to_status(_cache->update_disk_spaces(disk_spaces));
 }
 
 const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {

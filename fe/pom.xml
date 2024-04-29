@@ -52,7 +52,7 @@ under the License.
         <hadoop.version>3.3.6</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
-        <hudi.version>0.12.2</hudi.version>
+        <hudi.version>0.14.1</hudi.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
@@ -715,6 +715,14 @@ under the License.
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>42.4.4</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
+            <!-- we need clickhouse driver for jdbc connector -->
+            <dependency>
+                <groupId>com.clickhouse</groupId>
+                <artifactId>clickhouse-jdbc</artifactId>
+                <version>0.4.6</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->

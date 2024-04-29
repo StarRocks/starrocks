@@ -59,7 +59,6 @@ public class MultiUserLock extends Lock {
             return LockGrantType.NEW;
         }
 
-        boolean hasConflicts = false;
 
         LockHolder lockOwner = null;
         Iterator<LockHolder> ownerIterator = null;
@@ -75,15 +74,34 @@ public class MultiUserLock extends Lock {
             }
         }
 
-        LockHolder sameLockHolder = null;
+        boolean hasConflicts = false;
+        boolean hasSameLockerWithDifferentLockType = false;
         while (lockOwner != null) {
-            if (lockHolderRequest.equals(lockOwner)) {
-                sameLockHolder = lockOwner;
-            } else {
-                boolean isConflict = lockOwner.isConflict(lockHolderRequest);
-                if (isConflict) {
-                    hasConflicts = true;
+            /*
+             * If there is a Locker of the same Lock Type, directly increase the reference count and return.
+             * If the types are different, need to continue traversing to determine
+             * whether there are other Lockers with the same LockType.
+             */
+            if (lockHolderRequest.getLocker().equals(lockOwner.getLocker())) {
+                if (lockHolderRequest.getLockType().equals(lockOwner.getLockType())) {
+                    lockOwner.increaseRefCount();
+                    return LockGrantType.EXISTING;
+                } else if (lockOwner.getLockType() == LockType.WRITE
+                        && lockHolderRequest.getLockType() == LockType.READ) {
+                    /*
+                     * If you acquire an exclusive lock first and then request a shared lock,
+                     * you can successfully acquire the lock. This scenario is generally called "lock downgrade",
+                     * but this lock does not actually reduce the original write lock directly to a read lock.
+                     * In fact, it is still two independent read and write locks, and the two locks still need
+                     * to be released independently. The actual scenario is that before releasing the write lock,
+                     * acquire the read lock first, so that there is no gap time to release the lock.
+                     */
+                    hasSameLockerWithDifferentLockType = true;
                 }
+            }
+
+            if (lockOwner.isConflict(lockHolderRequest)) {
+                hasConflicts = true;
             }
 
             if (ownerIterator != null && ownerIterator.hasNext()) {
@@ -93,19 +111,10 @@ public class MultiUserLock extends Lock {
             }
         }
 
-        if (hasConflicts) {
-            return LockGrantType.WAIT;
+        if (hasSameLockerWithDifferentLockType || (!hasConflicts && waiterNum() == 0)) {
+            return LockGrantType.NEW;
         } else {
-            if (sameLockHolder != null) {
-                sameLockHolder.increaseRefCount();
-                return LockGrantType.EXISTING;
-            } else {
-                if (waiterNum() == 0) {
-                    return LockGrantType.NEW;
-                } else {
-                    return LockGrantType.WAIT;
-                }
-            }
+            return LockGrantType.WAIT;
         }
     }
 
@@ -323,7 +332,6 @@ public class MultiUserLock extends Lock {
             otherWaiters.add(lockHolder);
         }
     }
-
 
     @Override
     public String toString() {

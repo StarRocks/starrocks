@@ -73,6 +73,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());
+    rowset->set_version(_tablet_meta->version());
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     // collect trash files
@@ -144,6 +145,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
         rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+        rowset->set_version(_tablet_meta->version());
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
     }
 

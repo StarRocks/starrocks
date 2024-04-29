@@ -226,7 +226,8 @@ public class ScalarType extends Type implements Cloneable {
                 ctx.getSessionVariable().getLargeDecimalUnderlyingType().equals(SessionVariableConstants.PANIC)) {
             Preconditions.checkArgument(0 <= precision &&
                             precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
-                    "DECIMAL's precision should range from 1 to 38");
+                    "DECIMAL's precision should range from 1 to %s",
+                    PrimitiveType.getMaxPrecisionOfDecimal(type));
             Preconditions.checkArgument(0 <= scale && scale <= precision,
                     "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
         }

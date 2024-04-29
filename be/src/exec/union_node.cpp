@@ -346,7 +346,9 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     size_t i = 0;
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
-        operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
+        auto child_ops = child(i)->decompose_to_pipeline(context);
+        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        operators_list.emplace_back(child_ops);
 
         UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
         if (!_pass_through_slot_maps.empty()) {
@@ -370,7 +372,9 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
     // ProjectOperatorFactory is used for the materialized sub-node.
     for (; i < _children.size(); i++) {
-        operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
+        auto child_ops = child(i)->decompose_to_pipeline(context);
+        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        operators_list.emplace_back(child_ops);
 
         const auto& dst_tuple_desc =
                 context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);

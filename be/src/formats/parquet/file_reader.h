@@ -108,10 +108,6 @@ private:
 
     bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
-    // get the data page start/end offset in parquet file
-    static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
-    static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group);
-
     Status _build_split_tasks();
 
     RandomAccessFile* _file = nullptr;

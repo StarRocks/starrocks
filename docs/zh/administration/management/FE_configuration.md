@@ -47,6 +47,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### 日志
 
+##### log_roll_size_mb
+
+- 默认值：1024
+- 类型：Int
+- 单位：MB
+- 是否动态：否
+- 描述：单个系统日志或审计日志文件的大小上限。
+- 引入版本：-
+
 ##### sys_log_dir
 
 - 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -1063,6 +1072,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
 - 引入版本：v3.1.5
+
+#### metadata_enable_recovery_mode
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
+- 引入版本：v3.3.0
 
 ### 用户，角色及权限
 
@@ -2377,7 +2395,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **说明**
 >
-> - StarRocks 存算分离集群不支持该参数。
+> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
 > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
 
 ##### recover_with_empty_tablet
@@ -4035,17 +4053,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：
 - 引入版本：-
--->
-
-<!--
-#### metadata_enable_recovery_mode
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 含义：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
-- 默认值：FALSE
-- 引入版本：3.3
 -->
 
 <!--

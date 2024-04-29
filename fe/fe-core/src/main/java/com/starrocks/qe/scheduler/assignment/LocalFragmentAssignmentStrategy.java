@@ -166,11 +166,14 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
             fragment.disablePhysicalPropertyOptimize();
         }
 
+        long bucketScanRows = bucketScanRows(bucketSeqToScanRange);
+        int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
+        long instanceAvgScanRows = bucketScanRows / Math.max(1, workerIdToBucketSeqs.size() * expectedInstanceNum);
+
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
             ComputeNode worker = workerProvider.getWorkerById(workerId);
 
             // 2. split how many scanRange one instance should scan
-            int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
             List<List<Integer>> bucketSeqsPerInstance = ListUtil.splitBySize(bucketSeqsOfWorker, expectedInstanceNum);
 
             // 3.construct instanceExecParam add the scanRange should be scanned by instance
@@ -201,11 +204,17 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         SessionVariable sv = ConnectContext.get().getSessionVariable();
                         int maxDop = Math.min(sv.getGroupExecutionGroupScale() * expectedDop,
                                 sv.getGroupExecutionMaxGroups());
+                        maxDop = (int) Math.min(instanceAvgScanRows / sv.getGroupExecutionMinScanRows(), maxDop);
                         maxDop = Math.max(maxDop, expectedDop);
                         logicalDop = Math.min(bucketSeqsOfInstance.size(), maxDop);
+                        // Align logical dop to physical dop integer multiplier
+                        // For a bucket shuffle join, the hash table corresponding to 
+                        // the i-th probe is i % build_dop (physical dop).
+                        logicalDop = (logicalDop / expectedPhysicalDop) * expectedPhysicalDop;
                     }
                     List<List<Integer>> bucketSeqsPerDriverSeq = ListUtil.splitBySize(bucketSeqsOfInstance, logicalDop);
                     instance.setPipelineDop(expectedPhysicalDop);
+                    instance.setGroupExecutionScanDop(logicalDop);
 
                     for (int driverSeq = 0; driverSeq < bucketSeqsPerDriverSeq.size(); driverSeq++) {
                         int finalDriverSeq = driverSeq;
@@ -257,6 +266,8 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             SessionVariable sv = ConnectContext.get().getSessionVariable();
                             int maxDop = Math.min(sv.getGroupExecutionGroupScale() * expectedPhysicalDop,
                                     sv.getGroupExecutionMaxGroups());
+                            maxDop = (int) Math.min(totalScanRows(scanRanges) / sv.getGroupExecutionMinScanRows(),
+                                    maxDop);
                             maxDop = Math.max(maxDop, expectedPhysicalDop);
                             logicalDop = Math.min(scanRanges.size(), maxDop);
                         }
@@ -275,6 +286,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             fragment.setPipelineDop(expectedPhysicalDop);
                         }
                         instance.setPipelineDop(expectedPhysicalDop);
+                        instance.setGroupExecutionScanDop(logicalDop);
 
                         for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                             instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
@@ -329,5 +341,19 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         }
 
         return result;
+    }
+
+    // collect total size for each scan range
+    private static long bucketScanRows(ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange) {
+        return bucketSeqToScanRange.entrySet().stream().flatMap(entry -> entry.getValue().entrySet().stream())
+                .flatMap(item -> item.getValue().stream())
+                .map(scanRange -> scanRange.getScan_range().internal_scan_range.getRow_count())
+                .reduce(0L, Long::sum);
+    }
+
+    private static long totalScanRows(List<TScanRangeParams> scanRangeParams) {
+        return scanRangeParams.stream()
+                .map(scanRange -> scanRange.getScan_range().getInternal_scan_range().getRow_count())
+                .reduce(0L, Long::sum);
     }
 }

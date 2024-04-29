@@ -156,8 +156,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (!all_local_rf_set.empty()) {
         _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
     }
-    _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
-
+    size_t subscribe_filter_sequence = source_op->get_driver_sequence();
+    _local_rf_holders =
+            fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
     if (use_cache) {
         ssize_t cache_op_idx = -1;
         query_cache::CacheOperatorPtr cache_op = nullptr;
@@ -507,11 +508,12 @@ void PipelineDriver::mark_precondition_not_ready() {
     }
 }
 
-void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
+void PipelineDriver::mark_precondition_ready() {
     for (auto& op : _operators) {
-        op->set_precondition_ready(runtime_state);
+        op->set_precondition_ready(_runtime_state);
         submit_operators();
     }
+    _precondition_prepared = true;
 }
 
 void PipelineDriver::start_timers() {

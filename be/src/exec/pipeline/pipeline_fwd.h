@@ -31,6 +31,8 @@ using FragmentFuture = std::future<void>;
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
 using Pipelines = std::vector<PipelinePtr>;
+using PipelineRawPtr = Pipeline*;
+using PipelineRawPtrs = std::vector<Pipeline*>;
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;

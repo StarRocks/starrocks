@@ -47,6 +47,37 @@ struct SplitContext : public HdfsSplitContext {
     }
 };
 
+static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) {
+    int64_t offset = column.data_page_offset;
+    if (column.__isset.index_page_offset) {
+        offset = std::min(offset, column.index_page_offset);
+    }
+    if (column.__isset.dictionary_page_offset) {
+        offset = std::min(offset, column.dictionary_page_offset);
+    }
+    return offset;
+}
+
+static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group) {
+    const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
+    int64_t offset = _get_column_start_offset(first_column);
+
+    if (row_group.__isset.file_offset) {
+        offset = std::min(offset, row_group.file_offset);
+    }
+    return offset;
+}
+
+static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
+    // following computation is not correct. `total_compressed_size` means compressed size of all columns
+    // but between columns there could be holes, which means end offset inaccurate.
+    // if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
+    //     return row_group.file_offset + row_group.total_compressed_size;
+    // }
+    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
+    return _get_column_start_offset(last_column) + last_column.total_compressed_size;
+}
+
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                        io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
@@ -212,6 +243,8 @@ Status FileReader::_get_footer() {
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
+        } else {
+            deleter();
         }
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
@@ -240,6 +273,21 @@ Status FileReader::_build_split_tasks() {
         }
         int64_t start_offset = _get_row_group_start_offset(row_group);
         int64_t end_offset = _get_row_group_end_offset(row_group);
+        if (start_offset >= end_offset) {
+            LOG(INFO) << "row group " << i << " is empty. start = " << start_offset << ", end = " << end_offset;
+            continue;
+        }
+#ifndef NDEBUG
+        DCHECK(start_offset < end_offset) << "start = " << start_offset << ", end = " << end_offset;
+        // there could be holes between row groups.
+        // but this does not affect our scan range filter logic.
+        // because in `_select_row_group`, we check if `start offset of row group` is in this range
+        // so as long as `end_offset > start_offset && end_offset <= start_offset(next_group)`, it's ok
+        if ((i + 1) < row_group_size) {
+            const tparquet::RowGroup& next_row_group = _file_metadata->t_metadata().row_groups[i + 1];
+            DCHECK(end_offset <= _get_row_group_start_offset(next_row_group));
+        }
+#endif
         auto split_ctx = std::make_unique<SplitContext>();
         split_ctx->split_start = start_offset;
         split_ctx->split_end = end_offset;
@@ -252,8 +300,14 @@ Status FileReader::_build_split_tasks() {
         _scanner_ctx->split_tasks.clear();
     }
 
-    VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                  << ", split_tasks.size = " << _scanner_ctx->split_tasks.size();
+    if (VLOG_OPERATOR_IS_ON) {
+        std::stringstream ss;
+        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->split_tasks) {
+            ss << "[" << ctx->split_start << "," << ctx->split_end << "]";
+        }
+        VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
+                      << ", split_tasks.size = " << _scanner_ctx->split_tasks.size() << ", range = " << ss.str();
+    }
     return Status::OK();
 }
 
@@ -285,22 +339,6 @@ StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::vector<char>& f
                 metadata_length));
     }
     return metadata_length;
-}
-
-int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_group) {
-    if (row_group.__isset.file_offset) {
-        return row_group.file_offset;
-    }
-    const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
-    return first_column.data_page_offset;
-}
-
-int64_t FileReader::_get_row_group_end_offset(const tparquet::RowGroup& row_group) {
-    if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
-        return row_group.file_offset + row_group.total_compressed_size;
-    }
-    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
-    return last_column.data_page_offset + last_column.total_compressed_size;
 }
 
 StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
@@ -341,7 +379,8 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
 
         for (auto& it : _scanner_ctx->runtime_filter_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
-            const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+            // external node won't have colocate runtime filter
+            const JoinRuntimeFilter* filter = rf_desc->runtime_filter(-1);
             SlotId probe_slot_id;
             if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
             // !!linear search slot by slot_id.
@@ -648,8 +687,6 @@ Status FileReader::_init_group_readers() {
 
 Status FileReader::_prepare_cur_row_group() {
     auto& r = _row_group_readers[_cur_row_group_idx];
-    // prepare row group
-    RETURN_IF_ERROR(r->prepare());
     // if coalesce read enabled, we have to
     // 0. clear last group memory
     // 1. allocate shared buffered input stream and
@@ -670,7 +707,8 @@ Status FileReader::_prepare_cur_row_group() {
         _group_reader_param.sb_stream = _sb_stream;
     }
 
-    return Status::OK();
+    // prepare row group
+    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {

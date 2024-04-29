@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "block_cache/disk_space_monitor.h"
 #include "block_cache/kv_cache.h"
 #include "common/status.h"
 
@@ -26,6 +27,8 @@ public:
 
     // Return a singleton block cache instance
     static BlockCache* instance();
+
+    ~BlockCache();
 
     // Init the block cache instance
     Status init(const CacheOptions& options);
@@ -57,6 +60,15 @@ public:
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
 
+    // Update the datacache memory quota.
+    Status update_mem_quota(size_t quota_bytes);
+
+    // Update the datacache disk space infomation, such as disk quota or disk path.
+    Status update_disk_spaces(const std::vector<DirSpace>& spaces);
+
+    // Adjust the disk spaces, the space quota will be adjusted based on current disk usage before updating.
+    Status adjust_disk_spaces(const std::vector<DirSpace>& spaces);
+
     void record_read_remote(size_t size, int64_t lateny_us);
 
     void record_read_cache(size_t size, int64_t lateny_us);
@@ -81,6 +93,7 @@ private:
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;
+    std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
     std::atomic<bool> _initialized = false;
 };
 

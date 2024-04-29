@@ -224,6 +224,9 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
 if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
     export HADOOP_CLASSPATH=${THIRDPARTY_HADOOP_HOME}/common/*:${THIRDPARTY_HADOOP_HOME}/common/lib/*:${THIRDPARTY_HADOOP_HOME}/hdfs/*:${THIRDPARTY_HADOOP_HOME}/hdfs/lib/*
+    # get rid of StackOverflowError on the process reaper thread, which has a small stack size.
+    # https://bugs.openjdk.org/browse/JDK-8153057
+    export LIBHDFS_OPTS="$LIBHDFS_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
 else
     # exclude HdfsFileSystemTest related test case if no hadoop env found
     echo "[INFO] Can't find available HADOOP common lib, disable HdfsFileSystemTest related test!"

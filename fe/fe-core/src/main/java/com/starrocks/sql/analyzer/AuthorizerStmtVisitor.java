@@ -104,6 +104,7 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -1480,8 +1481,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                || r.equals(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
             UserIdentity userIdentity = context.getCurrentUserIdentity();
             if (!userIdentity.equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not grant root or cluster_admin role except root user");
@@ -1501,15 +1502,15 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                || r.equals(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
             UserIdentity userIdentity = context.getCurrentUserIdentity();
             if (!userIdentity.equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not grant root or cluster_admin role except root user");
             }
         }
 
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
             if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not revoke root role from root user");
             }
@@ -1974,9 +1975,18 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
         if (statement.getCreateTableAsSelectStmt() != null) {
             visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+        } else if (statement.getDataCacheSelectStmt() != null) {
+            visitDataCacheSelectStatement(statement.getDataCacheSelectStmt(), context);
         } else {
             visitInsertStatement(statement.getInsertStmt(), context);
         }
+        return null;
+    }
+
+    @Override
+    public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+        // check we have permission access source data
+        visitQueryStatement(statement.getInsertStmt().getQueryStatement(), context);
         return null;
     }
 

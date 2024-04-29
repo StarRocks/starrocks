@@ -1185,6 +1185,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "whether to collect metrics for materialized view by default")
     public static boolean enable_materialized_view_metrics_collect = true;
 
+    @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
+               "build ast tree in materialized view initialization")
+    public static boolean enable_materialized_view_text_based_rewrite = true;
+
     /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,
@@ -1253,7 +1257,7 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = true;
+    public static boolean memory_tracker_enable = false;
 
     /**
      * Decide how often to track the memory usage of the FE process
@@ -2738,9 +2742,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = true;
 
-    // This configuration will be removed after the shared data mode supports fast schema evolution
     @ConfField(mutable = true)
-    public static boolean experimental_enable_fast_schema_evolution_in_shared_data = false;
+    public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
@@ -2925,4 +2928,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
+
+    @ConfField(mutable = true)
+    public static boolean show_execution_groups = true;
 }

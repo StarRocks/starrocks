@@ -89,7 +89,9 @@ jobs:
               [[ "$GITHUB_REPOSITORY" == 'StarRocks/starrocks' ]] && all_linux=true
             elif [[ "${{ github.event.schedule }}" == "30 0 * * 1-5" ]]; then
               branch=main
-              all_linux=true
+              if [[ `date +%u` -eq 1 || `date +%u` -eq 4 ]]; then
+                all_linux=true
+              fi
             else
               branch=main
             fi
@@ -282,7 +284,7 @@ jobs:
       - name: BUILD RESULT
         run: |
           echo ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}
-          echo "##### Package: ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
+          echo "Package: ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
           echo ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }} > tar.txt
 
       - uses: actions/upload-artifact@v4

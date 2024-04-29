@@ -16,9 +16,9 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "connector_sink/hive_chunk_sink.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
+#include "hive_chunk_sink.h"
 
 namespace starrocks::connector {
 
@@ -110,6 +110,8 @@ private:
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
+    bool _enable_datacache_aync_populate_mode = false;
+    bool _enable_datacache_io_adaptor = false;
     bool _enable_dynamic_prune_scan_range = true;
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;

@@ -495,3 +495,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 | [murmur_hash3_32](./hash-functions/murmur_hash3_32.md) | 返回输入字符串的 32 位 murmur3 hash 值。 |
 | [xx_hash3_64](./hash-functions/xx_hash3_64.md) | 返回输入字符串的 64 位 xxhash3 值。 |
+
+## 字典函数
+
+| 函数                |                 功能      |
+|  :-:                |                :-:       |
+|  [dict_mapping](./dict-functions/dict_mapping.md)| 通过指定字典表和 key，返回该 key 所映射的 value。 |

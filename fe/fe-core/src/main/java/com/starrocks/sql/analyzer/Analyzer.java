@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
@@ -302,6 +303,8 @@ public class Analyzer {
             } else if (statement.getInsertStmt() != null) {
                 InsertStmt insertStmt = statement.getInsertStmt();
                 InsertAnalyzer.analyze(insertStmt, context);
+            } else if (statement.getDataCacheSelectStmt() != null) {
+                DataCacheStmtAnalyzer.analyze(statement.getDataCacheSelectStmt(), context);
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }
@@ -750,6 +753,12 @@ public class Analyzer {
 
         @Override
         public Void visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, ConnectContext context) {
+            DataCacheStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
             DataCacheStmtAnalyzer.analyze(statement, context);
             return null;
         }

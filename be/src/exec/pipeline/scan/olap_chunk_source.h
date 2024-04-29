@@ -26,6 +26,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "util/runtime_profile.h"
@@ -68,6 +69,7 @@ private:
     void _update_realtime_counter(Chunk* chunk);
     void _decide_chunk_size(bool has_predicate);
     Status _init_column_access_paths(Schema* schema);
+    Status _prune_schema_by_access_paths(Schema* schema);
 
 private:
     TabletReaderParams _params{};
@@ -77,12 +79,13 @@ private:
     const int64_t _limit; // -1: no limit
     TInternalScanRange* _scan_range;
 
+    PredicateTree _non_pushdown_pred_tree;
     ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;
-    std::shared_ptr<TabletSchema> _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     int64_t _version = 0;
 
     RuntimeState* _runtime_state = nullptr;

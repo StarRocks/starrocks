@@ -50,6 +50,7 @@
 #include "types/logical_type.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/json_converter.h"
 #include "util/mysql_global.h"
 
 namespace starrocks {
@@ -215,67 +216,11 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
         }
 
         JsonValue* json = viewer.value(row);
-        if constexpr (lt_is_arithmetic<ToType>) {
-            [[maybe_unused]] constexpr auto min = RunTimeTypeLimits<ToType>::min_value();
-            [[maybe_unused]] constexpr auto max = RunTimeTypeLimits<ToType>::max_value();
-            RunTimeCppType<ToType> cpp_value{};
-            bool ok = true;
-            if constexpr (lt_is_integer<ToType>) {
-                auto res = json->get_int();
-                ok = res.ok() && min <= res.value() && res.value() <= max;
-                cpp_value = ok ? res.value() : cpp_value;
-            } else if constexpr (lt_is_float<ToType>) {
-                auto res = json->get_double();
-                ok = res.ok() && min <= res.value() && res.value() <= max;
-                cpp_value = ok ? res.value() : cpp_value;
-            } else if constexpr (lt_is_boolean<ToType>) {
-                auto res = json->get_bool();
-                ok = res.ok();
-                cpp_value = ok ? res.value() : cpp_value;
-            } else {
-                if constexpr (AllowThrowException) {
-                    THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
-                }
-                DCHECK(false) << "unreachable type " << ToType;
-                __builtin_unreachable();
-            }
-            if (ok) {
-                builder.append(cpp_value);
-            } else {
-                if constexpr (AllowThrowException) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
-                }
-                builder.append_null();
-            }
-        } else if constexpr (lt_is_string<ToType>) {
-            // if the json already a string value, get the string directly
-            // else cast it to string representation
-            if (json->get_type() == JsonType::JSON_STRING) {
-                auto res = json->get_string();
-                if (res.ok()) {
-                    builder.append(res.value());
-                } else {
-                    if constexpr (AllowThrowException) {
-                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
-                    }
-                    builder.append_null();
-                }
-            } else {
-                auto res = json->to_string();
-                if (res.ok()) {
-                    builder.append(res.value());
-                } else {
-                    if constexpr (AllowThrowException) {
-                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
-                    }
-                    builder.append_null();
-                }
-            }
-        } else {
+        auto st = cast_vpjson_to<ToType, AllowThrowException>(json->to_vslice(), builder);
+        if (!st.ok()) {
             if constexpr (AllowThrowException) {
-                THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
             }
-            DCHECK(false) << "not supported type " << ToType;
             builder.append_null();
         }
     }
@@ -1100,10 +1045,12 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 
+// clang-format off
 #define DEFINE_CAST_CONSTRUCT(CLASS)             \
     CLASS(const TExprNode& node) : Expr(node) {} \
     virtual ~CLASS(){};                          \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
+// clang-format on
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 class VectorizedCastExpr final : public Expr {

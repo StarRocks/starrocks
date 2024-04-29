@@ -85,19 +85,23 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ## 准备工作
 
+### 部署 Flink Connector
+
 通过如下步骤完成 Flink Connector 的部署：
 
-1. 根据 Flink 的版本，选择和下载对应版本的 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR 包。
+1. 根据 Flink 的版本，选择和下载对应版本的 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR 包。如需调试代码，可选择对应分支代码自行编译。
 
    > **注意**
    >
    > 推荐您下载 Flink Connector 版本在 1.2.x 及以上、并且配套的 Flink 版本与您的业务环境中安装的 Flink 版本前两位一致的 JAR 包。例如，如果您的业务环境中安装的 Flink 版本为 1.14.x，可以下载 `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`。
 
-2. 如需调试代码，可选择对应分支代码自行编译。
+2. 将下载或者编译的 JAR 包放在 Flink 的 `lib` 目录中。
 
-3. 将下载或者编译的 JAR 包放在 Flink 的 `lib` 目录中。
+3. 重启 Flink。
 
-4. 重启 Flink。
+### 网络设置
+
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
 
 ## 参数说明
 

@@ -64,7 +64,7 @@ bool OlapScanPrepareOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
-    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
+    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters(), _driver_sequence);
 
     _morsel_queue->set_key_ranges(_ctx->key_ranges());
     std::vector<BaseTabletSharedPtr> tablets;

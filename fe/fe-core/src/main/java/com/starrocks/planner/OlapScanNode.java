@@ -882,7 +882,7 @@ public class OlapScanNode extends ScanNode {
             if (indexMeta != null) {
                 for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
                     TColumn tColumn = col.toThrift();
-                    tColumn.setColumn_name(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                    tColumn.setColumn_name(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
                     col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
                     columnsDesc.add(tColumn);
                 }
@@ -954,6 +954,8 @@ public class OlapScanNode extends ScanNode {
                         ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
                 msg.olap_scan_node.setMax_parallel_scan_instance_num(
                         ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
+                msg.olap_scan_node.setEnable_prune_column_after_index_filter(
+                        ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 

@@ -125,9 +125,12 @@ public:
 
     // Creates a new iterator for a specific column in a segment.
     //
-    // The main difference from `new_iterator` is, if the segment does not have the
-    // column, `new_column_iterator_or_default` will return an iterator that can read
-    // the default value of the column, if there is one.
+    // Difference from `new_iterator`:
+    //  - If the segment does not have the column, `new_column_iterator_or_default` will return an iterator that
+    //    can read the default value of the column, if there is one.
+    //  - If the type of the data stored in the segment file does not match the type of |column|, the iterator
+    //    returned from `new_column_iterator_or_default` will perform type conversion and return data that matches
+    //    the type of |column|.
     //
     // Note: If this column does not have a default value defined, but is nullable, then
     // NULL will be used as the default value.
@@ -201,12 +204,7 @@ public:
 
     size_t mem_usage() const;
 
-    int64_t get_data_size() const {
-        if (_segment_file_info.size.has_value()) {
-            return _segment_file_info.size.value();
-        }
-        return _fs->get_file_size(_segment_file_info.path).value_or(0);
-    }
+    StatusOr<int64_t> get_data_size() const;
 
     lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
 

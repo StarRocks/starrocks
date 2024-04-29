@@ -82,14 +82,14 @@ public:
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
-                                                       ThreadPool* flush_pool = nullptr);
+                                                       ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 
     const std::shared_ptr<const TabletSchema> tablet_schema() const override;
 
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
-    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_id(int64_t index_id);
+    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_id(int64_t schema_id);
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 

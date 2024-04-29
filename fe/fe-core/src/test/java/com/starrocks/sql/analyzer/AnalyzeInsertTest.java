@@ -192,8 +192,7 @@ public class AnalyzeInsertTest {
             }
         };
 
-        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
-                "partition value can't be null.");
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)");
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
 
         new Expectations() {

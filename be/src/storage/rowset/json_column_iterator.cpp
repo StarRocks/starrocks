@@ -20,16 +20,26 @@
 #include <vector>
 
 #include "column/column_access_path.h"
+#include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/cast_expr.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "util/json_util.h"
+#include "types/logical_type.h"
+#include "util/json_flattener.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -38,11 +48,14 @@ class JsonFlatColumnIterator final : public ColumnIterator {
 public:
     JsonFlatColumnIterator(ColumnReader* _reader, std::unique_ptr<ColumnIterator>& null_iter,
                            std::vector<std::unique_ptr<ColumnIterator>>& field_iters,
-                           std::vector<std::string>& flat_paths, ColumnAccessPath* path)
+                           std::vector<std::string>& flat_paths, std::vector<LogicalType> target_types,
+                           std::vector<LogicalType> source_types, ColumnAccessPath* path)
             : _reader(_reader),
               _null_iter(std::move(null_iter)),
               _flat_iters(std::move(field_iters)),
               _flat_paths(std::move(flat_paths)),
+              _target_types(std::move(target_types)),
+              _source_types(std::move(source_types)),
               _path(path) {}
 
     ~JsonFlatColumnIterator() override = default;
@@ -59,7 +72,8 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _flat_iters[0]->get_current_ordinal(); }
 
-    /// for vectorized engine
+    ordinal_t num_rows() const override { return _flat_iters[0]->num_rows(); }
+
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
@@ -67,12 +81,23 @@ public:
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
+    template <typename FUNC>
+    Status _read_and_cast(JsonColumn* json_column, FUNC fn);
+
+private:
     ColumnReader* _reader;
 
     std::unique_ptr<ColumnIterator> _null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> _flat_iters;
     std::vector<std::string> _flat_paths;
+    std::vector<LogicalType> _target_types;
+    std::vector<LogicalType> _source_types;
+    // to avoid create column with find type
+    std::vector<ColumnPtr> _source_columns;
     ColumnAccessPath* _path;
+
+    ObjectPool _pool;
+    std::vector<Expr*> _cast_exprs;
 };
 
 Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
@@ -85,13 +110,65 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
         RETURN_IF_ERROR(iter->init(opts));
     }
 
-    //  update stats
+    // update stats
     DCHECK(_path != nullptr);
     auto abs_path = _path->absolute_path();
     if (opts.stats->flat_json_hits.count(abs_path) == 0) {
         opts.stats->flat_json_hits[abs_path] = 1;
     } else {
         opts.stats->flat_json_hits[abs_path] = opts.stats->flat_json_hits[abs_path] + 1;
+    }
+
+    DCHECK(_target_types.size() == _source_types.size());
+
+    for (int i = 0; i < _target_types.size(); i++) {
+        if (_target_types[i] == _source_types[i]) {
+            _cast_exprs.push_back(nullptr);
+            _source_columns.push_back(nullptr);
+            continue;
+        }
+
+        TypeDescriptor source_type(_source_types[i]);
+        TypeDescriptor target_type(_target_types[i]);
+
+        SlotDescriptor source_slot(i, "mock_solt", source_type);
+        ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
+
+        auto cast_expr = VectorizedCastExprFactory::from_type(source_type, target_type, col_ref, &_pool);
+        _cast_exprs.push_back(cast_expr);
+        _source_columns.push_back(ColumnHelper::create_column(TypeDescriptor(_source_types[i]), true));
+    }
+
+    return Status::OK();
+}
+
+template <typename FUNC>
+Status JsonFlatColumnIterator::_read_and_cast(JsonColumn* json_column, FUNC read_fn) {
+    json_column->init_flat_columns(_flat_paths, _target_types);
+    Chunk chunk;
+
+    for (int i = 0; i < _flat_iters.size(); i++) {
+        if (_cast_exprs[i] != nullptr) {
+            ColumnPtr source = _source_columns[i]->clone_empty();
+            RETURN_IF_ERROR(read_fn(i, source.get()));
+
+            chunk.append_column(source, i);
+            ASSIGN_OR_RETURN(auto res, _cast_exprs[i]->evaluate_checked(nullptr, &chunk));
+            auto target = json_column->get_flat_field(i);
+            target->set_delete_state(source->delete_state());
+            if (res->only_null()) {
+                target->append_nulls(source->size());
+            } else if (res->is_constant()) {
+                auto data = down_cast<ConstColumn*>(res.get())->data_column();
+                target->append_value_multiple_times(*data, 0, source->size());
+            } else {
+                target->append(*res, 0, source->size());
+            }
+            DCHECK_EQ(json_column->size(), target->size());
+        } else {
+            auto* flat_column = json_column->get_flat_field(i).get();
+            RETURN_IF_ERROR(read_fn(i, flat_column));
+        }
     }
     return Status::OK();
 }
@@ -115,13 +192,8 @@ Status JsonFlatColumnIterator::next_batch(size_t* n, Column* dst) {
     }
 
     // 2. Read flat column
-    json_column->init_flat_columns(_flat_paths);
-    for (int i = 0; i < _flat_iters.size(); i++) {
-        Column* flat_column = json_column->get_flat_field(i).get();
-        RETURN_IF_ERROR(_flat_iters[i]->next_batch(n, flat_column));
-    }
-
-    return Status::OK();
+    auto read = [&](int index, Column* column) { return _flat_iters[index]->next_batch(n, column); };
+    return _read_and_cast(json_column, read);
 }
 
 Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
@@ -144,12 +216,8 @@ Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* ds
     }
 
     // 2. Read flat column
-    json_column->init_flat_columns(_flat_paths);
-    for (int i = 0; i < _flat_iters.size(); i++) {
-        Column* flat_column = json_column->get_flat_field(i).get();
-        RETURN_IF_ERROR(_flat_iters[i]->next_batch(range, flat_column));
-    }
-    return Status::OK();
+    auto read = [&](int index, Column* column) { return _flat_iters[index]->next_batch(range, column); };
+    return _read_and_cast(json_column, read);
 }
 
 Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
@@ -167,12 +235,11 @@ Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size
     }
 
     // 2. Read flat column
-    json_column->init_flat_columns(_flat_paths);
-    for (int i = 0; i < _flat_iters.size(); i++) {
-        Column* flat_column = json_column->get_flat_field(i).get();
-        RETURN_IF_ERROR(_flat_iters[i]->fetch_values_by_rowid(rowids, size, flat_column));
-    }
-    return Status::OK();
+    auto read = [&](int index, Column* column) {
+        return _flat_iters[index]->fetch_values_by_rowid(rowids, size, column);
+    };
+
+    return _read_and_cast(json_column, read);
 }
 
 Status JsonFlatColumnIterator::seek_to_first() {
@@ -204,9 +271,12 @@ Status JsonFlatColumnIterator::get_row_ranges_by_zone_map(const std::vector<cons
 
 class JsonDynamicFlatIterator final : public ColumnIterator {
 public:
-    JsonDynamicFlatIterator(std::unique_ptr<ScalarColumnIterator>& json_iter, std::vector<std::string>& flat_paths,
-                            ColumnAccessPath* path)
-            : _json_iter(std::move(json_iter)), _flat_paths(std::move(flat_paths)), _path(path){};
+    JsonDynamicFlatIterator(std::unique_ptr<ScalarColumnIterator>& json_iter, std::vector<std::string> flat_paths,
+                            std::vector<LogicalType> target_types, ColumnAccessPath* path)
+            : _json_iter(std::move(json_iter)),
+              _flat_paths(std::move(flat_paths)),
+              _target_types(std::move(target_types)),
+              _path(path){};
 
     ~JsonDynamicFlatIterator() override = default;
 
@@ -222,6 +292,8 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _json_iter->get_current_ordinal(); }
 
+    ordinal_t num_rows() const override { return _json_iter->num_rows(); }
+
     /// for vectorized engine
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
@@ -235,7 +307,10 @@ private:
 private:
     std::unique_ptr<ScalarColumnIterator> _json_iter;
     std::vector<std::string> _flat_paths;
+    std::vector<LogicalType> _target_types;
     ColumnAccessPath* _path;
+
+    JsonFlattener _flattener;
 };
 
 Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
@@ -247,6 +322,8 @@ Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
     } else {
         opts.stats->dynamic_json_hits[abs_path] = opts.stats->dynamic_json_hits[abs_path] + 1;
     }
+
+    _flattener = JsonFlattener(_flat_paths, _target_types);
     return _json_iter->init(opts);
 }
 
@@ -273,10 +350,8 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
     }
 
     // 2. flat
-    json_data->init_flat_columns(_flat_paths);
-
-    JsonFlater flater(_flat_paths);
-    flater.flatten(input, &(json_data->get_flat_fields()));
+    json_data->init_flat_columns(_flat_paths, _target_types);
+    _flattener.flatten(input, &(json_data->get_flat_fields()));
     return Status::OK();
 }
 
@@ -318,13 +393,15 @@ Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<con
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<std::string>& full_paths,
-        ColumnAccessPath* path) {
-    return std::make_unique<JsonFlatColumnIterator>(reader, null_iter, field_iters, full_paths, path);
+        std::vector<LogicalType>& target_types, std::vector<LogicalType>& source_types, ColumnAccessPath* path) {
+    return std::make_unique<JsonFlatColumnIterator>(reader, null_iter, field_iters, full_paths, target_types,
+                                                    source_types, path);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
-        std::unique_ptr<ScalarColumnIterator> json_iter, std::vector<std::string>& flat_paths, ColumnAccessPath* path) {
-    return std::make_unique<JsonDynamicFlatIterator>(json_iter, flat_paths, path);
+        std::unique_ptr<ScalarColumnIterator> json_iter, std::vector<std::string>& flat_paths,
+        std::vector<LogicalType>& target_types, ColumnAccessPath* path) {
+    return std::make_unique<JsonDynamicFlatIterator>(json_iter, flat_paths, target_types, path);
 }
 
 } // namespace starrocks

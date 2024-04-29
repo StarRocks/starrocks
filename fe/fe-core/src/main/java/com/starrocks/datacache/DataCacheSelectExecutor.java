@@ -1,0 +1,89 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.datacache;
+
+import com.google.common.base.Preconditions;
+import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Map;
+import java.util.Optional;
+
+public class DataCacheSelectExecutor {
+    private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
+
+    public static Optional<DataCacheSelectMetrics> cacheSelect(DataCacheSelectStatement statement,
+                                                             ConnectContext connectContext) throws Exception {
+        // backup original session variable
+        SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
+        // clone an new session variable
+        SessionVariable tmpSessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        // force enable datacache and populate
+        tmpSessionVariable.setEnableScanDataCache(true);
+        tmpSessionVariable.setEnablePopulateDataCache(true);
+        // make sure all accessed data must be cached
+        tmpSessionVariable.setEnableDataCacheAsyncPopulateMode(false);
+        tmpSessionVariable.setEnableDataCacheIOAdaptor(false);
+        connectContext.setSessionVariable(tmpSessionVariable);
+
+        InsertStmt insertStmt = statement.getInsertStmt();
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, insertStmt);
+        // register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
+        connectContext.getExecutor().registerSubStmtExecutor(stmtExecutor);
+        stmtExecutor.execute();
+
+        if (connectContext.getState().isError()) {
+            // throw exception if StmtExecutor execute failed
+            throw new UserException(connectContext.getState().getErrorMessage());
+        }
+
+        DataCacheSelectMetrics metrics = null;
+        Coordinator coordinator = stmtExecutor.getCoordinator();
+        Preconditions.checkNotNull(coordinator, "Coordinator can't be null");
+        coordinator.join(connectContext.getSessionVariable().getQueryTimeoutS());
+        if (coordinator.isDone()) {
+            metrics = stmtExecutor.getCoordinator().getDataCacheSelectMetrics();
+            if (metrics != null) {
+                // update backend's datacache metrics after cache select
+                updateBackendDataCacheMetrics(metrics);
+            }
+        }
+        // set original session variable
+        connectContext.setSessionVariable(sessionVariableBackup);
+        return Optional.ofNullable(metrics);
+    }
+
+    // update BE's datacache metrics after cache select
+    public static void updateBackendDataCacheMetrics(DataCacheSelectMetrics metrics) {
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Map.Entry<Long, LoadDataCacheMetrics> metric : metrics.getBeMetrics().entrySet()) {
+            Backend backend = clusterInfoService.getBackend(metric.getKey());
+            if (backend == null) {
+                continue;
+            }
+            backend.updateDataCacheMetrics(metric.getValue().getLastDataCacheMetrics());
+        }
+    }
+}

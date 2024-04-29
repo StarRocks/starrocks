@@ -103,7 +103,7 @@ public:
     ColumnReader(ColumnReader&&) = delete;
     void operator=(ColumnReader&&) = delete;
 
-    // create a new column iterator. Caller should free the returned iterator after unused.
+    // create a new column iterator.
     StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
 
     // Caller should free returned iterator after unused.
@@ -166,6 +166,8 @@ public:
 
     const std::string& name() const { return _name; }
 
+    const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
+
 private:
     const std::string& file_name() const { return _segment->file_name(); }
 
@@ -183,7 +185,7 @@ private:
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
-    Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
+    Status _parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
     Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges);
 

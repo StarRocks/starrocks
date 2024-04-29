@@ -27,6 +27,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -118,6 +119,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
@@ -177,6 +179,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
@@ -651,7 +654,8 @@ public class PlanFragmentBuilder {
                 if (entry.getValue().isLiteral() && !entry.getValue().isNullable()) {
                     slotDescriptor.setIsNullable(false);
                 } else {
-                    slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
+                    slotDescriptor.setIsNullable(
+                            slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
                 }
             }
             tupleDescriptor.computeMemLayout();
@@ -744,7 +748,7 @@ public class PlanFragmentBuilder {
             normalizer.collect(collector.getComplexExpressions());
 
             for (ColumnRefOperator key : scan.getColRefToColumnMetaMap().keySet()) {
-                if (!key.getType().isComplexType()) {
+                if (!key.getType().isStructType()) {
                     continue;
                 }
 
@@ -931,6 +935,7 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(entry.getKey().getType());
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
             }
             tupleDescriptor.computeMemLayout();
@@ -1166,6 +1171,7 @@ public class PlanFragmentBuilder {
                 }
                 deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl());
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : " + e);
@@ -1363,18 +1369,47 @@ public class PlanFragmentBuilder {
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
 
-            for (ScalarOperator predicate : predicates) {
-                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            for (ScalarOperator origPredicate : predicates) {
+                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(origPredicate, formatterContext));
                 // if user set table_schema or table_name in where condition and is
                 // binary predicate operator, we can set table_schema and table_name
                 // into scan-node, which can reduce time from be to fe
-                if (!(predicate.getChildren().size() == 2 &&
-                        predicate.getChildren().get(0) instanceof ColumnRefOperator &&
-                        predicate.getChildren().get(1) instanceof ConstantOperator)) {
+                if (origPredicate.getChildren().size() != 2) {
                     continue;
                 }
-                ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChildren().get(0);
-                ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
+                ScalarOperator predicate = origPredicate.clone();
+                ScalarOperator operator0 = origPredicate.getChild(0);
+                ScalarOperator operator1 = origPredicate.getChild(1);
+                if (operator0 instanceof CastOperator && operator0.getChild(0) instanceof ColumnRefOperator &&
+                        operator1 instanceof ConstantOperator) {
+                    // select * from information_schema.load_tracking_logs where job_id = "123", job_id is bigint type.
+                    // analyzer generates where predicate as [cast (job_id as varchar) = "123"] when
+                    // session variable cbo_eq_base_type is varchar, so rewrite the predicate for compatibility.
+                    ColumnRefOperator columnRefOperator = (ColumnRefOperator) operator0.getChild(0);
+                    if (columnRefOperator.getType().isNumericType() && operator0.getType().isStringType() &&
+                            operator1.getType().isStringType()) {
+                        predicate.setChild(0, columnRefOperator);
+                        try {
+                            LiteralExpr literalExpr =
+                                    LiteralExpr.create(((ConstantOperator) operator1).getVarchar(),
+                                            columnRefOperator.getType());
+                            predicate.setChild(1,
+                                    ConstantOperator.createObject(literalExpr.getRealObjectValue(),
+                                            columnRefOperator.getType()));
+                        } catch (AnalysisException e) {
+                            throw new SemanticException(
+                                    ((ConstantOperator) operator1).getVarchar() + " is not a number");
+                        }
+                    } else {
+                        continue;
+                    }
+                } else if (!(origPredicate.getChild(0) instanceof ColumnRefOperator &&
+                        origPredicate.getChild(1) instanceof ConstantOperator)) {
+                    continue;
+                }
+
+                ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChild(0);
+                ConstantOperator constantOperator = (ConstantOperator) predicate.getChild(1);
                 if (predicate instanceof BinaryPredicateOperator) {
                     BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
                     if (binaryPredicateOperator.getBinaryType() == BinaryType.EQ) {
@@ -1446,7 +1481,7 @@ public class PlanFragmentBuilder {
                     // currently, we only optimize `log rlike xxx` or `log regexp xxx`, raise an error if using `like`
                     if (columnRefOperator.getName().equals("LOG")) {
                         if (like.getLikeType() == LikePredicateOperator.LikeType.REGEXP) {
-                            scanNode.setLogPattern(((ConstantOperator) like.getChildren().get(1)).getVarchar());
+                            scanNode.setLogPattern(((ConstantOperator) like.getChild(1)).getVarchar());
                         } else {
                             throw UnsupportedException.unsupportedException(
                                     "only support `regexp` or `rlike` for log grep");
@@ -2540,7 +2575,7 @@ public class PlanFragmentBuilder {
             }
 
             // Build outputColumns
-            fillSlotsInfo(node.getProjection(), joinNode, optExpr, joinExpr.requiredColsForFilter);
+            fillSlotsInfo(node.getProjection(), joinNode, optExpr);
 
             joinNode.setDistributionMode(distributionMode);
             joinNode.getConjuncts().addAll(conjuncts);
@@ -2555,7 +2590,8 @@ public class PlanFragmentBuilder {
                     currentExecGroup.setColocateGroup();
                     currentExecGroup.merge(rightExecGroup);
                     execGroups.remove(rightExecGroup);
-                } else if (distributionMode.equals(JoinNode.DistributionMode.BROADCAST) &&
+                } else if ((distributionMode.equals(JoinNode.DistributionMode.BROADCAST) || distributionMode.equals(
+                        JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) &&
                         !leftExecGroup.isDisableColocateGroup()) {
                     // do nothing
                 } else {
@@ -2737,19 +2773,53 @@ public class PlanFragmentBuilder {
                 analyticEvalNode.getConjuncts()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
-            // In new planner
-            // Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
-            // to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
-            PlanNode root = inputFragment.getPlanRoot();
-            if (root instanceof SortNode) {
-                SortNode sortNode = (SortNode) root;
-                sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
-                // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
-                sortNode.setAnalyticPartitionSkewed(node.isSkewed());
-            }
+            passPartitionByToSortNode(context, inputFragment.getPlanRoot(), analyticEvalNode.getPartitionExprs(),
+                    node.isSkewed());
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
+        }
+
+        /**
+         * In new planner.
+         * Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
+         * to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
+         */
+        private static void passPartitionByToSortNode(ExecPlan context, PlanNode childRoot, List<Expr> partitionExprs,
+                                                      boolean isSkewed) {
+            SortNode sortNode = null;
+            if (childRoot instanceof SortNode) {
+                sortNode = (SortNode) childRoot;
+                sortNode.setAnalyticPartitionExprs(partitionExprs);
+            } else if (childRoot instanceof DecodeNode && childRoot.getChild(0) instanceof SortNode) {
+                DecodeNode decodeNode = (DecodeNode) childRoot;
+                sortNode = (SortNode) childRoot.getChild(0);
+
+                Map<Integer, Integer> stringIdToDictId = decodeNode.getDictIdToStringIds()
+                        .entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+                List<Expr> partitionExprsBeforeDecode = partitionExprs.stream().map(expr -> {
+                    if (!(expr instanceof SlotRef)) {
+                        return expr;
+                    }
+
+                    SlotRef slotRef = (SlotRef) expr;
+                    Integer dictSlotId = stringIdToDictId.get(slotRef.getDesc().getId().asInt());
+                    if (dictSlotId == null) {
+                        return expr;
+                    }
+
+                    SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(dictSlotId));
+                    return new SlotRef(slotDesc);
+                }).collect(Collectors.toList());
+
+                sortNode.setAnalyticPartitionExprs(partitionExprsBeforeDecode);
+            }
+
+            if (sortNode != null) {
+                // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
+                sortNode.setAnalyticPartitionSkewed(isSkewed);
+            }
         }
 
         private PlanFragment buildSetOperation(OptExpression optExpr, ExecPlan context, OperatorType operatorType) {
@@ -3102,16 +3172,10 @@ public class PlanFragmentBuilder {
             public final List<Expr> otherJoin;
             public final List<Expr> conjuncts;
 
-            // eqJoinConjuncts are used for hashJoin, cols from otherJoin and conjuncts are
-            // used for filter rows generated by hashJoin
-            public final ColumnRefSet requiredColsForFilter;
-
-            public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts,
-                                ColumnRefSet requiredColsForFilter) {
+            public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts) {
                 this.eqJoinConjuncts = eqJoinConjuncts;
                 this.otherJoin = otherJoin;
                 this.conjuncts = conjuncts;
-                this.requiredColsForFilter = requiredColsForFilter;
             }
         }
 
@@ -3167,7 +3231,7 @@ public class PlanFragmentBuilder {
             otherJoin.stream().forEach(e -> requiredColsForFilter.union(e.getUsedColumns()));
             predicates.stream().forEach(e -> requiredColsForFilter.union(e.getUsedColumns()));
 
-            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, requiredColsForFilter);
+            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
         }
 
         // TODO(murphy) consider state distribution
@@ -3218,7 +3282,7 @@ public class PlanFragmentBuilder {
                             node.getJoinType(), eqJoinConjuncts, otherJoinConjuncts);
             currentExecGroup.add(joinNode, true);
             // 4. Build outputColumns
-            fillSlotsInfo(node.getProjection(), joinNode, optExpr, joinExpr.requiredColsForFilter);
+            fillSlotsInfo(node.getProjection(), joinNode, optExpr);
 
             joinNode.setDistributionMode(distributionMode);
             joinNode.getConjuncts().addAll(conjuncts);
@@ -3438,8 +3502,7 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
-        private void fillSlotsInfo(Projection projection, JoinNode joinNode, OptExpression optExpr,
-                                   ColumnRefSet requiredColsForFilter) {
+        private void fillSlotsInfo(Projection projection, JoinNode joinNode, OptExpression optExpr) {
             ColumnRefSet outputCols = new ColumnRefSet();
             if (projection != null) {
                 for (ScalarOperator s : projection.getColumnRefMap().values()) {
@@ -3449,7 +3512,6 @@ public class PlanFragmentBuilder {
                     outputCols.union(s.getUsedColumns());
                 }
                 outputCols.except(new ArrayList<>(projection.getCommonSubOperatorMap().keySet()));
-                outputCols.union(requiredColsForFilter);
                 // when the project doesn't require any cols from join, we just select the first col in the build table
                 // of join as the output col for simple
                 if (outputCols.isEmpty()) {

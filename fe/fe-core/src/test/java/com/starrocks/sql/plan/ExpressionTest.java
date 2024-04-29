@@ -22,6 +22,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -193,8 +196,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(27,2)) - cast(v2 as decimal64(10,3)) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - " +
-                "CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(29,2)) - " +
+                "CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(29,3))\n"));
     }
 
     @Test
@@ -730,9 +733,10 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  3:ANALYTIC\n" +
                 "  |  functions: [, count(6: c1), ]\n" +
                 "  |  partition by: 8: array_sum"));
-        Assert.assertTrue(plan.contains("  2:SORT\n" +
+        assertContains(plan, "  2:SORT\n" +
                 "  |  order by: <slot 8> 8: array_sum ASC\n" +
-                "  |  offset:"));
+                "  |  analytic partition by: 8: array_sum\n" +
+                "  |  offset:");
         Assert.assertTrue(plan, plan.contains("  1:Project\n" +
                 "  |  <slot 6> : 2: c1\n" +
                 "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +
@@ -1875,5 +1879,18 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select parse_json('{\"a\": true}')->\"a\"->\"$....\"";
         plan = getFragmentPlan(sql);
         assertContains(plan, "json_query(json_query(parse_json('{\"a\": true}'), 'a'), '$....')");
+    }
+
+    @Test
+    public void testFoundJsonInt() {
+        Function func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.VARCHAR, Type.VARCHAR},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertNotNull(func);
+        Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
+
+        func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.JSON, Type.VARCHAR},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertNotNull(func);
+        Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
     }
 }

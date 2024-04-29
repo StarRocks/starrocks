@@ -270,6 +270,9 @@ set(EXEC_FILES
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
+    pipeline/group_execution/execution_group.cpp
+    pipeline/group_execution/execution_group_builder.cpp
+    pipeline/group_execution/group_operator.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp

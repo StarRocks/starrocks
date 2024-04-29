@@ -176,6 +176,15 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
     }
 }
 
+void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs) {
+    RuntimeState* state = _state;
+    for (auto* rf_desc : rf_descs) {
+        auto* filter = rf_desc->runtime_filter();
+        if (filter == nullptr) continue;
+        state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+    }
+}
+
 void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf) {
     _state->exec_env()->add_rf_event({
             _state->query_id(),

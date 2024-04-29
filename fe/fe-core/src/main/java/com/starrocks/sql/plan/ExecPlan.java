@@ -76,6 +76,15 @@ public class ExecPlan {
         this.outputColumns = outputColumns;
     }
 
+    // for broker load plan
+    public ExecPlan(ConnectContext connectContext, List<PlanFragment> fragments) {
+        this.connectContext = connectContext;
+        this.colNames = new ArrayList<>();
+        this.physicalPlan = null;
+        this.outputColumns = new ArrayList<>();
+        this.fragments.addAll(fragments);
+    }
+
     public ConnectContext getConnectContext() {
         return connectContext;
     }

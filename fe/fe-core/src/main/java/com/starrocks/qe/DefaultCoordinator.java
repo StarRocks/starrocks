@@ -53,6 +53,7 @@ import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -521,7 +522,14 @@ public class DefaultCoordinator extends Coordinator {
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
-            jobSpec.getQueryOptions().setEnable_profile(true);
+            // for non-pipeline engine, enable_profile is renamed from is_report_success,
+            // which is not only for report profile but also for report success.
+            // for pipeline engine, enable_profile is only for report profile.
+            // when enable_profile is true by default, the runtime profile of pipeline engine may use a lot of memory.
+            // so we only set enable_profile to true when use non-pipeline engine.
+            if (!jobSpec.isEnablePipeline()) {
+                jobSpec.getQueryOptions().setEnable_profile(true);
+            }
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(
                     jobSpec.getLoadJobId(), jobSpec.getQueryId(), executionDAG.getInstanceIds(), relatedBackendIds);
@@ -1104,6 +1112,11 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
         return executionDAG.getFragmentInstanceInfos();
+    }
+
+    @Override
+    public DataCacheSelectMetrics getDataCacheSelectMetrics() {
+        return queryProfile.getDataCacheSelectMetrics();
     }
 
     @Override

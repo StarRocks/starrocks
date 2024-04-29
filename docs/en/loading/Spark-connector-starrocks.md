@@ -279,6 +279,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`);
 ```
 
+#### Network configuration
+
+Ensure that the machine where Spark is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
+
 #### Set up your Spark environment
 
 Note that the following examples are run in Spark 3.2.4 and use `spark-shell`, `pyspark` and `spark-sql`. Before running the examples, make sure to place the Spark connector JAR file in the `$SPARK_HOME/jars` directory.

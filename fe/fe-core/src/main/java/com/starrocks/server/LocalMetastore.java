@@ -2094,6 +2094,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         .setVersion(partition.getVisibleVersion())
                         .setStorageMedium(storageMedium)
                         .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setPersistentIndexType(table.getPersistentIndexType())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                         .setBinlogConfig(table.getCurBinlogConfig())
                         .setTabletType(tabletType)
@@ -3520,6 +3521,16 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties().put(
                         PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, str);
                 properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+            }
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+                TableProperty.MVTransparentRewriteMode value = TableProperty.analyzeMVTransparentRewrite(str);
+                materializedView.getTableProperty().setMvTransparentRewriteMode(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             }
 
             // lake storage info

@@ -46,6 +46,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### Logging
 
+##### log_roll_size_mb
+
+- Default: 1024
+- Type: Int
+- Unit: MB
+- Is mutable: No
+- Description: The maximum size of a system log file or an audit log file.
+- Introduced in: -
+
 ##### sys_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -1063,6 +1072,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics.
 - Introduced in: v3.1.5
 
+#### metadata_enable_recovery_mode
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
+- Introduced in: v3.3.0
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1209,6 +1227,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
+
+##### enable_materialized_view_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: whether to collect metrics for materialized view by default.
+- Introduced in: v3.1.11
+
+##### enable_materialized_view_text_based_rewrite
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: whether to enable text based rewrite by default, if true it will build ast tree in materialized view initialization.
+- Introduced in: v3.2.5
 
 ##### enable_mv_automatic_active_check
 
@@ -2375,7 +2411,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **NOTE**
 >
-> - StarRocks shared-data clusters do not support this parameter.
+> - StarRocks shared-data clusters supports this parameter from v3.3.0.
 > - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
@@ -3701,17 +3737,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description:
 - Introduced in: -
--->
-
-<!--
-#### metadata_enable_recovery_mode
-
-- **Default:** FALSE
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- **Description:** Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
-- **Introduced in:** 3.3
 -->
 
 <!--

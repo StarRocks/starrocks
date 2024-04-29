@@ -63,6 +63,9 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     public LongCounterMetric counterQueryHitTotal;
     // increased once the materialized view is used in the final plan no matter it is queried directly or rewritten.
     public LongCounterMetric counterQueryMaterializedViewTotal;
+    // increased if the materialized view is successes to be rewritten from query by text based rewrite, and it will increase
+    // the counter query hit total.
+    public LongCounterMetric counterQueryTextBasedMatchedTotal;
 
     // gauge
     // the current pending refresh jobs for the materialized view
@@ -126,6 +129,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         counterQueryMatchedTotal = new LongCounterMetric("mv_query_total_matched_count", MetricUnit.REQUESTS,
                 "total matched materialized view's query count");
         metrics.add(counterQueryMatchedTotal);
+        // text based rewrite
+        counterQueryTextBasedMatchedTotal = new LongCounterMetric("mv_query_total_text_based_matched_count",
+                MetricUnit.REQUESTS, "total text based matched materialized view's query count");
+        metrics.add(counterQueryTextBasedMatchedTotal);
 
         // histogram metrics
         try {
@@ -297,6 +304,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     @Override
     public void increaseQueryMatchedCount(long count) {
         this.counterQueryMatchedTotal.increase(count);
+    }
+
+    @Override
+    public void increaseQueryTextBasedMatchedCount(long count) {
+        this.counterQueryTextBasedMatchedTotal.increase(count);
     }
 
     @Override

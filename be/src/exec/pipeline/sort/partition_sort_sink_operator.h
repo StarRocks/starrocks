@@ -90,6 +90,7 @@ protected:
 
     SortContext* _sort_context;
     RuntimeFilterHub* _hub;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class PartitionSortSinkOperatorFactory : public OperatorFactory {

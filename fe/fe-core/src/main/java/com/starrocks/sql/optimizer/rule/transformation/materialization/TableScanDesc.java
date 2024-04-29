@@ -31,15 +31,17 @@ public class TableScanDesc {
     // join type of LogicalJoinOperator above scan operator
     private final OptExpression joinOptExpression;
     private final boolean isLeft;
+    private final Integer relationid;
 
     public TableScanDesc(Table table, int index,
                          LogicalScanOperator scanOperator, OptExpression joinOptExpression,
-                         boolean isLeft) {
+                         boolean isLeft, Integer relationid) {
         this.table = table;
         this.index = index;
         this.scanOperator = scanOperator;
         this.joinOptExpression = joinOptExpression;
         this.isLeft = isLeft;
+        this.relationid = relationid;
     }
 
     public Table getTable() {
@@ -68,6 +70,24 @@ public class TableScanDesc {
         }
         LogicalJoinOperator joinOperator = joinOptExpression.getOp().cast();
         return joinOperator.getJoinType();
+    }
+
+    public Integer getRelationid() {
+        return relationid;
+    }
+
+    public boolean isCompatible(TableScanDesc other) {
+        if (isMatch(other)) {
+            return true;
+        }
+
+        JoinOperator joinOperator = getJoinType();
+        JoinOperator otherJoinOperator = other.getJoinType();
+        if (!MaterializedViewRewriter.JOIN_COMPATIBLE_MAP.containsKey(joinOperator) ||
+                !MaterializedViewRewriter.JOIN_COMPATIBLE_MAP.get(joinOperator).contains(otherJoinOperator)) {
+            return false;
+        }
+        return true;
     }
 
     public boolean isMatch(TableScanDesc other) {

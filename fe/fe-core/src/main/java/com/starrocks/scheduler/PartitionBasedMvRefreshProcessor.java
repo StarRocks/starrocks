@@ -40,6 +40,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -112,7 +113,6 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -135,6 +135,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.needToRefreshTable;
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 
 /**
@@ -464,7 +466,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // enable spill by default for mv if spill is not set by default and
         // `session.enable_spill` session variable is not set.
         if (Config.enable_materialized_view_spill &&
-                !mvSessionVariable.getEnableSpill() &&
+                !mvSessionVariable.isEnableSpill() &&
                 !mvProperty.getProperties().containsKey(MV_SESSION_ENABLE_SPILL)) {
             mvSessionVariable.setEnableSpill(true);
         }
@@ -1106,10 +1108,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         mvContext.setRefBaseTableListPartitionMap(baseListPartitionMap);
     }
 
-    private boolean needToRefreshTable(Table table) {
-        return CollectionUtils.isNotEmpty(materializedView.getUpdatedPartitionNamesOfTable(table, false));
-    }
-
     private static boolean supportPartitionRefresh(Table table) {
         return ConnectorPartitionTraits.build(table).supportPartitionRefresh();
     }
@@ -1125,7 +1123,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (!supportPartitionRefresh(snapshotTable)) {
                 return true;
             }
-            if (needToRefreshTable(snapshotTable)) {
+            if (needToRefreshTable(materializedView, snapshotTable)) {
                 return true;
             }
         }
@@ -1149,7 +1147,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
-            if (needToRefreshTable(snapshotTable)) {
+            if (needToRefreshTable(materializedView, snapshotTable)) {
                 return true;
             }
         }
@@ -1339,12 +1337,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // step1: check updated partition names in the ref base table and add it to the refresh candidate
-        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(refBaseTable, false);
-        if (updatePartitionNames == null) {
+        MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(materializedView, refBaseTable, false, false);
+        if (mvBaseTableUpdateInfo == null) {
             return mvRangePartitionNames;
         }
 
         // step2: fetch the corresponding materialized view partition names as the need to refresh partitions
+        Set<String> updatePartitionNames = mvBaseTableUpdateInfo.getToRefreshPartitionNames();
         Set<String> result = getMVPartitionNamesByBasePartitionNames(refBaseTable, updatePartitionNames);
         result.retainAll(mvRangePartitionNames);
         return result;

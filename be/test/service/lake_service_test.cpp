@@ -27,6 +27,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/test_util.h"
@@ -1831,4 +1832,85 @@ TEST_F(LakeServiceTest, test_drop_table_no_permission) {
     ASSERT_EQ(1, response.status().error_msgs_size());
     ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*Permission denied*"));
 }
+
+static TTabletSchema gen_tablet_schema_thrift() {
+    TTabletSchema schema;
+    schema.__set_id(next_id());
+    schema.__set_keys_type(TKeysType::DUP_KEYS);
+    schema.__set_schema_hash(0);
+    schema.__set_schema_version(2);
+    schema.__set_short_key_column_count(1);
+    schema.__set_storage_type(TStorageType::COLUMN);
+    {
+        auto& col = schema.columns.emplace_back();
+        col.__set_column_name("c0");
+        col.__set_is_key(true);
+        col.__set_aggregation_type(TAggregationType::NONE);
+        col.__set_col_unique_id(0);
+        col.__set_is_allow_null(true);
+        col.__set_type_desc(gen_type_desc(TPrimitiveType::BIGINT));
+    }
+    {
+        auto& col = schema.columns.emplace_back();
+        col.__set_column_name("d2");
+        col.__set_is_key(false);
+        col.__set_aggregation_type(TAggregationType::NONE);
+        col.__set_col_unique_id(3);
+        col.__set_is_allow_null(true);
+        col.__set_type_desc(gen_type_desc(TPrimitiveType::DOUBLE));
+    }
+    return schema;
+}
+
+TEST_F(LakeServiceTest, test_publish_version_for_fast_schema_evolution) {
+    int64_t alter_txn_id = next_id();
+    auto new_schema = gen_tablet_schema_thrift();
+    // 1. write txn log for schema evolution
+    {
+        TUpdateTabletMetaInfoReq req;
+        req.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+        req.__set_txn_id(alter_txn_id);
+
+        auto& update = req.tabletMetaInfos.emplace_back();
+        update.__set_tablet_id(_tablet_id);
+        update.__set_create_schema_file(true);
+        update.__set_tablet_schema(new_schema);
+
+        lake::SchemaChangeHandler handler(_tablet_mgr);
+        ASSERT_OK(handler.process_update_tablet_meta(req));
+    }
+    // 2. publish version for schema evolution
+    {
+        brpc::Controller cntl;
+        PublishVersionRequest req;
+        PublishVersionResponse resp;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(_tablet_id);
+        req.add_txn_ids(alter_txn_id);
+        req.set_commit_time(::time(nullptr));
+        _lake_service.publish_version(&cntl, &req, &resp, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, resp.status().status_code());
+    }
+    // 3. verify the new schema
+    {
+        auto compare_column = [](const TColumn& col1, const TabletColumn& col2) {
+            EXPECT_EQ(col1.column_name, col2.name());
+            EXPECT_EQ(col1.col_unique_id, col2.unique_id());
+            EXPECT_EQ(col1.is_allow_null, col2.is_nullable());
+            EXPECT_EQ(col1.is_key, col2.is_key());
+            auto t1 = thrift_to_type(col1.type_desc.types[0].scalar_type.type);
+            EXPECT_EQ(t1, col2.type());
+        };
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+        auto& schema = metadata->schema();
+        EXPECT_EQ(new_schema.id, schema.id());
+        EXPECT_EQ(new_schema.columns.size(), schema.column_size());
+        EXPECT_EQ(new_schema.short_key_column_count, schema.num_short_key_columns());
+        compare_column(new_schema.columns[0], schema.column(0));
+        compare_column(new_schema.columns[1], schema.column(1));
+    }
+}
+
 } // namespace starrocks

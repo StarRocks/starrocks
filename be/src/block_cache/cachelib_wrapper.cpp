@@ -42,7 +42,9 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
         }
         nvmConfig.navyConfig.blockCache().setRegionSize(16 * 1024 * 1024);
         nvmConfig.navyConfig.blockCache().setDataChecksum(options.enable_checksum);
-        nvmConfig.navyConfig.setMaxParcelMemoryMB(options.max_flying_memory_mb);
+        if (options.max_flying_memory_mb > 0) {
+            nvmConfig.navyConfig.setMaxParcelMemoryMB(options.max_flying_memory_mb);
+        }
         nvmConfig.navyConfig.setMaxConcurrentInserts(options.max_concurrent_inserts);
         config.enableNvmCache(nvmConfig);
     }
@@ -105,6 +107,14 @@ Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, si
 
 Status CacheLibWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
     return Status::NotSupported("not supported read object in cachelib");
+}
+
+Status CacheLibWrapper::update_mem_quota(size_t quota_bytes) {
+    return Status::NotSupported("not support updating memory cache quota for cachelib");
+}
+
+Status update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    return Status::NotSupported("not support updating disk cache spaces for cachelib");
 }
 
 void CacheLibWrapper::record_read_remote(size_t size, int64_t lateny_us) {}

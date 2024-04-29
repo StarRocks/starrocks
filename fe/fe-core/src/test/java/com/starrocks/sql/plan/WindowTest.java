@@ -206,6 +206,7 @@ public class WindowTest extends PlanTestBase {
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: <slot 3> 3: k3 ASC\n" +
+                "  |  analytic partition by: 3: k3\n" +
                 "  |  offset: 0");
     }
 
@@ -215,6 +216,7 @@ public class WindowTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
+                "  |  analytic partition by: 2: v2\n" +
                 "  |  offset: 0");
 
     }
@@ -513,6 +515,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:EXCHANGE");
@@ -605,6 +608,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -616,6 +620,7 @@ public class WindowTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
         }
         {
@@ -629,6 +634,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -640,6 +646,7 @@ public class WindowTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
         }
         {
@@ -653,6 +660,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:EXCHANGE");
@@ -985,6 +993,7 @@ public class WindowTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
+                "  |  analytic partition by: [1: v1, BIGINT, true]\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
@@ -1077,6 +1086,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
@@ -1102,6 +1112,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +

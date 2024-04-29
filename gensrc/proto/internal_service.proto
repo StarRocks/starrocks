@@ -428,7 +428,7 @@ message PKafkaLoadInfo {
     required string brokers = 1;
     required string topic = 2;
     repeated PStringPair properties = 3;
-    required int64 warehouseId = 11;
+    optional int64 warehouseId = 11;
 };
 
 message PKafkaMetaProxyRequest {

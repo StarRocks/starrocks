@@ -19,52 +19,29 @@
 #include "common/config.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
+#include "exec/exec_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
-#include "exec/pipeline/chunk_accumulate_operator.h"
-#include "exec/pipeline/exchange/exchange_sink_operator.h"
-#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
-#include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/noop_sink_operator.h"
-#include "exec/pipeline/olap_table_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/pipeline/sink/blackhole_table_sink_operator.h"
-#include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
-#include "exec/pipeline/sink/export_sink_operator.h"
-#include "exec/pipeline/sink/file_sink_operator.h"
-#include "exec/pipeline/sink/hive_table_sink_operator.h"
-#include "exec/pipeline/sink/iceberg_table_sink_operator.h"
-#include "exec/pipeline/sink/memory_scratch_sink_operator.h"
-#include "exec/pipeline/sink/mysql_table_sink_operator.h"
-#include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
-#include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
-#include "runtime/dictionary_cache_sink.h"
 #include "runtime/exec_env.h"
-#include "runtime/export_sink.h"
-#include "runtime/hive_table_sink.h"
-#include "runtime/iceberg_table_sink.h"
-#include "runtime/memory_scratch_sink.h"
-#include "runtime/multi_cast_data_stream_sink.h"
-#include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "runtime/table_function_table_sink.h"
 #include "util/debug/query_trace.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
@@ -334,9 +311,18 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.common().params;
     const auto& fragment = request.common().fragment;
-    const auto dop = _calc_dop(exec_env, request);
+    const auto pipeline_dop = _calc_dop(exec_env, request);
+    const int32_t group_execution_scan_dop = request.group_execution_scan_dop();
     const auto& query_options = request.common().query_options;
     const int chunk_size = runtime_state->chunk_size();
+
+    // check group execution params
+    if (request.common().fragment.__isset.group_execution_param &&
+        request.common().fragment.group_execution_param.enable_group_execution) {
+        _fragment_ctx->set_enable_group_execution(true);
+        _colocate_exec_groups = ExecutionGroupBuilder::create_colocate_exec_groups(
+                request.common().fragment.group_execution_param, pipeline_dop);
+    }
 
     bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
     bool enable_tablet_internal_parallel =
@@ -440,8 +426,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
-                                 scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), dop,
-                                 enable_tablet_internal_parallel, tablet_internal_parallel_mode));
+                                 scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
+                                 _is_in_colocate_exec_group(scan_node->id()), enable_tablet_internal_parallel,
+                                 tablet_internal_parallel_mode));
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
@@ -457,7 +444,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             // Some chunk sources scan `chunk_size` rows at a time, so normalize `limit` to be rounded up to `chunk_size`.
             logical_scan_limit += scan_node->limit();
             int64_t normalized_limit = (scan_node->limit() + chunk_size - 1) / chunk_size * chunk_size;
-            physical_scan_limit += normalized_limit * dop * scan_node->io_tasks_per_scan_operator();
+            physical_scan_limit += normalized_limit * pipeline_dop * scan_node->io_tasks_per_scan_operator();
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;
@@ -528,6 +515,15 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
+bool FragmentExecutor::_is_in_colocate_exec_group(PlanNodeId plan_node_id) {
+    for (auto& [group_id, group] : _colocate_exec_groups) {
+        if (group->contains(plan_node_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void create_adaptive_group_initialize_events(RuntimeState* state, PipelineGroupMap&& unready_pipeline_groups) {
     if (unready_pipeline_groups.empty()) {
         return;
@@ -553,20 +549,19 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
+
     auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     auto* runtime_state = _fragment_ctx->runtime_state();
-    const auto& pipelines = _fragment_ctx->pipelines();
     size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
-
     // Build pipelines
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
+    context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
     auto exec_ops = builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan);
-
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
@@ -583,33 +578,32 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                                                                   tsink, fragment.output_exprs));
     }
     _fragment_ctx->set_data_sink(std::move(datasink));
-
-    _fragment_ctx->set_pipelines(builder.build());
+    auto group_with_pipelines = builder.build();
+    _fragment_ctx->set_pipelines(std::move(group_with_pipelines.first), std::move(group_with_pipelines.second));
 
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
     // Set morsel_queue_factory to pipeline.
-    for (const auto& pipeline : pipelines) {
+    _fragment_ctx->iterate_pipeline([&morsel_queue_factories](Pipeline* pipeline) {
         if (pipeline->source_operator_factory()->with_morsels()) {
-            auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
+            auto source_id = pipeline->source_operator_factory()->plan_node_id();
             DCHECK(morsel_queue_factories.count(source_id));
             auto& morsel_queue_factory = morsel_queue_factories[source_id];
-
             pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
         }
-    }
+    });
 
+    // collect unready pipeline groups and instantiate ready drivers
     PipelineGroupMap unready_pipeline_groups;
-    for (const auto& pipeline : pipelines) {
+    _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, runtime_state](Pipeline* pipeline) {
         auto* source_op = pipeline->source_operator_factory();
         if (!source_op->is_adaptive_group_initial_active()) {
             auto* group_leader_source_op = source_op->group_leader();
-            unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline.get());
-            continue;
+            unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline);
+            return;
         }
-
         pipeline->instantiate_drivers(runtime_state);
-    }
+    });
 
     if (!unready_pipeline_groups.empty()) {
         create_adaptive_group_initialize_events(runtime_state, std::move(unready_pipeline_groups));
@@ -754,40 +748,16 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     auto* prepare_driver_timer =
             ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
 
-    auto iterate_active_drivers = [fragment_ctx = _fragment_ctx.get()](auto call) {
-        using Func = decltype(call);
-        static_assert(DriverPtrCallable<Func>, "Function must be callable with DriverPtr and return void or Status.");
-        using ReturnType = std::invoke_result_t<Func, const DriverPtr&>;
-
-        for (const auto& pipeline : fragment_ctx->pipelines()) {
-            auto* source_op = pipeline->source_operator_factory();
-            if (!source_op->is_adaptive_group_initial_active()) {
-                continue;
-            }
-            for (const auto& driver : pipeline->drivers()) {
-                if constexpr (std::is_same_v<ReturnType, Status>) {
-                    RETURN_IF_ERROR(call(driver));
-                } else {
-                    call(driver);
-                }
-            }
-        }
-        if constexpr (std::is_same_v<ReturnType, Status>) {
-            return Status::OK();
-        }
-    };
-
     {
         SCOPED_TIMER(prepare_instance_timer);
         SCOPED_TIMER(prepare_driver_timer);
-        RETURN_IF_ERROR(iterate_active_drivers(
-                [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
+        RETURN_IF_ERROR(_fragment_ctx->prepare_active_drivers());
     }
     prepare_success = true;
 
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = exec_env->wg_driver_executor();
-    iterate_active_drivers([executor](const DriverPtr& driver) { executor->submit(driver.get()); });
+    RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
 
     return Status::OK();
 }
