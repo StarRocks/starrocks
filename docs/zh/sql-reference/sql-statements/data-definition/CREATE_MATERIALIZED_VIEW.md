@@ -266,9 +266,9 @@ AS
 - `resource_group`: 为物化视图刷新任务设置资源组。更多关于资源组信息，请参考[资源隔离](../../../administration/management/resource_management/resource_group.md)。
 - `storage_volume`：如果您使用存算分离集群，则需要指定创建物化视图的 [Storage Volume](../../../deployment/shared_data/s3.md#使用-starrocks-存算分离集群) 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 
-  > **注意**
-  >
-  > Unique Key 约束和外键约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+> **注意**
+>
+> Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
 
 **query_statement**（必填）
 

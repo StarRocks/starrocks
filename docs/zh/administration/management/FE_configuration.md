@@ -1158,6 +1158,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启异步物化视图功能。`TRUE` 表示开启。从 2.5.2 版本开始，该功能默认开启。2.5.2 版本之前默认值为 `FALSE`。
 - 引入版本：v2.4
 
+##### enable_materialized_view_metrics_collect
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否默认收集异步物化视图的监控指标。
+- 引入版本：v3.1.11，v3.2.5
+
 ##### enable_mv_automatic_active_check
 
 - 默认值：true

@@ -1157,6 +1157,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
 - Introduced in: v2.4
 
+##### enable_materialized_view_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
+- Introduced in: v3.1.11, v3.2.5
+
 ##### enable_mv_automatic_active_check
 
 - Default: true
