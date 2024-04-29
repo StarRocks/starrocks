@@ -202,7 +202,7 @@ You only need to configure a partition expression (a time function expression or
 
 Range partitioning is suitable for storing simple, contiguous data, such as time series data, or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
 
-You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the range to which the data partitioning column values belong.
+You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the ranges to which the data partitioning column values belong.
 
 As for the data type of partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, partitioning column values support to be timestamps and strings. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use functions to convert partitioning column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
 
@@ -337,7 +337,7 @@ Multiple partitions can be created in batch at and after table creation. You can
   <Tabs groupId="batch partitioning(date)">
   <TabItem value="example1" label="with the same date interval" default>
   
-  In the following example, the partitions created in batch start from `2021-01-01` and ends、 on `2021-01-04`, with a partition increment of one day:  
+  In the following example, the partitions created in batch start from `2021-01-01` and ends on `2021-01-04`, with a partition increment of one day:  
 
     ```SQL
     CREATE TABLE site_access (
@@ -413,7 +413,7 @@ You can create batches of date partitions with different incremental intervals b
   > The partitioning column values in **START()** and **END()** need to be wrapped in double quotation marks, while the incremental value in the **EVERY()** does not need to be wrapped in double quotation marks.
 
   <Tabs groupId="batch partitioning(integer)">
-  <TabItem value="example1" label="with the same integer interval" default>
+  <TabItem value="example1" label="with the same numerical interval" default>
 
   In the following example, the range of all the partition starts from `1` and ends at `5`, with a partition increment of `1`:
 
