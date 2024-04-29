@@ -712,7 +712,7 @@ As shown above, `agg_mv5` contains the data from partitions `p1` to `p7`, and th
 
 From v3.1.0 onwards, StarRocks supports creating materialized views based on views. Subsequent queries against the views can be rewritten if they are of the SPJG pattern. By default, queries against views are automatically transcribed into queries against the base tables of the views and then transparently matched and rewritten.
 
-However, in real-world scenarios, data analysts may perform data modeling upon complex, nested views, which cannot be directly transcribed. As a result, materialized views created based on such views cannot rewrite queries. To improve its capability in the preceding scenario, StarRocks optimizes the view-based materialized view query rewrite logic from v3.3.0 onwards.
+However, in real-world scenarios, data analysts may perform data modeling upon complex, nested views, which cannot be directly transcribed. As a result, materialized views created based on such views cannot rewrite queries. To improve its capability in the preceding scenario, StarRocks optimizes the view-based materialized view query rewrite logic from v3.2.7 onwards.
 
 ### Fundamentals
 
