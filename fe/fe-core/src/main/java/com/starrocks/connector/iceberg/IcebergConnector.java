@@ -85,7 +85,7 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
-                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor());
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
