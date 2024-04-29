@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/tablet_schema.h"
+
 #include <gtest/gtest.h>
 
-#include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/tablet_schema_map.h"
 #include "util/json_util.h"
