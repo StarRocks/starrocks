@@ -757,10 +757,7 @@ bool SnapshotLoader::_end_with(const std::string& str, const std::string& match)
 }
 
 bool SnapshotLoader::_contains(const std::string& str, const std::string& match) {
-    if (str.find(match) != std::string::npos) {
-        return true;
-    }
-    return false;
+    return str.find(match) != std::string::npos;
 }
 
 bool SnapshotLoader::_is_index_files(const std::string& str) {
