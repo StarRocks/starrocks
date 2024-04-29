@@ -1296,7 +1296,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (Integer colIdx : originSortKeyIdxes) {
                     String columnName = index.getSchema().get(colIdx).getName();
                     Optional<Column> oneCol =
-                            alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
+                            alterSchema.stream().filter(c -> c.nameEquals(columnName, true)).findFirst();
                     if (oneCol.isEmpty()) {
                         LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
                         throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
