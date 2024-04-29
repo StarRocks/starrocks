@@ -23,6 +23,7 @@ properties
 
 
 -- Test partition compensate without partition expression
+set new_planner_optimize_timeout=10000;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
