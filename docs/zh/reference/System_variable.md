@@ -137,7 +137,89 @@ SELECT /*+ SET_VAR
 
 ### cbo_eq_base_type （2.5.14 及以后）
 
+<<<<<<< HEAD
 用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
+=======
+* 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。**该变量仅在进行 `=` 和 `!=` 比较时生效。**
+* 类型：String
+* 引入版本：v2.5.14
+
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* 描述：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
+* 默认值：64
+* 类型：Int
+* 引入版本：v3.1.9, v3.2.5
+
+### enable_sync_materialized_view_rewrite
+
+* 描述：是否启用基于同步物化视图的查询改写。
+* 默认值：true
+* 引入版本：v3.1.11，v3.2.5
+
+### query_including_mv_names
+
+* 描述：指定需要在查询执行过程中包含的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。此项优先于 `query_excluding_mv_names` 生效。
+* 默认值：空字符串
+* 类型：String
+* 引入版本：v3.1.11，v3.2.5
+
+### query_excluding_mv_names
+
+* 描述：指定需要在查询执行过程中排除的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。`query_including_mv_names` 优先于此项生效。
+* 默认值：空字符串
+* 类型：String
+* 引入版本：v3.1.11，v3.2.5
+
+### optimizer_materialized_view_timelimit
+
+* 描述：指定一个物化视图改写规则可消耗的最大时间。当达到阈值时，将不再使用该规则进行查询改写。
+* 默认值：1000
+* 单位：毫秒
+* 类型：Long
+
+### enable_materialized_view_text_match_rewrite
+
+* 描述：是否启用基于文本的物化视图改写。当此项设置为 `true` 时，优化器将查询与现有的物化视图进行比较。如果物化视图定义的抽象语法树与查询或其子查询的抽象语法树匹配，则会对查询进行改写。
+* 默认值：true
+* 引入版本：v3.2.5，v3.3.0
+
+### materialized_view_subuqery_text_match_max_count
+
+* 描述：指定系统比对查询的子查询是否与物化视图定义匹配的最大次数。
+* 默认值：4
+* 引入版本：v3.2.5，v3.3.0
+
+### enable_force_rule_based_mv_rewrite
+
+* 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
+* 默认值：true
+* 引入版本：v3.3
+
+### enable_view_based_mv_rewrite
+
+* 描述：是否为基于逻辑视图创建的物化视图启用查询改写。如果此项设置为 `true`，则逻辑视图被用作统一节点进行查询改写，从而获得更好的性能。如果此项设置为 `false`，则系统将针对逻辑视图的查询展开变为针对物理表或物化视图的查询，然后进行改写。
+* 默认值：false
+* 引入版本：v3.1.9，v3.2.5，v3.3.0
+
+### enable_materialized_view_union_rewrite
+
+* 描述：是否启用物化视图 UNION 改写。如果此项设置为 true，则系统在物化视图的谓词不能满足查询的谓词时，会尝试使用 UNION ALL 来补偿谓词。
+* 默认值：true
+* 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
+
+### follower_query_forward_mode
+
+* 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
+
+  有效值:
+  * `default`: 将查询语句路由到 Leader FE 或 Follower FE 节点，取决于 Follower FE 节点的回放进度。如果 Follower FE 节点未完成回放，查询将会被路由至 Leader FE 节点。反之，查询会被优先路由至 Follower FE 节点。
+  * `leader`: 将查询语句路由到 Leader FE 节点。
+  * `follower`: 将查询语句路由到 Follower FE 节点。
+* 默认值：default
+* 类型：String
+* 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
+>>>>>>> f0003d4dab ([Doc] Add 3.3 MV-related params (#44870))
 
 ### character_set_database（global）
 
