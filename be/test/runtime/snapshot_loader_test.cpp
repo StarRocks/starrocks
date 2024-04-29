@@ -108,6 +108,14 @@ TEST_F(SnapshotLoaderTest, NormalCase) {
     st = loader._get_tablet_id_from_remote_path("/__tbl_10004/__part_10003/__idx_10004/__10005", &tablet_id);
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(10005, tablet_id);
+
+    ASSERT_TRUE(loader._contains("1234_2_5_12345_1.segments_1", "segments"));
+    ASSERT_TRUE(loader._contains("1234_2_5_12345_1.segments_2", "segments"));
+    ASSERT_TRUE(loader._contains("1234_2_5_12345_1.segments_3", "segments"));
+    ASSERT_TRUE(loader._contains("1234_2_5_12345_1.segments_4", "segments"));
+    ASSERT_TRUE(loader._contains("1234_2_5_12345_1.segments_5", "segments"));
+
+    ASSERT_TRUE(loader._contains("1234_2_5_12345_1.segments.gen", "segments"));
 }
 
 } // namespace starrocks
