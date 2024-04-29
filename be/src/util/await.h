@@ -54,7 +54,7 @@ public:
     // return value:
     // * true: condition is true
     // * false: condition is still false, timed out
-    bool until(condition_fun cond);
+    bool until(const condition_fun& cond);
 
 private:
     int64_t _timeout = 0;

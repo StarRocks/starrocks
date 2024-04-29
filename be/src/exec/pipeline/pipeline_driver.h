@@ -215,7 +215,7 @@ public:
                              driver._driver_id) {}
 
     virtual ~PipelineDriver() noexcept;
-    void check_operator_close_states(std::string func_name);
+    void check_operator_close_states(const std::string& func_name);
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }

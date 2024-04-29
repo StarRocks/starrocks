@@ -64,7 +64,7 @@ public:
     Status add(FailPoint* fp);
     FailPoint* get(const std::string& name);
 
-    void iterate(std::function<void(FailPoint*)> callback);
+    void iterate(const std::function<void(FailPoint*)>& callback);
 
 private:
     FailPointRegistry();
