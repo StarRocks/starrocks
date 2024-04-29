@@ -1157,6 +1157,45 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
 - Introduced in: v2.4
 
+<<<<<<< HEAD
+=======
+##### enable_colocate_mv_index
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views.
+- Introduced in: v3.2.0
+
+##### default_mv_refresh_immediate
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- Introduced in: v3.2.3
+
+##### enable_materialized_view_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
+- Introduced in: v3.1.11, v3.2.5
+
+##### enable_materialized_view_text_based_rewrite
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
+- Introduced in: v3.2.5
+
+>>>>>>> f0003d4dab ([Doc] Add 3.3 MV-related params (#44870))
 ##### enable_mv_automatic_active_check
 
 - Default: true
