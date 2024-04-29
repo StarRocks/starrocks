@@ -106,8 +106,16 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return gtid;
     }
 
+    public void setSelectedPartitionId(List<Long> selectedPartitionId) {
+        this.selectedPartitionId = selectedPartitionId;
+    }
+
     public List<Long> getSelectedPartitionId() {
         return selectedPartitionId;
+    }
+
+    public void setSelectedTabletId(List<Long> tabletId) {
+        this.selectedTabletId = tabletId;
     }
 
     public List<Long> getSelectedTabletId() {
@@ -245,6 +253,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     public static Builder builder() {
         return new Builder();
     }
+
     public static class Builder
             extends PhysicalScanOperator.Builder<PhysicalOlapScanOperator, PhysicalScanOperator.Builder> {
         @Override
@@ -269,7 +278,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.usePkIndex = operator.usePkIndex;
             builder.globalDicts = operator.globalDicts;
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
-            return  this;
+            return this;
         }
 
         public Builder setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
