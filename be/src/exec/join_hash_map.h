@@ -287,6 +287,7 @@ struct HashTableParam {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+    bool mor_reader_mode = false;
 };
 
 template <class T>
