@@ -1,0 +1,12 @@
+-- name: test_select_const_into_outfile
+
+select 1 as a, 2 as b
+into outfile "oss://${oss_bucket}/test_sink/test_select_const_into_outfile/${uuid0}/"
+format as parquet;
+
+select * from files (
+	"path" = "oss://${oss_bucket}/test_sink/test_select_const_into_outfile/${uuid0}/*",
+	"format" = "parquet";
+);
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_select_const_into_outfile/${uuid0} >/dev/null || echo "exit 0" >/dev/null
