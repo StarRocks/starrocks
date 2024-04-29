@@ -29,6 +29,7 @@ import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -228,7 +229,7 @@ public class MvRefreshArbiter {
         List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
         TableProperty tableProperty = mv.getTableProperty();
         for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTableChecked();
+            Table table = MvUtils.getTableChecked(tableInfo);
             // skip check freshness of view
             if (table.isView()) {
                 continue;
@@ -398,7 +399,7 @@ public class MvRefreshArbiter {
                                                                      boolean isQueryRewrite) {
         TableProperty tableProperty = mv.getTableProperty();
         for (BaseTableInfo tableInfo : mv.getBaseTableInfos()) {
-            Table baseTable = tableInfo.getTableChecked();
+            Table baseTable = MvUtils.getTableChecked(tableInfo);
             // skip view
             if (baseTable.isView()) {
                 continue;
