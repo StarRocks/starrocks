@@ -253,7 +253,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
     DISTRIBUTED BY HASH(site_id);
     ```
 
-- 分分区列值为时间戳和字符串（自 3.3.0 起支持）
+- 分区列值为时间戳和字符串（自 3.3.0 起支持）
   
   在显式定义分区与分区列值范围的映射关系时，您需要先使用函数将时间戳或字符串的分区列值转成日期，然后按转换后的日期划分分区。
 
@@ -296,7 +296,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   ```
 
   </TabItem>
-  <TabItem value="example2" label="分区列为字符串类型">
+  <TabItem value="example2" label="分区列值为字符串">
 
     ```SQL
     CREATE TABLE site_access (
@@ -328,12 +328,12 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
 建表时和建表后，支持批量创建分区，通过 START、END 指定批量分区的开始和结束，EVERY 子句指定分区增量值。其中，批量分区包含 START 的值，但是不包含 END 的值。分区的命名规则同动态分区一样。
 
-- 分区列为日期类型
+- **分区列为日期类型**
 
     当分区列为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
 
   <Tabs groupId="batch partitioning(date)">
-  <TabItem value="example1" label="分区日期间隔相同" default>
+  <TabItem value="example1" label="日期间隔相同" default>
 
     如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
 
@@ -363,7 +363,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
     ```
 
   </TabItem>
-  <TabItem value="example2" label="分区日期间隔不同">
+  <TabItem value="example2" label="日期间隔不同">
 
     支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
 
@@ -403,7 +403,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   </TabItem>
   </Tabs>
 
-- 分区列为数值类型
+- **分区列为数值类型**
 
     当分区列为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
 
@@ -412,7 +412,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
     > START、END 所指定的分区列的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
 
   <Tabs groupId="batch partitioning(integer)">
-  <TabItem value="example1" label="分区数值间隔相同" default>
+  <TabItem value="example1" label="数值间隔相同" default>
 
     如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
 
@@ -443,7 +443,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
     ```
 
   </TabItem>
-  <TabItem value="example2" label="分区数值间隔不同">
+  <TabItem value="example2" label="数值间隔不同">
 
     支持针对不同的数值分区区间（数值分区区间不能相重合），使用不同的 EVERY 子句指定数值间隔。一个数值分区区间，按照对应 EVERY 子句定义的数值间隔，批量创建分区，例如：
 
@@ -466,7 +466,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
   </TabItem>
   </Tabs>
 
-- 分区列值为时间戳和字符串类型（自 3.3.0 起支持）
+- **分区列值为时间戳和字符串（自 3.3.0 起支持）**
 
   <Tabs groupId="batch partitioning(timestamp and string)">
   <TabItem value="example1" label="分区列值为时间戳" default>
