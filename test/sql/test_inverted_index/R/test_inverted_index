@@ -1290,7 +1290,7 @@ PROPERTIES (
 -- !result
 ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 BIGINT;
 -- result:
-E: (1064, "Cannot modify a column with GIN into non-string type")
+E: (1064, 'Cannot modify a column with GIN into non-string type')
 -- !result
 INSERT INTO t_alter_gin_col_into_other_type VALUES (1, "abc");
 -- result:
