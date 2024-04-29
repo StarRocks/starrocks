@@ -59,6 +59,16 @@ protected:
 template <typename Derived>
 class PredicateNodeFactory : public PredicateBaseNode {
 public:
+    Status evaluate(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection) const {
+        return derived()->evaluate(contexts, chunk, selection, 0, chunk->num_rows());
+    }
+    Status evaluate_and(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection) const {
+        return derived()->evaluate_and(contexts, chunk, selection, 0, chunk->num_rows());
+    }
+    Status evaluate_or(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection) const {
+        return derived()->evaluate_or(contexts, chunk, selection, 0, chunk->num_rows());
+    }
+
     template <typename Vistor, typename... Args>
     auto visit(Vistor&& visitor, Args&&... args) const {
         return visitor(*derived(), std::forward<Args>(args)...);
@@ -78,10 +88,20 @@ class PredicateColumnNode final : public PredicateNodeFactory<PredicateColumnNod
 public:
     explicit PredicateColumnNode(const ColumnPredicate* col_pred) : _col_pred(DCHECK_NOTNULL(col_pred)) {}
 
+    Status evaluate(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection, uint16_t from,
+                    uint16_t to) const;
+    Status evaluate_and(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection, uint16_t from,
+                        uint16_t to) const;
+    Status evaluate_or(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection, uint16_t from,
+                       uint16_t to) const;
+    StatusOr<uint16_t> evaluate_branchless(const Chunk* chunk, uint16_t* sel, uint16_t sel_size) const;
+
     const ColumnPredicate* col_pred() const { return _col_pred; }
     void set_col_pred(const ColumnPredicate* col_pred) { _col_pred = col_pred; }
 
     std::string debug_string() const;
+
+    using PredicateNodeFactory<PredicateColumnNode>::evaluate;
 
 private:
     const ColumnPredicate* _col_pred;
@@ -104,6 +124,13 @@ template <CompoundNodeType Type>
 class PredicateCompoundNode final : public PredicateNodeFactory<PredicateCompoundNode<Type>> {
 public:
     static constexpr auto DualType = CompoundNodeTraits<Type>::DualType;
+
+    Status evaluate(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection, uint16_t from,
+                    uint16_t to) const;
+    Status evaluate_and(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection, uint16_t from,
+                        uint16_t to) const;
+    Status evaluate_or(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection, uint16_t from,
+                       uint16_t to) const;
 
     template <CompoundNodeType ChildType>
     void add_child(PredicateCompoundNode<ChildType>&& child);
@@ -133,6 +160,8 @@ public:
     void partition_copy(Vistor&& cond, PredicateAndNode* true_pred_tree, PredicateAndNode* false_pred_tree) const;
     template <typename Vistor>
     void partition_move(Vistor&& cond, PredicateAndNode* true_pred_tree, PredicateAndNode* false_pred_tree);
+
+    using PredicateNodeFactory<PredicateCompoundNode>::evaluate;
 
 private:
     PredicateColumnNodeMap _col_children_map;
@@ -289,6 +318,13 @@ private:
 
 struct CompoundNodeContext {
     std::vector<uint8_t> selection_buffer;
+    std::vector<uint16_t> selected_idx_buffer;
+
+    struct CompoundAndContext {
+        std::vector<const PredicateColumnNode*> non_vec_children;
+        std::vector<ConstPredicateNodePtr> vec_children;
+    };
+    std::optional<CompoundAndContext> and_context;
 };
 
 /// Stores multiple ColumnPredicates in a tree. Internal nodes are AND or OR relations, and leaf nodes are ColumnPredicates.
@@ -313,6 +349,9 @@ class PredicateTree {
 public:
     PredicateTree() : PredicateTree(create(PredicateAndNode{})) {}
     static PredicateTree create(PredicateAndNode&& root);
+
+    Status evaluate(const Chunk* chunk, uint8_t* selection) const;
+    Status evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
     const std::unordered_set<ColumnId>& column_ids() const;
     bool contains_column(ColumnId cid) const;
