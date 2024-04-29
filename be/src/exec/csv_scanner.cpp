@@ -125,8 +125,10 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     }
     if (scan_range.params.__isset.multi_row_delimiter) {
         _parse_options.row_delimiter = scan_range.params.multi_row_delimiter;
+        LOG(INFO) << "multi_row_delimiter is set: " << _parse_options.row_delimiter << " schema_only:" << schema_only;
     } else {
         _parse_options.row_delimiter = scan_range.params.row_delimiter;
+        LOG(INFO) << "row_delimiter is set: " << _parse_options.row_delimiter << " schema_only:" << schema_only;
     }
     if (scan_range.params.__isset.skip_header) {
         _parse_options.skip_header = scan_range.params.skip_header;
@@ -618,6 +620,7 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
         fields.clear();
         _curr_reader->split_record(record, &fields);
         for (size_t i = 0; i < fields.size(); i++) {
+            LOG(INFO) << i << "th, fields: " << fields[i];
             // column name: $1, $2, $3...
             schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
         }

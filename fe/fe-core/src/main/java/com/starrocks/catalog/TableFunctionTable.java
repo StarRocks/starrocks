@@ -57,6 +57,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -267,6 +268,7 @@ public class TableFunctionTable extends Table {
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
             csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            LOG.info("csv row delimiter: {}", csvRowDelimiter);
         }
 
         if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
@@ -341,17 +343,18 @@ public class TableFunctionTable extends Table {
         params.setSkip_header(csvSkipHeader);
         params.setTrim_space(csvTrimSpace);
         params.setFlexible_column_mapping(true);
-        if (csvColumnSeparator.length() == 1) {
-            params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
-        } else if (csvColumnSeparator.length() > 1) {
+
+        byte[] columnSeparator = csvRowDelimiter.getBytes(StandardCharsets.UTF_8);
+        byte[] rowDelimiter = csvRowDelimiter.getBytes(StandardCharsets.UTF_8);
+        if (columnSeparator.length != 1) {
             params.setMulti_column_separator(csvColumnSeparator);
         }
-
-        if (csvRowDelimiter.length() == 1) {
-            params.setRow_delimiter(csvRowDelimiter.getBytes()[0]);
-        } else if (csvRowDelimiter.length() > 1) {
+        if (rowDelimiter.length != 1) {
             params.setMulti_row_delimiter(csvRowDelimiter);
         }
+
+        params.setColumn_separator(columnSeparator[0]);
+        params.setRow_delimiter(rowDelimiter[0]);
 
         try {
             THdfsProperties hdfsProperties = new THdfsProperties();

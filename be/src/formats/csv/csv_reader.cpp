@@ -568,7 +568,6 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         }
     } else {
         const auto* const base = ptr;
-
         do {
             ptr = static_cast<char*>(memmem(value, size - (value - base), _parse_options.column_delimiter.data(),
                                             _column_delimiter_length));
@@ -578,6 +577,7 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
                     columns->emplace_back(newPos.first, newPos.second);
                 } else {
                     columns->emplace_back(value, ptr - value);
+                    LOG(INFO) << "column lenth: " << ptr - value;
                 }
                 value = ptr + _column_delimiter_length;
             }
@@ -585,12 +585,16 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
 
         ptr = record.data + size;
     }
+    LOG(INFO) << "column_size 1: " << columns->size();
     if (_parse_options.trim_space) {
         std::pair<const char*, size_t> newPos = trim(value, ptr - value);
         columns->emplace_back(newPos.first, newPos.second);
     } else {
         columns->emplace_back(value, ptr - value);
     }
+    LOG(INFO) << "column_size 2: " << columns->size();
+    LOG(INFO) << "column_delimiter_length: " << _column_delimiter_length;
+    LOG(INFO) << "column_delimiter: " << _parse_options.column_delimiter;
 }
 
 size_t CSVReader::buff_capacity() const {

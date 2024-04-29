@@ -89,6 +89,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import jline.internal.Log;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -307,11 +308,13 @@ public class FileScanNode extends LoadScanNode {
             if (row_delimiter.length > 50) {
                 throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
             }
+            Log.info("scan node set multi row delimiter: ", fileGroup.getRowDelimiter());
             params.setMulti_row_delimiter(fileGroup.getRowDelimiter());
         }
 
         params.setColumn_separator(column_separator[0]);
         params.setRow_delimiter(row_delimiter[0]);
+        Log.info("scan node set multi row delimiter: ", row_delimiter[0]);
         params.setStrict_mode(strictMode);
         params.setProperties(brokerDesc.getProperties());
         params.setUse_broker(brokerDesc.hasBroker());
