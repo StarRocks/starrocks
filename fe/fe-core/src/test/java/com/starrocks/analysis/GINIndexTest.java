@@ -42,6 +42,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
@@ -85,15 +87,6 @@ public class GINIndexTest extends PlanTestBase {
                 }}, KeysType.DUP_KEYS),
                 "Only support clucene implement for now");
 
-        Config.run_mode = "shared_data";
-        RunMode.detectRunMode();
-        Assertions.assertThrows(
-                SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
-                "The inverted index does not support shared data mode");
-        Config.run_mode = "shared_nothing";
-        RunMode.detectRunMode();
-
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
@@ -125,6 +118,17 @@ public class GINIndexTest extends PlanTestBase {
                     put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
                     put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
                 }}, KeysType.DUP_KEYS));
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
+                "The inverted index does not support shared data mode");
     }
 
     @Test
