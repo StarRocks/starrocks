@@ -169,7 +169,7 @@ if [ -f $pidfile ]; then
     fi
 fi
 
-chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
+chmod 550 ${STARROCKS_HOME}/lib/starrocks_be
 
 if [ $(ulimit -n) != "unlimited" ] && [ $(ulimit -n) -lt 60000 ]; then
     ulimit -n 65535
