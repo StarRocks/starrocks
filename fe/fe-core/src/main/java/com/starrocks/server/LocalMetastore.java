@@ -241,11 +241,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PartitionDiffer;
->>>>>>> cef61ef427 ([BugFix] Fix mv refresh bug for queries with union all (#44629))
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
