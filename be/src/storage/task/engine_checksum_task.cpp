@@ -82,8 +82,8 @@ Status EngineChecksumTask::_compute_checksum() {
 
     size_t num_columns = tablet_schema->num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-        LogicalType type = tablet_schema->column(i).type();
-        if (is_support_checksum_type(type)) {
+        const auto& column = tablet_schema->column(i);
+        if (column.is_support_checksum()) {
             return_columns.push_back(i);
         }
     }
