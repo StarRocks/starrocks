@@ -134,8 +134,9 @@ public class BasicStatsMeta implements Writable {
 
         for (Partition partition : table.getPartitions()) {
             tableRowCount += partition.getRowCount();
-            if (tableStatistics.containsKey(partition.getId())) {
-                cachedTableRowCount += tableStatistics.get(partition.getId()).getRowCount();
+            TableStatistic statistic = tableStatistics.getOrDefault(partition.getId(), TableStatistic.unknown());
+            if (!statistic.equals(TableStatistic.unknown())) {
+                cachedTableRowCount += statistic.getRowCount();
             }
             LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
