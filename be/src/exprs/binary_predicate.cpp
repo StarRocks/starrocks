@@ -126,7 +126,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedBinaryPredicate(*this)); }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
@@ -234,7 +234,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayPredicate(*this)); }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
@@ -281,7 +281,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CommonEqualsPredicate(*this)); }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, chunk));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, chunk));
 
@@ -334,7 +334,7 @@ public:
     // if v1 null and v2 not null = false
     // if v1 not null and v2 null = false
     // if v1 not null and v2 not null = v1 OP v2
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, chunk));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, chunk));
 
@@ -397,7 +397,7 @@ public:
     // if v1 null and v2 not null = false
     // if v1 not null and v2 null = false
     // if v1 not null and v2 not null = v1 OP v2
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 

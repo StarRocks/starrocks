@@ -60,7 +60,7 @@ public:
         return Status::OK();
     }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& src_chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& src_chunk) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 

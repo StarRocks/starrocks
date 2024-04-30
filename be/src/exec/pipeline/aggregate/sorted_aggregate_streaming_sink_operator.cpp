@@ -69,7 +69,7 @@ StatusOr<ChunkPtr> SortedAggregateStreamingSinkOperator::pull_chunk(RuntimeState
     return Status::InternalError("Not support");
 }
 
-Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SortedAggregateStreamingSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());

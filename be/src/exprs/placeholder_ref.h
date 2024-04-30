@@ -25,7 +25,7 @@ namespace starrocks {
 class PlaceHolderRef final : public Expr {
 public:
     PlaceHolderRef(const TExprNode& node);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
     bool is_constant() const override { return false; }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new PlaceHolderRef(*this)); }
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {

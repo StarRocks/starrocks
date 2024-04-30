@@ -85,7 +85,7 @@ Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status BucketProcessSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     auto info = chunk->owner_info();
     if (!chunk->is_empty()) {
         RETURN_IF_ERROR(_ctx->sink->push_chunk(state, chunk));

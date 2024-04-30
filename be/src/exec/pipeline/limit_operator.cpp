@@ -23,7 +23,7 @@ StatusOr<ChunkPtr> LimitOperator::pull_chunk(RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
-Status LimitOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status LimitOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _cur_chunk = chunk;
 
     int64_t old_limit;

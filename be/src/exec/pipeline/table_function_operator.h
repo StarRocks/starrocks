@@ -44,7 +44,7 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 

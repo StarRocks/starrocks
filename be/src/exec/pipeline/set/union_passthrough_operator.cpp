@@ -19,7 +19,7 @@
 
 namespace starrocks::pipeline {
 
-Status UnionPassthroughOperator::push_chunk(RuntimeState* state, const ChunkPtr& src_chunk) {
+Status UnionPassthroughOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& src_chunk) {
     DCHECK_EQ(_dst_chunk, nullptr);
 
     _dst_chunk = std::make_shared<Chunk>();

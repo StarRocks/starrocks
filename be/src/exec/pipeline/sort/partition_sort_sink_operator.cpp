@@ -58,7 +58,7 @@ StatusOr<ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from partition sort sink operator");
 }
 
-Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status PartitionSortSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
                                                                          _sort_exec_exprs, _order_by_types);
     RETURN_IF_ERROR(materialize_chunk);

@@ -26,7 +26,7 @@ namespace starrocks {
 DictionaryGetExpr::DictionaryGetExpr(const TExprNode& node)
         : Expr(node), _dictionary_get_expr(node.dictionary_get_expr) {}
 
-StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
     // calculate all child expression which used to construct keys
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;

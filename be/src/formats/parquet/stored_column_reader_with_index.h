@@ -66,6 +66,10 @@ public:
         return _inner_reader->get_dict_values(dict_codes, nulls, column);
     }
 
+    StatusOr<bool> check_dictionary_size(size_t max_size) override {
+        return _inner_reader->check_dictionary_size(max_size);
+    }
+
 private:
     std::unique_ptr<StoredColumnReader> _inner_reader;
     ColumnOffsetIndexCtx* _offset_index_ctx;

@@ -40,7 +40,11 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    bool use_optimization_impl_for_dictionary_column(RuntimeState* state, const ChunkPtr& chunk) override {
+        return true;
+    }
+
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     bool _is_finished = false;

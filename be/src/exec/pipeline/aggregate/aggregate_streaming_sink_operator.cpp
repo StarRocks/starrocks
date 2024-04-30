@@ -66,7 +66,7 @@ void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
     _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
 }
 
-Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status AggregateStreamingSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DeferOp update_revocable_bytes{[this]() {
         set_revocable_mem_bytes(_aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool()));
     }};

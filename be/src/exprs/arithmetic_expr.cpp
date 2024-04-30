@@ -99,7 +99,7 @@ public:
         return nullptr;
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
 #if defined(__x86_64__) && defined(__GNUC__)
         if constexpr (is_mul_op<OP> && lt_is_decimal<Type>) {
             ASSIGN_OR_RETURN(auto opt_result, evaluate_decimal_fast_mul(context, ptr));
@@ -164,7 +164,7 @@ template <LogicalType Type, typename Op>
 class VectorizedDivArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         if constexpr (is_intdiv_op<Op> && lt_is_bigint<Type>) {
 #define EVALUATE_CHECKED_OVERFLOW(Mode)                                                   \
     using CastFunction = VectorizedUnaryFunction<DecimalTo<Mode>>;                        \
@@ -271,7 +271,7 @@ template <LogicalType Type>
 class VectorizedModArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedModArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
@@ -345,7 +345,7 @@ template <LogicalType Type>
 class VectorizedBitNotArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitNotArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
@@ -396,7 +396,7 @@ template <LogicalType Type, typename OP>
 class VectorizedBitShiftArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
 

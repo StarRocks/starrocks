@@ -61,7 +61,7 @@ public:
               _cast_to_type_desc(std::move(type_desc)),
               _throw_exception_if_err(throw_exception_if_err) {}
     ~CastStringToArray() override = default;
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
     Status prepare(RuntimeState* state, ExprContext* context) override;
 
@@ -82,7 +82,7 @@ public:
             : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(std::move(type_desc)) {}
     ~CastJsonToArray() override = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToArray(*this)); }
 
 private:
@@ -102,7 +102,7 @@ public:
 
     ~CastArrayExpr() override = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayExpr(*this)); }
 
@@ -124,7 +124,7 @@ public:
 
     ~CastMapExpr() override = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastMapExpr(*this)); }
 
@@ -145,7 +145,7 @@ public:
 
     ~CastStructExpr() override = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStructExpr(*this)); }
 
@@ -164,7 +164,7 @@ public:
 
     ~MustNullExpr() override = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MustNullExpr(*this)); }
 };

@@ -54,7 +54,7 @@ StatusOr<ChunkPtr> MapOperator::pull_chunk(starrocks::RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
-Status MapOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) {
+Status MapOperator::do_push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(_cur_chunk == nullptr);
     DCHECK(chunk != nullptr && !chunk->is_empty());
     DCHECK(chunk->num_columns() == 1);
@@ -111,7 +111,7 @@ bool ReduceSinkOperator::need_input() const {
     return !is_finished();
 }
 
-Status ReduceSinkOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) {
+Status ReduceSinkOperator::do_push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr && !chunk->is_empty());
     auto column = chunk->get_column_by_slot_id(SlotId(1));
     const auto* col = dynamic_cast<const DoubleColumn*>(column.get());

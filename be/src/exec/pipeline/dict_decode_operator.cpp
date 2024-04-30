@@ -34,7 +34,7 @@ StatusOr<ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
-Status DictDecodeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status DictDecodeOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     Columns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = chunk->get_column_by_slot_id(_encode_column_cids[i]);

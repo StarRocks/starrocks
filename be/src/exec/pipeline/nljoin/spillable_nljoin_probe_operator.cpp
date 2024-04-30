@@ -210,7 +210,7 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
     return res;
 }
 
-Status SpillableNLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SpillableNLJoinProbeOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TRACE_SPILL_LOG << "push_chunk:" << _driver_sequence;
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();

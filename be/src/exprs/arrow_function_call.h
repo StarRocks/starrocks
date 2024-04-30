@@ -31,7 +31,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrowFunctionCallExpr(*this)); }
 
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
     [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
                               FunctionContext::FunctionStateScope scope) override;

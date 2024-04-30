@@ -73,6 +73,8 @@ public:
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) = 0;
 
+    virtual StatusOr<bool> check_dictionary_size(size_t max_size) = 0;
+
     virtual Status load_dictionary_page() { return Status::InternalError("Not supported load_dictionary_page"); }
 
     virtual Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
@@ -101,6 +103,10 @@ public:
     Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                            Column* column) override {
         return _reader->get_dict_values(dict_codes, nulls, column);
+    }
+
+    StatusOr<bool> check_dictionary_size(size_t max_size) override {
+        return _reader->check_dictionary_size(max_size);
     }
 
     Status load_dictionary_page() override { return _reader->load_dictionary_page(); }

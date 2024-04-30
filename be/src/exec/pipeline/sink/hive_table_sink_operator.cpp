@@ -86,7 +86,7 @@ StatusOr<ChunkPtr> HiveTableSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from hive table sink operator");
 }
 
-Status HiveTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status HiveTableSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TableInfo tableInfo;
     tableInfo.schema = _parquet_file_schema;
     tableInfo.compress_type = _compression_codec;

@@ -1061,7 +1061,7 @@ template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 class VectorizedCastExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1228,7 +1228,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return Status::OK();                                                                                \
         }                                                                                                       \
                                                                                                                 \
-        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {                       \
+        StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {                       \
             ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                   \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
                 return ColumnHelper::create_const_null_column(column->size());                                  \
@@ -1326,7 +1326,7 @@ template <LogicalType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1539,7 +1539,7 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
     return std::make_unique<ColumnRef>(ref_node);
 }
 
-StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> MustNullExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     // only null
     auto column = ColumnHelper::create_column(_type, true);
     column->append_nulls(1);

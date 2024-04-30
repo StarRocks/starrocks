@@ -42,7 +42,7 @@ struct ArrowCallStubCtx {
 
 ArrowFunctionCallExpr::ArrowFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
+StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked_impl(ExprContext* context, Chunk* chunk) {
     Columns columns(children().size());
     size_t num_rows = chunk != nullptr ? chunk->num_rows() : 1;
     for (int i = 0; i < _children.size(); ++i) {

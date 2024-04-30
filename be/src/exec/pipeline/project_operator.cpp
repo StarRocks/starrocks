@@ -37,7 +37,7 @@ StatusOr<ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
-Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ProjectOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk->is_empty()) {
         DCHECK(chunk->owner_info().is_last_chunk());
         _cur_chunk = chunk;

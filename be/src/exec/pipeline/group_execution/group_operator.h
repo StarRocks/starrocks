@@ -46,7 +46,7 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return Status::InternalError("Not implemented"); }
 
 private:

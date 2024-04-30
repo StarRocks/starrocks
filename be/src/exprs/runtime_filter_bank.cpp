@@ -752,7 +752,7 @@ public:
     bool is_constant() const override { return false; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
 
-    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
+    StatusOr<ColumnPtr> evaluate_with_filter_impl(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
         const ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
         size_t size = col->size();
 
@@ -804,8 +804,8 @@ public:
         return result;
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        return evaluate_with_filter(context, ptr, nullptr);
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
+        return evaluate_with_filter_impl(context, ptr, nullptr);
     }
 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {

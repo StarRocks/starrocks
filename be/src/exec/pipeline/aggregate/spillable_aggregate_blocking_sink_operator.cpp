@@ -112,13 +112,13 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SpillableAggregateBlockingSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
     }
 
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
-        RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::do_push_chunk(state, chunk));
         set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
         return Status::OK();
     }
@@ -141,7 +141,7 @@ Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
 }
 
 Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk) {
-    RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::do_push_chunk(state, chunk));
     set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
     return _spill_all_data(state, true);
 }

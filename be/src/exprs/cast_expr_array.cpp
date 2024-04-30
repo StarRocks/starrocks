@@ -136,7 +136,7 @@ Status CastStringToArray::prepare(RuntimeState* state, ExprContext* context) {
 }
 
 // Cast string to array<ANY>
-StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
+StatusOr<ColumnPtr> CastStringToArray::evaluate_checked_impl(ExprContext* context, Chunk* input_chunk) {
     if (_constant_res != nullptr && _constant_res->is_constant()) {
         auto* input = down_cast<ConstColumn*>(_constant_res.get());
         size_t rows = input_chunk == nullptr ? 1 : input_chunk->num_rows();
@@ -250,7 +250,7 @@ Slice CastStringToArray::_unquote(Slice slice) const {
     return slice;
 }
 
-StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
+StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked_impl(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());

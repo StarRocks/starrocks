@@ -156,7 +156,7 @@ VectorizedLiteral::VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& ty
 
 #undef CASE_TYPE_COLUMN
 
-StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     ColumnPtr column = _value->clone_empty();
     column->append(*_value, 0, 1);
     if (ptr != nullptr) {

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <new>
 #include <type_traits>
 
@@ -153,6 +154,8 @@ public:
             }
         }
     }
+
+    virtual bool use_optimization_impl_for_dictionary_column(const std::vector<ColumnPtr> columns) const { return false; }
 
     // Contains a loop with calls to "update" function.
     // You can collect arguments into array "states"

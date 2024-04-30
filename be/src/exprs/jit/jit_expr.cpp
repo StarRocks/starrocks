@@ -101,7 +101,7 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> JITExpr::evaluate_checked_impl(starrocks::ExprContext* context, Chunk* ptr) {
     // If the expr fails to compile, evaluate using the original expr.
     if (UNLIKELY(_jit_function == nullptr)) {
         return _expr->evaluate_checked(context, ptr);

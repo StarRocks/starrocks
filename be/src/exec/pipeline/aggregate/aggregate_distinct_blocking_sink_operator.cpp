@@ -63,7 +63,7 @@ StatusOr<ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk(RuntimeStat
     return Status::InternalError("Not support");
 }
 
-Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status AggregateDistinctBlockingSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK_LE(chunk->num_rows(), state->chunk_size());
     {
         SCOPED_TIMER(_aggregator->agg_compute_timer());

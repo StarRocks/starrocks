@@ -734,6 +734,13 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
                 _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
             }
         }
+        if (!_agg_functions[i]->use_optimization_impl_for_dictionary_column(_agg_input_columns[i])) {
+            for (auto& col : _agg_input_columns[i]) {
+                if (col->is_dictionary()) {
+                    col = ColumnHelper::unpack_dictionary_column(col);
+                }
+            }
+        }
         _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
     }
     return Status::OK();
@@ -1131,6 +1138,9 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
                 const_column->data_column()->assign(chunk->num_rows(), 0);
                 _group_by_columns[i] = const_column->data_column();
             }
+        }
+        if (_group_by_columns[i]->is_dictionary()) {
+            _group_by_columns[i] = ColumnHelper::unpack_dictionary_column(_group_by_columns[i]);
         }
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.

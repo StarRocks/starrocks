@@ -43,7 +43,7 @@ public:
         return Status::InternalError("Shouldn't pull chunk from sink operator");
     }
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
 
 private:
     bool _is_finished{false};

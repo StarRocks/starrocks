@@ -65,6 +65,10 @@ public:
         return Status::NotSupported("get_dict_values is not supported");
     }
 
+    virtual bool check_dictionary_size(size_t max_size) {
+        return false;
+    }
+
     // used to set fixed length
     virtual void set_type_length(int32_t type_length) {}
 

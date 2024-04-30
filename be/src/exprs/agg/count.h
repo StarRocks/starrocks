@@ -144,6 +144,10 @@ public:
     }
 
     std::string get_name() const override { return "count"; }
+
+    bool use_optimization_impl_for_dictionary_column(const std::vector<ColumnPtr> columns) const override {
+        return true;
+    }
 };
 
 // count null_able column

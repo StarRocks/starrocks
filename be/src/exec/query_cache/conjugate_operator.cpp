@@ -109,7 +109,7 @@ StatusOr<ChunkPtr> ConjugateOperator::pull_chunk(RuntimeState* state) {
     return _source_op->pull_chunk(state);
 }
 
-Status ConjugateOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ConjugateOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _sink_op->push_chunk(state, chunk);
 }
 

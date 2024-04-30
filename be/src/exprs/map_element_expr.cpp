@@ -39,7 +39,7 @@ public:
     MapElementExpr(const MapElementExpr& m) = default;
     MapElementExpr(MapElementExpr&& m) noexcept = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override {
 #ifndef BE_TEST
         DCHECK_EQ(_type, _children[0]->type().children[1]);
 #endif

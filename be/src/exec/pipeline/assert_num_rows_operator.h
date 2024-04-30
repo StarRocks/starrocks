@@ -48,7 +48,7 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     bool need_input() const override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status set_finishing(RuntimeState* state) override;
     bool is_finished() const override;

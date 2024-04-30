@@ -45,6 +45,7 @@ class MapColumn;
 class StructColumn;
 class NullableColumn;
 class ConstColumn;
+class DictionaryColumn;
 
 template <typename T>
 class FixedLengthColumn;

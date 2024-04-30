@@ -23,7 +23,7 @@ Status DebugExpr::prepare(RuntimeState* state, ExprContext* context) {
     return Status::NotSupported("unsupported function name");
 }
 
-StatusOr<ColumnPtr> DebugExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> DebugExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     return _func_caller(context, ptr);
 }
 

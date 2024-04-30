@@ -173,7 +173,7 @@ StatusOr<ChunkPtr> ExportSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from export sink operator");
 }
 
-Status ExportSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ExportSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _export_sink_buffer->append_chunk(state, chunk);
 }
 

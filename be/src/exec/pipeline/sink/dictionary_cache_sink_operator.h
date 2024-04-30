@@ -52,7 +52,7 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     std::unique_ptr<DictionaryCacheWriter> _writer = nullptr;

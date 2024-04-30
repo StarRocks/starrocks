@@ -16,7 +16,7 @@ public:
 
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
 private:
     DebugFunctionCall _func_caller;

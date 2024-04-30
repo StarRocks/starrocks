@@ -88,7 +88,7 @@ public:
         return nullptr;
     };
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         if (_input_type != LogicalType::TYPE_ARRAY && _input_type != LogicalType::TYPE_VARCHAR) {
             return Status::InternalError(fmt::format("dictFuncExpr can't resolve type: {}", _dict_opt_ctx->slot_id));
         }

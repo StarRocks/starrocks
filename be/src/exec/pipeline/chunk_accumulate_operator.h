@@ -32,7 +32,11 @@ public:
     ~ChunkAccumulateOperator() override = default;
     Status prepare(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    bool use_optimization_impl_for_dictionary_column(RuntimeState* state, const ChunkPtr& chunk) override {
+        return true;
+    }
+
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     bool has_output() const override { return _acc.has_output(); }

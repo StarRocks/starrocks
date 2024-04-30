@@ -95,7 +95,7 @@ StatusOr<ChunkPtr> IcebergTableSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from iceberg table sink operator");
 }
 
-Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status IcebergTableSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TableInfo tableInfo;
     tableInfo.schema = _parquet_file_schema;
     tableInfo.compress_type = _compression_codec;

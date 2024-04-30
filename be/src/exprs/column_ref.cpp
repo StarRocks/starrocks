@@ -15,6 +15,7 @@
 #include "exprs/column_ref.h"
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "exprs/expr.h"
 
 namespace starrocks {
@@ -47,7 +48,7 @@ std::string ColumnRef::debug_string() const {
     return out.str();
 }
 
-StatusOr<ColumnPtr> ColumnRef::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> ColumnRef::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     return get_column(this, ptr);
 }
 

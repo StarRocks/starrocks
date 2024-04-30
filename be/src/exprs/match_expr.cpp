@@ -16,7 +16,7 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> MatchExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> MatchExpr::evaluate_checked_impl(ExprContext* context, Chunk* ptr) {
     return Status::InternalError("Match can only used as a pushdown predicate on column with GIN in a single query.");
 }
 

@@ -38,6 +38,7 @@
 #include <string>
 #include <vector>
 
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -59,7 +60,6 @@ class TExprNode;
 class Literal;
 struct UserFunctionCacheEntry;
 
-class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
 class JITContext;
@@ -206,9 +206,29 @@ public:
     // for vector query engine
     [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
+    /** If useDefaultImplementationForDictionaryColumns() is true,
+      */
+    virtual bool use_optimization_impl_for_dictionary_column(ExprContext* context, Chunk* ptr) const { return false; }
+
+    // evaluate_checked, deal with Decorator
+    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) {
+        // deal with decorator
+        //TODO
+        if (ptr != nullptr && !use_optimization_impl_for_dictionary_column(context, ptr)) {
+            ptr->unpack_dictionary_column_in_place();
+        }
+        return evaluate_checked_impl(context, ptr);
+    }
+
+    [[nodiscard]] StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) {
+        // deal with decorator
+        //TODO
+        return evaluate_with_filter_impl(context, ptr, filter);
+    }
+
     // TODO: check error in expression and return error [[nodiscard]] Status, instead of return null column
-    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) = 0;
-    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter);
+    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) = 0;
+    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_with_filter_impl(ExprContext* context, Chunk* ptr, uint8_t* filter);
 
     // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }

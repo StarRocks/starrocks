@@ -135,7 +135,7 @@ bool OlapTableSinkOperator::need_input() const {
     return !_sink->is_full();
 }
 
-Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status OlapTableSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (!_is_open_done) {
         _is_open_done = true;
         // we can be here cause _sink->is_open_done() return true

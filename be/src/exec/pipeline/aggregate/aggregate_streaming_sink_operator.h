@@ -44,7 +44,10 @@ public:
     void close(RuntimeState* state) override;
 
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    bool use_optimization_impl_for_dictionary_column(RuntimeState* state, const ChunkPtr& chunk) override {
+        return true;
+    }
+    [[nodiscard]] Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
     bool releaseable() const override { return true; }
     void set_execute_mode(int performance_level) override;

@@ -121,6 +121,11 @@ public:
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
 
+    StatusOr<bool> check_dictionary_size(size_t max_size) {
+        RETURN_IF_ERROR(_try_load_dictionary());
+        return _cur_decoder->check_dictionary_size(max_size);
+    }
+
     Status seek_to_offset(const uint64_t off) {
         RETURN_IF_ERROR(_page_reader->seek_to_offset(off));
         _page_parse_state = INITIALIZED;

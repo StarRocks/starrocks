@@ -30,7 +30,7 @@ public:
     ArrayExpr(const ArrayExpr&) = default;
     ArrayExpr(ArrayExpr&&) = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override {
         const TypeDescriptor& element_type = _type.children[0];
         const size_t num_elements = _children.size();
 

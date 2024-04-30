@@ -38,7 +38,12 @@ public:
     void close(RuntimeState* state) override;
 
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+
+    bool use_optimization_impl_for_dictionary_column(RuntimeState* state, const ChunkPtr& chunk) override {
+        return true;
+    }
+
+    [[nodiscard]] Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     bool _is_finished = false;

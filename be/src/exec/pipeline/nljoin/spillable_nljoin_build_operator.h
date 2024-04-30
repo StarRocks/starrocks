@@ -34,7 +34,7 @@ public:
     bool need_input() const override;
     bool is_finished() const override;
     Status set_finishing(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     void set_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
 

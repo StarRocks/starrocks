@@ -184,10 +184,10 @@ Status SpillableHashJoinProbeOperator::set_finished(RuntimeState* state) {
     return HashJoinProbeOperator::set_finished(state);
 }
 
-Status SpillableHashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status SpillableHashJoinProbeOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_status());
     if (!spilled()) {
-        return HashJoinProbeOperator::push_chunk(state, chunk);
+        return HashJoinProbeOperator::do_push_chunk(state, chunk);
     }
 
     RETURN_IF_ERROR(_push_probe_chunk(state, chunk));

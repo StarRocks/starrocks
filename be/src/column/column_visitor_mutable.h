@@ -30,6 +30,7 @@ public:
     // The default implementation of `visit` will return `Status::NotSupported`
     virtual Status visit(NullableColumn* column);
     virtual Status visit(ConstColumn* column);
+    virtual Status visit(DictionaryColumn* column);
     virtual Status visit(ArrayColumn* column);
     virtual Status visit(MapColumn* column);
     virtual Status visit(StructColumn* column);

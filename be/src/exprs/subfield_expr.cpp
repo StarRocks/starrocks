@@ -34,7 +34,7 @@ public:
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(1, _children.size());
 
         ASSIGN_OR_RETURN(ColumnPtr col, _children.at(0)->evaluate_checked(context, chunk));

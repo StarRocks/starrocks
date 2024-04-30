@@ -42,7 +42,7 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool releaseable() const override { return _exchanger->releaseable(); }
 

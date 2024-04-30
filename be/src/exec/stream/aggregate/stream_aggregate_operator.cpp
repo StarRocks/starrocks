@@ -74,7 +74,7 @@ void StreamAggregateOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-Status StreamAggregateOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status StreamAggregateOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_aggregator->process_chunk(dynamic_cast<StreamChunk*>(chunk.get())));
     return Status::OK();
 }

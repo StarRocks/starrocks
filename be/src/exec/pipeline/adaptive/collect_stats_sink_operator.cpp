@@ -46,7 +46,7 @@ bool CollectStatsSinkOperator::is_finished() const {
     return _is_finishing || _ctx->is_upstream_finished(_driver_sequence);
 }
 
-Status CollectStatsSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status CollectStatsSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _ctx->push_chunk(_driver_sequence, chunk);
 }
 StatusOr<ChunkPtr> CollectStatsSinkOperator::pull_chunk(RuntimeState* state) {

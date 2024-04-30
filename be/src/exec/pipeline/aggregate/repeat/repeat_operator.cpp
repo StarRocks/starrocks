@@ -66,7 +66,7 @@ void RepeatOperator::extend_and_update_columns(ChunkPtr* curr_chunk) {
     ++_repeat_times_last;
 }
 
-Status RepeatOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status RepeatOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     // get new chunk.
     _curr_chunk = chunk;
 

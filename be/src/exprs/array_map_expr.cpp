@@ -37,7 +37,7 @@ ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
-StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
+StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked_impl(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> input_elements;
     NullColumnPtr null_column = nullptr;
     bool is_single_nullable_child = false;

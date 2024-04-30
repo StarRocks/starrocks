@@ -119,7 +119,7 @@ StatusOr<ChunkPtr> MysqlTableSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from mysql table sink operator");
 }
 
-Status MysqlTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status MysqlTableSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _mysql_table_sink_buffer->append_chunk(state, chunk);
 }
 

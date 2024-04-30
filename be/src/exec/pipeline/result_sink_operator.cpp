@@ -131,7 +131,7 @@ bool ResultSinkOperator::need_input() const {
     }
 }
 
-Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ResultSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     // The ResultWriter memory that sends the results is no longer recorded to the query memory.
     // There are two reason:
     // 1. the query result has come out, and then the memory limit is triggered, cancel, it is not necessary

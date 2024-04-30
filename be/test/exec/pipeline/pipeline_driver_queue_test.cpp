@@ -36,7 +36,7 @@ public:
     bool is_finished() const override { return true; }
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
 };
 
 Operators _gen_operators() {

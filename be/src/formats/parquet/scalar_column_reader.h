@@ -92,8 +92,16 @@ public:
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
 private:
+    enum DICTIONARYCHECKSTATE {
+        NOT_CHECKED,
+        OK,
+        NOT_WORK
+    };
+
     // Returns true if all of the data pages in the column chunk are dict encoded
     bool _column_all_pages_dict_encoded();
+
+    Status _check_dictionary_state();
 
     const ColumnReaderOptions& _opts;
 
@@ -115,6 +123,9 @@ private:
     // dict code
     ColumnPtr _dict_code = nullptr;
     ColumnPtr _ori_column = nullptr;
+
+    DICTIONARYCHECKSTATE _dict_check_state = NOT_CHECKED;
+    ColumnPtr _dict_value = nullptr;
 };
 
 } // namespace starrocks::parquet

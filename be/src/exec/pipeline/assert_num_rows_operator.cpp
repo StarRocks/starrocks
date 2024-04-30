@@ -55,7 +55,7 @@ bool AssertNumRowsOperator::need_input() const {
     return !_input_finished;
 }
 
-Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status AssertNumRowsOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _actual_num_rows += chunk->num_rows();
     if (_actual_num_rows > 1) {
         auto iter = _TAssertion_VALUES_TO_NAMES.find(_assertion);

@@ -33,7 +33,7 @@ public:
     ArrayElementExpr(const ArrayElementExpr&) = default;
     ArrayElementExpr(ArrayElementExpr&&) = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
         DCHECK_EQ(_type, _children[0]->type().children[0]);
         ASSIGN_OR_RETURN(ColumnPtr arg0, _children[0]->evaluate_checked(context, chunk));

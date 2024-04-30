@@ -63,7 +63,7 @@ void AggregateDistinctStreamingSinkOperator::set_execute_mode(int performance_le
     _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
 }
 
-Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status AggregateDistinctStreamingSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
 
     _aggregator->update_num_input_rows(chunk_size);

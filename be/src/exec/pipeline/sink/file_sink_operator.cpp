@@ -158,7 +158,7 @@ StatusOr<ChunkPtr> FileSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from file sink operator");
 }
 
-Status FileSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status FileSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _file_sink_buffer->append_chunk(state, chunk);
 }
 

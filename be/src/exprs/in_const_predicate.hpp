@@ -288,7 +288,7 @@ public:
         return result;
     }
 
-    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
+    StatusOr<ColumnPtr> evaluate_with_filter_impl(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
         ASSIGN_OR_RETURN(ColumnPtr lhs, _children[0]->evaluate_checked(context, ptr));
         if (!_eq_null && ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
@@ -324,8 +324,8 @@ public:
         }
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        return evaluate_with_filter(context, ptr, nullptr);
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
+        return evaluate_with_filter_impl(context, ptr, nullptr);
     }
 
     ColumnPtr get_all_values() const {
@@ -455,7 +455,7 @@ public:
         return Status::OK();
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override {
         DCHECK_EQ(_const_input.size(), _children.size());
         auto child_size = _children.size();
         Columns input_data(child_size);

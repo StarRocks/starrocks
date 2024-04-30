@@ -67,7 +67,7 @@ public:
     bool is_finished() const override;
 
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
 

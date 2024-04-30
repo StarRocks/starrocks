@@ -28,7 +28,7 @@ public:
     DictionaryGetExpr(const TExprNode& node);
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictionaryGetExpr(*this)); }
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
     Status prepare(RuntimeState* state, ExprContext* context) override;
 
     int64_t get_dict_id() { return _dictionary_get_expr.dict_id; }

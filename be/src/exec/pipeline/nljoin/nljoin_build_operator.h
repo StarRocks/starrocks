@@ -45,7 +45,7 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     OutputAmplificationType intra_pipeline_amplification_type() const override;
     size_t output_amplification_factor() const override;

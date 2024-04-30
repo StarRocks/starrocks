@@ -45,7 +45,7 @@ public:
     size_t estimated_memory_reserved(const ChunkPtr& chunk) override;
     size_t estimated_memory_reserved() override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status set_finishing(RuntimeState* state) override;
 

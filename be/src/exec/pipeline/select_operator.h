@@ -42,7 +42,11 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    bool use_optimization_impl_for_dictionary_column(RuntimeState* state, const ChunkPtr& chunk) override {
+        return true;
+    }
+
+    Status do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 

@@ -23,7 +23,7 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
+StatusOr<ColumnPtr> MapExpr::evaluate_checked_impl(ExprContext* context, Chunk* chunk) {
     if (UNLIKELY(_children.size() % 2 == 1)) {
         return Status::RuntimeError(fmt::format("Map expressions' keys and values should be in pair."));
     }

@@ -52,7 +52,7 @@ protected:
 
     bool is_constant() const override;
 
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked_impl(ExprContext* context, Chunk* ptr) override;
 
 private:
     const FunctionDescriptor* _fn_desc{nullptr};

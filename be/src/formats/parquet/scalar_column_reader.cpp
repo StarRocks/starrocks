@@ -14,6 +14,10 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "column/dictionary_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
 #include "gutil/casts.h"
 #include "io/shared_buffered_input_stream.h"
@@ -24,9 +28,13 @@ namespace starrocks::parquet {
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(_field->is_nullable ? dst->is_nullable() : true);
+    if (_dict_check_state == NOT_CHECKED) {
+        RETURN_IF_ERROR(_check_dictionary_state());
+    }
     _need_lazy_decode =
             _dict_filter_ctx != nullptr || (_can_lazy_decode && filter != nullptr &&
-                                            SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO);
+                                            SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO)
+                                        || _dict_check_state == OK;
     ColumnContentType content_type = !_need_lazy_decode ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
     if (_need_lazy_decode) {
         if (_dict_code == nullptr) {
@@ -80,23 +88,37 @@ Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         dst->swap_column(*src);
     } else {
         if (_dict_filter_ctx == nullptr || _dict_filter_ctx->is_decode_needed) {
-            ColumnPtr& dict_values = dst;
-            dict_values->reserve(src->size());
-
             // decode dict code to dict values.
             // note that in dict code, there could be null value.
             const ColumnPtr& dict_codes = src;
             auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
             auto* codes_column =
                     ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
-            RETURN_IF_ERROR(
-                    _reader->get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values.get()));
-            DCHECK_EQ(dict_codes->size(), dict_values->size());
-            if (dict_values->is_nullable()) {
-                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
-                auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
-                nullable_values->null_column_data().swap(nullable_codes->null_column_data());
-                nullable_values->set_has_null(nullable_codes->has_null());
+
+            static constexpr size_t DICTIONARY_RATIO = 4;
+            // use dictionary column
+            if (_dict_check_state == OK && src->size() > _dict_value->size() * DICTIONARY_RATIO) {
+                IndexColumnPtr index_column = IndexColumn::create(codes_column->size());
+                index_column->swap_column(*codes_column);
+                ColumnPtr res_dict_column = DictionaryColumn::create(_dict_value, std::move(index_column));
+                if (dst->is_nullable()) {
+                    NullColumnPtr null_column = NullColumn::create(codes_column->size());
+                    null_column->swap_column(*(codes_nullable_column->null_column()));
+                    dst = NullableColumn::create(std::move(res_dict_column), std::move(null_column));
+                } else {
+                    dst = res_dict_column;
+                }
+            } else {
+                ColumnPtr& dict_values = dst;
+                dict_values->reserve(src->size());
+                RETURN_IF_ERROR(_reader->get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values.get()));
+                DCHECK_EQ(dict_codes->size(), dict_values->size());
+                if (dict_values->is_nullable()) {
+                    auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
+                    auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
+                    nullable_values->null_column_data().swap(nullable_codes->null_column_data());
+                    nullable_values->set_has_null(nullable_codes->has_null());
+                }
             }
         } else {
             dst->append_default(src->size());
@@ -166,6 +188,33 @@ bool ScalarColumnReader::_column_all_pages_dict_encoded() {
     }
 
     return true;
+}
+
+Status ScalarColumnReader::_check_dictionary_state() {
+    if (!config::parquet_dictionary_column_enable || !_column_all_pages_dict_encoded()) {
+        _dict_check_state = NOT_WORK;
+        return Status::OK();
+    }
+
+    //TODO: other type need more check
+    if (!_col_type->is_string_type()) {
+        _dict_check_state = NOT_WORK;
+        return Status::OK();
+    }
+
+    constexpr static const uint32_t MAX_DICTIONARY_SIZE = 1000;
+
+    ASSIGN_OR_RETURN(auto ret, _reader->check_dictionary_size(MAX_DICTIONARY_SIZE))
+
+    if (ret) {
+        // init dict values
+        _dict_value = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+        RETURN_IF_ERROR(_reader->get_dict_values(_dict_value.get()));
+        _dict_check_state = OK;
+    } else {
+        _dict_check_state = NOT_WORK;
+    }
+    return Status::OK();
 }
 
 void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,

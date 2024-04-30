@@ -704,8 +704,8 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
     return _constant_column;
 }
 
-StatusOr<ColumnPtr> Expr::evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) {
-    return evaluate_checked(context, ptr);
+StatusOr<ColumnPtr> Expr::evaluate_with_filter_impl(ExprContext* context, Chunk* ptr, uint8_t* filter) {
+    return evaluate_checked_impl(context, ptr);
 }
 
 ColumnRef* Expr::get_column_ref() {

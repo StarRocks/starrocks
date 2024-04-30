@@ -147,7 +147,7 @@ StatusOr<ChunkPtr> TableFunctionTableSinkOperator::pull_chunk(RuntimeState* stat
     return Status::InternalError("Shouldn't pull chunk from table function table sink operator");
 }
 
-Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status TableFunctionTableSinkOperator::do_push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (_partition_exprs.empty()) {
         if (_partition_writers.empty()) {
             auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(_path), _output_exprs,

@@ -81,6 +81,8 @@ public:
 
     virtual bool is_constant() const { return false; }
 
+    virtual bool is_dictionary() const { return false; }
+
     virtual bool is_binary() const { return false; }
 
     virtual bool is_large_binary() const { return false; }

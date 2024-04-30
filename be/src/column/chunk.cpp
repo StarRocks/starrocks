@@ -431,8 +431,12 @@ void Chunk::append(const Chunk& src, size_t offset, size_t count) {
     DCHECK_EQ(num_columns(), src.num_columns());
     const size_t n = src.num_columns();
     for (size_t i = 0; i < n; i++) {
+        auto src_c = src.get_column_by_index(i);
+        if (src_c->is_dictionary()) {
+            src_c = ColumnHelper::unpack_dictionary_column(src_c);
+        }
         ColumnPtr& c = get_column_by_index(i);
-        c->append(*src.get_column_by_index(i), offset, count);
+        c->append(*src_c, offset, count);
     }
 }
 
@@ -444,7 +448,11 @@ void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
     for (size_t i = 0; i < n; i++) {
         ColumnPtr& c = get_column_by_index(i);
         if (c->size() == cur_rows) {
-            c->append(*src.get_column_by_index(i), offset, count);
+            auto src_c = src.get_column_by_index(i);
+            if (src_c->is_dictionary()) {
+                src_c = ColumnHelper::unpack_dictionary_column(src_c);
+            }
+            c->append(*src_c, offset, count);
         }
     }
 }
@@ -464,12 +472,31 @@ bool Chunk::has_const_column() const {
     return false;
 }
 
+bool Chunk::has_not_accumulatable_column() const {
+    for (const auto& c : _columns) {
+        if (c->is_constant() || c->is_dictionary()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Chunk::unpack_and_duplicate_const_columns() {
     size_t num_rows = this->num_rows();
     for (size_t i = 0; i < _columns.size(); i++) {
         auto column = _columns[i];
         if (column->is_constant()) {
             auto unpack_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, column);
+            update_column_by_index(std::move(unpack_column), i);
+        }
+    }
+}
+
+void Chunk::unpack_dictionary_column_in_place() {
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto column = _columns[i];
+        if (column->is_dictionary()) {
+            auto unpack_column = ColumnHelper::unpack_dictionary_column(column);
             update_column_by_index(std::move(unpack_column), i);
         }
     }
