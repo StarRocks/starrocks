@@ -800,7 +800,7 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         request.add_tablet_ids(_tablet_id);
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+        ASSERT_EQ("missing txn_ids and txn_infos", cntl.ErrorText());
     }
 
     // test normal
@@ -821,6 +821,26 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+    }
+    // test delete combined txn log
+    {
+        CombinedTxnLogPB combined_txn_log_pb;
+        combined_txn_log_pb.add_txn_logs()->CopyFrom(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_txn_log_pb));
+        auto txn_id = combined_txn_log_pb.txn_logs(0).txn_id();
+
+        brpc::Controller cntl;
+        DeleteTxnLogRequest request;
+        DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        auto info = request.add_txn_infos();
+        info->set_txn_id(txn_id);
+        info->set_combined_txn_log(true);
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        auto log_path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
+        ASSERT_TRUE(FileSystem::Default()->path_exists(log_path).is_not_found());
     }
 }
 

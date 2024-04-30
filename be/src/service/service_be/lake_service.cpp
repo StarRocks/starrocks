@@ -471,8 +471,8 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
         return;
     }
 
-    if (request->txn_ids_size() == 0) {
-        cntl->SetFailed("missing txn_ids");
+    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
+        cntl->SetFailed("missing txn_ids and txn_infos");
         return;
     }
 
