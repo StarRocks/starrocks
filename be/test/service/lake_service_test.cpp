@@ -817,10 +817,10 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(logs.back().txn_id());
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
-
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+        auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
+        ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
     }
     // test delete txn log with new API
     {
@@ -839,8 +839,8 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+        auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
+        ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
     }
     // test delete combined txn log
     {
