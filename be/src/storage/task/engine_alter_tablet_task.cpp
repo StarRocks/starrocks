@@ -67,12 +67,7 @@ Status EngineAlterTabletTask::execute() {
         res = handler.process_alter_tablet(_alter_tablet_req);
     } else {
         SchemaChangeHandler handler;
-<<<<<<< HEAD
-        res = handler.process_alter_tablet_v2(_alter_tablet_req);
-=======
-        handler.set_alter_msg_header(alter_msg_header);
         res = handler.process_alter_tablet(_alter_tablet_req);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
     }
     if (!res.ok()) {
         LOG(WARNING) << "failed to do alter task. status=" << res.to_string()
