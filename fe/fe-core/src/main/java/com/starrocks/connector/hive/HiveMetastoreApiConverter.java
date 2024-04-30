@@ -260,7 +260,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static Map<String, String> toApiTableProperties(HiveTable table) {
-        ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
+        Map<String, String> tableProperties = new HashMap<>();
 
         tableProperties.put(ROW_COUNT, "0");
         tableProperties.put(TOTAL_SIZE, "0");
@@ -275,7 +275,7 @@ public class HiveMetastoreApiConverter {
             tableProperties.put("EXTERNAL", "TRUE");
         }
 
-        return tableProperties.build();
+        return tableProperties;
     }
 
     public static HiveView toHiveView(Table table, String catalogName) {
@@ -662,7 +662,7 @@ public class HiveMetastoreApiConverter {
 
     public static Map<String, String> updateStatisticsParameters(Map<String, String> parameters,
                                                                  HiveCommonStats statistics) {
-        ImmutableMap.Builder<String, String> result = ImmutableMap.builder();
+        Map<String, String> result = new HashMap<>();
 
         parameters.forEach((key, value) -> {
             if (!(STATS_PROPERTIES.contains(key))) {
@@ -678,7 +678,7 @@ public class HiveMetastoreApiConverter {
             result.put("STATS_GENERATED_VIA_STATS_TASK", "workaround for potential lack of HIVE-12730");
         }
 
-        return result.buildOrThrow();
+        return result;
     }
 
     public static void validateHiveTableType(String hiveTableType) {
