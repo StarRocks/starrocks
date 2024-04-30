@@ -20,13 +20,21 @@ The Prefix index is a sparse index, and its size is at least 1024 times smaller 
 
 ## Usage notes
 
-For a Duplicate Key table, sort key columns are specified in `DUPLICATE KEY`. For an Aggregate table or a Unique Key table, sort key columns are coupled with constrained columns, and are specified in `AGGREGATE KEY` or `UNIQUE KEY`. From v3.0 onwards, a Primary Key table decouples sort key columns and primary key columns, providing more flexible capabilities. The sort key columns are specified in `ORDER BY`, and primary key columns are specified in `PRIMARY KEY`.
+Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`. Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`.
 
-The following example uses a Unique Key table to illustrate how to specify sort key columns at table creation and how they comprise a Prefix index.
+- Data in the Duplicate Key table is sorted according to the sort key `ORDER BY`. The sort key can be any combination of columns.
+  :::info
 
-When creating the Unique Key table, you can specify sort key columns as `uid` and `name` in `DUPLICATE KEY`.
+  When both `ORDER BY` and `DUPLICATE KEY` are specified, `DUPLICATE KEY` does not take effect.
 
-```SQL
+  :::
+- Data in the Aggregate table is first aggregated according to the aggregate key `AGGREGATE KEY`, then sorted according to the sort key `ORDER BY`. The columns in `ORDER BY` and `AGGREGATE KEY` need to be same, but the order of the columns does not need to be same.
+- Data in the Unique Key table is first replaced according to the unique key `UNIQUE KEY`, then sorted according to the sort key `ORDER BY`. The columns in `ORDER BY` and `UNIQUE KEY` need to be same, but the order of the columns does not need to be same.
+- Data in the Primary Key table is first replaced according to the primary key `PRIMARY KEY`, then sorted according to the sort key `ORDER BY`.
+
+Take the Duplicate Key table as an example. The sort key is defined as `uid` and `name` using `ORDER BY`.
+
+```sql
 CREATE TABLE user_access (
     uid int,
     name varchar(64),
@@ -35,18 +43,17 @@ CREATE TABLE user_access (
     last_access datetime,
     credits double
 )
-DUPLICATE KEY(uid, name);
+ORDER BY (uid, name);
 ```
 
-:::note
+:::tip
 
-After creating a Unique Key table, Aggregate table, or Unique Key table, you can use `DESCRIBE <table_name>;` to view its sort key columns. In the returned result, the columns whose `Key` field shows `true` are sort key columns. After creating a Primary Key table, you can use `SHOW CREATE TABLE <table_name>;` to view its sort key columns. In the returned result, the columns in `ORDER BY` clause are sort key columns.
-
+After table creation, you can use `SHOW CREATE TABLE <table_name>;` to view the specified sort columns and the order in the `ORDER BY` clause from the returned result.
 :::
 
 Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part will be truncated. Therefore, each entry in the Prefix index of this table is uid (4 bytes) + name (only the first 32 bytes are taken), and the prefix fields are `uid` and `name`.
 
-**Precaution**
+**Note**
 
 - The number of prefix fields cannot exceed 3, and the maximum length of a Prefix index entry is 36 bytes.
 
@@ -69,15 +76,11 @@ Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part 
     6 rows in set (0.00 sec)
     ```
 
+- If the sort key are specified in the table using `ORDER BY`, the Prefix index is formed based on the sort key. If sort key is not specified using `ORDER BY`, Prefix index is formed based on the Key columns.
+
 ### How to design the sort key appropriately to form the Prefix index that can accelerate queries
 
 An analysis of queries and data in business scenarios helps choose appropriate sort key columns and arrange them in a proper order to form a Prefix index, which can significantly improve query performance.
-
-:::tip
-
-Except for Primary Key tables, currently the sort key for other types of tables **cannot be modified** after table creation. Therefore, it is recommended to carefully analyze the characteristics of data and queries to design a suitable sort key.
-
-:::
 
 - The number of sort key columns is generally 3 and is not recommended to exceed 4. A sort key with too many columns can not improve query performance but increase the sorting overhead during data loading.
 - It is recommended to prioritize columns to form the sort key in the order below:
@@ -93,15 +96,21 @@ Except for Primary Key tables, currently the sort key for other types of tables 
 
 ### Considerations for defining sort key columns at table creation
 
-When defining sort key columns for a Duplicate Key table, an Aggregate table, or a Unique Key table, pay attention to the following points:
+- Data types of sort columns:
 
-- The sort key columns must be defined before other columns at table creation.
-- The sort key columns must be the first one or more columns in the table, and the order of the sort key columns must match the sequence of these columns in the table.
-- The data types of the sort key columns can be numeric types (excluding DOUBLE and FLOAT), strings, and date types.
+  - The sort columns in Primary Key tables support numeric types (including integers, booleans), strings, and date/datetime types.
+  - The sort columns in Duplicate Key tables, Aggregate tables, and Unique Key tables support numeric types (including integers, booleans, decimals), strings, and date/datetime types.
+
+- In Aggregate tables and Unique Key tables, sort columns must be defined before other columns.
 
 ### Can the Prefix index be modified?
 
-The Prefix indexes can not be modified directly after table creation (except for Primary Key tables) because the sort key columns can not be changed. If columns other than the prefix fields are frequently used in query filter conditions, the existing Prefix index can not filter data and the query performance may not be ideal. Then you can also create a [synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md) based on this table and choose other columns commonly used as conditional columns to form the Prefix index, which can improve performance for these queries. But note that it will increase storage space.
+If the characteristics of queries in the business scenario evolve and columns other than the prefix fields are frequently used in query filter conditions, the existing Prefix index can not filter data and the query performance may not be ideal. Then you can also create a [synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md) based on this table and choose other columns commonly used as conditional columns to form the Prefix index, which can improve performance for these queries. But note that it will increase storage space.
+
+Since v3.3, the sort keys of Duplicate Key
+ tables, Aggregate tables, and Unique Key tables can be modified. And since v3.0, the sort keys of Primary Key tables can be modified. The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of the columns does not need to be consistent with the key columns.
+
+Alternatively, you can also create [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) based on this table and choose other columns commonly used as conditional columns to form the Prefix index, which can improve performance for these queries. But note that it will increase storage space.
 
 ## How to verify whether the Prefix index accelerates queries
 
