@@ -96,17 +96,6 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
             System.out.println(tQueryPlanInfo);
         }
-<<<<<<< HEAD
-        String queryPlan = jsonObject.getString("opaqued_query_plan");
-        Assert.assertNotNull(queryPlan);
-        byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
-        TDeserializer deserializer = new TDeserializer();
-        TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
-        deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
-        Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
-        expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
-=======
->>>>>>> 94420e1491 ([BugFix] Fix query plan when table or partition is empty (#38083))
     }
 
     @Test
