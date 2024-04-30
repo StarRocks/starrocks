@@ -454,7 +454,6 @@ public class DatabaseTransactionMgr {
                 // after state transform
                 transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
             }
-            transactionState.prepareFinishChecker(db);
 
             persistTxnStateInTxnLevelLock(transactionState);
 
