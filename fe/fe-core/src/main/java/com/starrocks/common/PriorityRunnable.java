@@ -48,6 +48,6 @@ public abstract class PriorityRunnable
 
     @Override
     public String toString() {
-        return "PriorityRunnable{" + "priority=" + getPriority() + ", runnable=" + getRun() + '}';
+        return "PriorityRunnable{" + "priority=" + getPriority() + ", seqNum=" + seqNum + '}';
     }
 }
