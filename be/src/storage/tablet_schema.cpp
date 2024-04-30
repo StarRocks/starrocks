@@ -315,6 +315,19 @@ void TabletColumn::add_sub_column(TabletColumn&& sub_column) {
     _get_or_alloc_extra_fields()->sub_columns.emplace_back(std::move(sub_column));
 }
 
+bool TabletColumn::is_support_checksum() const {
+    if (!is_support_checksum_type(_type)) {
+        return false;
+    }
+    for (auto i = 0; i < subcolumn_count(); ++i) {
+        const auto& sub_col = subcolumn(i);
+        if (!sub_col.is_support_checksum()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /******************************************************************
  * TabletSchema
  ******************************************************************/
