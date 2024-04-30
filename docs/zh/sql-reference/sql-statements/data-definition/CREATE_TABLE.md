@@ -497,7 +497,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 ### **ORDER BY**
 
-自 3.3 版本起，明细表、聚合表和更新表支持使用 `ORDER BY` 单独定义排序键，自 3.0 版本起，主键表支持使用 `ORDER BY` 定义排序键。
+自 3.3 版本起，明细表、聚合表和更新表支持使用 `ORDER BY` 定义排序键，自 3.0 版本起，
 具体使用方式，参见[前缀索引和排序键](../../../table_design/indexes/Prefix_index_sort_key.md)
 
 ### **PROPERTIES**
