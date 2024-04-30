@@ -2341,7 +2341,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.ROLLUP,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -2350,7 +2350,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.COLUMN,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
