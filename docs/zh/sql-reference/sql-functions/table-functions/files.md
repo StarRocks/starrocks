@@ -29,7 +29,7 @@ displayed_sidebar: "Chinese"
 - **导入**:
 
   ```SQL
-  FILES( data_location , data_format [, schema_detect ] [, format_type_options ] [, StorageCredentialParams ] [, columns_from_path ] )
+  FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
   ```
 
 - **导出**:
@@ -37,7 +37,6 @@ displayed_sidebar: "Chinese"
   ```SQL
   FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
   ```
-
 
 ## 参数说明
 
@@ -97,39 +96,15 @@ displayed_sidebar: "Chinese"
 
 数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
 
-### schema_detect
+特定数据文件格式需要额外参数指定细节选项。
 
-自 v3.2 版本起，FILES() 支持为批量数据文件执行自动 Schema 检测和 Union 操作。StarRocks 首先扫描同批次中随机数据文件的数据进行采样，以检测数据的 Schema。然后，StarRocks 将对同批次中所有数据文件的列进行 Union 操作。
-
-您可以使用以下参数配置采样规则：
-
-- `auto_detect_sample_rows`：扫描每个采样数据文件中的数据行数。范围：[-1, 500]。默认值：`500`。如果将此参数设置为 `-1`，则扫描所有数据行。
-- `auto_detect_sample_files`：在每个批次中采样的随机数据文件数量。有效值：`1` 和 `-1`。默认值：`1`。如果将此参数设置为 `-1`，则扫描所有数据文件。
-
-采样后，StarRocks 根据以下规则 Union 所有数据文件的列：
-
-- 对于具有不同列名或索引的列，StarRocks 将每列识别为单独的列，最终返回所有单独列。
-- 对于列名相同但数据类型不同的列，StarRocks 将这些列识别为相同的列，并为其选择一个通用的数据类型。例如，如果文件 A 中的列 `col1` 是 INT 类型，而文件 B 中的列 `col1` 是 DECIMAL 类型，则在返回的列中使用 DOUBLE 数据类型。STRING 类型可用于统一所有数据类型。
-
-如果 StarRocks 无法统一所有列，将生成一个包含错误信息和所有文件 Schema 的错误报告。
-
-> **注意**
->
-> 单个批次中的所有数据文件必须为相同的文件格式。
-
-### format_type_options
-
-用于指定特定数据文件格式的选项。
-
-#### CSV format_type_options
+#### CSV
 
 CSV 格式示例：
 
 ```SQL
 "format"="csv",
-"auto_detect_sample_files"="1",
-"auto_detect_sample_rows"="1",
-"csv.column_separator"=",",
+"csv.column_separator"="\\t",
 "csv.enclose"='"',
 "csv.skip_header"="1",
 "csv.escape"="\\"
@@ -172,6 +147,27 @@ CSV 格式示例：
 > 以下为两个示例：
 > - 当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。
 > - 假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。
+
+### schema_detect
+
+自 v3.2 版本起，FILES() 支持为批量数据文件执行自动 Schema 检测和 Union 操作。StarRocks 首先扫描同批次中随机数据文件的数据进行采样，以检测数据的 Schema。然后，StarRocks 将对同批次中所有数据文件的列进行 Union 操作。
+
+您可以使用以下参数配置采样规则：
+
+- `auto_detect_sample_files`：每个批次中采样的数据文件数量。范围：[0, + ∞]。默认值：`1`。
+- `auto_detect_sample_rows`：每个采样数据文件中的数据扫描行数。范围：[0, + ∞]。默认值：`500`。
+
+采样后，StarRocks 根据以下规则 Union 所有数据文件的列：
+
+- 对于具有不同列名或索引的列，StarRocks 将每列识别为单独的列，最终返回所有单独列。
+- 对于列名相同但数据类型不同的列，StarRocks 将这些列识别为相同的列，并为其选择一个相对较小的通用数据类型。例如，如果文件 A 中的列 `col1` 是 INT 类型，而文件 B 中的列 `col1` 是 DECIMAL 类型，则在返回的列中使用 DOUBLE 数据类型。
+- 一般情况下，STRING 类型可用于统一所有数据类型。
+
+如果 StarRocks 无法统一所有列，将生成一个包含错误信息和所有文件 Schema 的错误报告。
+
+> **注意**
+>
+> 单个批次中的所有数据文件必须为相同的文件格式。
 
 ### StorageCredentialParams
 
