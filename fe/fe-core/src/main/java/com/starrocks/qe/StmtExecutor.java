@@ -1758,6 +1758,7 @@ public class StmtExecutor {
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            // send EOF
             serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
@@ -1770,6 +1771,7 @@ public class StmtExecutor {
                 serializer.writeField(field.getName(), field.getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            // send EOF
             serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
