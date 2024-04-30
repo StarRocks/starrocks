@@ -267,8 +267,16 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.meta = _tablet->data_dir()->get_meta();
     }
     rs_opts.rowid_range_option = params.rowid_range_option;
+<<<<<<< HEAD
     rs_opts.short_key_ranges = params.short_key_ranges;
     rs_opts.asc_hint = _is_asc_hint;
+=======
+    rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+    if (keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
+    rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+>>>>>>> 911d7f42eb ([BugFix] Fix Topn Runtime Filter order by short key wrong result (#45037))
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {

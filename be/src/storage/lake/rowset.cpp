@@ -51,6 +51,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
+<<<<<<< HEAD
+=======
+    seg_options.tablet_schema = options.tablet_schema;
+    seg_options.lake_io_opts = options.lake_io_opts;
+    seg_options.asc_hint = options.asc_hint;
+>>>>>>> 911d7f42eb ([BugFix] Fix Topn Runtime Filter order by short key wrong result (#45037))
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), nullptr);
