@@ -43,6 +43,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
+#include "clucene/clucene_plugin.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
