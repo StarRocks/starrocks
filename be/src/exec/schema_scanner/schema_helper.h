@@ -52,6 +52,10 @@ public:
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response, const int timeout_ms);
 
+    static Status get_temporary_tables_info(const std::string& ip, const int32_t port,
+                                            const TGetTemporaryTablesInfoRequest& request,
+                                            TGetTemporaryTablesInfoResponse* response, const int timeout_ms);
+
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result, const int timeout_ms);
 
