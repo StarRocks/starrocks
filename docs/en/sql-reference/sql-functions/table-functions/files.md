@@ -97,7 +97,7 @@ The URI used to access the files. You can specify a path or a file.
 
 The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
 
-You must set detailed options for specific specific data file formats.
+You must set detailed options for specific data file formats.
 
 #### CSV
 
