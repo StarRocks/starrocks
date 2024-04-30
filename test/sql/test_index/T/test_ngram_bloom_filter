@@ -123,7 +123,7 @@ use ngram_bloom_filter_db_4;
 CREATE TABLE `common_duplicate` (
   `c0` int(11) NOT NULL COMMENT "",
   `c1` int(11) NOT NULL COMMENT "",
-  `c2` varchar(500) NOT NULL COMMENT ""
+  `c2` varchar(500)  NULL COMMENT ""
 ) ENGINE=OLAP
 DUPLICATE KEY(`c0`, `c1`, `c2`)
 COMMENT "OLAP"
@@ -136,7 +136,9 @@ PROPERTIES (
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
-insert into common_duplicate values (1,1,"abc"),(2,2,"abc"),(3,3,"abc"),(4,4,"abc"),(5,5,"abc");
+insert into common_duplicate values (1,1,"abc"),(2,2,"abc"),(3,3,"abc"),(4,4,"abc"),(5,5,"abc"),(6,6,NULL);
 select * from common_duplicate where c2 like '%b%' order by c0;
-select * from common_duplicate where c2 in ("ab","bc") order by c0;
+select * from common_duplicate where c2 in ("ab","bc","abc") order by c0;
 select * from common_duplicate where c2 is not null order by c0;
+select * from common_duplicate where c2 is  null order by c0;
+select * from common_duplicate where c2 ="abc" order by c0;
