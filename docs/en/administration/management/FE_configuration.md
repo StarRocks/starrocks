@@ -1081,6 +1081,23 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+#### lock_manager_enabled
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the lock manager. The lock manager provides central management for locks. For example, it can control whether to refine the granularity of metadata locks from the database level to the table level.
+- Introduced in: v3.3.0
+
+##### lock_manager_enable_loading_using_fine_granularity_lock
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks is refined to the table level, lock conflicts and contentions can be reduced, which can improve the performance of load concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user

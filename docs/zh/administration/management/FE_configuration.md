@@ -1088,7 +1088,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否开启锁管理。开启后，可以对锁实现集中管理，例如是否将元数据锁的粒度从库级别细化为表级别。
+- 描述：是否开启锁管理。lock manager 可以对锁实现集中管理，例如控制是否将元数据锁的粒度从库级别细化为表级别。
 - 引入版本：v3.3.0
 
 ##### lock_manager_enable_loading_using_fine_granularity_lock
