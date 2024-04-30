@@ -39,7 +39,6 @@
 #include <set>
 
 #include "agent/master_info.h"
-#include "clucene/clucene_plugin.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
@@ -51,6 +50,7 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
+#include "storage/inverted/clucene/clucene_plugin.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
