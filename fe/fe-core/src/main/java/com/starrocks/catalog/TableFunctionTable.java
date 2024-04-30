@@ -264,7 +264,7 @@ public class TableFunctionTable extends Table {
 
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
             csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
-            int len  = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
+            int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
             if (len > 50 || len == 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE,
                         PROPERTY_CSV_COLUMN_SEPARATOR, 1, 50);
