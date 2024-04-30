@@ -433,6 +433,14 @@ public class SystemInfoService {
         return idToComputeNodeRef.get(computeNodeId);
     }
 
+    public ComputeNode getBackendOrComputeNode(long nodeId) {
+        ComputeNode backend = idToBackendRef.get(nodeId);
+        if (backend == null) {
+            backend = idToComputeNodeRef.get(nodeId);
+        }
+        return backend;
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
