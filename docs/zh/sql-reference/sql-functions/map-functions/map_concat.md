@@ -27,11 +27,11 @@ ANY_MAP map_concat(any_map0, any_map1...)
 ## 示例
 
 ```Plain
-mysql> SELECT map_concat(map('a',1，'b',2), map('c',3));
+mysql> SELECT map_concat(map('a',1, 'b',2), map('c',3));
 +------------------------------------------+
-| map_concat(map{1:'a',2:'b'}, map{3:'c'}) |
+| map_concat(map{'a':1,'b':2}, map{'c':3}) |
 +------------------------------------------+
-| {3:"c",1:"a",2:"b"}                      |
+| {"c":3,"a":1,"b":2}                      |
 +------------------------------------------+
 
 mysql> select map_concat(map{1:3},map{'3.323':3});
