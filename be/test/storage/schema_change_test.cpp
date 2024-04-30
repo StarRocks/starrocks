@@ -465,7 +465,7 @@ TEST_F(SchemaChangeTest, convert_from) {
 
     {
         TCreateTabletReq create_tablet_req =
-                TabletTestHelper::gen_create_tablet_req(base_tablet_id, TKeysType::DUP_KEYS, TStorageType::COLUMN);
+                TabletTestHelper::gen_create_tablet_req(new_tablet_id, TKeysType::DUP_KEYS, TStorageType::COLUMN);
         add_key_column(&create_tablet_req, "k1", TPrimitiveType::INT);
         add_key_column(&create_tablet_req, "k2", TPrimitiveType::INT);
         add_value_column(&create_tablet_req, "v1", TPrimitiveType::BIGINT);
@@ -588,10 +588,12 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     const auto& new_tablet_schema = new_tablet->tablet_schema();
 
     ChunkChanger chunk_changer(new_tablet_schema);
+    auto indexs = chunk_changer.get_mutable_selected_column_indexes();
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
         column_mapping->ref_base_reader_column_index = i;
+        indexs->emplace_back(i);
     }
     Schema base_schema = ChunkHelper::convert_schema(base_tablet_schema, chunk_changer.get_selected_column_indexes());
 
@@ -602,15 +604,15 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     auto rowset_reader = TabletTestHelper::create_rowset_reader(base_tablet, base_schema, rowset->version());
     auto rowset_writer = TabletTestHelper::create_rowset_writer(*new_tablet, next_rowset_id(), version);
 
-    ASSERT_TRUE(sc_procedure->process(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
+    ASSERT_OK(sc_procedure->process_v2(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
 
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
 }
 
 TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
-    TTabletId base_tablet_id = 1103;
-    TTabletId new_tablet_id = 1104;
+    TTabletId base_tablet_id = 1105;
+    TTabletId new_tablet_id = 1106;
     Version version(3, 3);
 
     create_base_tablet(base_tablet_id, TKeysType::DUP_KEYS, TStorageType::COLUMN);
@@ -659,7 +661,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     auto rowset_reader = TabletTestHelper::create_rowset_reader(base_tablet, base_schema, rowset->version());
     auto rowset_writer = TabletTestHelper::create_rowset_writer(*new_tablet, next_rowset_id(), version);
 
-    ASSERT_TRUE(sc_procedure->process(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
+    ASSERT_OK(sc_procedure->process_v2(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
 }
