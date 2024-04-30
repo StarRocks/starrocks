@@ -156,7 +156,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 
 #### Partitioning
 
-The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management units (partitions) based on the partition key. You can set a storage strategy for each partition, including the number of buckets, the strategy of storing hot and cold data, the type of storage medium, and the number of replicas. StarRocks allows you to use different types of storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSDs) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
+The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management units (partitions) based on the partitioning key. You can set a storage strategy for each partition, including the number of buckets, the strategy of storing hot and cold data, the type of storage medium, and the number of replicas. StarRocks allows you to use different types of storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSDs) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
 
 | **Partitioning method**                   | **Scenarios**                                                    | **Methods to create partitions**               |
 | ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
@@ -166,7 +166,7 @@ The partitioning method divides a table into multiple partitions. Partitioning p
 
 ##### How to choose partitioning columns and granularity
 
-- **The partition key is composed of one or more partitioning columns**. Selecting a proper partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly adopted to resolve certain issues caused by the deletion of expired data and facilitate the management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on ENUM values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
+- **The partitioning key is composed of one or more partitioning columns**. Selecting a proper partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly adopted to resolve certain issues caused by the deletion of expired data and facilitate the management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on ENUM values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
 - When choosing the partitioning granularity, you need to consider data volume, query patterns, and data management granularity.
   - Example 1: If the monthly data volume in a table is small, partitioning by month can reduce the amount of metadata compared to partitioning by day, thereby reducing the resource consumption of metadata management and scheduling.
   - Example 2: If the monthly data volume in a table is large and queries mostly request data of certain days, partitioning by day can effectively reduce the amount of data scanned during queries.
@@ -204,7 +204,7 @@ Range partitioning is suitable for storing simple, contiguous data, such as time
 
 You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the ranges to which the data partitioning column values belong.
 
-As for the data type of partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, partitioning column values support to be timestamps and strings. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use functions to convert partitioning column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
+As for the data type of the partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, partitioning column values support to be timestamps and strings. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use functions to convert partitioning column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
 
 :::info
 
@@ -337,7 +337,7 @@ Multiple partitions can be created in batch at and after table creation. You can
   <Tabs groupId="batch partitioning(date)">
   <TabItem value="example1" label="with the same date interval" default>
   
-  In the following example, the partitions created in batch start from `2021-01-01` and ends on `2021-01-04`, with a partition increment of one day:  
+  In the following example, the partitions created in a batch start from `2021-01-01` and ends on `2021-01-04`, with a partition increment of one day:  
 
     ```SQL
     CREATE TABLE site_access (
@@ -354,20 +354,20 @@ Multiple partitions can be created in batch at and after table creation. You can
     DISTRIBUTED BY HASH(site_id);
     ```
 
-  It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+    It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
     ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
-  PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
-  PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
-  )
+    PARTITION BY RANGE (datekey) (
+        PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
+        PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
+        PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
+    )
     ```
 
-</TabItem>
-<TabItem value="example2" label="with different date intervals">
+  </TabItem>
+  <TabItem value="example2" label="with different date intervals">
 
-You can create batches of date partitions with different incremental intervals by specifying different incremental intervals in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
+  You can create batches of date partitions with different incremental intervals by specifying different incremental intervals in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
 
     ```SQL
     CREATE TABLE site_access (
@@ -386,23 +386,24 @@ You can create batches of date partitions with different incremental intervals b
     DISTRIBUTED BY HASH(site_id);
     ```
 
-  It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+    It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
     ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-  PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-  PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-  PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-  PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-  PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-  PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-  PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-  PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-  )
-  ```
-  </TabItem>
-  </Tabs>
+    PARTITION BY RANGE (datekey) (
+        PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
+        PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
+        PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
+        PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
+        PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
+        PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
+        PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
+        PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
+        PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
+    )
+    ```
+
+    </TabItem>
+    </Tabs>
 
 - **The partitioning column is of integer type.**
 
