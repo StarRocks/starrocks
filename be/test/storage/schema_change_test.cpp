@@ -86,7 +86,6 @@ TAlterTabletReqV2 SchemaChangeTest::gen_alter_tablet_req(TTabletId base_tablet_i
     req.__set_base_schema_hash(0);
     req.__set_new_schema_hash(0);
     req.__set_alter_version(version.second);
-    req.__set_alter_job_type(TAlterJobType::SCHEMA_CHANGE);
 
     return req;
 }
@@ -134,7 +133,7 @@ void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, st
     } else {
         col = SchemaTestHelper::gen_value_column_for_agg_table(column_name, type);
     }
-    col.__set_has_bitmap_index(true);
+    col.__set_is_bloom_filter_column(true);
     request->tablet_schema.columns.push_back(col);
 }
 
@@ -594,8 +593,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
         column_mapping->ref_column = i;
         column_mapping->ref_base_reader_column_index = i;
     }
-    Schema base_schema =
-            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer.get_selected_column_indexes());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet_schema, chunk_changer.get_selected_column_indexes());
 
     auto sc_procedure = std::make_unique<SchemaChangeDirectly>(&chunk_changer);
     RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
