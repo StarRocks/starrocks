@@ -809,7 +809,7 @@ public class PartitionUtil {
         thread.start();
     }
 
-    public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
+    public static RangePartitionDiff getPartitionDiff(Expr partitionExpr,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
                                                       Map<String, Range<PartitionKey>> mvPartitionMap,
                                                       PartitionDiffer differ) {

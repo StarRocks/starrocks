@@ -188,7 +188,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -248,6 +247,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -3433,8 +3433,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 materializedView.setPartitionExprMaps(partitionExprMaps);
                 // check partition schema from children
-                PartitionBasedMvRefreshProcessor.computePartitionRangeDiff(db, materializedView,
-                        Pair.create(null, null));
+                PartitionDiffer.computePartitionRangeDiff(db, materializedView, Pair.create(null, null));
             }
 
             MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
