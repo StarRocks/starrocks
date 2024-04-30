@@ -204,7 +204,7 @@ Range partitioning is suitable for storing simple, contiguous data, such as time
 
 You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the ranges to which the data partitioning column values belong.
 
-As for the data type of the partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, partitioning column values support to be timestamps and strings. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use functions to convert partitioning column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
+As for the data type of the partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, three specific functions to be used as partition columns. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use a specific function to convert partitioning column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
 
 :::info
 
@@ -255,9 +255,9 @@ Define the mapping relationship between each partition and the range of partitio
     DISTRIBUTED BY HASH(site_id);
     ```
 
-- **The partition column values are timestamps and strings (supported since v3.3.0).**
+- **Three specific functions can be used as partitioning columns (supported since v3.3.0).**
   
-  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you need to use a function to convert the partition column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
+  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific function to convert the partition column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
 
   <Tabs groupId="manual partitioning">
   <TabItem value="example1" label="The partition column values are timestamps" default>
@@ -468,7 +468,9 @@ Multiple partitions can be created in batch at and after table creation. You can
   </TabItem>
   </Tabs>
 
-- **The partition column values are timestamps and strings (supported since v3.3.0).**
+- **Three specific functions can be used as partitioning columns (supported since v3.3.0).**
+  
+  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific function to convert the partition column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
 
   <Tabs groupId="batch partitioning(timestamp and string)">
   <TabItem value="example1" label="The partitioning column values are timestamps" default>
