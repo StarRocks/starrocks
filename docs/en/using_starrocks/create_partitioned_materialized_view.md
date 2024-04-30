@@ -224,7 +224,6 @@ FROM par_tbl1
 GROUP BY datekey, k1;
 ```
 
-<!--
 ### Align partitions with multiple base tables
 
 ![Partitioned Materialized View-3](../assets/partitioned_mv-3.png)
@@ -269,7 +268,6 @@ GROUP BY
   par_tbl3.datekey_new,
   par_tbl3.k1;
 ```
--->
 
 ### Achieve incremental refresh and transparent rewrite
 
