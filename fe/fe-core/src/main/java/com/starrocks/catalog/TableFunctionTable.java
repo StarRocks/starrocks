@@ -57,6 +57,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -263,10 +264,16 @@ public class TableFunctionTable extends Table {
 
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
             csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            if (csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length > 50) {
+                throw new DdlException("the csv.column_separator is limited to maximum of 50 bytes");
+            }
         }
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
             csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            if (csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length > 50) {
+                throw new DdlException("the csv.row_delimiter is limited to maximum of 50 bytes");
+            }
         }
 
         if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
@@ -341,15 +348,15 @@ public class TableFunctionTable extends Table {
         params.setSkip_header(csvSkipHeader);
         params.setTrim_space(csvTrimSpace);
         params.setFlexible_column_mapping(true);
-        if (csvColumnSeparator.length() == 1) {
+        if (csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length == 1) {
             params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
-        } else if (csvColumnSeparator.length() > 1) {
+        } else {
             params.setMulti_column_separator(csvColumnSeparator);
         }
 
-        if (csvRowDelimiter.length() == 1) {
+        if (csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length > 1) {
             params.setRow_delimiter(csvRowDelimiter.getBytes()[0]);
-        } else if (csvRowDelimiter.length() > 1) {
+        } else {
             params.setMulti_row_delimiter(csvRowDelimiter);
         }
 
