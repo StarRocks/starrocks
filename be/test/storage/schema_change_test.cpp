@@ -46,92 +46,16 @@ class SchemaChangeTest : public testing::Test {
     void TearDown() override {}
 
 protected:
-<<<<<<< HEAD
-    void SetCreateTabletReq(TCreateTabletReq* request, int64_t tablet_id, TKeysType::type type = TKeysType::DUP_KEYS) {
-        request->tablet_id = tablet_id;
-        request->__set_version(1);
-        request->__set_version_hash(0);
-        request->tablet_schema.schema_hash = 270068375;
-        request->tablet_schema.short_key_column_count = 2;
-        request->tablet_schema.keys_type = type;
-        request->tablet_schema.storage_type = TStorageType::COLUMN;
-    }
-=======
     void add_key_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type);
     void add_value_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
                           TKeysType::type keys_type = TKeysType::DUP_KEYS);
     void add_value_column_with_index(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
                                      TKeysType::type keys_type = TKeysType::DUP_KEYS);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 
     void create_base_tablet(TTabletId tablet_id, TKeysType::type type, TStorageType::type);
     void create_dest_tablet_with_index(TTabletId base_tablet_id, TTabletId new_tablet_id, TKeysType::type type);
 
-<<<<<<< HEAD
-    void CreateSrcTablet(TTabletId tablet_id, TKeysType::type type = TKeysType::DUP_KEYS, int64_t* version = nullptr) {
-        StorageEngine* engine = StorageEngine::instance();
-        TCreateTabletReq create_tablet_req;
-        SetCreateTabletReq(&create_tablet_req, tablet_id, type);
-        AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
-        AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
-        AddColumn(&create_tablet_req, "v1", TPrimitiveType::INT, false);
-        AddColumn(&create_tablet_req, "v2", TPrimitiveType::INT, false);
-        Status res = engine->create_tablet(create_tablet_req);
-        ASSERT_TRUE(res.ok());
-        TabletSharedPtr tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-        Schema base_schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-        for (size_t i = 0; i < 4; ++i) {
-            ColumnPtr& base_col = base_chunk->get_column_by_index(i);
-            for (size_t j = 0; j < 4; ++j) {
-                Datum datum;
-                if (i != 1) {
-                    datum.set_int32(i + 1);
-                } else {
-                    datum.set_int32(4 - j);
-                }
-                base_col->append_datum(datum);
-            }
-        }
-        RowsetWriterContext writer_context;
-        writer_context.rowset_id = engine->next_rowset_id();
-        writer_context.tablet_uid = tablet->tablet_uid();
-        writer_context.tablet_id = tablet->tablet_id();
-        writer_context.tablet_schema_hash = tablet->schema_hash();
-        writer_context.rowset_path_prefix = tablet->schema_hash_path();
-        writer_context.tablet_schema = &(tablet->tablet_schema());
-        writer_context.rowset_state = VISIBLE;
-        if (version == nullptr) {
-            writer_context.version = Version(3, 3);
-        } else {
-            writer_context.version = Version(*version, *version);
-        }
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-        CHECK_OK(rowset_writer->add_chunk(*base_chunk));
-        CHECK_OK(rowset_writer->flush());
-        RowsetSharedPtr new_rowset = *rowset_writer->build();
-        ASSERT_TRUE(new_rowset != nullptr);
-        ASSERT_TRUE(tablet->add_rowset(new_rowset, false).ok());
-    }
-
-    std::shared_ptr<TabletSchema> SetTabletSchema(const std::string& name, const std::string& type,
-                                                  const std::string& aggregation, uint32_t length, bool is_allow_null,
-                                                  bool is_key) {
-        TabletSchemaPB tablet_schema_pb;
-        ColumnPB* column = tablet_schema_pb.add_column();
-        column->set_unique_id(0);
-        column->set_name(name);
-        column->set_type(type);
-        column->set_is_key(is_key);
-        column->set_is_nullable(is_allow_null);
-        column->set_length(length);
-        column->set_aggregation(aggregation);
-        return std::make_shared<TabletSchema>(tablet_schema_pb);
-    }
-=======
     void write_data_to_base_tablet(TTabletId tablet_id, Version version);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 
     TabletSchemaSPtr gen_tablet_schema(const std::string& name, const std::string& type, const std::string& aggregation,
                                        uint32_t length);
@@ -155,8 +79,6 @@ protected:
     const int64_t _mem_limit = config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024;
 };
 
-<<<<<<< HEAD
-=======
 TAlterTabletReqV2 SchemaChangeTest::gen_alter_tablet_req(TTabletId base_tablet_id, TTabletId new_tablet_id,
                                                          Version version) {
     TAlterTabletReqV2 req;
@@ -243,7 +165,7 @@ void SchemaChangeTest::create_dest_tablet_with_index(TTabletId base_tablet_id, T
 
 void SchemaChangeTest::write_data_to_base_tablet(TTabletId tablet_id, Version version) {
     auto tablet = _tablet_mgr->get_tablet(tablet_id);
-    Schema base_schema = *tablet->tablet_schema()->schema();
+    Schema base_schema = *tablet->tablet_schema().schema();
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
     for (size_t i = 0; i < 4; ++i) {
         ColumnPtr& base_col = base_chunk->get_column_by_index(i);
@@ -298,38 +220,6 @@ void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size
     EXPECT_EQ(expect_val, dst_datum.get<T>());
 }
 
-TEST_F(SchemaChangeTest, column_with_row) {
-    int64_t base_tablet_id = 1415001;
-    int64_t new_tablet_id = 1415002;
-
-    create_base_tablet(base_tablet_id, TKeysType::PRIMARY_KEYS, TStorageType::COLUMN_WITH_ROW);
-
-    {
-        auto create_tablet_req = TabletTestHelper::gen_create_tablet_req(new_tablet_id, TKeysType::PRIMARY_KEYS,
-                                                                         TStorageType::COLUMN_WITH_ROW);
-        create_tablet_req.__set_base_tablet_id(base_tablet_id);
-        add_key_column(&create_tablet_req, "k1", TPrimitiveType::INT);
-        add_key_column(&create_tablet_req, "k2", TPrimitiveType::INT);
-        add_value_column(&create_tablet_req, "v0", TPrimitiveType::INT);
-        add_value_column(&create_tablet_req, "v1", TPrimitiveType::INT);
-        add_value_column(&create_tablet_req, "v2", TPrimitiveType::INT);
-        add_value_column(&create_tablet_req, "v3", TPrimitiveType::INT);
-        Status res = _storage_engine->create_tablet(create_tablet_req);
-        ASSERT_TRUE(res.ok()) << res.to_string();
-    }
-
-    TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
-    ASSERT_TRUE(base_tablet != nullptr);
-    ASSERT_EQ(base_tablet->tablet_schema()->columns().back().name(), Schema::FULL_ROW_COLUMN);
-    ASSERT_EQ(base_tablet->tablet_schema()->columns().back().unique_id(), 4);
-
-    TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
-    ASSERT_TRUE(new_tablet != nullptr);
-    ASSERT_EQ(new_tablet->tablet_schema()->columns().back().name(), Schema::FULL_ROW_COLUMN);
-    ASSERT_EQ(new_tablet->tablet_schema()->columns().back().unique_id(), 6);
-}
-
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 TEST_F(SchemaChangeTest, convert_tinyint_to_varchar) {
     test_convert_to_varchar<int8_t>(TYPE_TINYINT, 1, 127, "127");
 }
@@ -425,7 +315,7 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
-    EXPECT_EQ(dst_value, dst_datum.get_uint24());
+    ASSERT_EQ(dst_value, dst_datum.get_uint24());
 }
 
 TEST_F(SchemaChangeTest, convert_date_to_datetime) {
@@ -572,9 +462,6 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     TTabletId new_tablet_id = 1102;
     Version version(3, 3);
 
-<<<<<<< HEAD
-    ChunkChanger chunk_changer(base_tablet->tablet_schema(), new_tablet->tablet_schema());
-=======
     create_base_tablet(base_tablet_id, TKeysType::DUP_KEYS, TStorageType::COLUMN);
     write_data_to_base_tablet(base_tablet_id, version);
 
@@ -591,11 +478,10 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
-    auto base_tablet_schema = base_tablet->tablet_schema();
-    auto new_tablet_schema = new_tablet->tablet_schema();
+    const auto& base_tablet_schema = base_tablet->tablet_schema();
+    const auto& new_tablet_schema = new_tablet->tablet_schema();
 
-    ChunkChanger chunk_changer(new_tablet_schema);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
+    ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
@@ -611,21 +497,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     auto rowset_reader = TabletTestHelper::create_rowset_reader(base_tablet, base_schema, rowset->version());
     auto rowset_writer = TabletTestHelper::create_rowset_writer(*new_tablet, next_rowset_id(), version);
 
-<<<<<<< HEAD
-    RowsetWriterContext writer_context;
-    writer_context.rowset_id = engine->next_rowset_id();
-    writer_context.tablet_uid = new_tablet->tablet_uid();
-    writer_context.tablet_id = new_tablet->tablet_id();
-    writer_context.tablet_schema_hash = new_tablet->schema_hash();
-    writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
-    writer_context.rowset_state = VISIBLE;
-    writer_context.version = Version(3, 3);
-    std::unique_ptr<RowsetWriter> rowset_writer;
-    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-=======
     ASSERT_OK(sc_procedure->process(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
@@ -636,9 +508,6 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     TTabletId new_tablet_id = 1104;
     Version version(3, 3);
 
-<<<<<<< HEAD
-    ChunkChanger chunk_changer(new_tablet->tablet_schema(), new_tablet->tablet_schema());
-=======
     create_base_tablet(base_tablet_id, TKeysType::DUP_KEYS, TStorageType::COLUMN);
     write_data_to_base_tablet(base_tablet_id, version);
 
@@ -655,11 +524,10 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
-    auto base_tablet_schema = base_tablet->tablet_schema();
-    auto new_tablet_schema = new_tablet->tablet_schema();
+    const auto& base_tablet_schema = base_tablet->tablet_schema();
+    const auto& new_tablet_schema = new_tablet->tablet_schema();
 
-    ChunkChanger chunk_changer(new_tablet_schema);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
+    ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
@@ -678,29 +546,9 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     auto rowset_reader = TabletTestHelper::create_rowset_reader(base_tablet, base_schema, rowset->version());
     auto rowset_writer = TabletTestHelper::create_rowset_writer(*new_tablet, next_rowset_id(), version);
 
-<<<<<<< HEAD
-    RowsetWriterContext writer_context;
-    writer_context.rowset_id = engine->next_rowset_id();
-    writer_context.tablet_uid = new_tablet->tablet_uid();
-    writer_context.tablet_id = new_tablet->tablet_id();
-    writer_context.tablet_schema_hash = new_tablet->schema_hash();
-    writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
-    writer_context.rowset_state = VISIBLE;
-    writer_context.version = Version(3, 3);
-    std::unique_ptr<RowsetWriter> rowset_writer;
-    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-
-    ASSERT_TRUE(
-            _sc_procedure->process(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
-    delete tablet_rowset_reader;
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1103);
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1104);
-=======
     ASSERT_OK(sc_procedure->process(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 }
 
 TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
@@ -708,9 +556,6 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     TTabletId new_tablet_id = 1204;
     Version version(3, 3);
 
-<<<<<<< HEAD
-    ChunkChanger chunk_changer(new_tablet->tablet_schema(), new_tablet->tablet_schema());
-=======
     create_base_tablet(base_tablet_id, TKeysType::AGG_KEYS, TStorageType::COLUMN);
     write_data_to_base_tablet(base_tablet_id, version);
 
@@ -726,11 +571,10 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
-    auto base_tablet_schema = base_tablet->tablet_schema();
-    auto new_tablet_schema = new_tablet->tablet_schema();
+    const auto& base_tablet_schema = base_tablet->tablet_schema();
+    const auto& new_tablet_schema = new_tablet->tablet_schema();
 
-    ChunkChanger chunk_changer(new_tablet_schema);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
+    ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
@@ -747,29 +591,9 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     auto rowset_reader = TabletTestHelper::create_rowset_reader(base_tablet, base_schema, version);
     auto rowset_writer = TabletTestHelper::create_rowset_writer(*new_tablet, next_rowset_id(), version);
 
-<<<<<<< HEAD
-    RowsetWriterContext writer_context;
-    writer_context.rowset_id = engine->next_rowset_id();
-    writer_context.tablet_uid = new_tablet->tablet_uid();
-    writer_context.tablet_id = new_tablet->tablet_id();
-    writer_context.tablet_schema_hash = new_tablet->schema_hash();
-    writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
-    writer_context.rowset_state = VISIBLE;
-    writer_context.version = Version(3, 3);
-    std::unique_ptr<RowsetWriter> rowset_writer;
-    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-
-    ASSERT_TRUE(
-            _sc_procedure->process(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
-    delete tablet_rowset_reader;
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1203);
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1204);
-=======
     ASSERT_OK(sc_procedure->process(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_json) {
@@ -811,9 +635,6 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     create_base_tablet(base_tablet_id, TKeysType::DUP_KEYS, TStorageType::COLUMN);
     write_data_to_base_tablet(base_tablet_id, version);
 
-<<<<<<< HEAD
-    ChunkChanger chunk_changer(new_tablet->tablet_schema(), new_tablet->tablet_schema());
-=======
     {
         TCreateTabletReq create_tablet_req =
                 TabletTestHelper::gen_create_tablet_req(new_tablet_id, TKeysType::DUP_KEYS, TStorageType::COLUMN);
@@ -829,11 +650,10 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
 
     TabletSharedPtr base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
     TabletSharedPtr new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
-    auto base_tablet_schema = base_tablet->tablet_schema();
-    auto new_tablet_schema = new_tablet->tablet_schema();
+    const auto& base_tablet_schema = base_tablet->tablet_schema();
+    const auto& new_tablet_schema = new_tablet->tablet_schema();
 
-    ChunkChanger chunk_changer(new_tablet_schema);
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
+    ChunkChanger chunk_changer(base_tablet_schema, new_tablet_schema);
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
@@ -878,21 +698,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     auto rowset_reader = TabletTestHelper::create_rowset_reader(base_tablet, base_schema, version);
     auto rowset_writer = TabletTestHelper::create_rowset_writer(*new_tablet, next_rowset_id(), version);
 
-<<<<<<< HEAD
-    RowsetWriterContext writer_context;
-    writer_context.rowset_id = engine->next_rowset_id();
-    writer_context.tablet_uid = new_tablet->tablet_uid();
-    writer_context.tablet_id = new_tablet->tablet_id();
-    writer_context.tablet_schema_hash = new_tablet->schema_hash();
-    writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-    writer_context.tablet_schema = &(new_tablet->tablet_schema());
-    writer_context.rowset_state = VISIBLE;
-    writer_context.version = Version(3, 3);
-    std::unique_ptr<RowsetWriter> rowset_writer;
-    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-=======
     ASSERT_OK(sc_procedure->process(rowset_reader.get(), rowset_writer.get(), new_tablet, base_tablet, rowset));
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
@@ -994,7 +800,7 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
 
         std::vector<uint32_t> idxs{0, 1, 2, 3};
         ASSERT_OK(delta_writer->write(chunk, idxs.data(), 0, 4));
-        ASSERT_OK(delta_writer->flush_memtable_async(false));
+        ASSERT_OK(delta_writer->_flush_memtable_async(false));
         ASSERT_OK(delta_writer->write(chunk, idxs.data(), 0, 4));
         ASSERT_OK(delta_writer->close());
         ASSERT_OK(delta_writer->commit());
@@ -1023,7 +829,7 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
     ASSERT_OK(handler.process_alter_tablet(req));
 
     auto new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
-    auto new_tablet_schema = new_tablet->tablet_schema();
+    const auto& new_tablet_schema = new_tablet->tablet_schema();
 
     auto new_rowset = new_tablet->get_rowset_by_version(version);
     ASSERT_TRUE(new_rowset != nullptr);

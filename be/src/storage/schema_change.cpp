@@ -257,21 +257,9 @@ void ChunkMerger::_pop_heap() {
 }
 
 Status LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-<<<<<<< HEAD
                                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
-#ifndef BE_TEST
-    Status st = CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange");
-    if (!st.ok()) {
-        LOG(WARNING) << alter_msg_header() << "fail to execute schema change: " << st.message() << std::endl;
-        return st;
-    }
-#endif
-=======
-                                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
-                                   TabletSchemaCSPtr base_tablet_schema) {
     RETURN_IF_ERROR_WITH_WARN(CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange"),
                               fmt::format("{}fail to execute schema change", alter_msg_header()));
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 
     Status status =
             new_rowset_writer->add_rowset_for_linked_schema_change(rowset, _chunk_changer->get_schema_mapping());
