@@ -40,7 +40,7 @@ public enum PlanMode {
             return DISTRIBUTED;
 
         } else {
-            throw new IllegalArgumentException("Unknown plan mode: " + modeName);
+            throw new IllegalArgumentException("Unknown plan mode: " + modeName + ", only support local, distributed, auto");
         }
     }
 

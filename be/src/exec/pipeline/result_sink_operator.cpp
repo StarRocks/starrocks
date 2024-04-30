@@ -17,6 +17,7 @@
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/http_result_writer.h"
+#include "runtime/metadata_result_writer.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
@@ -46,6 +47,9 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         break;
     case TResultSinkType::HTTP_PROTOCAL:
         _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
+        break;
+    case TResultSinkType::METADATA_ICEBERG:
+        _writer = std::make_shared<MetadataResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _sink_type);
         break;
     default:
         return Status::InternalError("Unknown result sink type");

@@ -33,6 +33,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PlanMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
@@ -292,6 +293,10 @@ public class SetStmtAnalyzer {
                 throw new SemanticException(String.format("Unsupported compression codec %s." +
                         " Use any of (uncompressed, snappy, lz4, zstd, gzip)", codec));
             }
+        }
+        // check plan mode
+        if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
+            PlanMode.fromName(resolvedExpression.getStringValue());
         }
 
         var.setResolvedExpression(resolvedExpression);

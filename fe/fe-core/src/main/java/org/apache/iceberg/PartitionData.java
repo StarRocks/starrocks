@@ -91,6 +91,14 @@ public class PartitionData
         this.schema = toCopy.schema;
     }
 
+    public PartitionData(PartitionData toCopy, Object[] data) {
+        this.partitionType = toCopy.partitionType;
+        this.size = toCopy.size;
+        this.stringSchema = toCopy.stringSchema;
+        this.schema = toCopy.schema;
+        this.data = data;
+    }
+
     public Types.StructType getPartitionType() {
         return partitionType;
     }

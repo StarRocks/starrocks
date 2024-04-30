@@ -39,7 +39,9 @@ public class MetadataExecutor {
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
-        // TODO(stephen): add execution
+
+        LOG.info("Start to execute metadata collect job on {}.{}.{}", job.getCatalogName(), job.getDbName(), job.getTableName());
+        executor.executeStmtWithResultQueue(context, execPlan, job.getResultQueue());
     }
 
     public Coordinator getCoordinator() {
