@@ -49,8 +49,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -326,7 +324,7 @@ public class TransactionState implements Writable {
     // used for PublishDaemon to check whether this txn can be published
     // not persisted, so need to rebuilt if FE restarts
     private volatile TransactionChecker finishChecker = null;
-    private long checkerCreationTime = 0;
+
     private Span txnSpan = null;
     private String traceParent = null;
     private Set<TabletCommitInfo> tabletCommitInfos = null;
@@ -895,31 +893,18 @@ public class TransactionState implements Writable {
         return true;
     }
 
-    // Note: caller should hold db lock
-    public void prepareFinishChecker(Database db) {
-        synchronized (this) {
-            finishChecker = TransactionChecker.create(this, db);
-            checkerCreationTime = System.nanoTime();
-        }
-    }
-
     public boolean checkCanFinish() {
-        // finishChecker may be null if FE restarts
         // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
-        if (finishChecker == null || System.nanoTime() - checkerCreationTime > 10000000000L) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db == null) {
-                // consider txn finished if db is dropped
-                return true;
-            }
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                prepareFinishChecker(db);
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            // consider txn finished if db is dropped
+            return true;
         }
+
+        if (finishChecker == null) {
+            finishChecker = TransactionChecker.create(this, db);
+        }
+
         if (finishState == null) {
             finishState = new TxnFinishState();
         }
