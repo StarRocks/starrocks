@@ -206,3 +206,228 @@ select c1,c0 from t2 order by c1,c0 asc limit 10;
 9	9
 10	10
 -- !result
+create table t3 (
+    c0 INT,
+    c1 BIGINT
+) UNIQUE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t3 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+-- !result
+select c1 from t3 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+-- !result
+select c1,c0 from t3 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
+select c0 from t3 order by c0 desc limit 10;
+-- result:
+7
+6
+5
+4
+3
+2
+1
+-- !result
+select c1 from t3 order by c1 desc limit 10;
+-- result:
+9
+8
+7
+6
+5
+4
+3
+-- !result
+select c1,c0 from t3 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
+create table t4 (
+    c0 INT,
+    c1 BIGINT REPLACE
+) UNIQUE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t4 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+-- !result
+select c1 from t4 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+-- !result
+select c1,c0 from t4 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
+select c0 from t4 order by c0 desc limit 10;
+-- result:
+7
+6
+5
+4
+3
+2
+1
+-- !result
+select c1 from t4 order by c1 desc limit 10;
+-- result:
+9
+8
+7
+6
+5
+4
+3
+-- !result
+select c1,c0 from t4 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
+create table t5 (
+    c0 INT,
+    c1 BIGINT
+) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t5 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+-- !result
+select c1 from t5 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+-- !result
+select c1,c0 from t5 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
+select c0 from t5 order by c0 desc limit 10;
+-- result:
+7
+6
+5
+4
+3
+2
+1
+-- !result
+select c1 from t5 order by c1 desc limit 10;
+-- result:
+9
+8
+7
+6
+5
+4
+3
+-- !result
+select c1,c0 from t5 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
