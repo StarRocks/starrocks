@@ -105,7 +105,7 @@ Example for the CSV format:
 
 ```SQL
 "format"="csv",
-"csv.column_separator"=",",
+"csv.column_separator"="\\t",
 "csv.enclose"='"',
 "csv.skip_header"="1",
 "csv.escape"="\\"
