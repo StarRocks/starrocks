@@ -99,6 +99,11 @@ public class ErrorReport {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
     }
 
+    public static void reportUserException(String pattern, ErrorCode errorCode, Object... objs)
+            throws UserException {
+        throw new UserException(reportCommon(pattern, errorCode, objs));
+    }
+
     public interface DdlExecutor {
         void apply() throws UserException;
     }

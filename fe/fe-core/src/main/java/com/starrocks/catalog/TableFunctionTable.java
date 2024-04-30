@@ -266,7 +266,8 @@ public class TableFunctionTable extends Table {
             csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
             int len  = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
             if (len > 50 || len == 0) {
-                throw new DdlException("the length of csv.column_separator property should be in [1, 50]");
+                ErrorReport.reportDdlException(ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE,
+                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, 50);
             }
         }
 
@@ -274,7 +275,8 @@ public class TableFunctionTable extends Table {
             csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
             int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
             if (len > 50 || len == 0) {
-                throw new DdlException("the length of csv.row_delimiter property should be in [1, 50]");
+                ErrorReport.reportDdlException(ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE,
+                        PROPERTY_CSV_ROW_DELIMITER, 1, 50);
             }
         }
 

@@ -54,6 +54,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -198,7 +200,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             byte[] setBytes = sep.getBytes(StandardCharsets.UTF_8);
             params.setColumn_separator(setBytes[0]);
             if (setBytes.length > 50) {
-                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+                ErrorReport.reportUserException("column separator", ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE, 1, 50);
             }
             if (setBytes.length > 1) {
                 params.setMulti_column_separator(sep);
@@ -211,7 +213,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             byte[] sepBytes = sep.getBytes(StandardCharsets.UTF_8);
             params.setRow_delimiter(sepBytes[0]);
             if (sepBytes.length > 50) {
-                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+                ErrorReport.reportUserException("row delimiter", ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE, 1, 50);
             }
             if (sepBytes.length > 1) {
                 params.setMulti_row_delimiter(sep);

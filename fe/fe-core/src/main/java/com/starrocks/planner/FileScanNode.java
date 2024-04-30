@@ -101,7 +101,6 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
@@ -299,13 +298,13 @@ public class FileScanNode extends LoadScanNode {
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
         if (column_separator.length != 1) {
             if (column_separator.length > 50) {
-                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+                ErrorReport.reportUserException("column separator", ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE, 1, 50);
             }
             params.setMulti_column_separator(fileGroup.getColumnSeparator());
         }
         if (row_delimiter.length != 1) {
             if (row_delimiter.length > 50) {
-                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+                ErrorReport.reportUserException("row delimiter", ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE, 1, 50);
             }
             params.setMulti_row_delimiter(fileGroup.getRowDelimiter());
         }
