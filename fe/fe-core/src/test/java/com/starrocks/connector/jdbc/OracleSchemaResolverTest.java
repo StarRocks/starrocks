@@ -63,8 +63,10 @@ public class OracleSchemaResolverTest {
                 "TIMESTAMP(6) WITH LOCAL TIME ZONE", "TIMESTAMP(6) WITH TIME ZONE"));
         columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 4000, 4000, 7, 11, 11, 13));
         columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 0, 6, 6, 6));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n"));
-        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO", "YES", "YES"));
+        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",
+                "l", "m", "n"));
+        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO",
+                "NO", "NO", "NO", "YES", "YES"));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "oracle.jdbc.driver.OracleDriver");
         properties.put(JDBCResource.URI, "jdbc:oracle:thin:@127.0.0.1:1521:ORCL");
