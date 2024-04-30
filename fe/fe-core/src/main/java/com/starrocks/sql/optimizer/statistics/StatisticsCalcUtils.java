@@ -189,10 +189,11 @@ public class StatisticsCalcUtils {
 
         for (Partition partition : table.getPartitions()) {
             long partitionRowCount;
-            if (tableStatisticMap.containsKey(partition.getId())) {
+            TableStatistic statistic = tableStatisticMap.getOrDefault(partition.getId(), TableStatistic.unknown());
+            if (statistic.equals(TableStatistic.unknown())) {
                 partitionRowCount = partition.getRowCount();
             } else {
-                partitionRowCount = tableStatisticMap.get(partition.getId()).getRowCount();
+                partitionRowCount = statistic.getRowCount();
             }
             tblRowCount += partitionRowCount;
         }
