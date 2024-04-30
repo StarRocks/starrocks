@@ -194,9 +194,8 @@ public class MvRefreshArbiter {
             Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = baseTableUpdateInfos.entrySet().stream()
                     .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getPartitionNameWithRanges()));
             Table partitionTable = mv.getDirectTableAndPartitionColumn().first;
-            Column partitionColumn = mv.getPartitionInfo().getPartitionColumns().get(0);
             PartitionDiffer differ = PartitionDiffer.build(mv, Pair.create(null, null));
-            rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
+            rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr,
                     refBaseTablePartitionMap.get(partitionTable), mvRangePartitionMap, differ);
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
@@ -306,12 +305,11 @@ public class MvRefreshArbiter {
         // TODO: prune the partitions based on ttl
         Pair<Table, Column> directTableAndPartitionColumn = mv.getDirectTableAndPartitionColumn();
         Table refBaseTable = directTableAndPartitionColumn.first;
-        Column refBaseTablePartitionColumn = directTableAndPartitionColumn.second;
 
         Map<String, Range<PartitionKey>> refTablePartitionMap = basePartitionNameToRangeMap.get(refBaseTable);
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = mv.getRangePartitionMap();
         RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr,
-                refBaseTablePartitionColumn, refTablePartitionMap, mvPartitionNameToRangeMap, null);
+                refTablePartitionMap, mvPartitionNameToRangeMap, null);
 
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
 
