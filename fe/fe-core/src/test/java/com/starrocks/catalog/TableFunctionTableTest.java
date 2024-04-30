@@ -183,4 +183,34 @@ public class TableFunctionTableTest {
                         "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
                 () -> new TableFunctionTable(properties));
     }
+
+    @Test
+    public void testIllegalDelimiter() throws DdlException {
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "the length of csv.row_delimiter property should be in [1, 50]",
+                    () -> new TableFunctionTable(properties));
+            properties.put("csv.row_delimiter", "");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "the length of csv.row_delimiter property should be in [1, 50]",
+                    () -> new TableFunctionTable(properties));
+        }
+
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.column_separator", "0123456789012345678901234567890123456789" +
+                    "012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "the length of csv.column_separator property should be in [1, 50]",
+                    () -> new TableFunctionTable(properties));
+
+            properties.put("csv.column_separator", "");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "the length of csv.column_separator property should be in [1, 50]",
+                    () -> new TableFunctionTable(properties));
+            properties.put("csv.column_separator", "");
+        }
+    }
 }

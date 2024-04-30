@@ -264,15 +264,17 @@ public class TableFunctionTable extends Table {
 
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
             csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
-            if (csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length > 50) {
-                throw new DdlException("the csv.column_separator is limited to maximum of 50 bytes");
+            int len  = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
+            if (len > 50 || len == 0) {
+                throw new DdlException("the length of csv.column_separator property should be in [1, 50]");
             }
         }
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
             csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
-            if (csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length > 50) {
-                throw new DdlException("the csv.row_delimiter is limited to maximum of 50 bytes");
+            int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
+            if (len > 50 || len == 0) {
+                throw new DdlException("the length of csv.row_delimiter property should be in [1, 50]");
             }
         }
 
@@ -354,7 +356,7 @@ public class TableFunctionTable extends Table {
             params.setMulti_column_separator(csvColumnSeparator);
         }
 
-        if (csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length > 1) {
+        if (csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length == 1) {
             params.setRow_delimiter(csvRowDelimiter.getBytes()[0]);
         } else {
             params.setMulti_row_delimiter(csvRowDelimiter);
