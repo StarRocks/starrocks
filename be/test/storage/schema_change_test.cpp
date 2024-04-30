@@ -135,7 +135,7 @@ void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, st
     } else {
         col = SchemaTestHelper::gen_value_column_for_agg_table(column_name, type);
     }
-    col.__set_has_bitmap_index(true);
+    col.__set_is_bloom_filter_column(true);
     request->tablet_schema.columns.push_back(col);
 }
 
