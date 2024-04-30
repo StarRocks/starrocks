@@ -2035,12 +2035,7 @@ public class StmtExecutor {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
-<<<<<<< HEAD
                 GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
-=======
-                GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
->>>>>>> 784d7d514e ([Enhancement] Improve no data load error message (#44292))
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable ||
                             targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
