@@ -532,6 +532,15 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column oriColumn = schemaForFinding.get(modColIndex);
 
+        for (Index index : olapTable.getIndexes()) {
+            if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                if (index.getColumns().contains(oriColumn.getName()) &&
+                        !modColumn.getType().isStringType()) {
+                    throw new DdlException("Cannot modify a column with GIN into non-string type");
+                }
+            }
+        }
+
         if (oriColumn.isAutoIncrement()) {
             throw new DdlException("Can't not modify a AUTO_INCREMENT column");
         }
