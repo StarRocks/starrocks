@@ -194,10 +194,15 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+=======
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+>>>>>>> 784d7d514e ([Enhancement] Improve no data load error message (#44292))
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -1850,12 +1855,20 @@ public class StmtExecutor {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
+<<<<<<< HEAD
                 String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
+=======
+                GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> 784d7d514e ([Enhancement] Improve no data load error message (#44292))
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable)) {
                         // schema table and iceberg table does not need txn
+<<<<<<< HEAD
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(), transactionId, errorMsg,
+=======
+                        mgr.abortTransaction(database.getId(), transactionId, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+>>>>>>> 784d7d514e ([Enhancement] Improve no data load error message (#44292))
                                 Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
