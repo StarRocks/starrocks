@@ -258,7 +258,7 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - For the naming conventions of partitions, see [System limits](../../../reference/System_limit.md).
-- Before v3.3.0, columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, range partitioning columns support timestamps and strings. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
+- Before v3.3.0, columns for range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, columns for range partition support three specific time functions. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
@@ -329,7 +329,7 @@ Description
 
 You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- Before v3.3.0, columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, range partitioning columns support timestamps and strings. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
+- Before v3.3.0, columns for range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, columns for range partition support three specific time functions. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
 For more information, see [Data distribution](../../../table_design/Data_distribution.md).
