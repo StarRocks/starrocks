@@ -190,11 +190,11 @@ public class TableFunctionTableTest {
             Map<String, String> properties = newProperties();
             properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
             ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "the length of csv.row_delimiter property should be in [1, 50]",
+                    "The valid range of values for 'csv.row_delimiter' is [1, 50]",
                     () -> new TableFunctionTable(properties));
             properties.put("csv.row_delimiter", "");
             ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "the length of csv.row_delimiter property should be in [1, 50]",
+                    "The valid range of values for 'csv.row_delimiter' is [1, 50]",
                     () -> new TableFunctionTable(properties));
         }
 
@@ -203,14 +203,13 @@ public class TableFunctionTableTest {
             properties.put("csv.column_separator", "0123456789012345678901234567890123456789" +
                     "012345678901234567890");
             ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "the length of csv.column_separator property should be in [1, 50]",
+                    "The valid range of values for 'csv.column_separator' is [1, 50]",
                     () -> new TableFunctionTable(properties));
 
             properties.put("csv.column_separator", "");
             ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "the length of csv.column_separator property should be in [1, 50]",
+                    "The valid range of values for 'csv.column_separator' is [1, 50]",
                     () -> new TableFunctionTable(properties));
-            properties.put("csv.column_separator", "");
         }
     }
 }
