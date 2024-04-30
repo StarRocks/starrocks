@@ -822,6 +822,26 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
     }
+    // test delete txn log with new API
+    {
+        std::vector<TxnLog> logs;
+
+        logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+        brpc::Controller cntl;
+        DeleteTxnLogRequest request;
+        DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        auto info = request.add_txn_infos();
+        info->set_txn_id(logs.back().txn_id());
+        info->set_combined_txn_log(false);
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+    }
     // test delete combined txn log
     {
         CombinedTxnLogPB combined_txn_log_pb;
