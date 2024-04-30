@@ -40,9 +40,7 @@ public:
     Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {}
 
     // Move c'tor
-    Status(Status&& s) noexcept : _state(s._state) {
-        s._state = moved_from_state();
-    }
+    Status(Status&& s) noexcept : _state(s._state) { s._state = moved_from_state(); }
 
     // Same as copy c'tor
     Status& operator=(const Status& s) {
@@ -86,47 +84,23 @@ public:
     void update(const Status& new_status);
     void update(Status&& new_status);
 
-    static Status OK() {
-        return Status();
-    }
+    static Status OK() { return Status(); }
 
-    static Status Unknown(const Slice& msg) {
-        return Status(TStatusCode::UNKNOWN, msg);
-    }
+    static Status Unknown(const Slice& msg) { return Status(TStatusCode::UNKNOWN, msg); }
 
-    static Status PublishTimeout(const Slice& msg) {
-        return Status(TStatusCode::PUBLISH_TIMEOUT, msg);
-    }
-    static Status MemoryAllocFailed(const Slice& msg) {
-        return Status(TStatusCode::MEM_ALLOC_FAILED, msg);
-    }
-    static Status BufferAllocFailed(const Slice& msg) {
-        return Status(TStatusCode::BUFFER_ALLOCATION_FAILED, msg);
-    }
-    static Status InvalidArgument(const Slice& msg) {
-        return Status(TStatusCode::INVALID_ARGUMENT, msg);
-    }
+    static Status PublishTimeout(const Slice& msg) { return Status(TStatusCode::PUBLISH_TIMEOUT, msg); }
+    static Status MemoryAllocFailed(const Slice& msg) { return Status(TStatusCode::MEM_ALLOC_FAILED, msg); }
+    static Status BufferAllocFailed(const Slice& msg) { return Status(TStatusCode::BUFFER_ALLOCATION_FAILED, msg); }
+    static Status InvalidArgument(const Slice& msg) { return Status(TStatusCode::INVALID_ARGUMENT, msg); }
     static Status MinimumReservationUnavailable(const Slice& msg) {
         return Status(TStatusCode::MINIMUM_RESERVATION_UNAVAILABLE, msg);
     }
-    static Status Corruption(const Slice& msg) {
-        return Status(TStatusCode::CORRUPTION, msg);
-    }
-    static Status IOError(const Slice& msg) {
-        return Status(TStatusCode::IO_ERROR, msg);
-    }
-    static Status NotFound(const Slice& msg) {
-        return Status(TStatusCode::NOT_FOUND, msg);
-    }
-    static Status AlreadyExist(const Slice& msg) {
-        return Status(TStatusCode::ALREADY_EXIST, msg);
-    }
-    static Status NotSupported(const Slice& msg) {
-        return Status(TStatusCode::NOT_IMPLEMENTED_ERROR, msg);
-    }
-    static Status EndOfFile(const Slice& msg) {
-        return Status(TStatusCode::END_OF_FILE, msg);
-    }
+    static Status Corruption(const Slice& msg) { return Status(TStatusCode::CORRUPTION, msg); }
+    static Status IOError(const Slice& msg) { return Status(TStatusCode::IO_ERROR, msg); }
+    static Status NotFound(const Slice& msg) { return Status(TStatusCode::NOT_FOUND, msg); }
+    static Status AlreadyExist(const Slice& msg) { return Status(TStatusCode::ALREADY_EXIST, msg); }
+    static Status NotSupported(const Slice& msg) { return Status(TStatusCode::NOT_IMPLEMENTED_ERROR, msg); }
+    static Status EndOfFile(const Slice& msg) { return Status(TStatusCode::END_OF_FILE, msg); }
     static Status InternalError(const Slice& msg, int16_t precise_code = 1, const Slice& msg2 = Slice()) {
         return Status(TStatusCode::INTERNAL_ERROR, msg);
     }
@@ -150,18 +124,10 @@ public:
     static Status TooManyTasks(const Slice& msg, int16_t precise_code = 1, const Slice& msg2 = Slice()) {
         return Status(TStatusCode::TOO_MANY_TASKS, msg);
     }
-    static Status ServiceUnavailable(const Slice& msg) {
-        return Status(TStatusCode::SERVICE_UNAVAILABLE, msg);
-    }
-    static Status Uninitialized(const Slice& msg) {
-        return Status(TStatusCode::UNINITIALIZED, msg);
-    }
-    static Status Aborted(const Slice& msg) {
-        return Status(TStatusCode::ABORTED, msg);
-    }
-    static Status DataQualityError(const Slice& msg) {
-        return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
-    }
+    static Status ServiceUnavailable(const Slice& msg) { return Status(TStatusCode::SERVICE_UNAVAILABLE, msg); }
+    static Status Uninitialized(const Slice& msg) { return Status(TStatusCode::UNINITIALIZED, msg); }
+    static Status Aborted(const Slice& msg) { return Status(TStatusCode::ABORTED, msg); }
+    static Status DataQualityError(const Slice& msg) { return Status(TStatusCode::DATA_QUALITY_ERROR, msg); }
     static Status VersionAlreadyMerged(const Slice& msg) {
         return Status(TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED, msg);
     }
@@ -173,106 +139,52 @@ public:
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
 
-    static Status GlobalDictError(const Slice& msg) {
-        return Status(TStatusCode::GLOBAL_DICT_ERROR, msg);
-    }
+    static Status GlobalDictError(const Slice& msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
 
-    static Status TransactionInProcessing(const Slice& msg) {
-        return Status(TStatusCode::TXN_IN_PROCESSING, msg);
-    }
-    static Status TransactionNotExists(const Slice& msg) {
-        return Status(TStatusCode::TXN_NOT_EXISTS, msg);
-    }
-    static Status LabelAlreadyExists(const Slice& msg) {
-        return Status(TStatusCode::LABEL_ALREADY_EXISTS, msg);
-    }
+    static Status TransactionInProcessing(const Slice& msg) { return Status(TStatusCode::TXN_IN_PROCESSING, msg); }
+    static Status TransactionNotExists(const Slice& msg) { return Status(TStatusCode::TXN_NOT_EXISTS, msg); }
+    static Status LabelAlreadyExists(const Slice& msg) { return Status(TStatusCode::LABEL_ALREADY_EXISTS, msg); }
 
-    static Status ResourceBusy(const Slice& msg) {
-        return Status(TStatusCode::RESOURCE_BUSY, msg);
-    }
+    static Status ResourceBusy(const Slice& msg) { return Status(TStatusCode::RESOURCE_BUSY, msg); }
 
-    static Status EAgain(const Slice& msg) {
-        return Status(TStatusCode::SR_EAGAIN, msg);
-    }
+    static Status EAgain(const Slice& msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
 
-    static Status RemoteFileNotFound(const Slice& msg) {
-        return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg);
-    }
+    static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
-    bool ok() const {
-        return _state == nullptr;
-    }
+    bool ok() const { return _state == nullptr; }
 
-    bool is_cancelled() const {
-        return code() == TStatusCode::CANCELLED;
-    }
-    bool is_mem_limit_exceeded() const {
-        return code() == TStatusCode::MEM_LIMIT_EXCEEDED;
-    }
-    bool is_thrift_rpc_error() const {
-        return code() == TStatusCode::THRIFT_RPC_ERROR;
-    }
-    bool is_end_of_file() const {
-        return code() == TStatusCode::END_OF_FILE;
-    }
-    bool is_ok_or_eof() const {
-        return ok() || is_end_of_file();
-    }
-    bool is_not_found() const {
-        return code() == TStatusCode::NOT_FOUND;
-    }
-    bool is_already_exist() const {
-        return code() == TStatusCode::ALREADY_EXIST;
-    }
-    bool is_io_error() const {
-        return code() == TStatusCode::IO_ERROR;
-    }
-    bool is_not_supported() const {
-        return code() == TStatusCode::NOT_IMPLEMENTED_ERROR;
-    }
-    bool is_corruption() const {
-        return code() == TStatusCode::CORRUPTION;
-    }
+    bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
+    bool is_mem_limit_exceeded() const { return code() == TStatusCode::MEM_LIMIT_EXCEEDED; }
+    bool is_thrift_rpc_error() const { return code() == TStatusCode::THRIFT_RPC_ERROR; }
+    bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }
+    bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
+    bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
+    bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
+    bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
+    bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
+    bool is_corruption() const { return code() == TStatusCode::CORRUPTION; }
 
     /// @return @c true if the status indicates Uninitialized.
-    bool is_uninitialized() const {
-        return code() == TStatusCode::UNINITIALIZED;
-    }
+    bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }
 
     // @return @c true if the status indicates an Aborted error.
-    bool is_aborted() const {
-        return code() == TStatusCode::ABORTED;
-    }
+    bool is_aborted() const { return code() == TStatusCode::ABORTED; }
 
     /// @return @c true if the status indicates an InvalidArgument error.
-    bool is_invalid_argument() const {
-        return code() == TStatusCode::INVALID_ARGUMENT;
-    }
+    bool is_invalid_argument() const { return code() == TStatusCode::INVALID_ARGUMENT; }
 
     // @return @c true if the status indicates ServiceUnavailable.
-    bool is_service_unavailable() const {
-        return code() == TStatusCode::SERVICE_UNAVAILABLE;
-    }
+    bool is_service_unavailable() const { return code() == TStatusCode::SERVICE_UNAVAILABLE; }
 
-    bool is_data_quality_error() const {
-        return code() == TStatusCode::DATA_QUALITY_ERROR;
-    }
+    bool is_data_quality_error() const { return code() == TStatusCode::DATA_QUALITY_ERROR; }
 
-    bool is_version_already_merged() const {
-        return code() == TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED;
-    }
+    bool is_version_already_merged() const { return code() == TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED; }
 
-    bool is_duplicate_rpc_invocation() const {
-        return code() == TStatusCode::DUPLICATE_RPC_INVOCATION;
-    }
+    bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
 
-    bool is_time_out() const {
-        return code() == TStatusCode::TIMEOUT;
-    }
+    bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
 
-    bool is_eagain() const {
-        return code() == TStatusCode::SR_EAGAIN;
-    }
+    bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
