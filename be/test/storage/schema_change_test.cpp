@@ -792,7 +792,6 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
     ASSERT_OK(handler.process_alter_tablet(req));
 
     auto new_tablet = _tablet_mgr->get_tablet(new_tablet_id);
-    const auto& new_tablet_schema = new_tablet->tablet_schema();
 
     auto new_rowset = new_tablet->get_rowset_by_version(version);
     ASSERT_TRUE(new_rowset != nullptr);
