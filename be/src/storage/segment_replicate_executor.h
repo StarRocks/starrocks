@@ -22,15 +22,12 @@ class SegmentPB;
 class PTabletInfo;
 class FileSystem;
 
-<<<<<<< HEAD
 namespace vectorized {
 class DeltaWriterOptions;
 }
 
 using DeltaWriterOptions = starrocks::vectorized::DeltaWriterOptions;
 
-=======
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 class ReplicateChannel {
 public:
     ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id);
