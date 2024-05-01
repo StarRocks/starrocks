@@ -327,6 +327,8 @@ Status set_config(const std::string& field, const std::string& value);
 
 std::vector<ConfigInfo> list_configs();
 
+void update_config(const std::string& field, const std::string& value);
+
 void TEST_clear_configs();
 
 } // namespace config
