@@ -209,7 +209,7 @@ As for the data type of the partitioning columns, before v3.3.0, range partition
 :::info
 
 - If the partitioning column value is a timestamp, you need to use the from_unixtime or from_unixtime_ms function to convert a timestamp to a date value when dividing the partitions. When the from_unixtime function is used, the partitioning column only supports INT and BIGINT types. When the from_unixtime_ms function is used, the partitioning column only supports BIGINT type.
-- If the partitioning column value is a string (STRING, VARCHAR, or CHAR types), you need to use the str2date function to convert the string to a date value when dividing the partitions.
+- If the partitioning column value is a string (STRING, VARCHAR, or CHAR type), you need to use the str2date function to convert the string to a date value when dividing the partitions.
 
 :::
 
