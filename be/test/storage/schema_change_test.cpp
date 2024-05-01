@@ -732,7 +732,7 @@ TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     BinaryColumn::Ptr dst_column = BinaryColumn::create();
     src_column->append(&json);
 
-    auto converter = get_type_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_VARCHAR);
+    auto converter = get_type_converter(OLAP_FIELD_TYPE_JSON, OLAP_FIELD_TYPE_VARCHAR);
     Status st =
             converter->convert_column(_json_type.get(), *src_column, _varchar_type.get(), dst_column.get(), &_mem_pool);
     ASSERT_TRUE(st.ok());
