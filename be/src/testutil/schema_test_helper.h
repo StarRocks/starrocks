@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "storage/tablet_schema.h"
 

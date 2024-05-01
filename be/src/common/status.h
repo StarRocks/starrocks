@@ -415,6 +415,15 @@ struct StatusInstance {
         }                                                            \
     } while (0);
 
+#define RETURN_FALSE_IF_ERROR_WITH_WARN(stmt, warning_prefix)        \
+    do {                                                             \
+        auto&& st__ = (stmt);                                        \
+        if (UNLIKELY(!st__.ok())) {                                  \
+            LOG(WARNING) << (warning_prefix) << ", error: " << st__; \
+            return false;                                            \
+        }                                                            \
+    } while (0);
+
 #define DCHECK_IF_ERROR(stmt)      \
     do {                           \
         auto&& st__ = (stmt);      \

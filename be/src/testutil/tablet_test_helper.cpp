@@ -40,7 +40,7 @@ std::shared_ptr<RowsetWriter> TabletTestHelper::create_rowset_writer(const Table
     writer_context.tablet_id = tablet.tablet_id();
     writer_context.tablet_schema_hash = tablet.schema_hash();
     writer_context.rowset_path_prefix = tablet.schema_hash_path();
-    writer_context.tablet_schema = tablet.tablet_schema();
+    writer_context.tablet_schema = &tablet.tablet_schema();
     writer_context.rowset_state = VISIBLE;
     writer_context.version = version;
     std::unique_ptr<RowsetWriter> rowset_writer;
@@ -49,13 +49,14 @@ std::shared_ptr<RowsetWriter> TabletTestHelper::create_rowset_writer(const Table
     return rowset_writer;
 }
 
-std::shared_ptr<TabletReader> TabletTestHelper::create_rowset_reader(const TabletSharedPtr& tablet,
-                                                                     const Schema& schema, Version version) {
-    TabletReaderParams read_params;
+std::shared_ptr<vectorized::TabletReader> TabletTestHelper::create_rowset_reader(const TabletSharedPtr& tablet,
+                                                                                 const vectorized::Schema& schema,
+                                                                                 Version version) {
+    vectorized::TabletReaderParams read_params;
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    auto tablet_reader = std::make_unique<TabletReader>(tablet, version, schema);
+    auto tablet_reader = std::make_unique<vectorized::TabletReader>(tablet, version, schema);
 
     CHECK(tablet_reader != nullptr);
     CHECK(tablet_reader->prepare().ok());
@@ -64,16 +65,15 @@ std::shared_ptr<TabletReader> TabletTestHelper::create_rowset_reader(const Table
     return tablet_reader;
 }
 
-std::shared_ptr<DeltaWriter> TabletTestHelper::create_delta_writer(TTabletId tablet_id,
-                                                                   const std::vector<SlotDescriptor*>& slots,
-                                                                   MemTracker* mem_tracker) {
-    DeltaWriterOptions options;
+std::shared_ptr<vectorized::DeltaWriter> TabletTestHelper::create_delta_writer(
+        TTabletId tablet_id, const std::vector<SlotDescriptor*>& slots, MemTracker* mem_tracker) {
+    vectorized::DeltaWriterOptions options;
     options.tablet_id = tablet_id;
     options.slots = &slots;
     options.txn_id = 1;
     options.partition_id = 1;
-    options.replica_state = ReplicaState::Primary;
-    auto writer = DeltaWriter::open(options, mem_tracker);
+    options.replica_state = vectorized::ReplicaState::Primary;
+    auto writer = vectorized::DeltaWriter::open(options, mem_tracker);
     CHECK(writer.ok());
     return std::move(writer.value());
 }

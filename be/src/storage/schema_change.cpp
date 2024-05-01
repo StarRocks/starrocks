@@ -272,23 +272,10 @@ bool ChunkMerger::_pop_heap() {
     return true;
 }
 
-<<<<<<< HEAD
 bool LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
-#ifndef BE_TEST
-    Status st = CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange");
-    if (!st.ok()) {
-        LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
-        return false;
-    }
-#endif
-=======
-Status LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
-                                   TabletSchemaCSPtr base_tablet_schema) {
-    RETURN_IF_ERROR_WITH_WARN(CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange"),
-                              fmt::format("{}fail to execute schema change", alter_msg_header()));
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
+    RETURN_FALSE_IF_ERROR_WITH_WARN(CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange"),
+                                    "fail to execute schema change");
 
     Status status =
             new_rowset_writer->add_rowset_for_linked_schema_change(rowset, _chunk_changer->get_schema_mapping());
@@ -400,14 +387,8 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
         if (bg_worker_stopped) {
             return Status::InternalError("bg_worker_stopped");
         }
-<<<<<<< HEAD
-#ifndef BE_TEST
-        Status st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
-            return st;
-        }
-#endif
+        RETURN_IF_ERROR_WITH_WARN(CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange"),
+                                  "fail to execute schema change");
         Status status = reader->do_get_next(base_chunk.get());
 
         if (!status.ok()) {
@@ -416,17 +397,6 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
             } else {
                 LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.get_error_msg();
                 return status;
-=======
-
-        RETURN_IF_ERROR_WITH_WARN(CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange"),
-                                  fmt::format("{}fail to execute schema change", alter_msg_header()));
-
-        if (st = reader->do_get_next(base_chunk.get()); !st.ok()) {
-            if (is_eos = st.is_end_of_file(); !is_eos) {
-                LOG(WARNING) << alter_msg_header()
-                             << "tablet reader failed to get next chunk, status: " << st.message();
-                return st;
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
             }
         }
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
@@ -702,13 +672,8 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
     return true;
 }
 
-<<<<<<< HEAD
-Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
-    LOG(INFO) << "begin to do request alter tablet: base_tablet_id=" << request.base_tablet_id
-=======
 Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& request) {
-    LOG(INFO) << _alter_msg_header << "begin to do request alter tablet: base_tablet_id=" << request.base_tablet_id
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
+    LOG(INFO) << "begin to do request alter tablet: base_tablet_id=" << request.base_tablet_id
               << ", base_schema_hash=" << request.base_schema_hash << ", new_tablet_id=" << request.new_tablet_id
               << ", new_schema_hash=" << request.new_schema_hash << ", alter_version=" << request.alter_version;
 
@@ -725,13 +690,8 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
     DeferOp release_lock(
             [&] { StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id); });
 
-<<<<<<< HEAD
-    Status status = _do_process_alter_tablet_v2(request);
-    LOG(INFO) << "finished alter tablet process, status=" << status.to_string()
-=======
     Status status = _do_process_alter_tablet(request);
-    LOG(INFO) << _alter_msg_header << "finished alter tablet process, status=" << status.to_string()
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
+    LOG(INFO) << "finished alter tablet process, status=" << status.to_string()
               << " duration: " << timer.elapsed_time() / 1000000
               << "ms, peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() << " bytes";
     return status;

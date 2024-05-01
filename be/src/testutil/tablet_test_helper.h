@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/schema.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/delta_writer.h"
 #include "storage/rowset/rowset_writer.h"
@@ -26,11 +27,12 @@ public:
                                                   TStorageType::type storage_type);
     static std::shared_ptr<RowsetWriter> create_rowset_writer(const Tablet& tablet, RowsetId rowset_id,
                                                               Version version);
-    static std::shared_ptr<TabletReader> create_rowset_reader(const TabletSharedPtr& tablet, const Schema& schema,
-                                                              Version version);
-    static std::shared_ptr<DeltaWriter> create_delta_writer(TTabletId tablet_id,
-                                                            const std::vector<SlotDescriptor*>& slots,
-                                                            MemTracker* mem_tracker);
+    static std::shared_ptr<vectorized::TabletReader> create_rowset_reader(const TabletSharedPtr& tablet,
+                                                                          const vectorized::Schema& schema,
+                                                                          Version version);
+    static std::shared_ptr<vectorized::DeltaWriter> create_delta_writer(TTabletId tablet_id,
+                                                                        const std::vector<SlotDescriptor*>& slots,
+                                                                        MemTracker* mem_tracker);
     static std::vector<ChunkIteratorPtr> create_segment_iterators(const Tablet& tablet, Version version,
                                                                   OlapReaderStatistics* stats);
 };
