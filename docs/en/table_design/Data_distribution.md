@@ -204,12 +204,12 @@ Range partitioning is suitable for storing simple, contiguous data, such as time
 
 You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the ranges to which the data partitioning column values belong.
 
-As for the data type of the partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, three specific time functions to be used as partition columns. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use a specific time function to convert partitioning column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
+As for the data type of the partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, three specific time functions can be used as partition columns. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use a specific time function to convert partitioning column values of timestamps or strings into date values, and then divide the partitions based on the converted date values.
 
 :::info
 
-- If the partitioning column value is a timestamp, you need to use the from_unixtime or from_unixtime_ms function to convert the timestamp to the date when dividing the partitions. When the from_unixtime function is used, the partitioning column only supports INT and BIGINT types. When using the from_unixtime_ms function is used, the partitioning column only supports BIGINT type.
-- If the partitioning column value is a string (STRING, VARCHAR, or CHAR types), you need to use the str2date function to convert the string to the date when dividing the partitions.
+- If the partitioning column value is a timestamp, you need to use the from_unixtime or from_unixtime_ms function to convert a timestamp to a date value when dividing the partitions. When the from_unixtime function is used, the partitioning column only supports INT and BIGINT types. When the from_unixtime_ms function is used, the partitioning column only supports BIGINT type.
+- If the partitioning column value is a string (STRING, VARCHAR, or CHAR types), you need to use the str2date function to convert the string to a date value when dividing the partitions.
 
 :::
 
@@ -257,13 +257,13 @@ Define the mapping relationship between each partition and the range of partitio
 
 - **Three specific time functions can be used as partitioning columns (supported since v3.3.0).**
   
-  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific time function to convert the partition column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
+  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific time function to convert the partition column values of timestamps or strings into date values, and then divide the partitions based on the converted date values.
 
   <Tabs groupId="manual partitioning">
   <TabItem value="example1" label="The partition column values are timestamps" default>
 
   ```SQL
-  -- A 10-digit timestamp accurate to seconds, for example: 1703832553.
+  -- A 10-digit timestamp accurate to the second, for example, 1703832553.
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
@@ -280,7 +280,7 @@ Define the mapping relationship between each partition and the range of partitio
   DISTRIBUTED BY HASH(site_id)
   ;
   
-  -- A 13-digit timestamp accurate to milliseconds, for example: 1703832553219.
+  -- A 13-digit timestamp accurate to the millisecond, for example, 1703832553219.
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
@@ -328,7 +328,7 @@ Different from the automatic partition creation ability provided by the expressi
 
 ##### Create multiple partitions in batch
 
-Multiple partitions can be created in batch at and after table creation. You can specify the start and end time for all the partitions created in batch in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is right hand half open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
+Multiple partitions can be created in batch at and after table creation. You can specify the start and end time for all the partitions created in batch in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is left-closed and right-open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
 
 - **The partitioning column is of date type.**
 
@@ -337,7 +337,7 @@ Multiple partitions can be created in batch at and after table creation. You can
   <Tabs groupId="batch partitioning(date)">
   <TabItem value="example1" label="with the same date interval" default>
   
-  In the following example, the partitions created in a batch start from `2021-01-01` and ends on `2021-01-04`, with a partition increment of one day:  
+  In the following example, the partitions created in a batch start from `2021-01-01` and end on `2021-01-04`, with a partition increment of one day:  
 
     ```SQL
     CREATE TABLE site_access (
@@ -470,13 +470,13 @@ Multiple partitions can be created in batch at and after table creation. You can
 
 - **Three specific time functions can be used as partitioning columns (supported since v3.3.0).**
   
-  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific time function to convert the partition column values of timestamps or strings into dates, and then divide the partitions based on the converted dates.
+  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific time function to convert the partition column values of timestamps or strings into date values, and then divide the partitions based on the converted date values.
 
   <Tabs groupId="batch partitioning(timestamp and string)">
   <TabItem value="example1" label="The partitioning column values are timestamps" default>
 
   ```SQL
-  -- A 10-digit timestamp accurate to seconds, for example: 1703832553.
+  -- A 10-digit timestamp accurate to the second, for example, 1703832553.
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
@@ -488,7 +488,7 @@ Multiple partitions can be created in batch at and after table creation. You can
       START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
   )
   DISTRIBUTED BY HASH(site_id);
-  -- A 13-digit timestamp accurate to milliseconds, for example: 1703832553219.
+  -- A 13-digit timestamp accurate to the milliseconds, for example, 1703832553219.
   CREATE TABLE site_access(
       event_time bigint,
       site_id INT,
