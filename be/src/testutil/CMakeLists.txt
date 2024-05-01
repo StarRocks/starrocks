@@ -28,12 +28,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/testutil")
 add_library(TestUtil
     desc_tbl_builder.cc
     function_utils.cpp
-<<<<<<< HEAD
-=======
-    sync_point.cc
-    sync_point_impl.cc
     schema_test_helper.cpp
     tablet_test_helper.cpp
->>>>>>> 301445d9fc ([BugFix] Fix the bug of direct schema change (#44854))
 )
 
