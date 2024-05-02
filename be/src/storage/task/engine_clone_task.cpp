@@ -61,6 +61,7 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage/utils.h"
 #include "util/defer_op.h"
 #include "util/network_util.h"
 #include "util/string_parser.hpp"
@@ -409,7 +410,7 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to download snapshot from " << download_url << ": " << st.to_string()
+            LOG(WARNING) << "Fail to download snapshot from " << _mask_token(download_url) << ": " << st.to_string()
                          << " tablet:" << _clone_req.tablet_id;
             error_msgs->push_back("download snapshot failed. backend_ip: " + src.host);
             continue;
@@ -429,7 +430,7 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             error_msgs->push_back("convert rowset id failed. backend_ip: " + src.host);
             continue;
         }
-        LOG(INFO) << "Cloned snapshot from " << download_url << " to " << local_data_path;
+        LOG(INFO) << "Cloned snapshot from " << _mask_token(download_url) << " to " << local_data_path;
         break;
     }
     return st;
@@ -612,10 +613,10 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
-        VLOG(1) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+        VLOG(1) << "Downloading " << _mask_token(remote_file_url) << " to " << local_path << ". bytes=" << file_size
                 << " timeout=" << estimate_timeout;
 
-        auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
+        auto download_cb = [this, &remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
             RETURN_IF_ERROR(client->init(remote_file_url));
             client->set_timeout_ms(estimate_timeout * 1000);
             RETURN_IF_ERROR(client->download(local_file_path));
@@ -623,7 +624,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
             // Check file length
             uint64_t local_file_size = std::filesystem::file_size(local_file_path);
             if (local_file_size != file_size) {
-                LOG(WARNING) << "Fail to download " << remote_file_url << ". file_size=" << local_file_size << "/"
+                LOG(WARNING) << "Fail to download " << _mask_token(remote_file_url) << ". file_size=" << local_file_size << "/"
                              << file_size;
                 return Status::InternalError("mismatched file size");
             }
