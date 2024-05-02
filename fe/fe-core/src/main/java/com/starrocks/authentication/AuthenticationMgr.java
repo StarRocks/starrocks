@@ -176,6 +176,15 @@ public class AuthenticationMgr {
         }
     }
 
+    public long getMaxIpConn(UserIdentity currUserIdentity) {
+        if (currUserIdentity.isEphemeral()) {
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+        } else {
+            String userName = currUserIdentity.getUser();
+            return getMaxIpConn(userName);
+        }
+    }
+
     /**
      * Get max connection number based on plain username, the user should be an internal user,
      * if the user doesn't exist in SR, it will throw an exception.
@@ -183,12 +192,19 @@ public class AuthenticationMgr {
      * @return max connection number of the user
      */
     public long getMaxConn(String userName) {
+        return getUserProperty(userName).getMaxConn();
+    }
+
+    public long getMaxIpConn(String userName) {
+        return getUserProperty(userName).getMaxIpConn();
+    }
+
+    private UserProperty getUserProperty(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
             throw new SemanticException("Unknown user: " + userName);
-        } else {
-            return userNameToProperty.get(userName).getMaxConn();
         }
+        return userProperty;
     }
 
     public String getDefaultPlugin() {

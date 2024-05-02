@@ -73,6 +73,7 @@ public class AuthenticationManagerTest {
         Assert.assertTrue(manager.doesUserExist(UserIdentity.ROOT));
         Assert.assertFalse(manager.doesUserExist(UserIdentity.createAnalyzedUserIdentWithIp("fake", "%")));
         Assert.assertEquals(new UserProperty().getMaxConn(), manager.getMaxConn(AuthenticationMgr.ROOT_USER));
+        Assert.assertEquals(new UserProperty().getMaxIpConn(), manager.getMaxIpConn(AuthenticationMgr.ROOT_USER));
     }
 
     @Test
@@ -300,6 +301,7 @@ public class AuthenticationManagerTest {
 
         // still has max connection
         Assert.assertNotEquals(0, manager.getMaxConn("test"));
+        Assert.assertNotEquals(0, manager.getMaxIpConn("test"));
 
         sql = "drop user 'test'@'10.1.1.1' ";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
@@ -308,6 +310,7 @@ public class AuthenticationManagerTest {
 
         // can't get max connection after all test user are dropped
         Assert.assertThrows(SemanticException.class, () -> manager.getMaxConn("test"));
+        Assert.assertThrows(SemanticException.class, () -> manager.getMaxIpConn("test"));
     }
 
     @Test
@@ -345,6 +348,10 @@ public class AuthenticationManagerTest {
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
         Assert.assertEquals(555, masterManager.getMaxConn("test"));
+        sql = "set property for 'test' 'max_user_ip_connections' = '110'";
+        setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
+        Assert.assertEquals(110, masterManager.getMaxIpConn("test"));
 
         // 4. save image after alter
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
@@ -385,6 +392,12 @@ public class AuthenticationManagerTest {
         UserPropertyInfo userPropertyInfo = (UserPropertyInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V3);
         followerManager.replayUpdateUserProperty(userPropertyInfo);
+        Assert.assertEquals(555, followerManager.getMaxConn("test"));
+        Assert.assertEquals(555, followerManager.getMaxIpConn("test"));
+        userPropertyInfo = (UserPropertyInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V3);
+        followerManager.replayUpdateUserProperty(userPropertyInfo);
+        Assert.assertEquals(110, followerManager.getMaxIpConn("test"));
         Assert.assertEquals(555, followerManager.getMaxConn("test"));
         // 7.3 replay drop user
         UserIdentity dropInfo = (UserIdentity)

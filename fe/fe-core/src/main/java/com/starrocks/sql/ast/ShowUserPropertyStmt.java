@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.CaseSensibility;
@@ -70,9 +71,10 @@ public class ShowUserPropertyStmt extends ShowStmt {
         List<List<String>> rows = new ArrayList<>();
         AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
-        // Currently only "max_user_connections" is supported
         long maxConn = authenticationManager.getMaxConn(user);
-        rows.add(Lists.newArrayList("max_user_connections", String.valueOf(maxConn)));
+        long maxIpConn = authenticationManager.getMaxIpConn(user);
+        rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_CONNECTIONS, String.valueOf(maxConn)));
+        rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_IP_CONNECTIONS, String.valueOf(maxIpConn)));
 
         if (pattern == null) {
             return rows;

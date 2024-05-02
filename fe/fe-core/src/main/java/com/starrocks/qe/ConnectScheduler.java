@@ -68,6 +68,7 @@ public class ConnectScheduler {
 
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
+    private final Map<String, AtomicInteger> connCountByUserIp = Maps.newConcurrentMap();
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
 
@@ -134,16 +135,22 @@ public class ConnectScheduler {
             return false;
         }
         // Check user
-        if (connCountByUser.get(ctx.getQualifiedUser()) == null) {
-            connCountByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
-        }
+        connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
+        String userIpKey = ctx.getQualifiedUser() + ":" + ctx.getRemoteIP();
+        connCountByUserIp.computeIfAbsent(userIpKey, k -> new AtomicInteger(0));
         int currentConn = connCountByUser.get(ctx.getQualifiedUser()).get();
         long currentMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
         if (currentConn >= currentMaxConn) {
             return false;
         }
+        int currentIpConn = connCountByUserIp.get(userIpKey).get();
+        long currentMaxIpConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxIpConn(ctx.getCurrentUserIdentity());
+        if (currentIpConn >= currentMaxIpConn) {
+            return false;
+        }
         numberConnection.incrementAndGet();
         connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
+        connCountByUserIp.get(userIpKey).incrementAndGet();
         connectionMap.put((long) ctx.getConnectionId(), ctx);
         return true;
     }

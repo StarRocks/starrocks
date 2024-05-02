@@ -27,19 +27,33 @@ public class UserProperty {
     @SerializedName(value = "m")
     private long maxConn = 1024;
 
-    private static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
+    @SerializedName(value = "mi")
+    private long maxIpConn = 1024;
+
+    public static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
+
+    public static final String PROP_MAX_USER_IP_CONNECTIONS = "max_user_ip_connections";
 
     public long getMaxConn() {
         return maxConn;
+    }
+
+    public long getMaxIpConn() {
+        return maxIpConn;
     }
 
     public void setMaxConn(long maxConn) {
         this.maxConn = maxConn;
     }
 
+    public void setMaxIpConn(long maxIpConn) {
+        this.maxIpConn = maxIpConn;
+    }
+
     public void update(List<Pair<String, String>> properties) throws DdlException {
         // copy
         long newMaxConn = maxConn;
+        long newMaxIpConn = maxIpConn;
 
         // update
         for (Pair<String, String> entry : properties) {
@@ -47,7 +61,8 @@ public class UserProperty {
             String value = entry.second;
 
             String[] keyArr = key.split("\\" + SetUserPropertyVar.DOT_SEPARATOR);
-            if (keyArr[0].equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
+            String propKey = keyArr[0];
+            if (propKey.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
                 if (keyArr.length != 1) {
                     throw new DdlException(PROP_MAX_USER_CONNECTIONS + " format error");
                 }
@@ -69,6 +84,31 @@ public class UserProperty {
                                     " is not valid, the value must be less than qe_max_connection("
                                     + Config.qe_max_connection + ")");
                 }
+                if (newMaxConn < newMaxIpConn) {
+                    newMaxIpConn = newMaxConn;
+                }
+            } else if (propKey.equalsIgnoreCase(PROP_MAX_USER_IP_CONNECTIONS)) {
+                if (keyArr.length != 1) {
+                    throw new DdlException(PROP_MAX_USER_IP_CONNECTIONS + " format error");
+                }
+
+                try {
+                    newMaxIpConn = Long.parseLong(value);
+                } catch (NumberFormatException e) {
+                    throw new DdlException(PROP_MAX_USER_IP_CONNECTIONS + " is not a number");
+                }
+
+                if (newMaxIpConn <= 0 || newMaxIpConn > 10000) {
+                    throw new DdlException(PROP_MAX_USER_IP_CONNECTIONS +
+                            " is not valid, the value must be between 1 and 10000");
+                }
+
+                if (newMaxIpConn > newMaxConn) {
+                    throw new DdlException(
+                            PROP_MAX_USER_IP_CONNECTIONS +
+                                    " is not valid, the value must be less than " + PROP_MAX_USER_CONNECTIONS + "("
+                                    + newMaxConn + ")");
+                }
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
@@ -76,5 +116,6 @@ public class UserProperty {
 
         // set
         maxConn = newMaxConn;
+        maxIpConn = newMaxIpConn;
     }
 }
