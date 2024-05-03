@@ -443,7 +443,7 @@ if (${WITH_STARCACHE} STREQUAL "ON")
     include_directories(SYSTEM ${STARCACHE_DIR}/include)
     message(STATUS "link the starcache in directory: ${STARCACHE_DIR}")
 endif()
-if (${WITH_BRPC_KEEPALIVE} STREQUAL "ON")
+if ("${WITH_BRPC_KEEPALIVE}" STREQUAL "ON")
   set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BRPC_KEEPALIVE")
 endif()
 
