@@ -14,11 +14,11 @@ The Unique Key table is suitable for business scenarios in which data needs to b
 
 ## Principle
 
-The Unique Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for VALUE columns to return the most recent record among a group of records that have the same unique key.
+The Unique Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for value columns to return the most recent record among a group of records that have the same unique key.
 
-When you load data into a table that uses the Unique Key table, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same unique key may come in multiple versions, of which the most recent version (namely, the record with the largest version number) is retrieved for queries.
+When you load data into a Unique Key table, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same unique key may come in multiple versions, of which the most recent version (namely, the record with the largest version number) is retrieved for queries.
 
-As shown in the following table, `ID` is the unique key column, `value` is a metric column, and `_version` holds the data version numbers generated within StarRocks. In this example, the record with an `ID` of 1 is loaded by two batches whose version numbers are `1` and `2`, and the record with an `ID` of `2` is loaded by three batches whose version numbers are `3`, `4`, and `5`.
+As shown in the following table, `ID` is the unique key, `value` is a value column, and `_version` holds the data version numbers generated within StarRocks. In this example, the record with an `ID` of 1 is loaded by two batches whose version numbers are `1` and `2`, and the record with an `ID` of `2` is loaded by three batches whose version numbers are `3`, `4`, and `5`.
 
 | ID   | value | _version |
 | ---- | ----- | -------- |
@@ -72,7 +72,7 @@ DISTRIBUTED BY HASH(order_id);
 
 - During table creation, only Bitmap indexes and Bloom filter indexes can be created for the value column.
 
-- When you create a table, you can create Bitmap indexes or Bloom Filter indexes on the key columns of the table.
+- When you create a table, you can only create Bitmap indexes or Bloom Filter indexes on the key columns of the table.
 
 ## What to do next
 

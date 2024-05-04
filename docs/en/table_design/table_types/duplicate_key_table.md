@@ -8,7 +8,8 @@ The Duplicate Key table is the default model in StarRocks. If you did not specif
 
 When you create a Duplicate Key table, you can define a sort key for that table. If the filter conditions contain the sort key columns, StarRocks can quickly filter data from the table to accelerate queries.
 
-The Duplicate Key table allows you to append new data to the table. However, it does not allow you to modify existing data in the table.
+The Duplicate Key table allows you to append new data to the table but it does not allow you to modify existing data in the table.
+The Duplicate Key table is suitable for scenarios, such as analyzing logs data.
 
 ## Scenarios
 
@@ -25,15 +26,13 @@ Suppose that you want to analyze the event data over a specific time range. In t
 Statement for creating the table:
 
 ```SQL
-CREATE TABLE detail (
+REATE TABLE detail (
     event_time DATETIME NOT NULL COMMENT "datetime of event",
     event_type INT NOT NULL COMMENT "type of event",
     user_id INT COMMENT "id of user",
     device_code INT COMMENT "device code",
-    channel INT COMMENT ""
-)
-DUPLICATE KEY(event_time, event_type)
-DISTRIBUTED BY HASH(user_id);
+    channel INT COMMENT "")
+ORDER BY (event_time, event_type);
 ```
 
 ## Usage notes

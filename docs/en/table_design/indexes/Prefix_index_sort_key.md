@@ -22,7 +22,7 @@ The Prefix index is a sparse index, and its size is at least 1024 times smaller 
 
 Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`. Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`.
 
-- Data in the Duplicate Key table is sorted according to the sort key `ORDER BY`. The sort key can be any combination of columns.
+- Data in the Duplicate Key table is sorted according to the sort key `ORDER BY`. The sort key can be combination of any columns.
   :::info
 
   When both `ORDER BY` and `DUPLICATE KEY` are specified, `DUPLICATE KEY` does not take effect.
@@ -48,7 +48,7 @@ ORDER BY (uid, name);
 
 :::tip
 
-After table creation, you can use `SHOW CREATE TABLE <table_name>;` to view the specified sort columns and the order in the `ORDER BY` clause from the returned result.
+After table creation, you can use `SHOW CREATE TABLE <table_name>;` to view the specified sort columns and the order of these columns in the `ORDER BY` clause from the returned result.
 :::
 
 Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part will be truncated. Therefore, each entry in the Prefix index of this table is uid (4 bytes) + name (only the first 32 bytes are taken), and the prefix fields are `uid` and `name`.
@@ -76,7 +76,7 @@ Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part 
     6 rows in set (0.00 sec)
     ```
 
-- If the sort key are specified in the table using `ORDER BY`, the Prefix index is formed based on the sort key. If sort key is not specified using `ORDER BY`, Prefix index is formed based on the Key columns.
+- If the sort key are specified in the table using `ORDER BY`, the Prefix index is formed based on the sort key. If sort key is not specified using `ORDER BY`, the Prefix index is formed based on the Key columns.
 
 ### How to design the sort key appropriately to form the Prefix index that can accelerate queries
 
@@ -84,7 +84,7 @@ An analysis of queries and data in business scenarios helps choose appropriate s
 
 - The number of sort key columns is generally 3 and is not recommended to exceed 4. A sort key with too many columns can not improve query performance but increase the sorting overhead during data loading.
 - It is recommended to prioritize columns to form the sort key in the order below:
-  1. **Select columns that are frequently used in query filter conditions as sort key columns.** If the number of the sort key columns is more than one, arrange them in descending order of their frequencies in query filter conditions. This way, if the query filter conditions include the prefix of the Prefix index, the query performance can be significantly improved. And if the filter conditions include the entire prefix of the Prefix index, the query can fully leverage the Prefix index. Of course, as long as the filter conditions include the prefix, though not the entire prefix, the Prefix index can still optimize the query. However, the effect of the Prefix index will be weakened if the length of the prefix included in the filter conditions is too short. Still, take the [Unique Key table](https://chat.openai.com/c/0c47f67a-8103-4ec6-a280-71495f037334#Usage-Guidelines) whose sort key is `(uid,name)` as an example. If the query filter conditions include the entire prefix, such as `select sum(credits) from user_access where uid = 123 and name = 'Jane Smith';`, the query can fully utilize the Prefix index to improve performance. If the query conditions only include part of the prefix, such as `select sum(credits) from user_access where uid = 123;`, the query can also benefit from the Prefix index to improve performance. However, if the query conditions do not include the prefix, for example, `select sum(credits) from user_access where name = 'Jane Smith';`, the query can not use the Prefix index to accelerate.
+  1. **Select columns that are frequently used in the query filter conditions as sort key columns.** If the number of the sort key columns is more than one, arrange them in descending order of their frequencies in the query filter conditions. This way, if the query filter conditions include the prefix of the Prefix index, the query performance can be significantly improved. And if the filter conditions include the entire prefix of the Prefix index, the query can fully leverage the Prefix index. Of course, as long as the filter conditions include the prefix, though not the entire prefix, the Prefix index can still optimize the query. However, the effect of the Prefix index will be weakened if the length of the prefix included in the filter conditions is too short. Still, take the [Unique Key table](https://chat.openai.com/c/0c47f67a-8103-4ec6-a280-71495f037334#Usage-Guidelines) whose sort key is `(uid,name)` as an example. If the query filter conditions include the entire prefix, such as `select sum(credits) from user_access where uid = 123 and name = 'Jane Smith';`, the query can fully utilize the Prefix index to improve performance. If the query conditions only include part of the prefix, such as `select sum(credits) from user_access where uid = 123;`, the query can also benefit from the Prefix index to improve performance. However, if the query conditions do not include the prefix, for example, `select sum(credits) from user_access where name = 'Jane Smith';`, the query can not use the Prefix index to accelerate.
   - If multiple sort key columns have similar frequencies as query filter conditions, you can measure the cardinality of these columns.
   - If the cardinality of the column is high, it can filter more data during the query. If the cardinality is too low, such as for Boolean-type columns, its filtering effect is not ideal.
 
@@ -105,10 +105,9 @@ An analysis of queries and data in business scenarios helps choose appropriate s
 
 ### Can the Prefix index be modified?
 
-If the characteristics of queries in the business scenario evolve and columns other than the prefix fields are frequently used in query filter conditions, the existing Prefix index can not filter data and the query performance may not be ideal. Then you can also create a [synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md) based on this table and choose other columns commonly used as conditional columns to form the Prefix index, which can improve performance for these queries. But note that it will increase storage space.
+If the characteristics of queries in the business scenario evolve and columns other than the prefix fields are frequently used in the query filter conditions, the existing Prefix index can not filter data and the query performance may not be ideal.
 
-Since v3.3, the sort keys of Duplicate Key
- tables, Aggregate tables, and Unique Key tables can be modified. And since v3.0, the sort keys of Primary Key tables can be modified. The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of the columns does not need to be consistent with the key columns.
+Since v3.3, the sort keys of Duplicate Key tables, Aggregate tables, and Unique Key tables can be modified. And since v3.0, the sort keys of Primary Key tables can be modified. The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of these columns does not need to be consistent with the key columns.
 
 Alternatively, you can also create [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) based on this table and choose other columns commonly used as conditional columns to form the Prefix index, which can improve performance for these queries. But note that it will increase storage space.
 

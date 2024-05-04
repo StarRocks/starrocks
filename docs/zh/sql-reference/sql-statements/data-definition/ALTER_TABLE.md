@@ -429,7 +429,7 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
-示例：修改主键表中组成排序键
+示例：修改主键表中的排序键
 
 假设原表为主键表，排序键与主键耦合 `dt,order_id`。
 
