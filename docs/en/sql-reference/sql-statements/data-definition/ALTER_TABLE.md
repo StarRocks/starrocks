@@ -425,7 +425,7 @@ Note:
 
 Since v3.3, the sort keys for the Duplicate Key tables, Aggregate tables, and Unique Key tables can be modified. Since v3.0, the sort keys for the Primary Key tables can be modified.
 
-The sort keys in Duplicate key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of the columns does not need to match the key columns.
+The sort keys in Duplicate key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of the columns does not need to be same as the key columns.
 
 Syntax:
 
