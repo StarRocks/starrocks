@@ -18,17 +18,18 @@
 
 namespace starrocks {
 
+class Tablet;
 class Rowset;
 class KVStore;
 class PrimaryIndex;
 
 class LocalPrimaryKeyCompactionConflictResolver : public PrimaryKeyCompactionConflictResolver {
 public:
-    explicit LocalPrimaryKeyCompactionConflictResolver(Rowset* rowset, KVStore* kvstore, PrimaryIndex* index,
+    explicit LocalPrimaryKeyCompactionConflictResolver(Tablet* tablet, Rowset* rowset, PrimaryIndex* index,
                                                        int64_t base_version, int64_t new_version, size_t* total_deletes,
                                                        std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs)
-            : _rowset(rowset),
-              _kvstore(kvstore),
+            : _tablet(tablet),
+              _rowset(rowset),
               _index(index),
               _base_version(base_version),
               _new_version(new_version),
@@ -36,17 +37,17 @@ public:
               _delvecs(delvecs) {}
     ~LocalPrimaryKeyCompactionConflictResolver() {}
 
-    StatusOr<std::string> filename() override;
+    StatusOr<std::string> filename() const override;
     Schema generate_pkey_schema() override;
     Status segment_iterator(
             const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
-                                       const std::function<void(uint32_t, DelVectorPtr, uint32_t)>&)>& handler)
+                                       const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
             override;
 
 private:
     // input
+    Tablet* _tablet = nullptr;
     Rowset* _rowset = nullptr;
-    KVStore* _kvstore = nullptr;
     PrimaryIndex* _index = nullptr;
     int64_t _base_version = 0;
     int64_t _new_version = 0;

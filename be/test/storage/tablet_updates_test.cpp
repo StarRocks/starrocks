@@ -1270,7 +1270,7 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     // read from file
     auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
     RowsMapperIterator iterator;
-    ASSERT_OK(iterator.open(local_rows_mapper_filename(output_rs->rowset_path(), output_rs->rowset_id_str())));
+    ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
     for (uint32_t i = 0; i < 100; i += 20) {
         std::vector<uint64_t> rows_mapper;
         ASSERT_OK(iterator.next_values(20, &rows_mapper));
@@ -1302,8 +1302,20 @@ TEST_F(TabletUpdatesTest, horizontal_compaction) {
     test_horizontal_compaction(false);
 }
 
+TEST_F(TabletUpdatesTest, horizontal_compaction_old_compact_stragety) {
+    config::enable_light_pk_compaction_publish = false;
+    test_horizontal_compaction(false);
+    config::enable_light_pk_compaction_publish = true;
+}
+
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
     test_horizontal_compaction(true);
+}
+
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_old_compact_stragety) {
+    config::enable_light_pk_compaction_publish = false;
+    test_horizontal_compaction(true);
+    config::enable_light_pk_compaction_publish = true;
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_rows_mapper) {
@@ -1556,7 +1568,7 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     // read from file
     auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
     RowsMapperIterator iterator;
-    ASSERT_OK(iterator.open(local_rows_mapper_filename(output_rs->rowset_path(), output_rs->rowset_id_str())));
+    ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
     for (uint32_t i = 0; i < 100; i += 20) {
         std::vector<uint64_t> rows_mapper;
         ASSERT_OK(iterator.next_values(20, &rows_mapper));
@@ -1588,8 +1600,20 @@ TEST_F(TabletUpdatesTest, vertical_compaction) {
     test_vertical_compaction(false);
 }
 
+TEST_F(TabletUpdatesTest, vertical_compaction_old_compact_stragety) {
+    config::enable_light_pk_compaction_publish = false;
+    test_vertical_compaction(false);
+    config::enable_light_pk_compaction_publish = true;
+}
+
 TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index) {
     test_vertical_compaction(true);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index_old_compact_stragety) {
+    config::enable_light_pk_compaction_publish = false;
+    test_vertical_compaction(true);
+    config::enable_light_pk_compaction_publish = true;
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_rows_mapper) {
@@ -3203,7 +3227,7 @@ TEST_F(TabletUpdatesTest, test_update_and_recover) {
     update_and_recover(false);
 }
 
-TEST_F(TabletUpdatesTest, test_recover_rowset_sorter) {
+void TabletUpdatesTest::test_recover_rowset_sorter() {
     const int N = 10;
     _tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
@@ -3253,6 +3277,16 @@ TEST_F(TabletUpdatesTest, test_recover_rowset_sorter) {
     ASSERT_TRUE(latest_rowsets[0]->rowset_meta()->max_compact_input_rowset_id() <
                 latest_rowsets[1]->rowset_meta()->get_rowset_seg_id());
     config::max_update_compaction_num_singleton_deltas = old_config;
+}
+
+TEST_F(TabletUpdatesTest, test_recover_rowset_sorter_old_stragety) {
+    config::enable_light_pk_compaction_publish = false;
+    test_recover_rowset_sorter();
+    config::enable_light_pk_compaction_publish = true;
+}
+
+TEST_F(TabletUpdatesTest, test_recover_rowset_sorter_new_stragety) {
+    test_recover_rowset_sorter();
 }
 
 TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {

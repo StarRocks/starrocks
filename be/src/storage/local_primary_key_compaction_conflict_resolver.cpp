@@ -18,12 +18,13 @@
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/primary_index.h"
+#include "storage/tablet.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
 
-StatusOr<std::string> LocalPrimaryKeyCompactionConflictResolver::filename() {
-    return local_rows_mapper_filename(_rowset->rowset_path(), _rowset->rowset_id_str());
+StatusOr<std::string> LocalPrimaryKeyCompactionConflictResolver::filename() const {
+    return local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
 }
 
 Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
@@ -38,7 +39,7 @@ Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
 
 Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
         const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
-                                   const std::function<void(uint32_t, DelVectorPtr, uint32_t)>&)>& handler) {
+                                   const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
     OlapReaderStatistics stats;
     auto pkey_schema = generate_pkey_schema();
     RowsetReleaseGuard guard(_rowset->shared_from_this());
@@ -46,7 +47,7 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments(), "itrs.size != num_segments");
     // init delvec loader
-    auto delvec_loader = std::make_unique<LocalDelvecLoader>(_kvstore);
+    auto delvec_loader = std::make_unique<LocalDelvecLoader>(_tablet->data_dir()->get_meta());
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->rowset_meta()->tablet_id();
@@ -55,7 +56,7 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     params.new_version = _new_version;
     params.delvec_loader = delvec_loader.get();
     params.index = _index;
-    return handler(params, segment_iters, [&](uint32_t rssid, DelVectorPtr dv, uint32_t num_dels) {
+    return handler(params, segment_iters, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
         *_total_deletes += num_dels;
         _delvecs->emplace_back(rssid, dv);
     });

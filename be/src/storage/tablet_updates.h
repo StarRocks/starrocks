@@ -404,7 +404,7 @@ private:
     // used for column-mode partial update
     void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
-    void _apply_compaction_commit(const EditVersionInfo& version_info, const EditVersion& applied_version);
+    void _apply_compaction_commit(const EditVersionInfo& version_info);
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
@@ -490,8 +490,9 @@ private:
 
     bool _use_light_apply_compaction(Rowset* rowset);
 
-    void _light_apply_compaction_commit(const EditVersionInfo& version_info, const EditVersion& applied_version,
-                                        Rowset* output_rowset);
+    Status _light_apply_compaction_commit(const EditVersion& version, Rowset* output_rowset, PrimaryIndex* index,
+                                          size_t* total_deletes, size_t* total_rows,
+                                          vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
 
 private:
     Tablet& _tablet;

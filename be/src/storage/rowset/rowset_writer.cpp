@@ -130,9 +130,12 @@ Status RowsetWriter::init() {
 
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
 
-    if (_context.is_compaction) {
-        _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(
-                local_rows_mapper_filename(_context.rowset_path_prefix, _context.rowset_id.to_string()));
+    if (_context.is_pk_compaction) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+        if (tablet != nullptr) {
+            _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(
+                    local_rows_mapper_filename(tablet.get(), _context.rowset_id.to_string()));
+        }
     }
     return Status::OK();
 }
