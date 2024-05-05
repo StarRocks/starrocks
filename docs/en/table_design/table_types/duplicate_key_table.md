@@ -8,8 +8,7 @@ The Duplicate Key table is the default model in StarRocks. If you did not specif
 
 When you create a Duplicate Key table, you can define a sort key for that table. If the filter conditions contain the sort key columns, StarRocks can quickly filter data from the table to accelerate queries.
 
-The Duplicate Key table allows you to append new data to the table but it does not allow you to modify existing data in the table.
-The Duplicate Key table is suitable for scenarios, such as analyzing logs data.
+The Duplicate Key table is suitable for scenarios, such as analyzing logs data. It is suitable for scenarios, such as analyzing logs data.
 
 ## Scenarios
 
@@ -26,7 +25,7 @@ Suppose that you want to analyze the event data over a specific time range. In t
 Statement for creating the table:
 
 ```SQL
-REATE TABLE detail (
+CREATE TABLE detail (
     event_time DATETIME NOT NULL COMMENT "datetime of event",
     event_type INT NOT NULL COMMENT "type of event",
     user_id INT COMMENT "id of user",
@@ -49,7 +48,7 @@ ORDER BY (event_time, event_type);
 
   - **Buckets number**: Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../Data_distribution.md#set-the-number-of-buckets).
 
-- When you create a table, you can only create Bitmap indexes or Bloom Filter indexes on the all columns of the table.
+- When you create a table, you can create Bitmap indexes or Bloom Filter indexes on the all columns of the table.
 
 ## What to do next
 

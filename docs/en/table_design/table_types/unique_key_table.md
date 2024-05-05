@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 You need to define a unique key at table creation. When multiple rows of data have the same unique key, the values in the value columns are replaced. During queries, the latest data from a group of data with the same unique key is returned. Additionally, you can define the sort key separately. If the filtering conditions in queries include the sort key, StarRocks can quickly filter the data, improving query efficiency.
 
-The Unique Key table can support real-time and frequent data updates. however, The Unique Key table are gradually being replaced by [Primary Key tables](./primary_key_table.md).
+The Unique Key table can support real-time and frequent data updates. However, The Unique Key table are gradually being replaced by [Primary Key tables](./primary_key_table.md).
 
 ## Scenarios
 
@@ -16,7 +16,7 @@ The Unique Key table is suitable for business scenarios in which data needs to b
 
 The Unique Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for value columns to return the most recent record among a group of records that have the same unique key.
 
-When you load data into a Unique Key table, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same unique key may come in multiple versions, of which the most recent version (namely, the record with the largest version number) is retrieved for queries.
+When you load data into a Unique Key table, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same unique key may be included in multiple versions. Data in the most recent version (that is, the record with the largest version number) is returned for queries.
 
 As shown in the following table, `ID` is the unique key, `value` is a value column, and `_version` holds the data version numbers generated within StarRocks. In this example, the record with an `ID` of 1 is loaded by two batches whose version numbers are `1` and `2`, and the record with an `ID` of `2` is loaded by three batches whose version numbers are `3`, `4`, and `5`.
 
@@ -68,9 +68,7 @@ DISTRIBUTED BY HASH(order_id);
 
   - Since v3.3.0, the sort key is decoupled from the unique key in the Unique Key table. The Unique Key table supports specifying the sort key using `ORDER BY` and specifying the unique key using `UNIQUE KEY`. The columns in the sort key and the unique key need to be the same, but the order of the columns does not need to be the same.
 
-  - During queries, the sort keys can filter data before aggregation, while filtering of the value columns typically occurs after multi-version aggregation. Therefore, it is recommended to use frequently filtered fields as sort keys to filter data before aggregation and thereby improve query performance.
-
-- During table creation, only Bitmap indexes and Bloom filter indexes can be created for the value column.
+  - During queries, data can be filtered based on the sort keys before aggregation. However, data can be filtered based on the value columns after multi-version aggregation. Therefore, it is recommended to use frequently filtered fields as sort keys to filter data before aggregation and thereby improve query performance.
 
 - When you create a table, you can only create Bitmap indexes or Bloom Filter indexes on the key columns of the table.
 

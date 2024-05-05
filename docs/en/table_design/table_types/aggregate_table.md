@@ -28,7 +28,8 @@ The data query and ingestion in the preceding scenarios have the following chara
 
 From the phrase of data ingestion to data query, data in the Aggregate tables is aggregated multiple times as follows:
 
-1. In the data ingestion phase, when data is loaded as batches into the table, each batch comprises a data version. After a data version is generated, StarRocks aggregates the data that has the same aggregate key in the data version.
+1. In the data ingestion phase, each batch of data forms a version when data is loaded into the Aggregate table in batches. In one version, data with the same sort key will be aggregated.
+
 2. In the background compaction phase, when the files of multiple data versions that are generated at data ingestion are periodically compacted into a large file, StarRocks aggregates the data that has the same aggregate key in the large file.
 3. In the data query phase, StarRocks aggregates the data that has the same aggregate key among all data versions before it returns the query result.
 
