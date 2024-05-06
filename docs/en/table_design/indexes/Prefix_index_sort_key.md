@@ -20,7 +20,7 @@ The Prefix index is a sparse index, and its size is at least 1024 times smaller 
 
 ## Usage notes
 
-Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`. Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`.
+Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
 - Data in the Duplicate Key table is sorted according to the sort key `ORDER BY`. The sort key can be combination of any columns.
   :::info
@@ -107,7 +107,7 @@ An analysis of queries and data in business scenarios helps choose appropriate s
 
 If the characteristics of queries in the business scenario evolve and columns other than the prefix fields are frequently used in the query filter conditions, the existing Prefix index can not filter data and the query performance may not be ideal.
 
-Since v3.3, the sort keys of Duplicate Key tables, Aggregate tables, and Unique Key tables can be modified. And since v3.0, the sort keys of Primary Key tables can be modified. The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of these columns does not need to be consistent with the key columns.
+Since v3.0, the sort keys of Primary Key tables can be modified. And since v3.3, the sort keys of Duplicate Key tables, Aggregate tables, and Unique Key tables can be modified. The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of these columns does not need to be consistent with the key columns.
 
 Alternatively, you can also create [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) based on this table and choose other columns commonly used as conditional columns to form the Prefix index, which can improve performance for these queries. But note that it will increase storage space.
 

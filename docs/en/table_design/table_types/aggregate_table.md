@@ -4,9 +4,9 @@ displayed_sidebar: "English"
 
 # Aggregate table
 
-At table creation, you can define an aggregate key and specify an aggregate function for the value column. When multiple rows of data have the same aggregate key, the values in the value columns are aggregated. Additionally, you can define the sort key separately. If the filtering conditions in queries include the sort key, StarRocks can quickly filter the data, improving query efficiency.
+At table creation, you can define an aggregate key and specify an aggregate function for the value column. When multiple rows of data have the same aggregate key, the values in the value columns are aggregated. Additionally, you can define the sort key separately. If the filter conditions in queries include the sort key, StarRocks can quickly filter the data, improving query efficiency.
 
-When analyzing aggregate and summarize data, Aggregate tables can reduce the amount of data that needs to be processed, thereby enhancing query efficiency.
+In data analysis and aggregation scenarios, Aggregate tables can reduce the amount of data that needs to be processed, thereby enhancing query efficiency.
 
 ## Scenarios
 
@@ -28,7 +28,7 @@ The data query and ingestion in the preceding scenarios have the following chara
 
 From the phrase of data ingestion to data query, data in the Aggregate tables is aggregated multiple times as follows:
 
-1. In the data ingestion phase, each batch of data forms a version when data is loaded into the Aggregate table in batches. In one version, data with the same sort key will be aggregated.
+1. In the data ingestion phase, each batch of data forms a version when data is loaded into the Aggregate table in batches. In one version, data with the same aggregate key will be aggregated.
 
 2. In the background compaction phase, when the files of multiple data versions that are generated at data ingestion are periodically compacted into a large file, StarRocks aggregates the data that has the same aggregate key in the large file.
 3. In the data query phase, StarRocks aggregates the data that has the same aggregate key among all data versions before it returns the query result.
@@ -82,7 +82,7 @@ DISTRIBUTED BY HASH(site_id);
     If the aggregate key is not explicitly defined using `AGGREGATE KEY`, all columns except the value columns are considered as the aggregate key by default.
   - The aggregate key has uniqueness constraint, and the values in these columns can not be updated.
 
-- **Value column**: Define a column as the value column by specifying an aggregate function after the column name. This column generally holds data that needs to be summarized.
+- **Value column**: Define a column as the value column by specifying an aggregate function after the column name. This column generally holds data that needs to be aggregated.
 
 - **Aggregate function**: The aggregate function used for the value column. For supported aggregate functions for the Aggregate tables, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 

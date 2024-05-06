@@ -4,9 +4,9 @@ displayed_sidebar: "English"
 
 # Unique Key table
 
-You need to define a unique key at table creation. When multiple rows of data have the same unique key, the values in the value columns are replaced. During queries, the latest data from a group of data with the same unique key is returned. Additionally, you can define the sort key separately. If the filtering conditions in queries include the sort key, StarRocks can quickly filter the data, improving query efficiency.
+You need to define a unique key at table creation. When multiple rows of data have the same unique key, the values in the value columns are replaced. During queries, the latest data from a group of data with the same unique key is returned. Additionally, you can define the sort key separately. If the filter conditions in queries include the sort key, StarRocks can quickly filter the data, improving query efficiency.
 
-The Unique Key table can support real-time and frequent data updates. However, The Unique Key table are gradually being replaced by [Primary Key tables](./primary_key_table.md).
+The Unique Key table can support real-time and frequent data updates. However, it is gradually replaced by the [Primary Key table](./primary_key_table.md).
 
 ## Scenarios
 

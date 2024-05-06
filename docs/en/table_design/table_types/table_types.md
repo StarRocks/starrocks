@@ -16,7 +16,7 @@ StarRocks provides four table types: Duplicate Key table, Aggregate table, Uniqu
 
 When data is loaded into a table created by using a certain table type, data is sorted and stored according to one or more columns defined as the sort key when the table is created. The sort key is usually one or more columns that are frequently used as filter conditions in queries, thereby accelerating queries.
 
-Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`. Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`.
+Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
 For more descriptions of sort keys, see [Sort keys and prefix indexes](../indexes/Prefix_index_sort_key.md).
 

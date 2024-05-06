@@ -385,7 +385,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 
 ### ORDER BY
 
-Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`. Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`.
+Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
 For more descriptions of sort keys, see [Sort keys and prefix indexes](../../../table_design/indexes/Prefix_index_sort_key.md).
 
