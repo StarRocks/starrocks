@@ -44,7 +44,7 @@ For information about all the authentication methods available, see [Authenticat
 
 ## Use INSERT+FILES()
 
-This method is available from v3.2 onwards and currently supports only the Parquet, ORC, and CSV file formats.
+This method is available from v3.2 onwards and currently supports only the Parquet, ORC, and CSV (from v3.3.0 onwards) file formats.
 
 ### Advantages of INSERT+FILES()
 
