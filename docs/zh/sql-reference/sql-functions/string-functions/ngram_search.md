@@ -60,4 +60,4 @@ mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",
 ## 更多信息
 
 - 目前仅支持 ASCII 编码。
-- 函数 `ngram_search` 区分大小写。另一个函数 `ngram_search_case_insensitive` 不区分大小写。除此之外，这两个函数是等价的。
+- 函数 `ngram_search` 区分大小写。另一个函数 `ngram_search_case_insensitive` 不区分大小写。除此之外，这两个函数是相同的。
