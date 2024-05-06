@@ -59,7 +59,7 @@ public:
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, true);
         size_t n = 1;
-        decoder->next_batch(&n, column.get());
+        ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
@@ -99,7 +99,13 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
-
+        for (uint i = 0; i < size; i++) {
+            CppType out;
+            page_decoder.at_index(i, &out);
+            if (src[i] != out) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << out;
+            }
+        }
         auto column = ChunkHelper::column_from_field_type(Type, false);
 
         status = page_decoder.next_batch(&size, column.get());
@@ -116,7 +122,7 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
-            page_decoder.seek_to_position_in_page(seek_off);
+            ASSERT_TRUE(page_decoder.seek_to_position_in_page(seek_off).ok());
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);
@@ -159,6 +165,15 @@ public:
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
+            CppType src_value = 0;
+            for (uint i = 0; i < count; i++) {
+                CppType out;
+                page_decoder.at_index(i, &out);
+                if (src_value != out) {
+                    FAIL() << "Fail at index " << i << " inserted=" << src_value << " got=" << out;
+                }
+                src_value++;
+            }
 
             auto dst = ChunkHelper::column_from_field_type(Type, false);
             dst->reserve(count);

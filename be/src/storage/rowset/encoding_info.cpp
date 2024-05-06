@@ -42,6 +42,7 @@
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/binary_prefix_page.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/dict_page.h"
 #include "storage/rowset/frame_of_reference_page.h"
 #include "storage/rowset/plain_page.h"
 #include "storage/rowset/rle_page.h"
@@ -118,6 +119,18 @@ struct TypeEncodingTraits<type, DICT_ENCODING, Slice> {
     }
 };
 
+template <LogicalType type, typename CppType>
+struct TypeEncodingTraits<type, DICT_ENCODING, CppType> {
+    static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
+        *builder = new DictPageBuilder<type>(opts);
+        return Status::OK();
+    }
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new DictPageDecoder<type>(data);
+        return Status::OK();
+    }
+};
+
 template <>
 struct TypeEncodingTraits<TYPE_DATE_V1, FOR_ENCODING, typename CppTypeTraits<TYPE_DATE_V1>::CppType> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
@@ -166,7 +179,17 @@ public:
     EncodingInfoResolver();
     ~EncodingInfoResolver();
 
+    // We aim to minimize the impact of the newly introduced encoding strategy on existing behaviors.
+    // This function is used to obtain the default encoding based on the field type, considering the following scenarios:
+    // 1. If the user has enabled dictionary encoding for number types, the field supports dictionary encoding,
+    //    and it is not for optimizing value seek, return DICT_ENCODING.
+    // 2. If optimization for value seek is required, retrieve the encoding method from _value_seek_encoding_map.
+    // 3. In the last scenario, directly retrieve it from _default_encoding_type_map.
     EncodingTypePB get_default_encoding(LogicalType type, bool optimize_value_seek) const {
+        if (enable_non_string_column_dict_encoding() && numeric_types_support_dict_encoding(delegate_type(type)) &&
+            !optimize_value_seek) {
+            return DICT_ENCODING;
+        }
         auto& encoding_map = optimize_value_seek ? _value_seek_encoding_map : _default_encoding_type_map;
         auto it = encoding_map.find(delegate_type(type));
         if (it != encoding_map.end()) {
@@ -184,6 +207,8 @@ private:
         auto key = std::make_pair(type, encoding_type);
         DCHECK(_encoding_map.count(key) == 0);
 
+        // For the same LogicType, the first call to the _add_map function will be added to
+        // the _default_encoding_type_map.
         if (_default_encoding_type_map.find(type) == _default_encoding_type_map.end()) {
             _default_encoding_type_map[type] = encoding_type;
         }
@@ -201,6 +226,8 @@ private:
     std::unordered_map<std::pair<LogicalType, EncodingTypePB>, EncodingInfo*, EncodingMapHash> _encoding_map;
 };
 
+// We have adjusted the default encoding for some scalar types to dictionary encoding.
+// As TYPE_DATE_V1/TYPE_DATETIME_V1 are legacy types, no changes are made here.
 EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_TINYINT, BIT_SHUFFLE>();
     _add_map<TYPE_TINYINT, FOR_ENCODING, true>();
@@ -270,6 +297,18 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_JSON, PLAIN_ENCODING>();
 
     _add_map<TYPE_VARBINARY, PLAIN_ENCODING>();
+
+    // These number typs are support dict encoding, if you need to change this, please
+    // change supports_dict_encoding function as same time.
+    _add_map<TYPE_SMALLINT, DICT_ENCODING>();
+    _add_map<TYPE_INT, DICT_ENCODING>();
+    _add_map<TYPE_BIGINT, DICT_ENCODING>();
+    _add_map<TYPE_LARGEINT, DICT_ENCODING>();
+    _add_map<TYPE_FLOAT, DICT_ENCODING>();
+    _add_map<TYPE_DOUBLE, DICT_ENCODING>();
+    _add_map<TYPE_DATE, DICT_ENCODING>();
+    _add_map<TYPE_DATETIME, DICT_ENCODING>();
+    _add_map<TYPE_DECIMALV2, DICT_ENCODING>();
 }
 
 EncodingInfoResolver::~EncodingInfoResolver() {
