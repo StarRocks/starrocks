@@ -14,8 +14,25 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.collect.ImmutableList;
+import com.starrocks.lake.StarOSAgent;
+
+import java.util.List;
+
 public class DefaultWarehouse extends Warehouse {
+
+    private static final List<Long> WORKER_GROUP_ID_LIST;
+
     public DefaultWarehouse(long id, String name) {
         super(id, name, "An internal warehouse init after FE is ready");
+    }
+
+    static {
+        WORKER_GROUP_ID_LIST = ImmutableList.of(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+    }
+
+    @Override
+    public List<Long> getWorkerGroupIds() {
+        return WORKER_GROUP_ID_LIST;
     }
 }
