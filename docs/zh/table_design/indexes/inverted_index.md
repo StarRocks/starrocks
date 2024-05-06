@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: "Chinese"
 keywords: ['suoyin']
-toc_max_heading_level: 5
+toc_max_heading_level: 4
 ---
 
 # 全文倒排索引
