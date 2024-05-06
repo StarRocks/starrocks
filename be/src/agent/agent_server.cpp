@@ -304,6 +304,7 @@ void AgentServer::Impl::stop() {
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
     STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
+    STOP_POOL(REPORT_TASK, _report_task_workers);
 #undef STOP_POOL
 }
 
