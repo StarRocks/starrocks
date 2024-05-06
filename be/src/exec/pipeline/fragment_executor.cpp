@@ -1050,7 +1050,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             max_file_size = target_table.target_max_file_size;
         }
         if (target_table.write_single_file) {
-            max_file_size = INT_MAX;
+            max_file_size = INT64_MAX;
         }
 
         auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
