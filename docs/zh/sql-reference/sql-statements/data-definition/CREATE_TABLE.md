@@ -498,11 +498,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 ### ORDER BY
 
-自 3.0 版本起，主键表解耦了主键和排序键，排序键通过 `ORDER BY` 指定，可以为任意列的排列组合。
+自 3.0 版本起，主键表支持使用 `ORDER BY` 定义排序键，自 3.3 版本起，明细表、聚合表和更新表支持使用 `ORDER BY` 定义排序键。
 
-> **注意**
->
-> 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
+排序键的更多说明，请参见[排序键和前缀索引](../../../table_design/indexes/Prefix_index_sort_key.md)。
 
 ### PROPERTIES
 
