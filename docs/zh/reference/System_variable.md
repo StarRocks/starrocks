@@ -174,6 +174,12 @@ SELECT /*+ SET_VAR
 * 默认值：64
 * 引入版本：v3.1.9, v3.2.5
 
+### cbo_prune_subfield
+
+* 含义：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
+* 默认值：false
+* 引入版本：v3.3.0
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。

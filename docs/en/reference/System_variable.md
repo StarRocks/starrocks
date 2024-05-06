@@ -172,9 +172,15 @@ Specifies the data type used for data comparison between DECIMAL data and STRING
 
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
-* Description: Specifies the maximum number of candidate materialized views allowed during query planning.
-* Default: 64
-* Introduced in: v3.1.9, v3.2.5
+* **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
+* **Default**: 64
+* **Introduced in**: v3.1.9, v3.2.5
+
+### cbo_prune_subfield
+
+* **Description**: Whether to enable JSON subfield pruning. This variable must be used with the BE dynamic parameter `enable_json_flat`. Otherwise, it may degrade JSON data query performance.
+* **Default**: false
+* **Introduced in**: v3.3.0
 
 ### character_set_database (global)
 

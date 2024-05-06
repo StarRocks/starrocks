@@ -278,6 +278,7 @@ You can find a built-in function based on the following categories:
 - [parse_json](./json-functions/json-constructor-functions/parse_json.md)
 - [Arrow function](./json-functions/json-query-and-processing-functions/arrow-function.md)
 - [cast](./json-functions/json-query-and-processing-functions/cast.md)
+- [get_json_bool](./json-functions/json-query-and-processing-functions/get_json_bool.md)
 - [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)
 - [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)
 - [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)
