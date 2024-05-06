@@ -47,6 +47,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### 日志
 
+##### log_roll_size_mb
+
+- 默认值：1024
+- 类型：Int
+- 单位：MB
+- 是否动态：否
+- 描述：单个系统日志或审计日志文件的大小上限。
+- 引入版本：-
+
 ##### sys_log_dir
 
 - 默认值：StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -1064,6 +1073,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
 - 引入版本：v3.1.5
 
+#### metadata_enable_recovery_mode
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
+- 引入版本：v3.3.0
+
+##### black_host_history_sec
+
+- 默认值：2 * 60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- 默认值：5
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：黑名单中的 BE 节点允许连接失败的上限。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -1210,6 +1246,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
 - 引入版本：v3.2.3
+
+##### enable_materialized_view_metrics_collect
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否默认收集异步物化视图的监控指标。
+- 引入版本：v3.1.11，v3.2.5
+
+##### enable_materialized_view_text_based_rewrite
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否默认启用基于文本的查询改写。如果此项设置为 `true`，则系统在创建异步物化视图时构建抽象语法树。
+- 引入版本：v3.2.5
 
 ##### enable_mv_automatic_active_check
 
@@ -2217,7 +2271,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- 默认值：4 * 3600
+- 默认值：3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：否
@@ -2377,7 +2431,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **说明**
 >
-> - StarRocks 存算分离集群不支持该参数。
+> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
 > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
 
 ##### recover_with_empty_tablet
@@ -3134,7 +3188,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### lake_enable_batch_publish_version 
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -4038,17 +4092,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-#### metadata_enable_recovery_mode
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 含义：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
-- 默认值：FALSE
-- 引入版本：3.3
--->
-
-<!--
 ##### enable_dict_optimize_stream_load
 
 - 默认值：true
@@ -4764,28 +4807,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
 - 引入版本：-
-
-<!--
-##### black_host_history_sec
-
-- 默认值：2 * 60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- 默认值：5
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### jdbc_connection_pool_size
 

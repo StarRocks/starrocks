@@ -93,7 +93,6 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -661,7 +660,8 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
+            Type compatibleType =
+                    TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -969,8 +969,8 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("left operand of MATCH must be column ref");
             }
 
-            if (!type2.isStringType() && !type2.isNull()) {
-                throw new SemanticException("right operand of MATCH must be of type STRING with NOT NULL");
+            if (!(node.getChild(1) instanceof StringLiteral) || type2.isNull()) {
+                throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
             }
 
             return null;
@@ -1706,6 +1706,9 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getSessionId().toString());
             }
             return null;
         }

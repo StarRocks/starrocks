@@ -352,16 +352,8 @@ public class ComputeNode implements IComputable, Writable {
         return this.isAlive.get();
     }
 
-    public void setIsAlive(boolean isAlive) {
-        this.isAlive.set(isAlive);
-    }
-
     public boolean isDecommissioned() {
         return this.isDecommissioned.get();
-    }
-
-    public void setIsDecommissioned(boolean isDecommissioned) {
-        this.isDecommissioned.set(isDecommissioned);
     }
 
     public boolean isAvailable() {
@@ -471,10 +463,6 @@ public class ComputeNode implements IComputable, Writable {
 
     public AtomicBoolean getIsAlive() {
         return isAlive;
-    }
-
-    public void setIsAlive(AtomicBoolean isAlive) {
-        this.isAlive = isAlive;
     }
 
     public void setDecommissionType(int decommissionType) {

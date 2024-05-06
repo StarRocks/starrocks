@@ -490,11 +490,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public static String removeNamePrefix(String colName) {
-        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length());
-        }
-        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
-            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length());
+        if (colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+            return colName.substring(SchemaChangeHandler.SHADOW_NAME_PREFIX.length());
         }
         return colName;
     }

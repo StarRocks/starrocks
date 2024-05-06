@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -193,17 +194,35 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             ScalarOperator child1 = equalConj.getChild(1);
             // skew column may be left or right column of the equal predicate
             if (skewColumn.equals(child0)) {
-                rightSkewColumn = equalConj.getChild(1);
-                break;
-            } else if (child0.isCast() && child0.getChild(0).equals(skewColumn)) {
-                rightSkewColumn = equalConj.getChild(1);
+                rightSkewColumn = child1;
                 break;
             } else if (skewColumn.equals(child1)) {
-                rightSkewColumn = equalConj.getChild(0);
+                rightSkewColumn = child0;
                 break;
-            } else if (child1.isCast() && child1.getChild(0).equals(skewColumn)) {
-                rightSkewColumn = equalConj.getChild(0);
-                break;
+            } else {
+                // find the skew column in the left/right child project map
+                if (input.inputAt(0).getOp() instanceof LogicalProjectOperator) {
+                    Map<ColumnRefOperator, ScalarOperator> projectMap = ((LogicalProjectOperator) input.inputAt(0).
+                            getOp()).getColumnRefMap();
+                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
+                    ScalarOperator rewriteChild0 = rewriter.rewrite(child0);
+                    ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
+                    if (skewColumn.equals(rewriteChild0)) {
+                        skewColumn = rewriteChild0;
+                        rightSkewColumn = child1;
+                        break;
+                    } else if (rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0))) {
+                        skewColumn = rewriteChild0.getChild(0);
+                        rightSkewColumn = child1;
+                    } else if (skewColumn.equals(rewriteChild1)) {
+                        skewColumn = rewriteChild1;
+                        rightSkewColumn = child0;
+                        break;
+                    } else if (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0))) {
+                        skewColumn = rewriteChild1.getChild(0);
+                        rightSkewColumn = child0;
+                    }
+                }
             }
         }
         // when use hint, we should check the skew column, and throw exception if not found

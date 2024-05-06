@@ -63,6 +63,8 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
+
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* range) override;
@@ -151,7 +153,7 @@ private:
     ordinal_t _current_ordinal = 0;
 
     // page indexes those are DEL_PARTIAL_SATISFIED
-    std::unordered_set<uint32_t> _delete_partial_satisfied_pages;
+    std::optional<std::unordered_set<uint32_t>> _delete_partial_satisfied_pages;
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;

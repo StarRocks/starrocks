@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -60,11 +61,8 @@ public class MaterializationContext {
 
     private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
 
-    // Updated partition names of the materialized view
-    private final Set<String> mvPartitionNamesToRefresh;
-
     // Updated partition names of the ref base table which will be used in compensating partition predicates
-    private final Set<String> refTableUpdatePartitionNames;
+    private final MvUpdateInfo mvUpdateInfo;
 
     private final List<Table> baseTables;
 
@@ -101,23 +99,21 @@ public class MaterializationContext {
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
                                   ColumnRefFactory mvColumnRefFactory,
-                                  Set<String> mvPartitionNamesToRefresh,
                                   List<Table> baseTables,
                                   List<Table> intersectingTables,
                                   ScalarOperator mvPartialPartitionPredicate,
-                                  Set<String> refTableUpdatePartitionNames,
+                                  MvUpdateInfo mvUpdateInfo,
                                   List<ColumnRefOperator> mvOutputColumnRefs) {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
         this.mvColumnRefFactory = mvColumnRefFactory;
-        this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
         this.baseTables = baseTables;
         this.intersectingTables = intersectingTables;
         this.matchedGroups = Lists.newArrayList();
         this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
-        this.refTableUpdatePartitionNames = refTableUpdatePartitionNames;
+        this.mvUpdateInfo = mvUpdateInfo;
         this.mvOutputColumnRefs = mvOutputColumnRefs;
         this.scanOpToPartitionCompensatePredicates = Maps.newHashMap();
     }
@@ -158,10 +154,6 @@ public class MaterializationContext {
         this.outputMapping = outputMapping;
     }
 
-    public Set<String> getMvPartitionNamesToRefresh() {
-        return mvPartitionNamesToRefresh;
-    }
-
     public List<Table> getBaseTables() {
         return baseTables;
     }
@@ -198,8 +190,8 @@ public class MaterializationContext {
         this.mvUsedCount += 1;
     }
 
-    public Set<String> getRefTableUpdatePartitionNames() {
-        return this.refTableUpdatePartitionNames;
+    public MvUpdateInfo getMvUpdateInfo() {
+        return mvUpdateInfo;
     }
 
     private boolean checkOperatorCompatible(OperatorType query) {
@@ -267,15 +259,15 @@ public class MaterializationContext {
                 return false;
             }
 
-            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
-            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
+            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression, queryRefFactory);
+            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression, mvColumnRefFactory);
             // there should be at least one same join type in mv scan descs for every query scan desc.
             // to forbid rewrite for:
             // query: a left outer join b
             // mv: a inner join b inner join c
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getJoinOptExpression() != null
-                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
+                        && mvTableScanDescs.stream().noneMatch(scanDesc -> scanDesc.isCompatible(queryScanDesc))) {
                     logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
                             "at least one same join type should be existed");
                     return false;

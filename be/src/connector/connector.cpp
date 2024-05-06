@@ -83,7 +83,7 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
     if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return Status::OK();
     for (const auto& item : _runtime_filters->descriptors()) {
         RuntimeFilterProbeDescriptor* probe = item.second;
-        DCHECK(runtime_bloom_filter_eval_context.driver_sequence == -1);
+        DCHECK(runtime_bloom_filter_eval_context.driver_sequence != -1);
         const JoinRuntimeFilter* filter = probe->runtime_filter(runtime_bloom_filter_eval_context.driver_sequence);
         if (filter == nullptr) continue;
         SlotId slot_id;
@@ -122,6 +122,27 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
             morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
         }
     }
+
+    if (partition_order_hint().has_value()) {
+        bool asc = partition_order_hint().value();
+        std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
+            auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
+            auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+            if (asc) {
+                return std::less()(l_partition_id, r_partition_id);
+            } else {
+                return std::greater()(l_partition_id, r_partition_id);
+            }
+        });
+    }
+
+    if (output_chunk_by_bucket()) {
+        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+        });
+    }
+
     return std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
 }
 

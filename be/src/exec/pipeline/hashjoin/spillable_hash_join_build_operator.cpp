@@ -68,6 +68,7 @@ bool SpillableHashJoinBuildOperator::need_input() const {
 }
 
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() { _join_builder->spill_channel()->set_finishing(); });
 
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL ||
@@ -263,6 +264,7 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     //
     _spill_options->read_shared =
             _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::BROADCAST ||
+            _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::LOCAL_HASH_BUCKET ||
             state->fragment_ctx()->enable_adaptive_dop();
 
     const auto& param = _hash_joiner_factory->hash_join_param();

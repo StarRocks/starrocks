@@ -74,7 +74,8 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
 }
 
 Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, size_t size,
-                                      std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+                                      std::function<void()> deleter, DataCacheHandle* handle,
+                                      WriteCacheOptions* options) {
     if (!options) {
         return to_status(_cache->set_object(key, ptr, size, deleter, handle, nullptr));
     }
@@ -109,7 +110,7 @@ Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
     return st;
 }
 
-Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+Status StarCacheWrapper::read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) {
     if (!options) {
         return to_status(_cache->get_object(key, handle, nullptr));
     }
@@ -124,6 +125,19 @@ Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle
 Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
+}
+
+Status StarCacheWrapper::update_mem_quota(size_t quota_bytes) {
+    return to_status(_cache->update_mem_quota(quota_bytes));
+}
+
+Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    std::vector<starcache::DirSpace> disk_spaces;
+    disk_spaces.reserve(spaces.size());
+    for (auto& dir : spaces) {
+        disk_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
+    }
+    return to_status(_cache->update_disk_spaces(disk_spaces));
 }
 
 const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {

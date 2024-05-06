@@ -875,23 +875,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql =
                 "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  |  output columns:\n" +
-                "  |  9 <-> if[(DictDecode(11: S_ADDRESS, [<place-holder> = 'kks']), [13: expr, VARCHAR, true], " +
-                "DictDecode(12: S_COMMENT, [<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; " +
-                "args nullable: true; result nullable: true]\n" +
-                "  |  10 <-> concat[([13: expr, VARCHAR, true], DictDecode(11: S_ADDRESS, [<place-holder>])); " +
-                "args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
-        Assert.assertTrue(plan, plan.contains("  |  common expressions:\n" +
-                "  |  13 <-> DictDecode(12: S_COMMENT, [upper(<place-holder>)])"));
+        Assert.assertTrue(plan, plan.contains("9 <-> if[(DictDecode(11: S_ADDRESS, [<place-holder> = 'kks'])"));
 
         // support(support(unsupport(Column), unsupport(Column)))
         sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 9> : reverse(substr(left(11: expr, CAST(CAST(instr(11: expr, '/') AS BIGINT)" +
-                " - 1 AS INT)), 5))\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 11> : DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
+        assertContains(plan, "<slot 9> : reverse(substr(left(DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
     }
 
     @Test
@@ -1219,22 +1208,38 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // Test partition by string column
         String sql;
         String plan;
+
         // Analytic with where
         sql = "select sum(rm) from (" +
                 "select row_number() over( partition by L_COMMENT order by L_PARTKEY) as rm from lineitem" +
                 ") t where rm < 10";
         plan = getCostExplain(sql);
-
-        Assert.assertTrue(plan, plan.contains("  2:SORT\n" +
-                "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
-        Assert.assertTrue(plan, plan.contains("  1:PARTITION-TOP-N\n" +
-                "  |  partition by: [20: L_COMMENT, INT, false] "));
-        Assert.assertTrue(plan, plan.contains("  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
+                "  |  order by: [2: L_PARTKEY, INT, false] ASC");
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 20> : <string id 16>");
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC\n" +
+                "  |  analytic partition by: [20, INT, false]");
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  partition by: [20: L_COMMENT, INT, false] ");
+        assertContains(plan, "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC");
 
         // row number
         sql = "select * from (select L_COMMENT,l_quantity, row_number() over " +
                 "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 19> : <string id 16>");
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  analytic partition by: [19, INT, false]");
         assertContains(plan, "  1:PARTITION-TOP-N\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] \n" +
                 "  |  partition limit: 10\n" +
@@ -1245,6 +1250,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
                 "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 19> : <string id 16>");
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  analytic partition by: [19, INT, false]");
         assertContains(plan, "  1:PARTITION-TOP-N\n" +
                 "  |  type: RANK\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] \n" +
@@ -1255,12 +1269,78 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
                 "(partition by L_COMMENT, l_shipmode order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [16: L_COMMENT, VARCHAR(44), false], [15: L_SHIPMODE, VARCHAR, false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 19> : <string id 16>");
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  analytic partition by: [19, INT, false], [15: L_SHIPMODE, VARCHAR, false]");
         assertContains(plan, "  1:PARTITION-TOP-N\n" +
                 "  |  type: RANK\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] , [15: L_SHIPMODE, CHAR, false] \n" +
                 "  |  partition limit: 10\n" +
                 "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
                 "  |  offset: 0");
+
+        // partition column with expr
+        sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_COMMENT order by S_NAME) FROM supplier_nullable";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [7: S_COMMENT, VARCHAR(101), false]\n" +
+                "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
+        assertContains(plan, "  2:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  <dict id 11> : <string id 7>");
+        assertContains(plan, "  1:SORT\n" +
+                "  |  order by: [11, INT, false] ASC, [2, VARCHAR, false] ASC\n" +
+                "  |  analytic partition by: [11, INT, false]");
+
+        sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by concat(S_COMMENT, 'a') order by S_NAME) FROM supplier_nullable";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, max[([9: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [17: concat, VARCHAR, true]\n" +
+                "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 20> : <string id 17>");
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [20, INT, true] ASC, [2, VARCHAR, false] ASC\n" +
+                "  |  analytic partition by: [20, INT, true]");
+
+        // partition column is not dict column
+        sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_NAME order by S_COMMENT) FROM supplier_nullable";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [2: S_NAME, VARCHAR, false]\n" +
+                "  |  order by: [7: S_COMMENT, VARCHAR(101), false] ASC");
+        assertContains(plan, "  2:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  <dict id 11> : <string id 7>");
+        assertContains(plan, "  1:SORT\n" +
+                "  |  order by: [2, VARCHAR, false] ASC, [11, INT, false] ASC\n" +
+                "  |  analytic partition by: [2: S_NAME, VARCHAR, false]");
+
+        // there is not DecodeNode
+        sql = "SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/" +
+                "S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_COMMENT order by S_NAME) FROM supplier_nullable";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [7: S_COMMENT, VARCHAR, false]\n" +
+                "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
+        assertContains(plan, "  1:SORT\n" +
+                "  |  order by: [7, VARCHAR, false] ASC, [2, VARCHAR, false] ASC\n" +
+                "  |  analytic partition by: [7: S_COMMENT, VARCHAR, false]");
+
     }
 
     @Test

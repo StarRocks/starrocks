@@ -36,6 +36,8 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
+#include <memory>
 #include <thread>
 
 #include "testutil/assert.h"
@@ -231,6 +233,51 @@ PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {
     ASSERT_EQ(0, buf_len);
     ASSERT_TRUE(eof);
 
+    producer.join();
+}
+
+std::vector<char> readFileAsBytes(const std::string& filename) {
+    // Open the file in binary mode
+    std::ifstream file(filename, std::ios::binary);
+
+    // Stop execution if file couldn't be opened
+    if (!file) {
+        throw std::runtime_error("Could not open file");
+    }
+
+    // Seek to the end of the file to find its size
+    file.seekg(0, std::ios::end);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // Create a vector to hold the bytes of the file
+    std::vector<char> buffer(size);
+
+    // Read the file into the buffer
+    if (!file.read(buffer.data(), size)) {
+        throw std::runtime_error("Error reading file");
+    }
+
+    return buffer;
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
+    auto pipe = std::make_shared<StreamLoadPipe>();
+
+    auto producer = std::thread([&pipe]() {
+        // append data with size larger than max_buffered_bytes
+        auto buf = readFileAsBytes("./be/test/runtime/test_data/compressed_file/foo.json.lz4");
+        EXPECT_OK(pipe->append(buf.data(), buf.size()));
+        pipe->finish();
+    });
+
+    CompressedStreamLoadPipeReader reader(pipe, TCompressionType::LZ4_FRAME);
+
+    auto res = reader.read();
+    EXPECT_OK(res.status());
+    auto buf = res.value();
+    EXPECT_EQ(buf->remaining(), 42000021);
+    EXPECT_EQ(std::string_view(R"({"foo": 1, "bar": 2})"), std::string_view(buf->ptr, 20));
     producer.join();
 }
 

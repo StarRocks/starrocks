@@ -36,12 +36,18 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
 
     // split first
     Columns split_columns{columns[0], columns[1]};
-    RETURN_IF_ERROR(StringFunctions::split_prepare(context, FunctionContext::FRAGMENT_LOCAL));
     ASSIGN_OR_RETURN(auto splited, StringFunctions::split(context, split_columns));
-    RETURN_IF_ERROR(StringFunctions::split_close(context, FunctionContext::FRAGMENT_LOCAL));
 
     Columns splited_columns{splited, columns[2]};
     return str_to_map_v1(context, splited_columns);
+}
+
+Status StringFunctions::str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return StringFunctions::split_prepare(context, scope);
+}
+
+Status StringFunctions::str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return StringFunctions::split_close(context, scope);
 }
 
 /**

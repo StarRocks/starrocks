@@ -28,6 +28,8 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.datacache.LoadDataCacheMetrics;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -35,6 +37,7 @@ import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TLoadDataCacheMetrics;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -129,6 +132,9 @@ public class QueryRuntimeProfile {
     // Fields for external table sink
     // ------------------------------------------------------------------------------------
     private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
+
+    // Fields for datacache
+    private final DataCacheSelectMetrics dataCacheSelectMetrics = new DataCacheSelectMetrics();
 
     public QueryRuntimeProfile(ConnectContext connectContext,
                                JobSpec jobSpec,
@@ -309,6 +315,7 @@ public class QueryRuntimeProfile {
             profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
             ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
             saveRunningProfile(profilingPlan, profile);
+            LOG.debug("update profile, profilingPlan: {}, profile: {}", profilingPlan, profile);
         }
     }
 
@@ -323,6 +330,15 @@ public class QueryRuntimeProfile {
 
     public void finalizeProfile() {
         fragmentProfiles.forEach(RuntimeProfile::sortChildren);
+    }
+
+    public void updateDataCacheSelectMetrics(long backendId, TLoadDataCacheMetrics tLoadDataCacheMetrics) {
+        LoadDataCacheMetrics loadDataCacheMetrics = LoadDataCacheMetrics.buildFromThrift(tLoadDataCacheMetrics);
+        dataCacheSelectMetrics.updateLoadDataCacheMetrics(backendId, loadDataCacheMetrics);
+    }
+
+    public DataCacheSelectMetrics getDataCacheSelectMetrics() {
+        return dataCacheSelectMetrics;
     }
 
     public void updateLoadInformation(FragmentInstanceExecState execState, TReportExecStatusParams params) {
@@ -349,6 +365,9 @@ public class QueryRuntimeProfile {
         }
         if (params.isSetSink_commit_infos()) {
             sinkCommitInfos.addAll(params.getSink_commit_infos());
+        }
+        if (params.isSetLoad_datacache_metrics()) {
+            updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
         }
     }
 

@@ -448,6 +448,7 @@ public class ExecutionDAG {
 
         // Set params for pipeline level shuffle.
         fragment.getDestNode().setPartitionType(fragment.getOutputPartition().getType());
+        int destDop = destFragment.getPipelineDop();
         if (sink instanceof DataStreamSink) {
             DataStreamSink dataStreamSink = (DataStreamSink) sink;
             dataStreamSink.setExchDop(destFragment.getPipelineDop());
@@ -495,7 +496,7 @@ public class ExecutionDAG {
 
                     int driverSeq = destInstance.getDriverSeqOfBucketSeq(bucketSeq);
                     if (driverSeq != FragmentInstance.ABSENT_DRIVER_SEQUENCE) {
-                        dest.setPipeline_driver_sequence(driverSeq);
+                        dest.setPipeline_driver_sequence(driverSeq % destDop);
                     }
                 }
                 execFragment.addDestination(dest);

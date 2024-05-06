@@ -17,6 +17,7 @@ displayed_sidebar: "Chinese"
 
 - [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md)（从 v3.0 开始支持）
 - [INSERT](./INSERT.md)（从 v3.0 开始支持）
+- [CACHE SELECT](../../../data_source/data_cache_warmup.md)（从 v3.3 开始支持）
 
 您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
 
@@ -70,7 +71,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | **参数**                     | **默认值** | **说明**                                                     |
 | ---------------------------- | ---------- | ------------------------------------------------------------ |
 | task_ttl_second              | 86400      | Task 的有效期，单位秒。超过有效期的 Task 会被自动删除。        |
-| task_check_interval_second   | 14400      | 删除过期 Task 的间隔时间，单位秒。                           |
+| task_check_interval_second   | 3600       | 删除过期 Task 的间隔时间，单位秒。                           |
 | task_runs_ttl_second         | 86400      | TaskRun 的有效期，单位秒。超过有效期的 TaskRun 会被自动删除。此外，成功和失败状态的 TaskRun 也会被自动删除。 |
 | task_runs_concurrency        | 4          | 最多可同时运行的 TaskRun 的数量。                            |
 | task_runs_queue_length       | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |

@@ -37,7 +37,7 @@
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/json.h"
-#include "util/json_util.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -496,7 +496,7 @@ TEST_P(FlatJsonQueryTestFixture, json_query) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns{flat_json, builder.build(true)};
@@ -550,7 +550,6 @@ INSTANTIATE_TEST_SUITE_P(
                 // nested array
                 std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[3]", R"( NULL )"),
-                std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[-1]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][1]", R"( 2 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][2]", R"( 3 )"),
@@ -689,7 +688,7 @@ TEST_P(FlatJsonExistsTestFixture, flat_json_exists_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;
@@ -765,7 +764,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;
@@ -813,7 +812,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;
@@ -859,7 +858,7 @@ TEST_F(JsonFunctionsTest, flat_json_variable_path_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;
@@ -906,7 +905,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_variable_path_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;
@@ -955,7 +954,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_null_path_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;
@@ -1003,7 +1002,7 @@ TEST_F(JsonFunctionsTest, flat_json_constant_path_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;
@@ -1313,7 +1312,7 @@ TEST_P(FlatJsonLengthTestFixture, flat_json_length_test) {
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
-    JsonFlater jf(param_flat_path);
+    JsonFlattener jf(param_flat_path);
     jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
 
     Columns columns;

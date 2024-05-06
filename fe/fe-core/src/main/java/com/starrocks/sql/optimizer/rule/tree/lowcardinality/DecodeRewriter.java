@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -353,6 +354,11 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         builder.setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
 
         builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
+        if (CollectionUtils.isNotEmpty(scanOperator.getPrunedPartitionPredicates())) {
+            List<ScalarOperator> prunedPredicates = scanOperator.getPrunedPartitionPredicates().stream()
+                    .map(p -> rewritePredicate(p, info.inputStringColumns)).collect(Collectors.toList());
+            builder.setPrunedPartitionPredicates(prunedPredicates);
+        }
         builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
         return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
     }

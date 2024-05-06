@@ -14,17 +14,47 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/column_converter.h"
+#include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
+#include "types/logical_type.h"
+
+namespace tparquet {
+class ColumnChunk;
+class OffsetIndex;
+class RowGroup;
+} // namespace tparquet
 
 namespace starrocks {
 class RandomAccessFile;
 struct HdfsScanStats;
+class ColumnPredicate;
+class ExprContext;
+class NullableColumn;
+class TIcebergSchemaField;
+
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
+struct TypeDescriptor;
 } // namespace starrocks
 
 namespace starrocks::parquet {

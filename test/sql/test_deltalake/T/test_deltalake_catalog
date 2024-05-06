@@ -3,6 +3,43 @@
 create external catalog delta_test_${uuid0} PROPERTIES ("type"="deltalake", "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}");
 
 -- only partition column Predicate with runtime filter
-select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='a' order by c1;;
+select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='a' order by c1;
+
+-- test struct column is null
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is null;
+
+-- test struct column is not null
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is not null order by col_tinyint;
+
+-- test partition prune with boolean type
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = true;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = false;
+
+-- test predicate with date type
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date = '2024-04-24' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date > '2024-04-24' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date >= '2024-04-24' and col_date < '2024-04-26' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date = '2024-04-24' or col_date = '2024-04-26' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date != '2024-04-24' order by col_smallint;
+select count(1) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date is NULL;
+select count(1) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date is NOT NULL;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date in ('2024-04-24', '2024-04-25') order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date not in ('2024-04-24', '2024-04-25', '2024-04-26') order by col_smallint;
+
+-- test predicate with string type
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_string where col_string = 'value1' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_string where col_string != 'value1' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_string where col_string in ('value1','value2') order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_string where col_string not in ('value1','value2') order by col_smallint;
+
+-- test complex type
+select col_tinyint,col_array,col_map,col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_tinyint < 6 order by col_tinyint;
+
+-- test timestamp
+select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_timestamp = '2024-04-24 12:00:00';
+select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_timestamp >= '2024-04-24 12:00:00' and col_timestamp < '2024-04-27 12:00:00';
+
+-- test column mapping
+select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 
 drop catalog delta_test_${uuid0}

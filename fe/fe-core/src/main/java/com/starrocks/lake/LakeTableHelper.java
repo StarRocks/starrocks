@@ -27,13 +27,16 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.TransactionState;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -191,5 +194,14 @@ public class LakeTableHelper {
             }
         }
         return maxId;
+    }
+
+    public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && hasSingleOlapTableSink(sourceType);
+    }
+
+    private static boolean hasSingleOlapTableSink(TransactionState.LoadJobSourceType sourceType) {
+        return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK;
     }
 }

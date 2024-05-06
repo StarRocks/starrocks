@@ -24,19 +24,13 @@ import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -66,6 +60,7 @@ public class InsertStmt extends DmlStmt {
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
     private List<String> targetColumnNames;
+    private boolean usePartialUpdate = false;
     private QueryStatement queryStatement;
     private String label = null;
 
@@ -77,7 +72,6 @@ public class InsertStmt extends DmlStmt {
 
     private Table targetTable;
 
-    private List<Column> targetColumns = Lists.newArrayList();
     private boolean isOverwrite;
     private long overwriteJobId = -1;
 
@@ -235,6 +229,14 @@ public class InsertStmt extends DmlStmt {
         return targetColumnNames;
     }
 
+    public void setUsePartialUpdate() {
+        this.usePartialUpdate = true;
+    }
+
+    public boolean usePartialUpdate() {
+        return this.usePartialUpdate;
+    }
+
     public void setTargetPartitionNames(PartitionNames targetPartitionNames) {
         this.targetPartitionNames = targetPartitionNames;
     }
@@ -245,10 +247,6 @@ public class InsertStmt extends DmlStmt {
 
     public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
-    }
-
-    public void setTargetColumns(List<Column> targetColumns) {
-        this.targetColumns = targetColumns;
     }
 
     public boolean isSpecifyKeyPartition() {
@@ -312,104 +310,6 @@ public class InsertStmt extends DmlStmt {
     public Table makeTableFunctionTable(SessionVariable sessionVariable) {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         List<Column> columns = collectSelectedFieldsFromQueryStatement();
-        List<String> columnNames = columns.stream()
-                .map(Column::getName)
-                .collect(Collectors.toList());
-        Set<String> duplicateColumnNames = columns.stream()
-                .map(Column::getName)
-                .filter(name -> Collections.frequency(columnNames, name) > 1)
-                .collect(Collectors.toSet());
-        if (!duplicateColumnNames.isEmpty()) {
-            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
-        }
-
-        // parse table function properties
-        Map<String, String> props = getTableFunctionProperties();
-        String single = props.getOrDefault("single", "false");
-        if (!single.equalsIgnoreCase("true") && !single.equalsIgnoreCase("false")) {
-            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).",
-                    single);
-        }
-
-        boolean writeSingleFile = single.equalsIgnoreCase("true");
-        String path = props.get("path");
-        String format = props.get("format");
-        String partitionBy = props.get("partition_by");
-        String compressionType = props.get("compression");
-
-        // validate properties
-        if (path == null) {
-            throw new SemanticException(
-                    "path is a mandatory property. \"path\" = \"s3://path/to/your/location/\"");
-        }
-
-        if (format == null) {
-            throw new SemanticException("format is a mandatory property. " +
-                    "Use any of (parquet, orc, csv)");
-        }
-
-        if (!TableFunctionTable.SUPPORTED_FORMATS.contains(format)) {
-            throw new SemanticException(String.format("Unsupported format %s. " +
-                    "Use any of (parquet, orc, csv)", format));
-        }
-
-        // if max_file_size is not specified, use target max file size
-        long targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
-        if (props.get("target_max_file_size") != null) {
-            targetMaxFileSize = Long.parseLong(props.get("target_max_file_size"));
-        }
-
-        // if compression codec is not specified, use compression codec from session
-        if (compressionType == null) {
-            compressionType = sessionVariable.getConnectorSinkCompressionCodec();
-        }
-        if (CompressionUtils.getConnectorSinkCompressionType(compressionType).isEmpty()) {
-            throw new SemanticException(String.format("Unsupported compression codec %s. " +
-                    "Use any of (uncompressed, snappy, lz4, zstd, gzip)", compressionType));
-        }
-
-        if (writeSingleFile && partitionBy != null) {
-            throw new SemanticException("cannot use partition_by and single simultaneously.");
-        }
-
-        if (writeSingleFile) {
-            return new TableFunctionTable(path, format, compressionType, columns, null, true, targetMaxFileSize, props);
-        }
-
-        if (partitionBy == null) {
-            return new TableFunctionTable(
-                    path, format, compressionType, columns, null, false, targetMaxFileSize, props);
-        }
-
-        if (!path.endsWith("/")) {
-            path += "/";
-        }
-
-        // parse and validate partition columns
-        List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
-        partitionColumnNames.replaceAll(String::trim);
-        partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList());
-
-        List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream().filter(col ->
-                !columnNames.contains(col)).collect(Collectors.toList());
-        if (!unmatchedPartitionColumnNames.isEmpty()) {
-            throw new SemanticException("partition columns expected to be a subset of " + columnNames +
-                    ", but got extra columns: " + unmatchedPartitionColumnNames);
-        }
-
-        List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
-                Collectors.toList());
-
-        for (Integer partitionColumnID : partitionColumnIDs) {
-            Column partitionColumn = columns.get(partitionColumnID);
-            Type type = partitionColumn.getType();
-            if (type.isBoolean() || type.isIntegerType() || type.isDateType() || type.isStringType()) {
-                continue;
-            }
-            throw new SemanticException("partition column does not support type of " + type);
-        }
-
-        return new TableFunctionTable(
-                path, format, compressionType, columns, partitionColumnIDs, false, targetMaxFileSize, props);
+        return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
     }
 }

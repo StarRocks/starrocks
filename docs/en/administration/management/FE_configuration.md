@@ -46,6 +46,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### Logging
 
+##### log_roll_size_mb
+
+- Default: 1024
+- Type: Int
+- Unit: MB
+- Is mutable: No
+- Description: The maximum size of a system log file or an audit log file.
+- Introduced in: -
+
 ##### sys_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
@@ -1063,6 +1072,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics.
 - Introduced in: v3.1.5
 
+#### metadata_enable_recovery_mode
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
+- Introduced in: v3.3.0
+
+##### black_host_history_sec
+
+- Default: 2 * 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration for retaining historical connection failures of BE nodes in the BE Blacklist. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold of connection failures allowed for a blacklisted BE node. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1209,6 +1245,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
+
+##### enable_materialized_view_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
+- Introduced in: v3.1.11, v3.2.5
+
+##### enable_materialized_view_text_based_rewrite
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
+- Introduced in: v3.2.5
 
 ##### enable_mv_automatic_active_check
 
@@ -2216,7 +2270,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- Default: 4 * 3600
+- Default: 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
@@ -2375,7 +2429,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **NOTE**
 >
-> - StarRocks shared-data clusters do not support this parameter.
+> - StarRocks shared-data clusters supports this parameter from v3.3.0.
 > - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
@@ -3128,7 +3182,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### lake_enable_batch_publish_version 
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3701,17 +3755,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description:
 - Introduced in: -
--->
-
-<!--
-#### metadata_enable_recovery_mode
-
-- **Default:** FALSE
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- **Description:** Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
-- **Introduced in:** 3.3
 -->
 
 <!--
@@ -4758,28 +4801,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
 - Introduced in: -
-
-<!--
-##### black_host_history_sec
-
-- Default: 2 * 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- Default: 5
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### jdbc_connection_pool_size
 

@@ -62,6 +62,7 @@ OutPut Exchange Id: 12
 |
 7:SORT
 |  order by: [18, INT, false] ASC
+|  analytic partition by: [18: P_PARTKEY, INT, false]
 |  offset: 0
 |  cardinality: 614017
 |  column statistics:

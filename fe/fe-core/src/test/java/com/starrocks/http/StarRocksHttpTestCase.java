@@ -63,6 +63,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -343,7 +344,7 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(newEmptyTable);
 
         LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, new TemporaryTableMgr(), null, null);
 
         new Expectations(globalStateMgr) {
             {

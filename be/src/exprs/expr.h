@@ -309,6 +309,11 @@ protected:
     /// Releases cache entries to LibCache in all nodes of the Expr tree.
     virtual void close();
 
+    // ------------------------------------------------------------------------------------
+    // Data Members:
+    // **NOTE** that when adding a new data member, please check whether it need to be added into `Expr::Expr(const Expr&)`.
+    // ------------------------------------------------------------------------------------
+
     /// Cache entry for the library implementing this function.
     std::shared_ptr<UserFunctionCacheEntry> _cache_entry = nullptr;
 

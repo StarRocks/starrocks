@@ -13,7 +13,10 @@
 // limitations under the License.
 package com.starrocks.common.util.concurrent.lock;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -55,7 +58,8 @@ public class LockManager {
     public void lock(long rid, Locker locker, LockType lockType, long timeout)
             throws LockInterruptException, LockTimeoutException, DeadlockException {
 
-        final long startTime;
+        final long startTime = System.currentTimeMillis();
+        locker.setLockRequestTimeMs(startTime);
 
         synchronized (locker) {
             int lockTableIdx = getLockTableIndex(rid);
@@ -80,19 +84,19 @@ public class LockManager {
                 }
             }
 
-            startTime = System.currentTimeMillis();
             locker.setWaitingFor(rid, lockType);
 
             /*
              * Because deadlock detection also requires a significant cost, but at the first moment
              * when a lock cannot be obtained, we cannot determine whether it is because the required
              * lock is being used normally or if a deadlock has occurred.
-             * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
-             * is used to control the waiting time before deadlock detection.
+             * Therefore, based on the configuration parameter `slow_lock_threshold_ms`
+             * If this time is exceeded, we believe that the status of the acquire lock operation is abnormal,
+             * and we need to start deadlock detection.
              * If a lock is obtained during this period, there is no need to perform deadlock detection.
              * Avoid frequent and unnecessary deadlock detection due to lock contention
              */
-            long deadLockDetectionDelayTimeMs = Config.lock_manager_dead_lock_detection_delay_time_ms;
+            long deadLockDetectionDelayTimeMs = Config.slow_lock_threshold_ms;
             if (deadLockDetectionDelayTimeMs > 0) {
                 if (timeout != 0) {
                     deadLockDetectionDelayTimeMs = Math.min(deadLockDetectionDelayTimeMs, timeRemain(timeout, startTime));
@@ -126,6 +130,8 @@ public class LockManager {
             /*
              * After waiting, not acquire lock and entered the waiting period, with deadlock detection enabled
              */
+
+            logSlowLockTrace(rid);
         }
 
         while (true) {
@@ -322,26 +328,74 @@ public class LockManager {
         }
     }
 
-    public String dumpLock() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("LockTable: \n");
-
+    public List<LockInfo> dumpLockManager() {
+        List<LockInfo> lockInfoList = new ArrayList<>();
         for (int i = 0; i < lockTablesSize; ++i) {
             synchronized (lockTableMutexes[i]) {
                 Map<Long, Lock> lockTable = lockTables[i];
 
                 for (Map.Entry<Long, Lock> lockEntry : lockTable.entrySet()) {
-                    Long rid = lockEntry.getKey();
                     Lock lock = lockEntry.getValue();
+                    Set<LockHolder> owners = lock.cloneOwners();
+                    List<LockHolder> waiters = lock.cloneWaiters();
 
-                    sb.append("---- rid: ").append(rid).append(" ----\n");
-                    sb.append(lock);
-                    sb.append("\n");
+                    lockInfoList.add(new LockInfo(lockEntry.getKey(), new ArrayList<>(owners), waiters));
                 }
             }
         }
 
-        return sb.toString();
+        return lockInfoList;
+    }
+
+    private static final int DEFAULT_STACK_RESERVE_LEVELS = 20;
+
+    private void logSlowLockTrace(long rid) {
+        long nowMs = System.currentTimeMillis();
+        int lockTableIdx = getLockTableIndex(rid);
+        List<LockHolder> owners;
+        List<LockHolder> waiters;
+
+        synchronized (lockTableMutexes[lockTableIdx]) {
+            Map<Long, Lock> lockTable = lockTables[lockTableIdx];
+            Lock lock = lockTable.get(rid);
+            owners = new ArrayList<>(lock.cloneOwners());
+            waiters = lock.cloneWaiters();
+        }
+
+        JsonObject ownerInfo = new JsonObject();
+
+        //owner
+        JsonArray ownerArray = new JsonArray();
+        for (LockHolder owner : owners) {
+            Locker locker = owner.getLocker();
+
+            JsonObject readerInfo = new JsonObject();
+            readerInfo.addProperty("id", owner.getLocker().getThreadID());
+            readerInfo.addProperty("name", owner.getLocker().getThreadName());
+            readerInfo.addProperty("heldFor", nowMs - owner.getLockAcquireTimeMs());
+            readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
+            readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
+                    locker.getLockerThread(), 0, DEFAULT_STACK_RESERVE_LEVELS));
+            ownerArray.add(readerInfo);
+        }
+        ownerInfo.add("owners", ownerArray);
+
+        //waiter
+        JsonArray waiterArray = new JsonArray();
+        for (LockHolder waiter : waiters) {
+            Locker locker = waiter.getLocker();
+
+            JsonObject readerInfo = new JsonObject();
+            readerInfo.addProperty("id", locker.getThreadID());
+            readerInfo.addProperty("name", locker.getThreadName());
+            readerInfo.addProperty("heldFor", "");
+            readerInfo.addProperty("waitTime", nowMs - locker.getLockRequestTimeMs());
+            readerInfo.addProperty("locker", locker.getLockerStackTrace());
+            waiterArray.add(readerInfo);
+        }
+        ownerInfo.add("waiter", waiterArray);
+
+        LOG.warn("LockManager detects slow lock : {}", ownerInfo.toString());
     }
 
     private Locker checkAndHandleDeadLock(Long rid, Locker locker, LockType lockType) throws DeadlockException {

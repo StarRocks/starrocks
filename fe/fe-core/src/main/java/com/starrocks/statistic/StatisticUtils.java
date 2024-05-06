@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -35,9 +36,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -158,7 +163,6 @@ public class StatisticUtils {
         if (collectPartitionIds.isEmpty()) {
             return;
         }
-
         StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
         Map<String, String> properties = Maps.newHashMap();
         if (SAMPLE == analyzeType) {
@@ -176,6 +180,10 @@ public class StatisticUtils {
                     .submit(() -> {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                        // set session id for temporary table
+                        if (table.isTemporaryTable()) {
+                            statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
+                        }
                         statsConnectCtx.setThreadLocalInfo();
 
                         statisticExecutor.collectStatistics(statsConnectCtx,
@@ -523,5 +531,28 @@ public class StatisticUtils {
             colName = ((SubfieldExpr) column).getPath();
         }
         return colName;
+    }
+
+    public static Type getQueryStatisticsColumnType(Table table, String column) {
+        String[] parts = column.split("\\.");
+        Preconditions.checkState(parts.length >= 1);
+        Column base = table.getColumn(parts[0]);
+        if (base == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
+        }
+
+        Type baseColumnType = base.getType();
+        for (int i = 1; i < parts.length; i++) {
+            if (baseColumnType.isStructType()) {
+                StructType baseStructType = (StructType) baseColumnType;
+                StructField field = baseStructType.getField(parts[i]);
+                if (field.getType().isStructType()) {
+                    baseColumnType = field.getType();
+                } else {
+                    return field.getType();
+                }
+            }
+        }
+        return baseColumnType;
     }
 }

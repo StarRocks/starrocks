@@ -74,6 +74,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -89,6 +90,8 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DdlStmt;
@@ -97,6 +100,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -271,25 +275,27 @@ public class StarRocksAssert {
         utCreateTableWithRetry(createTableStmt, connectContext);
     }
 
-    // retry 3 times when create table in ut to avoid
-    // table creation timeout caused by heavy load of testing machine
-    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt, ConnectContext ctx) throws Exception {
-        int retryTime = 0;
-        final int MAX_RETRY_TIME = 3;
+    public static void utDropTableWithRetry(DropTableStmt dropTableStmt) throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.setDatabase(dropTableStmt.getDbName());
+        utDropTableWithRetry(dropTableStmt, connectContext);
+    }
 
-        while (retryTime < MAX_RETRY_TIME) {
+    @FunctionalInterface
+    public interface RetryableOperation {
+        void execute(int retryTime) throws Exception;
+    }
+
+    // retry 3 times when operator table in ut to avoid
+    // table operation timeout caused by heavy load of testing machine
+    public static void executeWithRetry(RetryableOperation operation, String operationMsg, int maxRetryTime) throws Exception {
+        int retryTime = 0;
+        while (retryTime < maxRetryTime) {
             try {
-                CreateTableStmt createTableStmtCopied = createTableStmt;
-                if (retryTime > 0) {
-                    // copy `createTableStmt` after the first retry, because the state of `createTableStmt`
-                    // may change and throw different error after retry
-                    createTableStmtCopied = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
-                            createTableStmt.getOrigStmt().originStmt, ctx);
-                }
-                GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmtCopied);
+                operation.execute(retryTime);
                 break;
             } catch (Exception e) {
-                if (retryTime == MAX_RETRY_TIME - 1) {
+                if (retryTime == maxRetryTime - 1) {
                     if (e.getCause() instanceof DdlException) {
                         throw new DdlException(e.getMessage());
                     } else if (e.getCause() instanceof SemanticException) {
@@ -301,11 +307,33 @@ public class StarRocksAssert {
                     }
                 }
                 retryTime++;
-                System.out.println("ut create table failed with " + retryTime + " time retry, msg: " +
+                System.out.println(operationMsg + " failed with " + retryTime + " time retry, msg: " +
                         e.getMessage() + ", " + Arrays.toString(e.getStackTrace()));
                 Thread.sleep(500);
             }
         }
+    }
+
+    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt, ConnectContext ctx) throws Exception {
+        executeWithRetry((retryTime) -> {
+            CreateTableStmt createTableStmtCopied = createTableStmt;
+            if (retryTime > 0) {
+                createTableStmtCopied = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                        createTableStmt.getOrigStmt().originStmt, ctx);
+            }
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmtCopied);
+        }, "Create Table", 3);
+    }
+
+    public static void utDropTableWithRetry(DropTableStmt dropTableStmt, ConnectContext ctx) throws Exception {
+        executeWithRetry((retryTime) -> {
+            DropTableStmt dropTableStmtCopied = dropTableStmt;
+            if (retryTime > 0) {
+                dropTableStmtCopied = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                        dropTableStmt.getOrigStmt().originStmt, ctx);
+            }
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmtCopied);
+        }, "Drop Table", 3);
     }
 
     public StarRocksAssert withTable(String sql) throws Exception {
@@ -318,6 +346,23 @@ public class StarRocksAssert {
         String sql = mTable.getCreateTableSql();
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTemporaryTable(String sql) throws Exception {
+        CreateTemporaryTableStmt createTableStmt =
+                (CreateTemporaryTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        createTableStmt.setSessionId(ctx.getSessionId());
+        utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTemporaryTableLike(String dstTable, String srcTable) throws Exception {
+        String sql = "create temporary table " + dstTable + " like " + srcTable;
+        CreateTemporaryTableLikeStmt createTemporaryTableLikeStmt =
+                (CreateTemporaryTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        createTemporaryTableLikeStmt.setSessionId(ctx.getSessionId());
+        utCreateTableWithRetry(createTemporaryTableLikeStmt.getCreateTableStmt(), ctx);
         return this;
     }
 
@@ -591,6 +636,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        return this;
+    }
+
     public StarRocksAssert dropTables(List<String> tableNames) throws Exception {
         for (String tableName : tableNames) {
             dropTable(tableName);
@@ -602,6 +654,13 @@ public class StarRocksAssert {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropTemporaryTable(String tableName) throws Exception {
+        DropTemporaryTableStmt dropTemporaryTableStmt = (DropTemporaryTableStmt)
+                UtFrameUtils.parseStmtWithNewParser("drop temporary table " + tableName + ";", ctx);
+        GlobalStateMgr.getCurrentState().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
         return this;
     }
 
@@ -805,10 +864,11 @@ public class StarRocksAssert {
 
         Task task = tm.getTask(TaskBuilder.getMvTaskName(mv.getId()));
         TaskRunManager taskRunManager = tm.getTaskRunManager();
-        TaskRun taskRun = taskRunManager.getRunnableTaskRun(task.getId());
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
         while (taskRun != null) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
-            taskRun = taskRunManager.getRunnableTaskRun(task.getId());
+            taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
         }
         return this;
     }

@@ -294,19 +294,12 @@ void TabletSchema::append_column(TabletColumn column) {
     _num_columns++;
 }
 
-void TabletSchema::clear_columns() {
+void TabletSchema::_clear_columns() {
     _unique_id_to_index.clear();
     _num_columns = 0;
     _num_key_columns = 0;
     _cols.clear();
     _sort_key_idxes.clear();
-}
-
-void TabletSchema::copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema) {
-    TabletSchemaPB tablet_schema_pb;
-    tablet_schema->to_schema_pb(&tablet_schema_pb);
-    _init_from_pb(tablet_schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 void TabletColumn::add_sub_column(const TabletColumn& sub_column) {
@@ -315,6 +308,19 @@ void TabletColumn::add_sub_column(const TabletColumn& sub_column) {
 
 void TabletColumn::add_sub_column(TabletColumn&& sub_column) {
     _get_or_alloc_extra_fields()->sub_columns.emplace_back(std::move(sub_column));
+}
+
+bool TabletColumn::is_support_checksum() const {
+    if (!is_support_checksum_type(_type)) {
+        return false;
+    }
+    for (auto i = 0; i < subcolumn_count(); ++i) {
+        const auto& sub_col = subcolumn(i);
+        if (!sub_col.is_support_checksum()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /******************************************************************
@@ -359,7 +365,7 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
 }
 
 std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchemaCSPtr& tablet_schema,
-                                                            const std::vector<uint32_t>& unique_column_ids) {
+                                                            const std::vector<ColumnUID>& unique_column_ids) {
     std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
     std::vector<int32_t> column_indexes;
     for (int cid = 0; cid < tablet_schema->columns().size(); cid++) {
@@ -370,10 +376,31 @@ std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchemaCS
     return TabletSchema::create(tablet_schema, column_indexes);
 }
 
-std::unique_ptr<TabletSchema> TabletSchema::copy(const std::shared_ptr<const TabletSchema>& tablet_schema) {
-    auto t_ptr = std::make_unique<TabletSchema>();
-    t_ptr->copy_from(tablet_schema);
-    return t_ptr;
+StatusOr<TabletSchemaSPtr> TabletSchema::create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
+                                                const POlapTableColumnParam& column_param) {
+    TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>(ori_schema);
+    RETURN_IF_ERROR(new_schema->_build_current_tablet_schema(schema_id, version, column_param, ori_schema));
+    return new_schema;
+}
+
+TabletSchema::TabletSchema(const TabletSchema& tablet_schema) {
+    TabletSchemaPB tablet_schema_pb;
+    tablet_schema.to_schema_pb(&tablet_schema_pb);
+    _init_from_pb(tablet_schema_pb);
+}
+
+TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
+    return std::make_shared<TabletSchema>(tablet_schema);
+}
+
+TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {
+    auto dst_schema = std::make_unique<TabletSchema>(src_schema);
+    dst_schema->_clear_columns();
+    for (const auto& col : cols) {
+        dst_schema->append_column(TabletColumn(col));
+    }
+    dst_schema->_generate_sort_key_idxes();
+    return dst_schema;
 }
 
 void TabletSchema::_fill_index_map(const TabletIndex& index) {
@@ -402,16 +429,13 @@ Schema* TabletSchema::schema() const {
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::~TabletSchema() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }
@@ -486,17 +510,17 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _schema_version = schema.schema_version();
 }
 
-Status TabletSchema::build_current_tablet_schema(int64_t schema_id, int32_t version,
-                                                 const POlapTableColumnParam& column_param,
-                                                 const TabletSchemaCSPtr& ori_tablet_schema) {
+Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t version,
+                                                  const POlapTableColumnParam& column_param,
+                                                  const TabletSchema& ori_tablet_schema) {
     // copy from ori_tablet_schema
-    _keys_type = ori_tablet_schema->keys_type();
+    _keys_type = ori_tablet_schema.keys_type();
     _num_short_key_columns = column_param.short_key_column_count();
-    _num_rows_per_row_block = ori_tablet_schema->num_rows_per_row_block();
-    _compression_type = ori_tablet_schema->compression_type();
+    _num_rows_per_row_block = ori_tablet_schema.num_rows_per_row_block();
+    _compression_type = ori_tablet_schema.compression_type();
 
     // todo(yixiu): unique_id
-    _next_column_unique_id = ori_tablet_schema->next_column_unique_id();
+    _next_column_unique_id = ori_tablet_schema.next_column_unique_id();
     // copy from table_schema_param
     _num_key_columns = 0;
     _num_columns = 0;
@@ -521,8 +545,8 @@ Status TabletSchema::build_current_tablet_schema(int64_t schema_id, int32_t vers
         _cols.emplace_back(std::move(column));
         _num_columns++;
     }
-    if (ori_tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN) {
-        _cols.emplace_back(ori_tablet_schema->columns().back());
+    if (ori_tablet_schema.columns().back().name() == Schema::FULL_ROW_COLUMN) {
+        _cols.emplace_back(ori_tablet_schema.columns().back());
     }
 
     if (!column_param.sort_key_uid().empty()) {
@@ -545,7 +569,7 @@ Status TabletSchema::build_current_tablet_schema(int64_t schema_id, int32_t vers
     }
     if (has_bf_columns) {
         _has_bf_fpp = true;
-        _bf_fpp = ori_tablet_schema->bf_fpp();
+        _bf_fpp = ori_tablet_schema.bf_fpp();
     } else {
         _has_bf_fpp = false;
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
@@ -637,7 +661,7 @@ int32_t TabletSchema::field_index(int32_t col_unique_id) const {
     return (found == _unique_id_to_index.end()) ? -1 : found->second;
 }
 
-void TabletSchema::generate_sort_key_idxes() {
+void TabletSchema::_generate_sort_key_idxes() {
     if (!_sort_key_idxes.empty()) {
         return;
     }
