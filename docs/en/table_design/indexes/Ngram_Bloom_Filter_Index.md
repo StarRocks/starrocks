@@ -3,9 +3,9 @@ displayed_sidebar: "English"
 
 ---
 
-# N-Gram Bloom Filter index
+# N-gram bloom filter index
 
-The N-Gram Bloom Filter index is a special [Bloom Filter index](./Bloomfilter_index.md) only suitable for string (`STRING`, `CHAR`, or `VARCHAR`) type columns. The difference between the N-Gram Bloom Filter and Bloom Filter is that the N-Gram Bloom Filter tokenizes the strings and writes the resulting substrings into the Bloom Filter.
+The N-Gram bloom filter index is a special [Bloom filter index](./Bloomfilter_index.md) only suitable for string (`STRING`, `CHAR`, or `VARCHAR`) type columns. The difference between the N-Gram Bloom Filter and Bloom Filter is that the N-Gram Bloom Filter tokenizes the strings and writes the resulting substrings into the Bloom Filter.
 
 For example, if a row in a string column contains the word `Technical`, a traditional Bloom Filter would write the entire string `Technical` into the Bloom Filter. In contrast, an N-Gram Bloom Filter with a specified `gram_num` of 4 would tokenize `Technical` into the following substrings:
 
@@ -17,8 +17,8 @@ Each of these six substrings is written into the Bloom Filter.
 
 ## Usage notes
 
-- You can create N-Gram Bloom Filter indexes for all string columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create N-Gram Bloom Filter indexes for key columns.
-- N-Gram Bloom Filter indexes can be created for columns of the string types (CHAR, STRING, and VARCHAR).
+- For a Duplicate Key or Primary Key table, you can create N-Gram Bloom Filter indexes for all the columns (of the string types). For an Aggregate table or Unique Key table, you can only create N-Gram Bloom Filter indexes on the key columns (of the string types).
+- N-Gram bloom filter indexes can be created for columns of the string types (CHAR, STRING, and VARCHAR).
 - To determine whether a query hits an N-Gram Bloom Filter index, you can check the `BloomFilterFilterRows` field in the query's profile.
 - Only one type of index (Bloom Filter or N-gram Bloom Filter) can be created for a single column.
 
