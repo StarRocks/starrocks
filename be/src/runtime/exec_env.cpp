@@ -518,6 +518,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_cache_mgr);
+    _load_rpc_pool.reset();
     _metrics = nullptr;
 
     _reset_tracker();
