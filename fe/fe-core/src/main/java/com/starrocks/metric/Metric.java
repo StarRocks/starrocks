@@ -93,6 +93,16 @@ public abstract class Metric<T> {
         if (labels.contains(label)) {
             return this;
         }
+        for (int i = 0; i < labels.size(); i++) {
+            if (!labels.get(i).getKey().equals(label.getKey())) {
+                continue;
+            }
+            // update the label instead of adding, cuz renaming operations will result in duplicate labels
+            // for instance: after running `alter table t1 rename t2`
+            // labels should change from [{ key: "tbl_name", value: "t1" }] to [{ key: "tbl_name", value: "t2" }]
+            labels.set(i, label);
+            return this;
+        }
         labels.add(label);
         return this;
     }
