@@ -238,6 +238,7 @@ public:
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
+    ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
@@ -362,7 +363,12 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
+<<<<<<< HEAD
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+=======
+
+    std::unique_ptr<ThreadPool> _load_rpc_pool;
+>>>>>>> 8f30c5e7a6 ([Enhancement] Remove `internal_service_async_thread_num` (#45029))
 };
 
 template <>

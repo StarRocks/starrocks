@@ -391,6 +391,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
 
+<<<<<<< HEAD
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
@@ -400,6 +401,15 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
 #endif
 
+=======
+    // The _load_rpc_pool now handles routine load RPC and table function RPC.
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc
+                            .set_min_threads(10)
+                            .set_max_threads(1000)
+                            .set_max_queue_size(0)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_load_rpc_pool));
+>>>>>>> 8f30c5e7a6 ([Enhancement] Remove `internal_service_async_thread_num` (#45029))
     return Status::OK();
 }
 
@@ -589,6 +599,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_cache_mgr);
+    _load_rpc_pool.reset();
     _metrics = nullptr;
 
     _reset_tracker();
