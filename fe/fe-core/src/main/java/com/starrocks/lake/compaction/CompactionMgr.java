@@ -82,7 +82,11 @@ public class CompactionMgr implements MemoryTrackable {
     public void start() {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(),
+                    Config.lake_compaction_disable_tables);
+            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+                compactionScheduler.disableTables(Config.lake_compaction_disable_tables);
+            });
             compactionScheduler.start();
         }
     }
@@ -124,13 +128,14 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     @NotNull
-    List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes) {
-        return choosePartitionsToCompact().stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
+    List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
+            @NotNull Set<Long> excludeTables) {
+        return choosePartitionsToCompact(excludeTables).stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
     }
 
     @NotNull
-    List<PartitionIdentifier> choosePartitionsToCompact() {
-        List<PartitionStatistics> selection = sorter.sort(selector.select(partitionStatisticsHashMap.values()));
+    List<PartitionIdentifier> choosePartitionsToCompact(Set<Long> excludeTables) {
+        List<PartitionStatistics> selection = sorter.sort(selector.select(partitionStatisticsHashMap.values(), excludeTables));
         return selection.stream().map(PartitionStatistics::getPartition).collect(Collectors.toList());
     }
 
