@@ -16,14 +16,14 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 
 ## 参数说明
 
-- `haystack`: 必填项，要比较的第一个字符串。必须是 VARCHAR 值，可以是列或常量值。
+- `haystack`: 必填项，要比较的第一个字符串。必须是 VARCHAR 值，可以是列名或常量值。
 - `needle`: 必填项，要比较的第二个字符串。必须是 VARCHAR 值，只能是常量值。
 
     :::tip
   
-    - `needle` 的值大小不能大于 2^15，否则会抛出错误。
-    - 如果 `haystack` 的大小大于 2^15，则此函数将返回 0。
-    - 如果 `haystack` 或 `needle` 的大小小于 `gram_num`，则此函数将返回 0。
+    - `needle` 值的长度不能大于 2^15，否则会抛出错误。
+    - 如果 `haystack` 值的长度大于 2^15，则此函数将返回 0。
+    - 如果 `haystack` 或 `needle` 值的长度小于 `gram_num`，则此函数将返回 0。
  
     :::
 
@@ -31,7 +31,7 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 
 ## 返回值说明
 
-返回一个描述这两个字符串相似程度的值。返回值的范围在 0 和 1 之间，值越大，两者越接近。
+返回一个描述这两个字符串相似程度的值。返回值的范围在 0 和 1 之间。该值越大，两个字符串越相似。
 
 ## 示例
 
@@ -57,7 +57,7 @@ mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",
 +--------------------------------------+-------------------+
 ```
 
-## 其他说明
+## 更多信息
 
 - 目前仅支持 ASCII 编码。
-- `ngram_search` 区分大小写。另一个函数 `ngram_search_case_insensitive` 不区分大小写。这两个函数在其他方面一致。
+- 函数 `ngram_search` 区分大小写。另一个函数 `ngram_search_case_insensitive` 不区分大小写。除此之外，这两个函数是等价的。
