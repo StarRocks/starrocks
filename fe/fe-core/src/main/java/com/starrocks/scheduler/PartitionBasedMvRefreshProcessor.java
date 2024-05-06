@@ -85,7 +85,6 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -106,9 +105,9 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
+import com.starrocks.sql.common.MvPartitionDiffResult;
 import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.QueryDebugOptions;
-import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -272,7 +271,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
                 // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
                 filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, materializedView);
-                LOG.debug("materialized view partitions to refresh:{}", mvToRefreshedPartitions);
+                LOG.info("materialized view partitions to refresh:{}", mvToRefreshedPartitions);
 
                 // Get to refreshed base table partition infos.
                 refTableRefreshPartitions = getRefTableRefreshPartitions(mvToRefreshedPartitions);
@@ -619,14 +618,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void refreshExternalTable(TaskRunContext context) {
         List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Database db = baseTableInfo.getDb();
-            if (db == null) {
+            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+            if (dbOpt.isEmpty()) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getDbInfoStr(), materializedView.getName());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
 
-            Table table = baseTableInfo.getTable();
+            Table table = MvUtils.getTableChecked(baseTableInfo);
             if (table == null) {
                 LOG.warn("table {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getTableInfoStr(), materializedView.getName());
@@ -839,8 +838,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // FIXME: If base table's partition has been dropped, should drop the according version partition too?
             // remove partition info of not-exist partition for snapshot table from version map
+            Table table = MvUtils.getTableChecked(baseTableInfo);
             Set<String> partitionNames =
-                    Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTableChecked()));
+                    Sets.newHashSet(PartitionUtil.getPartitionNames(table));
             currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
         }
         if (!changedTablePartitionInfos.isEmpty()) {
@@ -948,7 +948,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Pair<String, String> partitionRange = Pair.create(
                 context == null ? null : context.getProperties().get(TaskRun.PARTITION_START),
                 context == null ? null : context.getProperties().get(TaskRun.PARTITION_END));
-        DiffResult result = computePartitionRangeDiff(db, materializedView, partitionRange);
+        MvPartitionDiffResult result = PartitionDiffer.computePartitionRangeDiff(db, materializedView, partitionRange);
         if (result == null) {
             return;
         }
@@ -984,71 +984,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
         mvContext.setRefBaseTableRangePartitionMap(result.refBaseTablePartitionMap);
         mvContext.setExternalRefBaseTableMVPartitionMap(result.refBaseTableMVPartitionMap);
-    }
-
-    public static DiffResult computePartitionRangeDiff(Database db,
-                                                       MaterializedView materializedView,
-                                                       Pair<String, String> partitionRange) {
-        Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
-        Map<Table, Column> partitionTableAndColumn = materializedView.getRelatedPartitionTableAndColumn();
-        Preconditions.checkArgument(!partitionTableAndColumn.isEmpty());
-        List<RangePartitionDiff> rangePartitionDiffList = Lists.newArrayList();
-
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
-        Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
-        Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap = Maps.newHashMap();
-        try {
-            for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
-                Table refBaseTable = entry.getKey();
-                Column refBaseTablePartitionColumn = entry.getValue();
-                // Collect the ref base table's partition range map.
-                refBaseTablePartitionMap.put(refBaseTable, PartitionUtil.getPartitionKeyRange(
-                        refBaseTable, refBaseTablePartitionColumn, partitionExpr));
-
-                // To solve multi partition columns' problem of external table, record the mv partition name to all the same
-                // partition names map here.
-                if (!refBaseTable.isNativeTableOrMaterializedView()) {
-                    refBaseTableMVPartitionMap.put(refBaseTable,
-                            PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
-                                    refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable)));
-                }
-
-                Column partitionColumn = (materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-                PartitionDiffer differ = PartitionDiffer.build(materializedView, partitionRange);
-                rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
-                        refBaseTablePartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
-            }
-
-        } catch (UserException | SemanticException e) {
-            LOG.warn("Materialized view compute partition difference with base table failed.", e);
-            return null;
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-
-        // UnionALL MV may generate multiple PartitionDiff, needs to be merged into one PartitionDiff
-        RangePartitionDiff rangePartitionDiff = RangePartitionDiff.merge(rangePartitionDiffList);
-        return new DiffResult(mvRangePartitionMap, refBaseTablePartitionMap, refBaseTableMVPartitionMap,
-                rangePartitionDiff);
-    }
-
-    private static class DiffResult {
-        public final Map<String, Range<PartitionKey>> mvRangePartitionMap;
-        public final Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap;
-        public final Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap;
-        public final RangePartitionDiff rangePartitionDiff;
-
-        public DiffResult(Map<String, Range<PartitionKey>> mvRangePartitionMap,
-                          Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap,
-                          Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap,
-                          RangePartitionDiff rangePartitionDiff) {
-            this.mvRangePartitionMap = mvRangePartitionMap;
-            this.refBaseTablePartitionMap = refBaseTablePartitionMap;
-            this.refBaseTableMVPartitionMap = refBaseTableMVPartitionMap;
-            this.rangePartitionDiff = rangePartitionDiff;
-        }
     }
 
     private void syncPartitionsForList() {
@@ -1253,7 +1188,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     } else {
                         // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                         // it should be refreshed according to the user-specified range, not all partitions.
-                        return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
+                        return getMvPartitionNamesToRefresh(refBaseTable,
                                 mvRangePartitionNames, true);
                     }
                 }
@@ -1263,13 +1198,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (partitionExpr instanceof SlotRef) {
                 // check related partition table
                 for (Table table : partitionTablesAndColumn.keySet()) {
-                    needRefreshMvPartitionNames.addAll(getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+                    needRefreshMvPartitionNames.addAll(getMvPartitionNamesToRefresh(
                             table, mvRangePartitionNames, force));
                 }
             } else if (partitionExpr instanceof FunctionCallExpr) {
                 // check related partition table
                 for (Table table : partitionTablesAndColumn.keySet()) {
-                    needRefreshMvPartitionNames.addAll(getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+                    needRefreshMvPartitionNames.addAll(getMvPartitionNamesToRefresh(
                             table, mvRangePartitionNames, force));
                 }
 
@@ -1315,13 +1250,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
-                    return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(partitionTable,
+                    return getMvPartitionNamesToRefresh(partitionTable,
                             mvListPartitionNames, true);
                 }
             }
 
             // check the ref base table
-            return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(partitionTable, mvListPartitionNames,
+            return getMvPartitionNamesToRefresh(partitionTable, mvListPartitionNames,
                     force);
         } else {
             throw new DmlException("unsupported partition info type:" + mvPartitionInfo.getClass().getName());
@@ -1329,9 +1264,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return needRefreshMvPartitionNames;
     }
 
-    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table refBaseTable,
-                                                                                  Set<String> mvRangePartitionNames,
-                                                                                  boolean force) {
+    private Set<String> getMvPartitionNamesToRefresh(Table refBaseTable,
+                                                     Set<String> mvRangePartitionNames,
+                                                     boolean force) {
+        // refresh all mv partitions when the ref base table is not supported partition refresh
         if (force || !supportPartitionRefresh(refBaseTable)) {
             return Sets.newHashSet(mvRangePartitionNames);
         }
@@ -1648,11 +1584,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
             Table snapshotTable = snapshotInfo.getBaseTable();
 
-            Table table = baseTableInfo.getTable();
-            if (table == null) {
+            Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
+            if (tableOptional.isEmpty()) {
                 return true;
             }
-
+            Table table = tableOptional.get();
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                 PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
@@ -1778,12 +1714,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     List<Database> collectDatabases(MaterializedView materializedView) {
         Map<Long, Database> databaseMap = Maps.newHashMap();
         for (BaseTableInfo baseTableInfo : materializedView.getBaseTableInfos()) {
-            Database db = baseTableInfo.getDb();
-            if (db == null) {
+            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+            if (dbOpt.isEmpty()) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getDbInfoStr(), materializedView.getName());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
+            Database db = dbOpt.get();
             databaseMap.put(db.getId(), db);
         }
         return Lists.newArrayList(databaseMap.values());
@@ -1800,13 +1737,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             locker.lockDatabases(dbs, LockType.READ);
 
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Table table = baseTableInfo.getTable();
-                if (table == null) {
+                Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                if (tableOpt.isEmpty()) {
                     LOG.warn("table {} do not exist when refreshing materialized view:{}",
                             baseTableInfo.getTableInfoStr(), materializedView.getName());
                     throw new DmlException("Materialized view base table: %s not exist.",
                             baseTableInfo.getTableInfoStr());
                 }
+                Table table = tableOpt.get();
                 if (table.isView()) {
                     // skip to collect snapshots for views
                 } else if (table.isOlapTable()) {

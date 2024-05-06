@@ -114,6 +114,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ExplainAnalyzer;
+import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -218,6 +219,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -228,6 +230,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 // Do one COM_QUERY process.
@@ -507,7 +510,7 @@ public class StmtExecutor {
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
                         try {
-                            execPlan = StatementPlanner.plan(parsedStmt, context);
+                            execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
                         } catch (SemanticException e) {
                             if (e.getMessage().contains("Unknown partition")) {
                                 throw new SemanticException(e.getMessage() +
@@ -541,6 +544,19 @@ public class StmtExecutor {
             if (context.isHTTPQueryDump) {
                 return;
             }
+
+            // For follower: verify sql in BlackList before forward to leader
+            // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
+            if (isQuery && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
+                OriginStatement origStmt = parsedStmt.getOrigStmt();
+                if (origStmt != null) {
+                    String originSql = origStmt.originStmt.trim()
+                            .toLowerCase().replaceAll(" +", " ");
+                    // If this sql is in blacklist, show message.
+                    SqlBlackList.verifying(originSql);
+                }
+            }
+
             if (isForwardToLeader()) {
                 context.setIsForward(true);
                 forwardToLeader();
@@ -552,17 +568,6 @@ public class StmtExecutor {
             if (parsedStmt instanceof QueryStatement) {
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 context.setStatisticsJob(isStatisticsJob);
-
-                // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
-                    OriginStatement origStmt = parsedStmt.getOrigStmt();
-                    if (origStmt != null) {
-                        String originSql = origStmt.originStmt.trim()
-                                .toLowerCase().replaceAll(" +", " ");
-                        // If this sql is in blacklist, show message.
-                        SqlBlackList.verifying(originSql);
-                    }
-                }
 
                 // Record planner costs in audit log
                 Preconditions.checkNotNull(execPlan, "query must has a plan");
@@ -806,8 +811,10 @@ public class StmtExecutor {
 
     private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
-            DDLStmtExecutor.execute(new DropTemporaryTableStmt(
-                    true, stmt.getCreateTableStmt().getDbTbl(), true), context);
+            DropTemporaryTableStmt dropTemporaryTableStmt =
+                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getDbTbl(), true);
+            dropTemporaryTableStmt.setSessionId(context.getSessionId());
+            DDLStmtExecutor.execute(dropTemporaryTableStmt, context);
         } else {
             DDLStmtExecutor.execute(new DropTableStmt(
                     true, stmt.getCreateTableStmt().getDbTbl(), true), context);
@@ -996,7 +1003,15 @@ public class StmtExecutor {
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
         boolean isSchedulerExplain = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
-        boolean executeInFe = !isExplainAnalyze & !isSchedulerExplain & canExecuteInFe(context, execPlan.getPhysicalPlan());
+        boolean isOutfileQuery = (parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause();
+        if (isOutfileQuery) {
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(parsedStmt);
+            if (hasTemporaryTable) {
+                throw new SemanticException("temporary table doesn't support select outfile statement");
+            }
+        }
+        boolean executeInFe = !isExplainAnalyze && !isSchedulerExplain && !isOutfileQuery
+                && canExecuteInFe(context, execPlan.getPhysicalPlan());
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
@@ -1043,17 +1058,6 @@ public class StmtExecutor {
         coord.setExecPlan(execPlan);
 
         RowBatch batch;
-        boolean isOutfileQuery = false;
-        if (queryStmt instanceof QueryStatement) {
-            isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
-            if (isOutfileQuery) {
-                boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStmt);
-                if (hasTemporaryTable) {
-                    throw new SemanticException("temporary table doesn't support select outfile statement");
-                }
-            }
-        }
-
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan);
         } else {
@@ -2114,13 +2118,12 @@ public class StmtExecutor {
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
                 GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable.isIcebergTable() ||
                             targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                             targetTable.isBlackHoleTable())) {
                         // schema table and iceberg table does not need txn
-                        mgr.abortTransaction(database.getId(), transactionId, errorMsg,
+                        mgr.abortTransaction(database.getId(), transactionId, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                                 Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
@@ -2380,5 +2383,39 @@ public class StmtExecutor {
             return isAllConstants;
         }
         return false;
+    }
+
+    public void executeStmtWithResultQueue(ConnectContext context, ExecPlan plan, Queue<TResultBatch> sqlResult) {
+        try {
+            UUID uuid = context.getQueryId();
+            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+            coord = getCoordinatorFactory().createQueryScheduler(
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+
+            coord.exec();
+            RowBatch batch;
+            do {
+                batch = coord.getNext();
+                if (batch.getBatch() != null) {
+                    sqlResult.add(batch.getBatch());
+                }
+            } while (!batch.isEos());
+            context.getState().setEof();
+        } catch (Exception e) {
+            LOG.error("Failed to execute metadata collection job", e);
+            if (coord.getExecStatus().ok()) {
+                context.getState().setError(e.getMessage());
+            }
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+        } finally {
+            if (context.isProfileEnabled()) {
+                tryProcessProfileAsync(plan, 0);
+                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                        context.getSessionVariable().getProfileTimeout() * 1000L);
+            } else {
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
+        }
     }
 }

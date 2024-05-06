@@ -98,6 +98,8 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
  * DatabaseTransactionMgr mainly be responsible for the following content:
@@ -296,10 +298,11 @@ public class DatabaseTransactionMgr {
                 LOG.debug("transaction is already prepared: {}", transactionId);
                 return;
             }
-            // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+            // For compatible reason, the default behavior of empty load is still returning
+            // "No partitions have data available for loading" and abort transaction.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
-                throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                throw new TransactionCommitFailedException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
             }
 
             if (transactionState.getWriteEndTimeMs() < 0) {
@@ -454,7 +457,6 @@ public class DatabaseTransactionMgr {
                 // after state transform
                 transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
             }
-            transactionState.prepareFinishChecker(db);
 
             persistTxnStateInTxnLevelLock(transactionState);
 
@@ -1241,7 +1243,7 @@ public class DatabaseTransactionMgr {
     // for add/update/delete TransactionState
     protected void unprotectUpsertTransactionState(TransactionState transactionState, boolean isReplay) {
         // if this is a replay operation, we should not log it
-        if (!isReplay && !Config.lock_manager_enable_loading_using_fine_granularity_lock) {
+        if (!isReplay && !Config.lock_manager_enable_using_fine_granularity_lock) {
             doWriteTxnStateEditLog(transactionState);
         }
 
@@ -1275,7 +1277,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void persistTxnStateInTxnLevelLock(TransactionState transactionState) {
-        if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
+        if (Config.lock_manager_enable_using_fine_granularity_lock) {
             doWriteTxnStateEditLog(transactionState);
         }
     }
@@ -1297,7 +1299,7 @@ public class DatabaseTransactionMgr {
 
     // The status of stateBach is VISIBLE or ABORTED
     public void unprotectSetTransactionStateBatch(TransactionStateBatch stateBatch, boolean isReplay) {
-        if (!isReplay && !Config.lock_manager_enable_loading_using_fine_granularity_lock) {
+        if (!isReplay && !Config.lock_manager_enable_using_fine_granularity_lock) {
             long start = System.currentTimeMillis();
             editLog.logInsertTransactionStateBatch(stateBatch);
             LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
@@ -1827,7 +1829,7 @@ public class DatabaseTransactionMgr {
                 } finally {
                     writeUnlock();
                 }
-                if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
+                if (Config.lock_manager_enable_using_fine_granularity_lock) {
                     long start = System.currentTimeMillis();
                     editLog.logInsertTransactionStateBatch(stateBatch);
                     LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
@@ -1859,7 +1861,7 @@ public class DatabaseTransactionMgr {
                     writeUnlock();
                     stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
                 }
-                if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
+                if (Config.lock_manager_enable_using_fine_granularity_lock) {
                     long start = System.currentTimeMillis();
                     editLog.logInsertTransactionStateBatch(stateBatch);
                     LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",

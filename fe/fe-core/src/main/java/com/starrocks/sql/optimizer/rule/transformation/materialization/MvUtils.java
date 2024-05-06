@@ -31,6 +31,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -1368,5 +1369,13 @@ public class MvUtils {
         Preconditions.checkArgument(predicateSplitCache != null);
         // Cache predicate split for predicates because it's time costing if there are too many materialized views.
         return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
+    }
+
+    public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
+    }
+
+    public static Table getTableChecked(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
     }
 }

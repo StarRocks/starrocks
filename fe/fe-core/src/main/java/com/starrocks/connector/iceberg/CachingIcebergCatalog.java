@@ -72,7 +72,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Cache<String, Set<DataFile>> dataFileCache;
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
-    private long latestRefreshTime = -1;
+    private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
 
     public CachingIcebergCatalog(String catalogName, IcebergCatalog delegate, IcebergCatalogProperties icebergProperties,
                                  ExecutorService executorService) {
@@ -206,7 +206,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private List<String> listPartitionNamesWithSnapshotId(
             Table table, String dbName, String tableName, long snapshotId, ExecutorService executorService) {
         Set<String> partitionNames = Sets.newHashSet();
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(PlanMode.LOCAL);
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                catalogName, dbName, tableName, PlanMode.LOCAL);
         scanContext.setOnlyReadCache(true);
         TableScan tableScan = getTableScan(table, scanContext)
                 .planWith(executorService)
@@ -280,6 +281,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
+        long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
         List<String> updatedPartitionNames = updatedTable.spec().isPartitioned() ?
                 listPartitionNamesWithSnapshotId(updatedTable, dbName, tableName, updatedSnapshotId, executorService) :
@@ -301,14 +303,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .collect(Collectors.toList());
 
         if (manifestFiles.isEmpty()) {
+            tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
             return;
         }
 
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(PlanMode.LOCAL);
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                catalogName, dbName, tableName, PlanMode.LOCAL);
         StarRocksIcebergTableScan tableScan = (StarRocksIcebergTableScan) getTableScan(updatedTable, scanContext)
                 .planWith(executorService)
                 .useSnapshot(updatedSnapshotId);
         tableScan.refreshDataFileCache(manifestFiles);
+
+        tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
         LOG.info("Refreshed {} iceberg manifests on the table [{}.{}]", manifestFiles.size(), dbName, tableName);
     }
 
@@ -328,7 +334,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 invalidateCache(identifier);
             }
         }
-        latestRefreshTime = System.currentTimeMillis();
     }
 
     public void invalidateCacheWithoutTable(IcebergTableName icebergTableName) {
@@ -347,6 +352,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         scanContext.setDataFileCache(dataFileCache);
         scanContext.setDeleteFileCache(deleteFileCache);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
+        scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
+                icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
 
         return delegate.getTableScan(table, scanContext);
     }

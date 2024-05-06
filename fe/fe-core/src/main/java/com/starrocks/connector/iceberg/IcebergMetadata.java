@@ -165,15 +165,18 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final ExecutorService jobPlanningExecutor;
     private final ExecutorService refreshOtherFeExecutor;
     private final IcebergMetricsReporter metricsReporter;
+    private final IcebergCatalogProperties catalogProperties;
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor) {
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           IcebergCatalogProperties catalogProperties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
         this.metricsReporter = new IcebergMetricsReporter();
         this.jobPlanningExecutor = jobPlanningExecutor;
         this.refreshOtherFeExecutor = refreshOtherFeExecutor;
+        this.catalogProperties = catalogProperties;
     }
 
     @Override
@@ -476,9 +479,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
         List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests, nativeTable, predicate);
-        for (ManifestFile file : matchingDeleteManifests) {
-            remoteMetaSplits.add(IcebergMetaSplit.from(file));
-        }
 
         FileIO fileIO = nativeTable.io();
         if (fileIO instanceof IcebergCachingFileIO) {
@@ -487,7 +487,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         String serializedTable = SerializationUtil.serializeToBase64(new SerializableTable(nativeTable, fileIO));
         boolean loadColumnStats = enableCollectColumnStatistics() ||
-                (!deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot));
+                (!deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
+                        catalogProperties.enableDistributedPlanLoadColumnStatsWithEqDelete());
 
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
     }
@@ -600,7 +601,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
-        TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(planMode()))
+        TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(
+                catalogName, dbName, tableName, planMode()))
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);

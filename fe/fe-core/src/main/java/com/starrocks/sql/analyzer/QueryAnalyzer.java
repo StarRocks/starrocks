@@ -1120,7 +1120,7 @@ public class QueryAnalyzer {
 
     }
 
-    private Table resolveTable(TableRelation tableRelation) {
+    public Table resolveTable(TableRelation tableRelation) {
         TableName tableName = tableRelation.getName();
         try {
             MetaUtils.normalizationTableName(session, tableName);

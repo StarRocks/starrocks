@@ -845,7 +845,7 @@ public class Config extends ConfigBase {
     public static int publish_version_interval_ms = 10;
 
     @ConfField(mutable = true)
-    public static boolean lake_enable_batch_publish_version = false;
+    public static boolean lake_enable_batch_publish_version = true;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
@@ -2403,7 +2403,7 @@ public class Config extends ConfigBase {
     public static boolean enable_password_reuse = true;
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `all partitions have no load data` is returned.
+     * Otherwise, `No partitions have data available for loading` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
@@ -2733,10 +2733,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int pipe_listener_interval_millis = 1000;
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int pipe_scheduler_interval_millis = 1000;
+    @ConfField(mutable = true, comment = "default poll interval of pipe")
+    public static int pipe_default_poll_interval_s = 60 * 5;
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
@@ -2852,18 +2854,7 @@ public class Config extends ConfigBase {
      * Whether to use table level lock
      */
     @ConfField
-    public static boolean lock_manager_enable_loading_using_fine_granularity_lock = false;
-
-    /**
-     * when a lock cannot be obtained, we cannot determine whether it is because the required
-     * lock is being used normally or if a deadlock has occurred.
-     * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
-     * is used to control the waiting time before deadlock detection.
-     * If a lock is obtained during this period, there is no need to perform deadlock detection.
-     * Avoid frequent and unnecessary deadlock detection due to lock contention
-     */
-    @ConfField(mutable = true)
-    public static long lock_manager_dead_lock_detection_delay_time_ms = 3000; // 3s
+    public static boolean lock_manager_enable_using_fine_granularity_lock = false;
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;

@@ -29,6 +29,7 @@ import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -193,9 +194,8 @@ public class MvRefreshArbiter {
             Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = baseTableUpdateInfos.entrySet().stream()
                     .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getPartitionNameWithRanges()));
             Table partitionTable = mv.getDirectTableAndPartitionColumn().first;
-            Column partitionColumn = mv.getPartitionInfo().getPartitionColumns().get(0);
             PartitionDiffer differ = PartitionDiffer.build(mv, Pair.create(null, null));
-            rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
+            rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr,
                     refBaseTablePartitionMap.get(partitionTable), mvRangePartitionMap, differ);
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
@@ -228,7 +228,7 @@ public class MvRefreshArbiter {
         List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
         TableProperty tableProperty = mv.getTableProperty();
         for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTableChecked();
+            Table table = MvUtils.getTableChecked(tableInfo);
             // skip check freshness of view
             if (table.isView()) {
                 continue;
@@ -305,12 +305,11 @@ public class MvRefreshArbiter {
         // TODO: prune the partitions based on ttl
         Pair<Table, Column> directTableAndPartitionColumn = mv.getDirectTableAndPartitionColumn();
         Table refBaseTable = directTableAndPartitionColumn.first;
-        Column refBaseTablePartitionColumn = directTableAndPartitionColumn.second;
 
         Map<String, Range<PartitionKey>> refTablePartitionMap = basePartitionNameToRangeMap.get(refBaseTable);
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = mv.getRangePartitionMap();
         RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr,
-                refBaseTablePartitionColumn, refTablePartitionMap, mvPartitionNameToRangeMap, null);
+                refTablePartitionMap, mvPartitionNameToRangeMap, null);
 
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
 
@@ -398,7 +397,7 @@ public class MvRefreshArbiter {
                                                                      boolean isQueryRewrite) {
         TableProperty tableProperty = mv.getTableProperty();
         for (BaseTableInfo tableInfo : mv.getBaseTableInfos()) {
-            Table baseTable = tableInfo.getTableChecked();
+            Table baseTable = MvUtils.getTableChecked(tableInfo);
             // skip view
             if (baseTable.isView()) {
                 continue;

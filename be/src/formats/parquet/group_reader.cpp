@@ -14,22 +14,30 @@
 
 #include "formats/parquet/group_reader.h"
 
-#include <memory>
-#include <sstream>
+#include <glog/logging.h>
 
-#include "column/column_helper.h"
+#include <algorithm>
+#include <memory>
+#include <utility>
+
+#include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 #include "utils.h"
 
 namespace starrocks::parquet {

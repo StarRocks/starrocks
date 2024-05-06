@@ -80,7 +80,6 @@ private:
     TInternalScanRange* _scan_range;
 
     PredicateTree _non_pushdown_pred_tree;
-    ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
@@ -152,6 +151,7 @@ private:
     RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+    RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;

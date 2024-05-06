@@ -2019,7 +2019,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             if (mutablePartitions.size() <= 1) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addSubPartitions(db, olapTable.getName(), partition, 1);
+                        .addSubPartitions(db, olapTable, partition, 1);
             }
             p.setImmutable(true);
         }
@@ -2266,7 +2266,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.ROLLUP,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -2275,7 +2275,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.COLUMN,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());

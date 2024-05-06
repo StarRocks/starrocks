@@ -23,15 +23,34 @@ import java.util.Set;
 
 public class StarRocksIcebergTableScanContext {
     private final PlanMode planMode;
+    private final String catalogName;
+    private final String dbName;
+    private final String tableName;
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
     private boolean onlyReadCache;
     private int localParallelism;
     private long localPlanningMaxSlotSize;
+    private boolean enableCacheDataFileIdentifierColumnMetrics;
 
-    public StarRocksIcebergTableScanContext(PlanMode planMode) {
+    public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
+        this.catalogName = catalogName;
+        this.dbName = dbName;
+        this.tableName = tableName;
         this.planMode = planMode;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
+    public String getTableName() {
+        return tableName;
     }
 
     public boolean isDataFileCacheWithMetrics() {
@@ -84,5 +103,13 @@ public class StarRocksIcebergTableScanContext {
 
     public void setLocalPlanningMaxSlotSize(long localPlanningMaxSlotSize) {
         this.localPlanningMaxSlotSize = localPlanningMaxSlotSize;
+    }
+
+    public boolean isEnableCacheDataFileIdentifierColumnMetrics() {
+        return enableCacheDataFileIdentifierColumnMetrics;
+    }
+
+    public void setEnableCacheDataFileIdentifierColumnMetrics(boolean enableCacheDataFileIdentifierColumnMetrics) {
+        this.enableCacheDataFileIdentifierColumnMetrics = enableCacheDataFileIdentifierColumnMetrics;
     }
 }

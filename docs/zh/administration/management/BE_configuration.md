@@ -1803,6 +1803,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：每个 Store 用以 Flush MemTable 的线程数。
 - 引入版本：-
 
+##### lake_flush_thread_num_per_store
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：在存算分离模式下，每个 Store 用以 Flush MemTable 的线程数。当该参数被设置为 `0` 时，系统使用 CPU 核数的两倍。
+当该参数被设置为小于 `0` 时，系统使用该参数的绝对值与 CPU 核数的乘积。
+- 引入版本：3.1.12, 3.2.7
+
 ##### max_runnings_transactions_per_txn_map
 
 - 默认值：100

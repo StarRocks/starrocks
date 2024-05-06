@@ -31,7 +31,7 @@ jobs:
           fi
 
       - name: sync
-        if: steps.commit_sha.outputs.is_sync != "true"
+        if: steps.commit_sha.outputs.is_sync != 'true'
         env:
           PR_ID: ${{ github.event.number }}
           COMMIT_ID: ${{ steps.commit_sha.outputs.commit_sha }}

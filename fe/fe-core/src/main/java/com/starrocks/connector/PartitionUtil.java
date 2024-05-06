@@ -16,6 +16,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -128,21 +129,13 @@ public class PartitionUtil {
     public static List<String> toPartitionValues(String partitionName) {
         // mimics Warehouse.makeValsFromName
         ImmutableList.Builder<String> resultBuilder = ImmutableList.builder();
-        int start = 0;
-        while (true) {
-            while (start < partitionName.length() && partitionName.charAt(start) != '=') {
-                start++;
-            }
-            start++;
-            int end = start;
-            while (end < partitionName.length() && partitionName.charAt(end) != '/') {
-                end++;
-            }
-            if (start > partitionName.length()) {
+        Iterable<String> pieces = Splitter.on("/").split(partitionName);
+        for (String piece : pieces) {
+            int idx = piece.indexOf("=");
+            if (idx == -1) {
                 break;
             }
-            resultBuilder.add(unescapePathName(partitionName.substring(start, end)));
-            start = end + 1;
+            resultBuilder.add(unescapePathName(piece.substring(idx + 1)));
         }
         return resultBuilder.build();
     }
@@ -816,7 +809,14 @@ public class PartitionUtil {
         thread.start();
     }
 
-    public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
+    public static <T> void executeInNewThread(String threadName, Runnable runnable) {
+        Thread thread = new Thread(runnable);
+        thread.setName(threadName);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    public static RangePartitionDiff getPartitionDiff(Expr partitionExpr,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
                                                       Map<String, Range<PartitionKey>> mvPartitionMap,
                                                       PartitionDiffer differ) {

@@ -446,6 +446,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_GROUP_EXECUTION = "enable_group_execution";
     public static final String GROUP_EXECUTION_GROUP_SCALE = "group_execution_group_scale";
     public static final String GROUP_EXECUTION_MAX_GROUPS = "group_execution_max_groups";
+    public static final String GROUP_EXECUTION_MIN_SCAN_ROWS = "group_execution_min_scan_rows";
 
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
     public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
@@ -650,6 +651,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
+
+    public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
+
+    public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
@@ -1376,6 +1381,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = GROUP_EXECUTION_MAX_GROUPS)
     private int groupExecutionMaxGroups = 128;
 
+    @VarAttr(name = GROUP_EXECUTION_MIN_SCAN_ROWS)
+    private long groupExecutionMinScanRows = 5000000;
+
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
 
@@ -1509,6 +1517,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getGroupExecutionMaxGroups() {
         return groupExecutionMaxGroups;
+    }
+
+    public long getGroupExecutionMinScanRows() {
+        return groupExecutionMinScanRows;
     }
 
     public int getWindowPartitionMode() {
@@ -1809,6 +1821,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
+
+    @VarAttr(name = ENABLE_PUSHDOWN_OR_PREDICATE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePushdownOrPredicate = true;
+
+    @VarAttr(name = ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE, flag = VariableMgr.INVISIBLE)
+    private boolean enableShowPredicateTreeInProfile = false;
 
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
@@ -3525,6 +3543,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public boolean isEnablePushdownOrPredicate() {
+        return enablePushdownOrPredicate;
+    }
+
+    public boolean isEnableShowPredicateTreeInProfile() {
+        return enableShowPredicateTreeInProfile;
     }
 
     public double getSelectRatioThreshold() {

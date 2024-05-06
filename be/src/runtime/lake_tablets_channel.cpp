@@ -39,7 +39,6 @@
 #include "storage/lake/async_delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable.h"
-#include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"

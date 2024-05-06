@@ -32,6 +32,8 @@ public:
                                      std::vector<ExprContext*>* conjunct_ctxs);
 
     static void append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value, std::vector<TExpr>* tExprs);
+    static void append_string_conjunct(TExprOpcode::type opcode, SlotId slot_id, std::string value,
+                                       std::vector<TExpr>* tExprs);
 };
 
 } // namespace starrocks::parquet
