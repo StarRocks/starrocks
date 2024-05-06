@@ -2827,6 +2827,63 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - Introduced in: v3.1.0
 
+<<<<<<< HEAD
+=======
+##### lake_enable_ingest_slowdown
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
+- Introduced in: v3.2.0
+
+##### lake_ingest_slowdown_threshold
+
+- Default: 100
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
+- Introduced in: v3.2.0
+
+##### lake_ingest_slowdown_ratio
+
+- Default: 0.1
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
+
+  Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
+
+- Introduced in: v3.2.0
+
+> **NOTE**
+>
+> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
+> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
+> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
+
+##### lake_compaction_score_upper_bound
+
+- Default: 0
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- Introduced in: v3.2.0
+
+##### lake_compaction_disable_tables
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
+- Introduced in: v3.1.11
+
+>>>>>>> 1538f7cbf6 ([Enhancement] support disable lake compaction (#44616))
 ### Other
 
 ##### tmp_dir

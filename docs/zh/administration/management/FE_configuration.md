@@ -2829,6 +2829,67 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：存算分离集群下，如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
 - 引入版本：v3.1.0
 
+<<<<<<< HEAD
+=======
+##### lake_enable_ingest_slowdown
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。
+- 引入版本：v3.2.0
+
+##### lake_ingest_slowdown_threshold
+
+- 默认值：100
+- 类型：Long
+- 单位：-
+- 是否动态：是
+- 描述：触发导入限速的 Compaction Score 阈值。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。
+- 引入版本：v3.2.0
+
+> **说明**
+>
+> 当 `lake_ingest_slowdown_threshold` 比配置项 `lake_compaction_score_selector_min_score` 小时，实际生效的阈值会是 `lake_compaction_score_selector_min_score`。
+
+##### lake_ingest_slowdown_ratio
+
+- 默认值：0.1
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：导入限速比例。
+
+  数据导入任务可以分为数据写入和数据提交（COMMIT）两个阶段，导入限速是通过延迟数据提交来达到限速的目的的，延迟比例计算公式为：`(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`。例如，数据写入阶段耗时为 5 分钟，`lake_ingest_slowdown_ratio` 为 0.1，Compaction Score 比 `lake_ingest_slowdown_threshold` 多 10，那么延迟提交的时间为 `5 * 10 * 0.1 = 5` 分钟，相当于写入阶段的耗时由 5 分钟增加到了 10 分钟，平均导入速度下降了一倍。
+
+- 引入版本：v3.2.0
+
+> **说明**
+>
+> - 如果一个导入任务同时向多个分区写入，那么会取所有分区的 Compaction Score 的最大值来计算延迟提交时间。
+> - 延迟提交的时间是在第一次尝试提交时计算的，一旦确定便不会更改，延迟时间一到，只要 Compaction Score 不超过 `lake_compaction_score_upper_bound`，系统都会执行数据提交（COMMIT）操作。
+> - 如果延迟之后的提交时间超过了导入任务的超时时间，那么导入任务会直接失败。
+
+##### lake_compaction_score_upper_bound
+
+- 默认值：0
+- 类型：Long
+- 单位：-
+- 是否动态：是
+- 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
+- 引入版本：v3.2.0
+
+##### lake_compaction_disable_tables
+
+- 默认值：""
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
+- 引入版本：v3.1.11
+
+>>>>>>> 1538f7cbf6 ([Enhancement] support disable lake compaction (#44616))
 ### 其他
 
 ##### tmp_dir

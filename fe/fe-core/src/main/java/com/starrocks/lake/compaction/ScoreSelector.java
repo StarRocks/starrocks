@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -26,13 +27,21 @@ public class ScoreSelector implements Selector {
 
     @Override
     @NotNull
-    public List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics) {
+    public List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics,
+            @NotNull Set<Long> excludeTables) {
         double minScore = Config.lake_compaction_score_selector_min_score;
         long now = System.currentTimeMillis();
         return statistics.stream()
                 .filter(p -> p.getNextCompactionTime() <= now)
                 .filter(p -> p.getCompactionScore() != null)
+<<<<<<< HEAD
                 .filter(p -> p.getCompactionScore().getMax() >= minScore)
+=======
+                .filter(p -> !excludeTables.contains(p.getPartition().getTableId()))
+                // When manual compaction is triggered, we just skip min score
+                .filter(p -> (p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
+                        || p.getCompactionScore().getMax() >= minScore))
+>>>>>>> 1538f7cbf6 ([Enhancement] support disable lake compaction (#44616))
                 .collect(Collectors.toList());
     }
 }
