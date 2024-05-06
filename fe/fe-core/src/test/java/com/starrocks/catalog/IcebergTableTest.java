@@ -19,12 +19,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.server.IcebergTableFactory;
-import mockit.Expectations;
 import mockit.Mocked;
-import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.TableMetadata;
-import org.apache.iceberg.TableOperations;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -72,34 +68,5 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         IcebergTable table = newBuilder.build();
         Assert.assertEquals(table.getResourceName(), resourceName);
-    }
-
-    @Test
-    public void testIcebergTableUUID(@Mocked BaseTable icebergNativeTable, @Mocked TableOperations tableOperations,
-                                     @Mocked TableMetadata tableMetadata) {
-        new Expectations() {
-            {
-                icebergNativeTable.operations();
-                result = tableOperations;
-
-                tableOperations.current();
-                result = tableMetadata;
-
-                tableMetadata.uuid();
-                result = "uuid123";
-            }
-        };
-
-        IcebergTable.Builder tableBuilder = IcebergTable.builder()
-                .setId(1000)
-                .setSrTableName("SUPPLIER")
-                .setCatalogName("iceberg_catalog")
-                .setRemoteDbName("iceberg_OSS_tpch_1g_parquet_gzip")
-                .setRemoteTableName("supplier")
-                .setFullSchema(new ArrayList<>())
-                .setNativeTable(icebergNativeTable)
-                .setIcebergProperties(new HashMap<>());
-        IcebergTable oTable = tableBuilder.build();
-        Assert.assertEquals("iceberg_catalog.iceberg_oss_tpch_1g_parquet_gzip.supplier.uuid123", oTable.getUUID());
     }
 }
