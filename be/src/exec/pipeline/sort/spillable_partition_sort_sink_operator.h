@@ -50,6 +50,9 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     Status set_finished(RuntimeState* state) override;
+
+private:
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class SpillablePartitionSortSinkOperatorFactory final : public PartitionSortSinkOperatorFactory {

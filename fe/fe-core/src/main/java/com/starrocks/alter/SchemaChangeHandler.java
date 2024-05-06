@@ -407,6 +407,8 @@ public class SchemaChangeHandler extends AlterHandler {
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+        // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
+        boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
@@ -530,6 +532,15 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column oriColumn = schemaForFinding.get(modColIndex);
 
+        for (Index index : olapTable.getIndexes()) {
+            if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                if (index.getColumns().contains(oriColumn.getName()) &&
+                        !modColumn.getType().isStringType()) {
+                    throw new DdlException("Cannot modify a column with GIN into non-string type");
+                }
+            }
+        }
+
         if (oriColumn.isAutoIncrement()) {
             throw new DdlException("Can't not modify a AUTO_INCREMENT column");
         }
@@ -642,7 +653,16 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for handling other indices
 
-        return false;
+        // fast schema evolution supports the conversion of scalar types to decimal types, but does not support the conversion
+        // of decimal types to other scale types, due to the fact that the precision and scale of the decimal are not recorded
+        // in the segment file
+        if (modColumn.isKey() || !modColumn.getType().isScalarType()
+                || oriColumn.isKey()
+                || !oriColumn.getType().isScalarType()
+                || oriColumn.getType().isDecimalOfAnyVersion()) {
+            fastSchemaEvolution = false;
+        }
+        return fastSchemaEvolution;
     }
 
     // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
@@ -1285,7 +1305,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (Integer colIdx : originSortKeyIdxes) {
                     String columnName = index.getSchema().get(colIdx).getName();
                     Optional<Column> oneCol =
-                            alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
+                            alterSchema.stream().filter(c -> c.nameEquals(columnName, true)).findFirst();
                     if (oneCol.isEmpty()) {
                         LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
                         throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
@@ -2235,7 +2255,7 @@ public class SchemaChangeHandler extends AlterHandler {
     public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.READ)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
             throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
         }
         TableProperty tableProperty;
@@ -2467,13 +2487,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx).shallowCopy();
                 List<Column> originSchema = currentIndexMeta.getSchema();
 
-                if (hasMv && indexSchema.size() < originSchema.size()) {
-                    // drop column
-                    List<Column> differences = originSchema.stream().filter(element ->
-                            !indexSchema.contains(element)).collect(Collectors.toList());
-                    // can just drop one column one time, so just one element in differences
-                    int dropIdx = originSchema.indexOf(differences.get(0));
-                    modifiedColumns.add(originSchema.get(dropIdx).getName());
+                if (hasMv) {
+                    modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, indexSchema));
                 }
 
                 List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();

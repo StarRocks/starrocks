@@ -4,7 +4,44 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
-## 3.1.10
+## 3.1.11
+
+Release date: April 28, 2024
+
+### Behavior Changes
+
+- Users are not allowed to drop views in the system database `information_schema` using DROP TABLE. [#43556](https://github.com/StarRocks/starrocks/pull/43556)
+- Users are not allowed to specify duplicate keys in the ORDER BY clause when creating a Primary Key table. [#43374](https://github.com/StarRocks/starrocks/pull/43374)
+
+### Improvements
+
+- Queries on Parquet-formatted Iceberg v2 tables support equality deletes.
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege. [#44061](https://github.com/StarRocks/starrocks/pull/44061)
+- `str_to_map` may cause BEs to crash. [#43930](https://github.com/StarRocks/starrocks/pull/43930)
+- When a Routine Load job is going on, running `show proc '/routine_loads'` is stuck due to deadlock. [#44249](https://github.com/StarRocks/starrocks/pull/44249)
+- Persistent Index of Primary Key tables may cause BEs to crash due to issues in concurrency control. [#43720](https://github.com/StarRocks/starrocks/pull/43720)
+- The `pending_task_run_count` displayed on the page of `leaderFE_IP:8030` is incorrect. The displayed number is the sum of Pending and Running tasks, not Pending tasks. In addition, the information of the metric `refresh_pending` cannot be displayed using `followerFE_IP:8030`. [#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- Querying `information_schema.task_runs` fails frequently. [#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- Some SQL queries that contain CTEs may encounter the `Invalid plan: PhysicalTopNOperator` error. [#44185](https://github.com/StarRocks/starrocks/pull/44185)
+
+## 3.1.10 (Yanked)
+
+:::tip
+
+This version has been taken offline due to privilege issues in querying external tables in external catalogs such as Hive and Iceberg.
+
+- **Problem**: When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege.
+
+- **Impact scope**: This problem only affects queries on external tables in external catalogs. Other queries are not affected.
+
+- **Temporary workaround**: The query succeeds after the SELECT privilege on this table is granted to the user again. But `SHOW GRANTS` will return duplicate privilege entries. After an upgrade to v3.1.11, users can run `REVOKE` to remove one of the privilege entries.
+
+:::
 
 Release date: March 29, 2024
 

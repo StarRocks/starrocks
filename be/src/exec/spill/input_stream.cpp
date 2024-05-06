@@ -131,7 +131,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }
@@ -151,7 +151,7 @@ InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams
     return std::make_shared<UnionAllSpilledInputStream>(_streams);
 }
 
-InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller) {
+InputStreamPtr SpillInputStream::as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller) {
     return std::make_shared<RawChunkInputStream>(chunks, spiller);
 }
 
@@ -262,7 +262,7 @@ private:
 };
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
-    RACE_DETECT(detect_get_next, var1);
+    RACE_DETECT(detect_get_next);
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }
@@ -310,7 +310,7 @@ public:
 
     ~OrderedInputStream() override = default;
 
-    Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs, Spiller* spiller);
+    Status init(const SerdePtr& serde, const SortExecExprs* sort_exprs, const SortDescs* descs, Spiller* spiller);
 
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
 
@@ -333,7 +333,7 @@ private:
     Status _status;
 };
 
-Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs,
+Status OrderedInputStream::init(const SerdePtr& serde, const SortExecExprs* sort_exprs, const SortDescs* descs,
                                 Spiller* spiller) {
     std::vector<starrocks::ChunkProvider> chunk_providers;
     DCHECK(!_input_blocks.empty());

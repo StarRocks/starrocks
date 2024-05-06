@@ -482,7 +482,8 @@ public class SparkLoadJob extends BulkLoadJob {
             writeLock();
             try {
                 // check state is still loading. If state is cancelled or finished, return.
-                // if state is cancelled or finished and not return, this would throw all partitions have no load data exception,
+                // if state is cancelled or finished and not return, this would throw
+                // "No partitions have data available for loading" exception,
                 // because tableToLoadPartitions was already cleaned up,
                 if (state != JobState.LOADING) {
                     LOG.warn("job state is not loading. job id: {}, state: {}", id, state);
@@ -504,6 +505,7 @@ public class SparkLoadJob extends BulkLoadJob {
                             LOG.warn("partition does not exist. id: {}", partitionId);
                             continue;
                         }
+                        long partitionVersion = partition.getVisibleVersion();
 
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
@@ -538,7 +540,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                                 .getBackend(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
-                                                replicaId, schemaHash, params, batchTask, tabletMetaStr,
+                                                replicaId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
                                                 backend, replica, tabletFinishedReplicas,
                                                 TTabletType.TABLET_TYPE_DISK, columnsDesc);
                                     }
@@ -566,7 +568,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                     }
 
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
-                                            tabletId, schemaHash, params, batchTask, tabletMetaStr,
+                                            tabletId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
                                             backend, new Replica(tabletId, backend.getId(), -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE, columnsDesc);
 
@@ -588,7 +590,7 @@ public class SparkLoadJob extends BulkLoadJob {
                     String errMsg = new LogBuilder(LogKey.LOAD_JOB, id)
                             .add("database_id", dbId)
                             .add("label", label)
-                            .add("error_msg", "all partitions have no load data")
+                            .add("error_msg", "No partitions have data available for loading")
                             .build();
                     throw new LoadException(errMsg);
                 }
@@ -603,7 +605,7 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     private void pushTask(long backendId, long tableId, long partitionId, long indexId,
-                          long tabletId, long replicaId, int schemaHash,
+                          long tabletId, long replicaId, int schemaHash, long partitionVersion,
                           PushBrokerReaderParams params,
                           AgentBatchTask batchTask,
                           String tabletMetaStr,
@@ -649,7 +651,7 @@ public class SparkLoadJob extends BulkLoadJob {
             }
 
             PushTask pushTask = new PushTask(backendId, dbId, tableId, partitionId,
-                    indexId, tabletId, replicaId, schemaHash,
+                    indexId, tabletId, replicaId, schemaHash, partitionVersion,
                     0, id, TPushType.LOAD_V2,
                     TPriority.NORMAL, transactionId, taskSignature,
                     tBrokerScanRange, params.tDescriptorTable,

@@ -337,6 +337,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [parse_json](./json-functions/json-constructor-functions/parse_json.md)|将字符串类型的数据构造为 JSON 类型的数据。|
 |  [箭头函数](./json-functions/json-query-and-processing-functions/arrow-function.md)| 箭头函数可以查询 JSON 对象中指定路径的值。|
 |  [cast](./json-functions/json-query-and-processing-functions/cast.md)| 实现 JSON 类型数据与 SQL 类型间的相互转换。|
+|  [get_json_bool](./json-functions/json-query-and-processing-functions/get_json_bool.md)| 解析并获取 `json_str` 内指定 `json_path` 下的布尔内容。|
 |  [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 JSON 字符串内指定路径中的浮点型内容。|
 |  [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 JSON 字符串内指定路径中的整型内容。|
 |  [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|

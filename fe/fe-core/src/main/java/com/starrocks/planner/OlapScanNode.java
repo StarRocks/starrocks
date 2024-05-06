@@ -176,6 +176,8 @@ public class OlapScanNode extends ScanNode {
 
     private boolean usePkIndex = false;
 
+    private long gtid = 0;
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -513,6 +515,10 @@ public class OlapScanNode extends ScanNode {
                 }
             }
 
+            if (gtid > 0) {
+                internalRange.setGtid(gtid);
+            }
+
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
@@ -785,6 +791,10 @@ public class OlapScanNode extends ScanNode {
                 output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
             }
 
+            if (gtid > 0) {
+                output.append(prefix).append(String.format("gtid=%s", gtid));
+            }
+
             output.append("\n");
             output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
             output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
@@ -802,6 +812,11 @@ public class OlapScanNode extends ScanNode {
             } else {
                 output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
             }
+
+            if (gtid > 0) {
+                output.append(prefix).append(String.format("gtid=%s", gtid));
+            }
+
             output.append("\n");
 
             output.append(prefix).append(String.format("actualRows=%s", actualRows))
@@ -936,6 +951,13 @@ public class OlapScanNode extends ScanNode {
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.lake_scan_node.setColumn_access_paths(columnAccessPathToThrift());
             }
+
+            if (!scanTabletIds.isEmpty()) {
+                msg.lake_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+                msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
+
+            msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -954,6 +976,8 @@ public class OlapScanNode extends ScanNode {
                         ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
                 msg.olap_scan_node.setMax_parallel_scan_instance_num(
                         ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
+                msg.olap_scan_node.setEnable_prune_column_after_index_filter(
+                        ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
@@ -977,8 +1001,6 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
-            msg.olap_scan_node.setEnable_prune_column_after_index_filter(
-                ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
         }
     }
 
@@ -1305,7 +1327,7 @@ public class OlapScanNode extends ScanNode {
             // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
             // maybe invalid.
             Preconditions.checkState(tabletToPartitionMap.containsKey(tabletId),
-                    String.format("Invalid tablet id: '%s'", tabletId));
+                    "Invalid tablet id: '" + tabletId + "'");
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }
@@ -1339,6 +1361,10 @@ public class OlapScanNode extends ScanNode {
 
     public List<List<LiteralExpr>> getRowStoreKeyLiterals() {
         return rowStoreKeyLiterals;
+    }
+
+    public void setGtid(long gtid) {
+        this.gtid = gtid;
     }
 
     // clear scan node， reduce body size

@@ -139,6 +139,7 @@ import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -222,6 +223,8 @@ import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
@@ -237,6 +240,9 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesInfo;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TListPipesResult;
+import com.starrocks.thrift.TListSessionsOptions;
+import com.starrocks.thrift.TListSessionsRequest;
+import com.starrocks.thrift.TListSessionsResponse;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadJobType;
@@ -273,6 +279,7 @@ import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
+import com.starrocks.thrift.TSessionInfo;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -321,7 +328,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -1690,7 +1699,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         timeoutMs = timeoutMs * 3 / 4;
 
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ, timeoutMs)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ,
+                timeoutMs, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(
                     "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
         }
@@ -2009,7 +2019,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             if (mutablePartitions.size() <= 1) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addSubPartitions(db, olapTable.getName(), partition, 1);
+                        .addSubPartitions(db, olapTable, partition, 1);
             }
             p.setImmutable(true);
         }
@@ -2256,7 +2266,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.ROLLUP,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -2265,7 +2275,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.COLUMN,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
@@ -2813,5 +2823,41 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             resp.setValid(true);
         }
         return resp;
+    }
+
+    @Override
+    public TListSessionsResponse listSessions(TListSessionsRequest request) throws TException {
+        TListSessionsResponse response = new TListSessionsResponse();
+        if (!request.isSetOptions()) {
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.addToError_msgs("options must be set");
+            response.setStatus(status);
+            return response;
+        }
+        TListSessionsOptions options = request.options;
+        if (options.isSetTemporary_table_only() && options.temporary_table_only) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            Set<UUID> sessions = ExecuteEnv.getInstance().getScheduler().listAllSessionsId();
+            sessions.retainAll(temporaryTableMgr.listSessions());
+            List<TSessionInfo> sessionInfos = new ArrayList<>();
+            for (UUID session : sessions) {
+                TSessionInfo sessionInfo = new TSessionInfo();
+                sessionInfo.setSession_id(session.toString());
+                sessionInfos.add(sessionInfo);
+            }
+            response.setStatus(new TStatus(TStatusCode.OK));
+            response.setSessions(sessionInfos);
+        } else {
+            TStatus status = new TStatus(NOT_IMPLEMENTED_ERROR);
+            status.addToError_msgs("only support temporary_table_only options now");
+            response.setStatus(status);
+        }
+        return response;
+    }
+
+    @Override
+    public TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        return InformationSchemaDataSource.generateTemporaryTablesInfoResponse(request);
     }
 }

@@ -256,6 +256,8 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
         driver->mark_precondition_not_ready();
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
+        if (driver->has_precondition() && !driver->precondition_prepared()) driver->mark_precondition_ready();
+
         driver->submit_operators();
 
         // Try to add the driver to poller first.

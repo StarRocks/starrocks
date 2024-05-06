@@ -713,6 +713,8 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+    _dictionary_cache_pool.reset();
+    _automatic_partition_pool.reset();
     _metrics = nullptr;
 }
 

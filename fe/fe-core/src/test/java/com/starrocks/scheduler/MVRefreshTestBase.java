@@ -73,7 +73,7 @@ public class MVRefreshTestBase {
     public static void tearDown() throws Exception {
     }
 
-    public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
         new StmtExecutor(connectContext, statement).execute();

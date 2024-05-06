@@ -774,7 +774,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_5` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -790,7 +790,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_6` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -806,7 +806,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_7` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -822,7 +822,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 -- name: test_clone_for_gin
 set low_cardinality_optimize_v2 = false;
@@ -833,8 +833,14 @@ set cbo_enable_low_cardinality_optimize = false;
 -- !result
 CREATE TABLE `t_clone_for_gin` (
   `id1` bigint(20) NOT NULL COMMENT "",
-  `text_column` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+  `text_column_1` varchar(255) NULL COMMENT "",
+  `text_column_2` varchar(255) NULL COMMENT "",
+  `text_column_3` varchar(255) NULL COMMENT "",
+  `text_column_4` varchar(255) NULL COMMENT "",
+  INDEX gin_none_1 (`text_column_1`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_2 (`text_column_2`) USING BITMAP,
+  INDEX gin_none_3 (`text_column_3`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_4 (`text_column_4`) USING BITMAP
 ) ENGINE=OLAP
 DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
@@ -846,13 +852,13 @@ PROPERTIES (
 );
 -- result:
 -- !result
-INSERT INTO t_clone_for_gin VALUES (1, "abc"),(2, "ABC");
+INSERT INTO t_clone_for_gin VALUES (1, "abc","abc","abc","abc"),(2, "ABC","ABC","ABC","ABC");
 -- result:
 -- !result
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 -- result:
-1	abc
-2	ABC
+1	abc	abc	abc	abc
+2	ABC	ABC	ABC	ABC
 -- !result
 function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 -- result:
@@ -860,8 +866,8 @@ None
 -- !result
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 -- result:
-1	abc
-2	ABC
+1	abc	abc	abc	abc
+2	ABC	ABC	ABC	ABC
 -- !result
 -- name: test_complex_predicate_for_gin
 set low_cardinality_optimize_v2 = false;
@@ -1060,5 +1066,251 @@ SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
 3
 -- !result
 DROP TABLE t_delete_and_column_prune;
+-- result:
+-- !result
+-- name: test_upper_case_column_name
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+CREATE TABLE `t_upper_case_column_name` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `TeXt` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`TeXt`) USING GIN ("parser" = "english") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_upper_case_column_name VALUES (1, "b"),(2, "b"),(3, "b");
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
+-- result:
+1
+2
+3
+-- !result
+DROP TABLE t_upper_case_column_name;
+-- result:
+-- !result
+-- name: test_alter_replicated_storage
+CREATE TABLE `t_alter_replicated_storage` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `text` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+ALTER TABLE t_alter_replicated_storage SET ("replicated_storage" = "true");
+-- result:
+E: (5507, 'Getting analyzing error. Detail message: Can not enable replicated storage when the table has GIN.')
+-- !result
+SHOW CREATE TABLE t_alter_replicated_storage;
+-- result:
+t_alter_replicated_storage	CREATE TABLE `t_alter_replicated_storage` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `text` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text`) USING GIN("parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE t_alter_replicated_storage;
+-- result:
+-- !result
+-- name: test_disable_global_dict_rewrite
+CREATE TABLE `t_disable_global_dict_rewrite` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_disable_global_dict_rewrite VALUES (1, "abc", "bcd"), (2, "cbd", "dbs");
+-- result:
+-- !result
+SELECT * FROM t_disable_global_dict_rewrite;
+-- result:
+1	abc	bcd
+2	cbd	dbs
+-- !result
+SELECT SLEEP(5);
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 = "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 LIKE "%abc%";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 IN ("abc", "ab");
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
+-- result:
+1
+-- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+DROP TABLE t_disable_global_dict_rewrite;
+-- result:
+-- !result
+-- name: test_create_mv_with_match
+CREATE TABLE `t_create_mv_with_match` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
+-- result:
+-- !result
+function: wait_materialized_view_cancel()
+-- result:
+None
+-- !result
+DROP TABLE t_create_mv_with_match;
+-- result:
+-- !result
+-- name: test_alter_gin_col_into_other_type
+CREATE TABLE `t_alter_gin_col_into_other_type` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 BIGINT;
+-- result:
+E: (1064, 'Cannot modify a column with GIN into non-string type')
+-- !result
+INSERT INTO t_alter_gin_col_into_other_type VALUES (1, "abc");
+-- result:
+-- !result
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 VARCHAR(2000);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t_alter_gin_col_into_other_type;
+-- result:
+t_alter_gin_col_into_other_type	CREATE TABLE `t_alter_gin_col_into_other_type` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(2000) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN("parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+SELECT * FROM t_alter_gin_col_into_other_type;
+-- result:
+1	abc
+-- !result
+DROP TABLE t_alter_gin_col_into_other_type;
 -- result:
 -- !result

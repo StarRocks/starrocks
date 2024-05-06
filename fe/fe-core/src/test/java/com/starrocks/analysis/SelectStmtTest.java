@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -62,6 +63,7 @@ public class SelectStmtTest {
     @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        Config.show_execution_groups = false;
         FeConstants.showFragmentCost = false;
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
@@ -626,13 +628,10 @@ public class SelectStmtTest {
             String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
                     "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("2 <-> 4: str_to_map['age']\n" +
-                    "  |  3 <-> 4: str_to_map['sex']\n" +
-                    "  |  common expressions:\n" +
-                    "  |  4 <-> str_to_map[('age=18&sex=1&gender=1', '&', '='); " +
-                    "args: VARCHAR,VARCHAR,VARCHAR; " +
-                    "result: MAP<VARCHAR,VARCHAR>; args " +
-                    "nullable: false; result nullable: true]"));
+            Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  2 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['age']\n" +
+                    "  |  3 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['sex']"));
         } catch (Exception e) {
             Assert.fail("Should not throw an exception");
         }

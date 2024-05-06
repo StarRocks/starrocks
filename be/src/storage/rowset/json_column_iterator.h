@@ -24,9 +24,10 @@ namespace starrocks {
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<std::string>& flat_paths,
-        ColumnAccessPath* path);
+        std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<std::string>& full_paths,
+        std::vector<LogicalType>& target_types, std::vector<LogicalType>& source_types, ColumnAccessPath* path);
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
-        std::unique_ptr<ScalarColumnIterator> json_iter, std::vector<std::string>& flat_paths, ColumnAccessPath* path);
+        std::unique_ptr<ScalarColumnIterator> json_iter, std::vector<std::string>& flat_paths,
+        std::vector<LogicalType>& target_types, ColumnAccessPath* path);
 } // namespace starrocks

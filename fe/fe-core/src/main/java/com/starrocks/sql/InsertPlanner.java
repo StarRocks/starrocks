@@ -195,7 +195,7 @@ public class InsertPlanner {
         OlapTable targetTable = (OlapTable) insertStmt.getTargetTable();
         for (Column column : targetTable.getFullSchema()) {
             String columnName = column.getName().toLowerCase();
-            if (outputColumnNames.contains(columnName)) {
+            if (outputColumnNames.contains(columnName) || column.isKey()) {
                 if (baseSchemaNames.contains(columnName)) {
                     outputBaseSchema.add(column);
                 }

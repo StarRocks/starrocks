@@ -540,9 +540,9 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
      * 2. partition prune
      * 3. bucket prune
      */
-    public OptExpression doPostAfterRewrite(OptimizerContext optimizerContext,
-                                            MvRewriteContext mvRewriteContext,
-                                            OptExpression candidate) {
+    public OptExpression postRewrite(OptimizerContext optimizerContext,
+                                     MvRewriteContext mvRewriteContext,
+                                     OptExpression candidate) {
         if (candidate == null) {
             return null;
         }
@@ -720,6 +720,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 queryExpression, queryPredicateSplit, queryEc, queryRelationIdToColumns, queryColumnRefFactory,
                 mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet);
+        // add agg push down rewrite info
+        rewriteContext.setAggregatePushDownContext(mvRewriteContext.getAggregatePushDownContext());
 
         // collect partition and distribution related predicates in mv
         // used to prune partition and buckets after mv rewrite
@@ -914,7 +916,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 if (foreignKeyConstraint.getChildTableInfo() == null) {
                     return false;
                 }
-                Table table = foreignKeyConstraint.getChildTableInfo().getTableChecked();
+                Table table = MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo());
                 return table.equals(mvChildTable);
             }).forEach(foreignKeyConstraints::add);
         }
@@ -971,7 +973,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
                         .map(String::toLowerCase).collect(Collectors.toList());
 
-                Table foreignKeyParentTable = foreignKeyConstraint.getParentTableInfo().getTableChecked();
+                Table foreignKeyParentTable = MvUtils.getTableChecked(foreignKeyConstraint.getParentTableInfo());
                 for (TableScanDesc mvParentTableScanDesc : mvParentTableScanDescs) {
                     Table parentTable = mvParentTableScanDesc.getTable();
                     // check the parent table is the same table in the foreign key constraint
@@ -1042,7 +1044,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
             if (foreignKeyConstraint.getChildTableInfo() != null &&
-                    foreignKeyConstraint.getChildTableInfo().getTableChecked().equals(childTable)) {
+                    MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo()).equals(childTable)) {
                 List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
                 Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toSet());
@@ -2184,7 +2186,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
         // NOTE: selected partitions and tablets should be deduced again.
-        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput);
+        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput, false);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         // rewrite viewInput

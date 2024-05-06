@@ -137,6 +137,7 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
     return Status::OK();
@@ -592,28 +593,6 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 }
 
 void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
-    std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
-    _buffered_morsels.insert(_buffered_morsels.end(), std::make_move_iterator(morsels.begin()),
-                             std::make_move_iterator(morsels.end()));
-    _buffered_morsels_size += morsels.size();
-}
-
-void ConnectorScanOperator::begin_pickup_morsels() {
-    if (_buffered_morsels_size.load(std::memory_order_relaxed) == 0) {
-        return;
-    }
-
-    std::vector<MorselPtr> morsels;
-    {
-        std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
-        morsels.swap(_buffered_morsels);
-        _buffered_morsels_size = 0;
-    }
-
-    if (morsels.size() == 0) {
-        return;
-    }
-
     query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
     if (ticket_checker != nullptr) {
         int64_t cached_owner_id = -1;
@@ -626,7 +605,6 @@ void ConnectorScanOperator::begin_pickup_morsels() {
             }
         }
     }
-
     _morsel_queue->append_morsels(std::move(morsels));
 }
 
@@ -741,7 +719,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     if (scan_op->enable_adaptive_io_tasks()) {
-        [[maybe_unused]] auto build_debug_string = [&](const std::string action) {
+        [[maybe_unused]] auto build_debug_string = [&](const std::string& action) {
             std::stringstream ss;
             ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
                << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", "

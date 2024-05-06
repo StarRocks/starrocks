@@ -62,6 +62,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -204,6 +205,8 @@ public class ConnectContext {
     protected boolean isStatisticsConnection = false;
     protected boolean isStatisticsJob = false;
     protected boolean isStatisticsContext = false;
+
+    protected boolean isMetadataContext = false;
     protected boolean needQueued = true;
 
     protected DumpInfo dumpInfo;
@@ -429,6 +432,7 @@ public class ConnectContext {
     public Map<String, UserVariable> getUserVariables() {
         return userVariables;
     }
+
     public UserVariable getUserVariable(String variable) {
         return userVariables.get(variable);
     }
@@ -732,6 +736,14 @@ public class ConnectContext {
         this.isStatisticsContext = isStatisticsContext;
     }
 
+    public boolean isMetadataContext() {
+        return isMetadataContext;
+    }
+
+    public void setMetadataContext(boolean metadataContext) {
+        isMetadataContext = metadataContext;
+    }
+
     public boolean isNeedQueued() {
         return needQueued;
     }
@@ -853,6 +865,10 @@ public class ConnectContext {
 
     public int getTotalBackendNumber() {
         return globalStateMgr.getNodeMgr().getClusterInfo().getTotalBackendNumber();
+    }
+
+    public int getAliveComputeNumber() {
+        return globalStateMgr.getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
     }
 
     public void setPending(boolean pending) {
@@ -984,6 +1000,26 @@ public class ConnectContext {
         }
 
         this.setDatabase(dbName);
+    }
+
+    public void cleanTemporaryTable() {
+        if (sessionId == null) {
+            return;
+        }
+        if (!GlobalStateMgr.getCurrentState().getTemporaryTableMgr().sessionExists(sessionId)) {
+            return;
+        }
+        LOG.debug("clean temporary table on session {}", sessionId);
+        try {
+            setQueryId(UUIDUtil.genUUID());
+            CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
+            cleanTemporaryTableStmt.setOrigStmt(
+                    new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
+            executor = new StmtExecutor(this, cleanTemporaryTableStmt);
+            executor.execute();
+        } catch (Throwable e) {
+            LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);
+        }
     }
 
     /**

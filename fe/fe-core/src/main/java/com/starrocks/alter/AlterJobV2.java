@@ -272,8 +272,10 @@ public abstract class AlterJobV2 implements Writable {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
 
-            unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                    GlobalStateMgr.getCurrentState().getTabletScheduler());
+            if (tbl.isOlapTable()) {
+                unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getTabletScheduler());
+            }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }

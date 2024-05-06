@@ -14,7 +14,11 @@
 
 #include "formats/parquet/encoding.h"
 
+#include <iterator>
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"

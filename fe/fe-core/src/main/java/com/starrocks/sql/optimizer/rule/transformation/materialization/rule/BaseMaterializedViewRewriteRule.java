@@ -208,7 +208,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 continue;
             }
 
-            candidate = mvRewriter.doPostAfterRewrite(context, mvRewriteContext, candidate);
+            candidate = mvRewriter.postRewrite(context, mvRewriteContext, candidate);
             if (candidate == null) {
                 logMVRewrite(context, this, "doPostAfterRewrite phase failed");
                 continue;

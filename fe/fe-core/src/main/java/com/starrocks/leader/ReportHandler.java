@@ -135,6 +135,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.stream.Collectors;
@@ -1253,8 +1254,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             Map<Long, Map<Long, TPartitionVersionInfo>> map = transactionsToPublish.get(dbId);
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
+                Optional<Long> gtid = map.values().stream().flatMap(m -> m.values().stream()).map(info -> info.gtid).findFirst();
                 PublishVersionTask task =
-                        new PublishVersionTask(backendId, txnId, dbId, commitTime,
+                        new PublishVersionTask(backendId, txnId, gtid.orElse((long) 0), dbId, commitTime,
                                 map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null,
                                 Config.enable_sync_publish, TTxnType.TXN_NORMAL);

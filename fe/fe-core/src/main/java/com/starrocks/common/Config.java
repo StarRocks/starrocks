@@ -143,6 +143,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+    @ConfField(mutable = true)
+    public static int slow_lock_stack_trace_reserve_levels = 15;
+
     @ConfField
     public static String custom_config_dir = "/conf";
 
@@ -842,13 +845,16 @@ public class Config extends ConfigBase {
     public static int publish_version_interval_ms = 10;
 
     @ConfField(mutable = true)
-    public static boolean lake_enable_batch_publish_version = false;
+    public static boolean lake_enable_batch_publish_version = true;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;
+
+    @ConfField(mutable = true)
+    public static boolean lake_use_combined_txn_log = false;
 
     /**
      * The thrift server max worker threads
@@ -1184,6 +1190,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "whether to collect metrics for materialized view by default")
     public static boolean enable_materialized_view_metrics_collect = true;
+
+    @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
+               "build ast tree in materialized view initialization")
+    public static boolean enable_materialized_view_text_based_rewrite = true;
 
     /**
      * When the materialized view fails to start FE due to metadata problems,
@@ -2123,7 +2133,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
+    public static int iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
      * size of iceberg table refresh pool
@@ -2393,7 +2403,7 @@ public class Config extends ConfigBase {
     public static boolean enable_password_reuse = true;
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `all partitions have no load data` is returned.
+     * Otherwise, `No partitions have data available for loading` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
@@ -2464,6 +2474,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String lake_compaction_warehouse = "default_warehouse";
+
+    // e.g. "tableId1;tableId2"
+    @ConfField(mutable = true)
+    public static String lake_compaction_disable_tables = "";
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
@@ -2723,10 +2737,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution_in_share_data_mode = true;
 
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int pipe_listener_interval_millis = 1000;
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int pipe_scheduler_interval_millis = 1000;
+    @ConfField(mutable = true, comment = "default poll interval of pipe")
+    public static int pipe_default_poll_interval_s = 60 * 5;
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
@@ -2842,18 +2858,7 @@ public class Config extends ConfigBase {
      * Whether to use table level lock
      */
     @ConfField
-    public static boolean lock_manager_enable_loading_using_fine_granularity_lock = false;
-
-    /**
-     * when a lock cannot be obtained, we cannot determine whether it is because the required
-     * lock is being used normally or if a deadlock has occurred.
-     * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
-     * is used to control the waiting time before deadlock detection.
-     * If a lock is obtained during this period, there is no need to perform deadlock detection.
-     * Avoid frequent and unnecessary deadlock detection due to lock contention
-     */
-    @ConfField(mutable = true)
-    public static long lock_manager_dead_lock_detection_delay_time_ms = 3000; // 3s
+    public static boolean lock_manager_enable_using_fine_granularity_lock = false;
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
@@ -2906,4 +2911,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
+
+    @ConfField(mutable = true)
+    public static boolean show_execution_groups = true;
 }

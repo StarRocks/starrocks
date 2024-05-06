@@ -216,22 +216,19 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_range_pruner =
             OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(parser, &preds));
-    _decide_chunk_size(!preds.empty());
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _not_push_down_predicates.add(p.get());
-        }
-        _predicate_free_pool.emplace_back(std::move(p));
-    }
+
+    ASSIGN_OR_RETURN(auto pred_tree, _scan_ctx->conjuncts_manager().get_predicate_tree(parser, _predicate_free_pool));
+    _decide_chunk_size(!pred_tree.empty());
+    PredicateAndNode pushdown_pred_root;
+    PredicateAndNode non_pushdown_pred_root;
+    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
+                                    &pushdown_pred_root, &non_pushdown_pred_root);
+    _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+    _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
     {
-        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                     *_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
 
     // Range
@@ -407,18 +404,14 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
-    auto tablet_schema_ptr = _tablet->tablet_schema();
-    _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
-
     // if column_desc come from fe, reset tablet schema
     if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
         !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
         _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema->clear_columns();
-        for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
-            _tablet_schema->append_column(TabletColumn(column_desc));
-        }
-        _tablet_schema->generate_sort_key_idxes();
+        _tablet_schema =
+                TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+    } else {
+        _tablet_schema = _tablet->tablet_schema();
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
@@ -437,6 +430,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), std::move(rowsets), &_tablet_schema);
+    _reader->set_use_gtid(_morsel->get_olap_scan_range()->__isset.gtid);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -444,8 +438,18 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates.empty()) {
+    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_non_pushdown_pred_tree.empty()) {
         _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", IO_TASK_EXEC_TIMER_NAME);
+
+        _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
+                                                                  TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        COUNTER_SET(_non_pushdown_predicates_counter,
+                    static_cast<int64_t>(_scan_ctx->not_push_down_conjuncts().size() + _non_pushdown_pred_tree.size()));
+        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+            _runtime_profile->add_info_string(
+                    "NonPushdownPredicateTree",
+                    _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+        }
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
@@ -511,11 +515,11 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_not_push_down_predicates.empty()) {
+        if (!_non_pushdown_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
@@ -613,7 +617,12 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+
+    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        _runtime_profile->add_info_string(
+                "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+    }
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
@@ -637,7 +646,7 @@ void OlapChunkSource::_update_counter() {
         std::string access_path_hits = "AccessPathHits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
-            auto* path_counter = _runtime_profile->get_counter(k);
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[Hit]{}", k));
             if (path_counter == nullptr) {
                 path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
             }
@@ -650,7 +659,7 @@ void OlapChunkSource::_update_counter() {
         std::string access_path_unhits = "AccessPathUnhits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
-            auto* path_counter = _runtime_profile->get_counter(k);
+            auto* path_counter = _runtime_profile->get_counter(fmt::format("[Unhit]{}", k));
             if (path_counter == nullptr) {
                 path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_unhits);
             }

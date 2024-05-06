@@ -190,6 +190,10 @@ Status TabletReader::do_get_next(Chunk* chunk) {
     return Status::OK();
 }
 
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+    return _collect_iter->get_next(chunk, rssid_rowids);
+}
+
 Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     DCHECK(_is_vertical_merge);
     if (_need_split) {
@@ -200,6 +204,15 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                                 std::vector<uint64_t>* rssid_rowids) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
+    return Status::OK();
+}
+
+// TODO: support
+//  1. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet_schema->keys_type();
@@ -207,9 +220,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
-    rs_opts.predicates = _pushdown_predicates;
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
-                                                                     &rs_opts.predicates_for_zone_map));
+    rs_opts.pred_tree = params.pred_tree;
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(
+            ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree, pred_tree_for_zone_map));
+    rs_opts.predicates_for_zone_map = pred_tree_for_zone_map.get_immediate_column_predicate_map();
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
@@ -273,9 +288,6 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 }
 
 Status TabletReader::init_predicates(const TabletReaderParams& params) {
-    for (const ColumnPredicate* pred : params.predicates) {
-        _pushdown_predicates[pred->column_id()].emplace_back(pred);
-    }
     return Status::OK();
 }
 
@@ -392,7 +404,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = new_heap_merge_iterator(seg_iters, (keys_type == PRIMARY_KEYS));
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {

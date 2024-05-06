@@ -27,6 +27,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -40,10 +41,7 @@
 
 namespace starrocks::lake {
 
-using Chunk = starrocks::Chunk;
-using Column = starrocks::Column;
-using MemTable = starrocks::MemTable;
-using MemTableSink = starrocks::MemTableSink;
+using TxnLogPtr = DeltaWriter::TxnLogPtr;
 
 class TabletWriterSink : public MemTableSink {
 public:
@@ -98,7 +96,7 @@ public:
 
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
-    Status finish(DeltaWriter::FinishMode mode);
+    StatusOr<TxnLogPtr> finish(DeltaWriterFinishMode mode);
 
     void close();
 
@@ -220,8 +218,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-            _tablet_writer =
-                    std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema, _txn_id);
+            _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
+                                                                        _txn_id, nullptr, false /** no compaction**/);
         } else {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
                                                                              _txn_id);
@@ -289,6 +287,7 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
         _tablet_schema = std::move(res).value();
         return Status::OK();
     } else if (res.status().is_not_found()) {
+        LOG(WARNING) << "No schema file of id=" << _schema_id << " for tablet=" << _tablet_id;
         // schema file does not exist, fetch tablet schema from tablet metadata
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         return Status::OK();
@@ -306,7 +305,7 @@ inline Status DeltaWriterImpl::flush() {
 // in a bthread.
 Status DeltaWriterImpl::open() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    _flush_token = StorageEngine::instance()->memtable_flush_executor()->create_flush_token();
+    _flush_token = StorageEngine::instance()->lake_memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
     }
@@ -404,15 +403,11 @@ Status DeltaWriterImpl::init_write_schema() {
     return Status::OK();
 }
 
-Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
+StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
-
-    if (mode == DeltaWriter::kDontWriteTxnLog) {
-        return Status::OK();
-    }
 
     if (UNLIKELY(_txn_id < 0)) {
         return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
@@ -422,6 +417,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
+    txn_log->set_partition_id(_partition_id);
     auto op_write = txn_log->mutable_op_write();
 
     for (auto& f : _tablet_writer->files()) {
@@ -485,12 +481,17 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
             }
         }
     }
-    RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
+    if (mode == kWriteTxnLog) {
+        RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
+    } else {
+        auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
+        _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+    }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
-    return Status::OK();
+    return txn_log;
 }
 
 Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
@@ -618,7 +619,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return _impl->write(chunk, indexes, indexes_size);
 }
 
-Status DeltaWriter::finish(FinishMode mode) {
+StatusOr<TxnLogPtr> DeltaWriter::finish(DeltaWriterFinishMode mode) {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
     return _impl->finish(mode);
 }
@@ -686,10 +687,10 @@ ThreadPool* DeltaWriter::io_threads() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return nullptr;
     }
-    if (UNLIKELY(StorageEngine::instance()->memtable_flush_executor() == nullptr)) {
+    if (UNLIKELY(StorageEngine::instance()->lake_memtable_flush_executor() == nullptr)) {
         return nullptr;
     }
-    return StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+    return StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
 }
 
 StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {

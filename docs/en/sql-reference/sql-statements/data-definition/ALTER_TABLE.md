@@ -421,9 +421,11 @@ Note:
 - All columns in the index must be written.
 - The value column is listed after the key column.
 
-#### Modify columns of the sort key in a Primary Key table
+#### Modify the sort key
 
-<!--Supported Versions-->
+Since v3.0, the sort keys for the Primary Key tables can be modified. v3.3 extends this support to Duplicate Key tables, Aggregate tables, and Unique Key tables.
+
+The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of the columns does not need to be same as the key columns.
 
 Syntax:
 
@@ -435,9 +437,9 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
-Example:
+Example: modify the sort keys in Primary Key tables.
 
-For example, the original table is a Primary Key table where the sort key and  the primary key are coupled, which is `dt, order_id`.
+For example, the original table is a Primary Key table where the sort key and the primary key are coupled, which is `dt, order_id`.
 
 ```SQL
 create table orders (
@@ -613,6 +615,8 @@ Before v3.1, compaction is performed in two ways:
 - Users can perform compaction by calling an HTTP interface.
 
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
+
+Shared-data clusters support this feature from v3.3.0 onwards.
 
 Syntax:
 

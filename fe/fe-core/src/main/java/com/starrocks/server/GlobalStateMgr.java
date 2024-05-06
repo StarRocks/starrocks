@@ -96,6 +96,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
@@ -219,6 +220,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.lang3.StringUtils;
@@ -466,7 +468,11 @@ public class GlobalStateMgr {
     private MemoryUsageTracker memoryUsageTracker;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+
     private TemporaryTableMgr temporaryTableMgr;
+    private TemporaryTableCleaner temporaryTableCleaner;
+
+    private final GtidGenerator gtidGenerator;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -709,6 +715,8 @@ public class GlobalStateMgr {
 
         this.lockManager = new LockManager();
 
+        this.gtidGenerator = new GtidGenerator();
+
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
@@ -753,6 +761,7 @@ public class GlobalStateMgr {
         this.authorizer = new Authorizer(accessControlProvider);
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
     }
 
     public static void destroyCheckpoint() {
@@ -975,6 +984,10 @@ public class GlobalStateMgr {
         return showExecutor;
     }
 
+    public GtidGenerator getGtidGenerator() {
+        return gtidGenerator;
+    }
+
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -983,7 +996,7 @@ public class GlobalStateMgr {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
-                        LOG.warn("globalStateMgr lock is held by: {}", Util.dumpThread(owner, 50));
+                        LOG.warn("globalStateMgr lock is held by: {}", LogUtil.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {
@@ -1333,6 +1346,7 @@ public class GlobalStateMgr {
             LOG.info("run system in recovery mode");
             metaRecoveryDaemon.start();
         }
+        temporaryTableCleaner.start();
 
     }
 

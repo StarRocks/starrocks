@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
@@ -31,8 +32,11 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections4.ListUtils;
 
 import java.io.DataOutput;
 import java.io.IOException;
@@ -61,7 +65,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     // shadow index id -> index schema
     @SerializedName(value = "schemaInfos")
     private List<IndexSchemaInfo> schemaInfos;
-    private Set<Long> visitedIndexSet = new HashSet<>();
+    private Set<String> partitionsWithSchemaFile = new HashSet<>();
 
     LakeTableAsyncFastSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
@@ -73,7 +77,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
             setIndexTabletSchema(indexSchemaInfo.indexId, indexSchemaInfo.indexName, indexSchemaInfo.schemaInfo);
         }
-        visitedIndexSet.addAll(other.visitedIndexSet);
+        partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
     public void setIndexTabletSchema(long indexId, String indexName, SchemaInfo schemaInfo) {
@@ -81,12 +85,14 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
-    protected TabletMetadataUpdateAgentTask createTask(MaterializedIndex index, long nodeId, Set<Long> tablets) {
+    protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition, MaterializedIndex index, long nodeId,
+            Set<Long> tablets) {
+        String tag = String.format("%d_%d", partition.getId(), index.getId());
         TabletMetadataUpdateAgentTask task = null;
         for (IndexSchemaInfo info : schemaInfos) {
             if (info.indexId == index.getId()) {
-                boolean createSchemaFile = !visitedIndexSet.contains(info.indexId);
-                visitedIndexSet.add(info.indexId);
+                // `Set.add()` returns true means this set did not already contain the specified element
+                boolean createSchemaFile = partitionsWithSchemaFile.add(tag);
                 task = TabletMetadataUpdateAgentTaskFactory.createTabletSchemaUpdateTask(nodeId,
                         new ArrayList<>(tablets), info.schemaInfo.toTabletSchema(), createSchemaFile);
                 break;
@@ -107,7 +113,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     private void updateCatalogUnprotected(Database db, LakeTable table) {
-        Set<String> droppedColumns = Sets.newHashSet();
+        Set<String> droppedOrModifiedColumns = Sets.newHashSet();
         boolean hasMv = !table.getRelatedMaterializedViews().isEmpty();
         for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
             SchemaInfo schemaInfo = indexSchemaInfo.schemaInfo;
@@ -116,31 +122,29 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             List<Column> oldColumns = indexMeta.getSchema();
 
             Preconditions.checkState(Objects.equals(indexMeta.getKeysType(), schemaInfo.getKeysType()));
-            Preconditions.checkState(Objects.equals(indexMeta.getSortKeyIdxes(), schemaInfo.getSortKeyIndexes()));
-            Preconditions.checkState(Objects.equals(indexMeta.getSortKeyUniqueIds(), schemaInfo.getSortKeyUniqueIds()));
+            Preconditions.checkState(Objects.equals(ListUtils.emptyIfNull(indexMeta.getSortKeyUniqueIds()),
+                    ListUtils.emptyIfNull(schemaInfo.getSortKeyUniqueIds())));
             Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion());
             Preconditions.checkState(Objects.equals(indexMeta.getShortKeyColumnCount(), schemaInfo.getShortKeyColumnCount()));
 
-            if (hasMv && schemaInfo.getColumns().size() < oldColumns.size()) {
-                List<Column> differences = oldColumns.stream().filter(element -> !schemaInfo.getColumns().contains(element))
-                        .collect(Collectors.toList());
-                // can just drop one column one time, so just one element in differences
-                int dropIdx = oldColumns.indexOf(differences.get(0));
-                droppedColumns.add(oldColumns.get(dropIdx).getName());
+            if (hasMv) {
+                droppedOrModifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(oldColumns, schemaInfo.getColumns()));
             }
 
             indexMeta.setSchema(schemaInfo.getColumns());
             indexMeta.setSchemaVersion(schemaInfo.getVersion());
             indexMeta.setSchemaId(schemaInfo.getId());
+            indexMeta.setSortKeyIdxes(schemaInfo.getSortKeyIndexes());
 
             // update the indexIdToMeta
             table.getIndexIdToMeta().put(indexId, indexMeta);
             table.setIndexes(schemaInfo.getIndexes());
+            table.renameColumnNamePrefix(indexId);
         }
         table.rebuildFullSchema();
 
         // If modified columns are already done, inactive related mv
-        inactiveRelatedMaterializedViews(db, table, droppedColumns);
+        inactiveRelatedMaterializedViews(db, table, droppedOrModifiedColumns);
     }
 
     @Override
@@ -195,12 +199,18 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             info.add(errMsg);
             info.add(progress);
             info.add(timeoutMs / 1000);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+            if (warehouse == null) {
+                info.add("null");
+            } else {
+                info.add(warehouse.getName());
+            }
             infos.add(info);
         }
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
-        visitedIndexSet = new HashSet<>();
+        partitionsWithSchemaFile = new HashSet<>();
     }
 }

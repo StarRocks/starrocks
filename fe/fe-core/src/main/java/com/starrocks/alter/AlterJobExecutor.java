@@ -118,7 +118,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     public Void visitSwapTableClause(SwapTableClause clause, ConnectContext context) {
         // must hold db write lock
         Locker locker = new Locker();
-        Preconditions.checkState(locker.isWriteLockHeldByCurrentThread(db));
+        Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
 
         OlapTable origTable = (OlapTable) table;
 
@@ -324,7 +324,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         Database db = MetaUtils.getDatabase(context, mvName);
 
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
 

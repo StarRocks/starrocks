@@ -36,6 +36,8 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
@@ -114,8 +116,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         this.jobState = JobState.RUNNING;
     }
 
-    protected abstract TabletMetadataUpdateAgentTask createTask(MaterializedIndex index, long nodeId,
-                                                                Set<Long> tablets);
+    protected abstract TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
+            MaterializedIndex index, long nodeId, Set<Long> tablets);
 
     protected abstract void updateCatalog(Database db, LakeTable table);
 
@@ -246,12 +248,17 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     boolean publishVersion() {
         try {
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.commitTime = finishedTimeMs / 1000;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
-                            finishedTimeMs / 1000, warehouseId);
+                    Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                            warehouseId);
                 }
             }
             return true;
@@ -324,7 +331,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         batchTask = new AgentBatchTask();
         for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
-            TabletMetadataUpdateAgentTask task = createTask(index, kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = createTask(partition, index, kv.getKey(), kv.getValue());
             Preconditions.checkState(task != null, "task is null");
             task.setLatch(countDownLatch);
             task.setTxnId(watershedTxnId);

@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -53,12 +54,15 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
+    @SerializedName("taskId")
     private long taskId;
 
+    @SerializedName("properties")
     private Map<String, String> properties;
 
     private final CompletableFuture<Constants.TaskRunState> future;
 
+    @SerializedName("task")
     private Task task;
 
     private ConnectContext runCtx;
@@ -67,12 +71,16 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private TaskRunProcessor processor;
 
+    @SerializedName("status")
     private TaskRunStatus status;
 
+    @SerializedName("type")
     private Constants.TaskType type;
 
+    @SerializedName("executeOption")
     private ExecuteOption executeOption;
 
+    @SerializedName("taskRunId")
     private final String taskRunId;
 
     TaskRun() {
@@ -136,7 +144,7 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
-    public String getUUID() {
+    public String getTaskRunId() {
         return taskRunId;
     }
 
@@ -302,20 +310,17 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
+        long created = createTime == null ? System.currentTimeMillis() : createTime;
         status.setQueryId(queryId);
         status.setTaskId(task.getId());
         status.setTaskName(task.getName());
         status.setSource(task.getSource());
-        if (createTime == null) {
-            status.setCreateTime(System.currentTimeMillis());
-        } else {
-            status.setCreateTime(createTime);
-        }
+        status.setCreateTime(created);
         status.setUser(task.getCreateUser());
         status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
-        status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
+        status.setExpireTime(created + Config.task_runs_ttl_second * 1000L);
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
@@ -325,15 +330,45 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        // if priority is different, return the higher priority
-        if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
-            return taskRun.getStatus().getPriority() - this.getStatus().getPriority();
+        TaskRunStatus taskRunStatus = this.getStatus();
+        TaskRunStatus otherTaskRunStatus = taskRun.getStatus();
+        if (taskRunStatus == null) {
+            // prefer other
+            return 1;
+        } else if (otherTaskRunStatus == null) {
+            // prefer this
+            return -1;
         } else {
-            // if priority is the same, return the older task
-            return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
+            // if priority is different, return the higher priority
+            if (taskRunStatus.getPriority() != otherTaskRunStatus.getPriority()) {
+                return otherTaskRunStatus.getPriority() - taskRunStatus.getPriority();
+            } else {
+                // if priority is the same, return the older task
+                return taskRunStatus.getCreateTime() > otherTaskRunStatus.getCreateTime() ? 1 : -1;
+            }
         }
     }
 
+    /**
+     * Check the taskRun is equal task to the given taskRun which means they have the same taskRunId and the same task.
+     */
+    public boolean isEqualTask(TaskRun o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null) {
+            return false;
+        }
+        if (task.getDefinition() == null) {
+            return false;
+        }
+        return this.taskId == o.getTaskId() &&
+                this.task.getDefinition().equals(o.getTask().getDefinition());
+    }
+
+    /**
+     * TaskRun is equal if they have the same taskRunId and the same task.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -342,12 +377,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (task.getDefinition() == null) {
-            return false;
-        }
         TaskRun taskRun = (TaskRun) o;
-        return this.taskId == taskRun.getTaskId() &&
-                this.task.getDefinition().equals(taskRun.getTask().getDefinition());
+        return this.taskRunId.equals(taskRun.getTaskRunId()) && isEqualTask(taskRun);
     }
 
     @Override

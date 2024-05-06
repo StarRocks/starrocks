@@ -86,6 +86,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const {
+    return _location_provider->combined_txn_log_location(tablet_id, txn_id);
+}
+
 std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->txn_slog_location(tablet_id, txn_id);
 }
@@ -308,6 +312,26 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     return ptr;
 }
 
+StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::string& path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::get_combined_txn_log");
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    ProtobufFile file(path);
+    RETURN_IF_ERROR(file.load(log.get(), fill_cache));
+    if (fill_cache) {
+        _metacache->cache_combined_txn_log(path, log);
+    }
+    return log;
+}
+
+StatusOr<CombinedTxnLogPtr> TabletManager::get_combined_txn_log(const std::string& path, bool fill_cache) {
+    ASSIGN_OR_RETURN(auto cache_key, _location_provider->real_location(path));
+    if (auto ptr = _metacache->lookup_combined_txn_log(cache_key); ptr != nullptr) {
+        TRACE("got cached combined txn log");
+        return ptr;
+    }
+    return _combined_txn_log_group.Do(cache_key, [&]() { return load_combined_txn_log(path, fill_cache); });
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id) {
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
@@ -357,6 +381,28 @@ Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path
 
 Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
     return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
+}
+
+Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs) {
+    if (UNLIKELY(logs.txn_logs_size() == 0)) {
+        return Status::InvalidArgument("empty CombinedTxnLogPB");
+    }
+    auto tablet_id = logs.txn_logs(0).tablet_id();
+    auto txn_id = logs.txn_logs(0).txn_id();
+#ifndef NDEBUG
+    // Ensure that all tablets belongs to the same partition.
+    auto partition_id = logs.txn_logs(0).partition_id();
+    for (const auto& log : logs.txn_logs()) {
+        DCHECK(log.has_tablet_id());
+        DCHECK(log.has_partition_id());
+        DCHECK(log.has_txn_id());
+        DCHECK_EQ(partition_id, log.partition_id());
+        DCHECK_EQ(txn_id, log.txn_id());
+    }
+#endif
+    auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
+    ProtobufFile file(path);
+    return file.save(logs);
 }
 
 StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
@@ -492,7 +538,10 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
     }
     // else: Cache miss, read the schema file
     auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
-    auto schema_or = load_and_parse_schema_file(schema_file_path);
+    auto schema_or = _schema_group.Do(global_cache_key, [&]() { return load_and_parse_schema_file(schema_file_path); });
+    //                                ^^^^^^^^^^^^^^^^ Do not use "schema_file_path" as the key for singleflight, as
+    // our path is a virtual path rather than a real path (when the same file is accessed by different tablets, the
+    // "schema_file_path" here is different), so using "schema_file_path" cannot achieve optimal effect.
     TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.2", &schema_or);
     if (schema_or.ok()) {
         schema = std::move(schema_or).value();
@@ -576,6 +625,7 @@ void TabletManager::remove_in_writing_data_size(int64_t tablet_id) {
 }
 
 void TabletManager::clean_in_writing_data_size() {
+#ifdef USE_STAROS
     std::unique_lock wrlock(_meta_lock);
     for (auto it = _tablet_in_writing_size.begin(); it != _tablet_in_writing_size.end();) {
         VLOG(1) << "clean in writing data size of tablet " << it->first << " size: " << it->second;
@@ -585,6 +635,7 @@ void TabletManager::clean_in_writing_data_size() {
             ++it;
         }
     }
+#endif
 }
 
 void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchemaPtr schema) {

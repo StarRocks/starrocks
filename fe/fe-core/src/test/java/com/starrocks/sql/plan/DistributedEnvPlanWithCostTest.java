@@ -68,6 +68,23 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testComplexExprStats() throws Exception {
+        String sql = "select CONCAT(CONCAT(EXTRACT(YEAR FROM DATE_ADD(CASE WHEN CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6 " +
+                "ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 THEN DATE_SUB(l_shipdate, INTERVAL 7 DAY) " +
+                "WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6 ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN l_shipdate ELSE NULL END, INTERVAL 26 - WEEK(CASE WHEN CASE  WHEN DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN 6 ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 THEN DATE_SUB(l_shipdate, INTERVAL 7 DAY) WHEN NOT CASE  " +
+                "WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6 ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN l_shipdate ELSE NULL END, 3) DAY))), " +
+                "CASE WHEN 2 >= 0 THEN RIGHT(CONCAT('0', CONCAT(WEEK(CASE  WHEN CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  " +
+                "ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 THEN DATE_SUB(l_shipdate, INTERVAL 7 DAY)" +
+                " WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN l_shipdate ELSE NULL END, 3))), 2) ELSE NULL END) from lineitem";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "concat-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
+    }
+
+    @Test
     public void testCountDistinctWithGroupLowCountLow() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_TYPE) from part group by P_BRAND;";
@@ -733,7 +750,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [1: PS_PARTKEY, INT, false] = [7: P_PARTKEY, INT, true]\n" +
                 "  |  other predicates: 7: P_PARTKEY IS NULL\n" +
-                "  |  output columns: 1, 2, 7\n" +
+                "  |  output columns: 1, 2\n" +
                 "  |  cardinality: 8000000");
         // test right outer join
         sql = "select ps_partkey,ps_suppkey from partsupp right outer join part on " +

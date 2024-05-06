@@ -171,6 +171,11 @@ public:
     Pipelines pipelines() { return std::move(_pipelines); }
 
 private:
+    // op1->limit->op2 (except accumulate) => return -1
+    // op1->limit->op2 (accumulate) => return limit
+    int64_t _prev_limit_size(const OpFactories& pred_operators);
+    void _try_interpolate_limit_operator(int32_t plan_node_id, OpFactories& pred_operators, int64_t limit_size);
+
     void _subscribe_pipeline_event(Pipeline* pipeline);
 
     OpFactories _maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,

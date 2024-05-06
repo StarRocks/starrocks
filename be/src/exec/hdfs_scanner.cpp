@@ -185,7 +185,9 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(do_open(runtime_state));
     RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
     _opened = true;
-    VLOG_FILE << "open file success: " << _scanner_params.path;
+    VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
+              << _scanner_params.scan_range->offset << ","
+              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset) << "]";
     return Status::OK();
 }
 
@@ -193,6 +195,11 @@ void HdfsScanner::close() noexcept {
     if (!_runtime_state) {
         return;
     }
+    VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
+              << _scanner_params.scan_range->offset << ","
+              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
+              << "], rows = " << _app_stats.rows_read;
+
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();

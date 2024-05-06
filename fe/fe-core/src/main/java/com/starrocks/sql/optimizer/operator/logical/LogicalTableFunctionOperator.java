@@ -168,6 +168,17 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
             return this;
         }
 
+        public LogicalTableFunctionOperator.Builder setFnResultColRefs(List<ColumnRefOperator> fnResultColRefs) {
+            builder.fnResultColRefs = fnResultColRefs;
+            return this;
+        }
+
+        public LogicalTableFunctionOperator.Builder setFnParamColumnProject(
+                List<Pair<ColumnRefOperator, ScalarOperator>> fnParamColumnProject) {
+            builder.fnParamColumnProject = fnParamColumnProject;
+            return this;
+        }
+
         @Override
         public LogicalTableFunctionOperator.Builder withOperator(LogicalTableFunctionOperator tableFunctionOperator) {
             super.withOperator(tableFunctionOperator);

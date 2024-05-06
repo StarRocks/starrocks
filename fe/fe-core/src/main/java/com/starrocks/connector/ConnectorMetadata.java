@@ -29,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -91,9 +92,10 @@ public interface ConnectorMetadata {
      *
      * @param databaseName the name of the database
      * @param tableName the name of the table
+     * @param snapshotId table snapshot id, default value is -1
      * @return a list of partition names
      */
-    default List<String> listPartitionNames(String databaseName, String tableName) {
+    default List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         return Lists.newArrayList();
     }
 
@@ -156,6 +158,20 @@ public interface ConnectorMetadata {
                                                     List<String> fieldNames, long limit) {
         return Lists.newArrayList();
     }
+
+    /**
+     * Get table meta serialized specification
+     * @param dbName
+     * @param tableName
+     * @param snapshotId
+     * @param serializedPredicate serialized predicate string of lake format expression
+     * @return table meta serialized specification
+     */
+    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                     long snapshotId, String serializedPredicate) {
+        return null;
+    }
+
 
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
@@ -257,14 +273,14 @@ public interface ConnectorMetadata {
     default void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
     }
 
-    default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+    default void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
     }
 
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
     }
 
     default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
     }
 
     default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {

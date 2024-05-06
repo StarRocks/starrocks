@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -39,6 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -50,10 +52,12 @@ import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -438,6 +442,37 @@ public class MetadataMgr {
         });
     }
 
+    public void cleanTemporaryTables(CleanTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        cleanTemporaryTables(stmt.getSessionId());
+    }
+
+    public void cleanTemporaryTables(UUID sessionId) {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        com.google.common.collect.Table<Long, String, Long> allTables = temporaryTableMgr.getTemporaryTables(sessionId);
+
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database database = localMetastore.getDb(databaseId);
+            if (database == null) {
+                // database maybe dropped by force, we should clean temporary tables on it.
+                temporaryTableMgr.dropTemporaryTables(sessionId, databaseId);
+                continue;
+            }
+            Map<String, Long> tables = allTables.row(databaseId);
+            tables.forEach((tableName, tableId) -> {
+                try {
+                    database.dropTemporaryTable(tableId, tableName, true, true);
+                    temporaryTableMgr.dropTemporaryTable(sessionId, database.getId(), tableName);
+                } catch (DdlException e) {
+                    LOG.error("Failed to drop temporary table {}.{} in session {}",
+                            database.getFullName(), tableName, sessionId, e);
+                }
+            });
+        }
+        temporaryTableMgr.removeTemporaryTables(sessionId);
+    }
+
     public Optional<Table> getTable(TableName tableName) {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
@@ -458,6 +493,45 @@ public class MetadataMgr {
             return null;
         }
         return database.getTable(tableId);
+    }
+
+    public Optional<Database> getDatabase(BaseTableInfo baseTableInfo) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return Optional.ofNullable(getDb(baseTableInfo.getDbId()));
+        } else {
+            return Optional.ofNullable(getDb(baseTableInfo.getCatalogName(), baseTableInfo.getDbName()));
+        }
+    }
+
+    public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return Optional.ofNullable(getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+        } else {
+            return Optional.ofNullable(
+                    getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
+        }
+    }
+
+    public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTable(baseTableInfo);
+        if (baseTableInfo.isInternalCatalog()) {
+            return tableOpt;
+        } else if (tableOpt.isPresent()) {
+            Table table = tableOpt.get();
+            String tableIdentifier = baseTableInfo.getTableIdentifier();
+            if (tableIdentifier != null && tableIdentifier.equals(table.getTableIdentifier())) {
+                return tableOpt;
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Table getTableChecked(BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTableWithIdentifier(baseTableInfo);
+        if (tableOpt.isPresent()) {
+            return tableOpt.get();
+        }
+        throw MaterializedViewExceptions.reportBaseTableNotExists(baseTableInfo);
     }
 
     public Table getTemporaryTable(UUID sessionId, String catalogName, Long databaseId, String tblName) {
@@ -504,11 +578,15 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+        return listPartitionNames(catalogName, dbName, tableName, -1);
+    }
+
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName, long snapshotId) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listPartitionNames(dbName, tableName).forEach(partitionNames::add);
+                connectorMetadata.get().listPartitionNames(dbName, tableName, snapshotId).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
                 throw e;
@@ -653,6 +731,20 @@ public class MetadataMgr {
             }
         }
         return partitions.build();
+    }
+
+    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName,
+                                                    long snapshotId, String serializedPredicate) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+            } catch (Exception e) {
+                LOG.error("Failed to get remote meta splits on catalog [{}], table [{}.{}]", catalogName, dbName, tableName, e);
+                throw e;
+            }
+        }
+        return null;
     }
 
     public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item, Tracers tracers) {

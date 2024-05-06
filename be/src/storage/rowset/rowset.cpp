@@ -261,7 +261,7 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
-        // When creating segment iterators for compaction, we don't provide rowid_range_option and predicates_for_zone_map,
+        // When creating segment iterators for compaction, we don't provide rowid_range_option and pred_tree_for_zone_map,
         // So here we don't need to consider the following two situation:
         //
         // if (options.rowid_range_option != nullptr) {
@@ -396,13 +396,13 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
         // link inverted files
         if (!_schema->indexes()->empty()) {
             int segment_n = i;
-            for (int index_id = 0; index_id < _schema->indexes()->size(); index_id++) {
-                const auto& index = (*(_schema->indexes()))[index_id];
+            const auto& indexes = *_schema->indexes();
+            for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
-                            dir, new_rowset_id.to_string(), segment_n, index_id);
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
-                            _rowset_path, rowset_id().to_string(), segment_n, index_id);
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
 
                     RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
                     std::set<std::string> files;
@@ -659,7 +659,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
-    seg_options.predicates = options.predicates;
+    seg_options.pred_tree = options.pred_tree;
     seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;

@@ -250,6 +250,19 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
                         "Property " + PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE +
                                 " must be bool type(false/true)");
             }
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                boolean hasGIN = false;
+                for (Index index : olapTable.getIndexes()) {
+                    if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                        hasGIN = true;
+                        break;
+                    }
+                }
+                if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasGIN) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED);
+                }
+            }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
@@ -348,8 +361,8 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
         }
 
-        if (olapTable.isCloudNativeTableOrMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in cloud native is not supported");
+        if (olapTable.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize materialized view is not supported");
         }
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();

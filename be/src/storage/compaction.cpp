@@ -59,10 +59,14 @@ Status Compaction::do_compaction_impl() {
     OlapStopWatch watch;
 
     int64_t segments_num = 0;
+    int64_t max_gtid = 0;
     for (auto& rowset : _input_rowsets) {
         _input_rowsets_size += rowset->data_disk_size();
         _input_row_num += rowset->num_rows();
         segments_num += rowset->num_segments();
+        if (rowset->rowset_meta()->gtid() > max_gtid) {
+            max_gtid = rowset->rowset_meta()->gtid();
+        }
     }
 
     TRACE_COUNTER_INCREMENT("input_rowsets_data_size", _input_rowsets_size);
@@ -98,8 +102,9 @@ Status Compaction::do_compaction_impl() {
               << ", column group size=" << _column_groups.size()
               << ", columns per group=" << config::vertical_compaction_max_columns_per_group;
 
-    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
-            _tablet.get(), max_rows_per_segment, algorithm, _output_version, &_output_rs_writer, cur_tablet_schema));
+    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment, algorithm,
+                                                                    _output_version, max_gtid, &_output_rs_writer,
+                                                                    cur_tablet_schema));
     TRACE("prepare finished");
 
     Statistics stats;
@@ -158,8 +163,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
                                                const TabletSchemaCSPtr& tablet_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    auto merge_tablet_schema = std::shared_ptr<TabletSchema>(TabletSchema::copy(tablet_schema));
-    TabletReader reader(_tablet, _output_rs_writer->version(), merge_tablet_schema, schema);
+    TabletReader reader(_tablet, _output_rs_writer->version(), tablet_schema, schema);
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");

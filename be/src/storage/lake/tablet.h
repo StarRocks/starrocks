@@ -72,6 +72,8 @@ public:
 
     [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
@@ -82,7 +84,7 @@ public:
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
-                                                       ThreadPool* flush_pool = nullptr);
+                                                       ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 
     const std::shared_ptr<const TabletSchema> tablet_schema() const override;
 

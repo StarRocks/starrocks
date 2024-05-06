@@ -85,19 +85,23 @@ You can also deploy Flink by following the instructions provided in [Flink docum
 
 ## Before you begin
 
+### Deploy the Flink connector
+
 Follow these steps to deploy the Flink connector:
 
-1. Select and download the [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR package matching the Flink version that you are using.
+1. Select and download the [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR package matching the Flink version that you are using. If code debugging is needed, compile the Flink connector package to suit your business requirements.
 
    > **NOTICE**
    >
    > We recommend that you download the Flink connector package whose version is 1.2.x or later and whose matching Flink version has the same first two digits as the Flink version that you are using. For example, if you use Flink v1.14.x, you can download `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`.
 
-2. If code debugging is needed, compile the Flink connector package to suit your business requirements.
+2. Place the Flink connector package you downloaded or compiled into the `lib` directory of Flink.
 
-3. Place the Flink connector package you downloaded or compiled into the `lib` directory of Flink.
+3. Restart your Flink cluster.
 
-4. Restart your Flink cluster.
+### Network configuration
+
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
 
 ## Parameters
 

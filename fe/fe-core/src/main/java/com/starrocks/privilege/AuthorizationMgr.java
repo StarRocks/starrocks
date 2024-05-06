@@ -504,7 +504,7 @@ public class AuthorizationMgr {
                     userPrivilegeCollection.grantRole(roleId);
                     boolean verifyDone = false;
                     try {
-                        Set<Long> result = getAllPredecessorsUnlocked(userPrivilegeCollection);
+                        Set<Long> result = getAllPredecessorRoleIdsUnlocked(userPrivilegeCollection);
                         if (result.size() > Config.privilege_max_total_roles_per_user) {
                             LOG.warn("too many predecessor roles {} for user {}", result, user);
                             throw new PrivilegeException(String.format(
@@ -551,7 +551,7 @@ public class AuthorizationMgr {
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true);
 
                 // to avoid circle, verify roleName is not predecessor role of parentRoleName
-                Set<Long> parentRolePredecessors = getAllPredecessorsUnlocked(parentRoleId);
+                Set<Long> parentRolePredecessors = getAllPredecessorRoleIdsUnlocked(parentRoleId);
                 if (parentRolePredecessors.contains(roleId)) {
                     throw new PrivilegeException(String.format("role %s[%d] is already a predecessor role of %s[%d]",
                             roleName, roleId, parentRole, parentRoleId));
@@ -562,7 +562,7 @@ public class AuthorizationMgr {
                 parentCollection.addSubRole(roleId);
                 try {
                     // verify role inheritance depth
-                    parentRolePredecessors = getAllPredecessorsUnlocked(parentRoleId);
+                    parentRolePredecessors = getAllPredecessorRoleIdsUnlocked(parentRoleId);
                     parentRolePredecessors.add(parentRoleId);
                     for (long i : parentRolePredecessors) {
                         long cnt = getMaxRoleInheritanceDepthInner(0, i);
@@ -866,7 +866,7 @@ public class AuthorizationMgr {
                 // (because the current session and the session initiated by the revoke operation may not be the same),
                 // but for the user The operation will cause the cache to invalid, so in the next load process after
                 // the cache fails, we need to determine whether the user still has access to this role.
-                validRoleIds = getAllPredecessorsUnlocked(validRoleIds);
+                validRoleIds = getAllPredecessorRoleIdsUnlocked(validRoleIds);
 
                 // 3. Merge privilege collections of all predecessors.
                 for (long roleId : validRoleIds) {
@@ -1618,25 +1618,25 @@ public class AuthorizationMgr {
      * then the inheritance graph would be role_a -> role_b -> role_c
      * then all parent roles of role_c would be [role_a, role_b]
      */
-    protected Set<Long> getAllPredecessorsUnlocked(UserPrivilegeCollectionV2 collection) throws PrivilegeException {
-        return getAllPredecessorsUnlocked(collection.getAllRoles());
+    protected Set<Long> getAllPredecessorRoleIdsUnlocked(UserPrivilegeCollectionV2 collection) throws PrivilegeException {
+        return getAllPredecessorRoleIdsUnlocked(collection.getAllRoles());
     }
 
-    protected Set<Long> getAllPredecessorsUnlocked(long roleId) throws PrivilegeException {
+    protected Set<Long> getAllPredecessorRoleIdsUnlocked(long roleId) throws PrivilegeException {
         Set<Long> set = new HashSet<>();
         set.add(roleId);
-        return getAllPredecessorsUnlocked(set);
+        return getAllPredecessorRoleIdsUnlocked(set);
     }
 
-    protected Set<Long> getAllPredecessorsUnlocked(Set<Long> initialRoleIds) throws PrivilegeException {
+    protected Set<Long> getAllPredecessorRoleIdsUnlocked(Set<Long> initialRoleIds) throws PrivilegeException {
         Set<Long> result = new HashSet<>(initialRoleIds);
         for (long roleId : initialRoleIds) {
-            getAllPredecessorsInner(roleId, result);
+            getAllPredecessorRoleIdsInner(roleId, result);
         }
         return result;
     }
 
-    protected void getAllPredecessorsInner(long roleId, Set<Long> resultSet) throws PrivilegeException {
+    protected void getAllPredecessorRoleIdsInner(long roleId, Set<Long> resultSet) throws PrivilegeException {
         RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, false);
         if (collection == null) { // this role has been dropped
             resultSet.remove(roleId);
@@ -1646,9 +1646,31 @@ public class AuthorizationMgr {
             if (!resultSet.contains(parentId)) {
                 resultSet.add(parentId);
                 // recursively collect all predecessors
-                getAllPredecessorsInner(parentId, resultSet);
+                getAllPredecessorRoleIdsInner(parentId, resultSet);
             }
         }
+    }
+
+    public Set<String> getAllPredecessorRoleNames(Long roleId) {
+        Set<Long> resultSetIds = new HashSet<>();
+        resultSetIds.add(roleId);
+
+        roleReadLock();
+        try {
+            getAllPredecessorRoleIdsInner(roleId, resultSetIds);
+        } catch (PrivilegeException e) {
+            // can ignore
+        } finally {
+            roleReadUnlock();
+        }
+
+        return new HashSet<>(getRoleNamesByRoleIds(resultSetIds));
+    }
+
+    public Set<String> getAllPredecessorRoleNamesByUser(UserIdentity userIdentity) throws PrivilegeException {
+        Set<String> resultSet = new HashSet<>();
+        getRoleIdsByUser(userIdentity).forEach(roleId -> resultSet.addAll(getAllPredecessorRoleNames(roleId)));
+        return resultSet;
     }
 
     public boolean isLoaded() {

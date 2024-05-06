@@ -23,6 +23,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/utils.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -32,19 +33,16 @@
 namespace starrocks::lake {
 
 Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
-    IndexValueWithVerPB index_value_ver;
+    IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
     }
-    if (index_value_ver.versions_size() != index_value_ver.values_size()) {
-        return Status::InternalError("The size of version and the size of value are not equal");
-    }
-    if (index_value_ver.versions_size() == 0) {
+    if (index_value_ver.values_size() == 0) {
         return Status::OK();
     }
 
-    auto version = index_value_ver.versions(0);
-    auto index_value = index_value_ver.values(0);
+    auto version = index_value_ver.values(0).version();
+    auto index_value = build_index_value(index_value_ver.values(0));
     if (_key == key) {
         if (_index_value_vers.empty()) {
             _index_value_vers.emplace_front(version, index_value);
@@ -66,10 +64,12 @@ void KeyValueMerger::flush() {
         return;
     }
 
-    IndexValueWithVerPB index_value_pb;
+    IndexValuesWithVerPB index_value_pb;
     for (const auto& index_value_with_ver : _index_value_vers) {
-        index_value_pb.add_versions(index_value_with_ver.first);
-        index_value_pb.add_values(index_value_with_ver.second.get_value());
+        auto* value = index_value_pb.add_values();
+        value->set_version(index_value_with_ver.first);
+        value->set_rssid(index_value_with_ver.second.get_rssid());
+        value->set_rowid(index_value_with_ver.second.get_rowid());
     }
     _builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString()));
     _index_value_vers.clear();
@@ -87,10 +87,9 @@ LakePersistentIndex::~LakePersistentIndex() {
 }
 
 Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     for (auto& sstable_pb : sstable_meta.sstables()) {
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        ASSIGN_OR_RETURN(auto rf,
+                         fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
         auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
         if (block_cache == nullptr) {
             return Status::InternalError("Block cache is null.");
@@ -125,8 +124,7 @@ Status LakePersistentIndex::minor_compact() {
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(location));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
@@ -248,23 +246,58 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
     return Status::OK();
 }
 
-std::unique_ptr<sstable::Iterator> LakePersistentIndex::prepare_merging_iterator() {
+Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
+                                    const std::vector<uint32_t>& replace_indexes) {
+    std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
+    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _version.major_number()));
+    if (is_memtable_full()) {
+        return flush_memtable();
+    }
+    return Status::OK();
+}
+
+Status LakePersistentIndex::prepare_merging_iterator(
+        const TabletMetadata& metadata, TxnLogPB* txn_log,
+        std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
+        std::unique_ptr<sstable::Iterator>* merging_iter_ptr) {
     sstable::ReadOptions read_options;
+    // No need to cache input sst's blocks.
+    read_options.fill_cache = false;
     std::vector<sstable::Iterator*> iters;
-    auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
-    iters.reserve(max_compaction_versions);
-    for (const auto& sstable : _sstables) {
-        sstable::Iterator* iter = sstable->new_iterator(read_options);
+    DeferOp free_iters([&] {
+        for (sstable::Iterator* iter : iters) {
+            delete iter;
+        }
+    });
+
+    auto max_compaction_bytes = config::lake_pk_index_sst_max_compaction_bytes;
+    iters.reserve(metadata.sstable_meta().sstables().size());
+    size_t total_filesize = 0;
+    std::stringstream ss_debug;
+    for (const auto& sstable_pb : metadata.sstable_meta().sstables()) {
+        // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
+        ASSIGN_OR_RETURN(auto rf,
+                         fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        auto merging_sstable = std::make_shared<PersistentIndexSstable>();
+        RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/));
+        merging_sstables->push_back(merging_sstable);
+        sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
-        if (iters.size() >= max_compaction_versions) {
+        total_filesize += sstable_pb.filesize();
+        // add input sstable.
+        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
+        ss_debug << sstable_pb.filename() << " | ";
+        if (total_filesize >= max_compaction_bytes &&
+            merging_sstables->size() >= config::lake_pk_index_sst_min_compaction_versions) {
             break;
         }
     }
     sstable::Options options;
-    std::unique_ptr<sstable::Iterator> iter_ptr(
-            sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
-    iter_ptr->SeekToFirst();
-    return iter_ptr;
+    (*merging_iter_ptr).reset(sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
+    (*merging_iter_ptr)->SeekToFirst();
+    iters.clear(); // Clear the vector without deleting iterators since they are now managed by merge_iter_ptr.
+    VLOG(2) << "prepare sst for merge : " << ss_debug.str();
+    return Status::OK();
 }
 
 Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr,
@@ -279,14 +312,18 @@ Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> it
     return builder->Finish();
 }
 
-Status LakePersistentIndex::major_compact(int64_t min_retain_version, TxnLogPB* txn_log) {
-    if (_sstables.size() < config::lake_pk_index_sst_min_compaction_versions) {
+Status LakePersistentIndex::major_compact(const TabletMetadata& metadata, int64_t min_retain_version,
+                                          TxnLogPB* txn_log) {
+    if (metadata.sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
         return Status::OK();
     }
 
-    auto iter_ptr = prepare_merging_iterator();
-    if (!iter_ptr->Valid()) {
-        return iter_ptr->status();
+    std::vector<std::shared_ptr<PersistentIndexSstable>> sstable_vec;
+    std::unique_ptr<sstable::Iterator> merging_iter_ptr;
+    // build merge iterator
+    RETURN_IF_ERROR(prepare_merging_iterator(metadata, txn_log, &sstable_vec, &merging_iter_ptr));
+    if (!merging_iter_ptr->Valid()) {
+        return merging_iter_ptr->status();
     }
 
     auto filename = gen_sst_filename();
@@ -297,18 +334,10 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version, TxnLogPB* 
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf.get());
-    RETURN_IF_ERROR(merge_sstables(std::move(iter_ptr), &builder));
+    RETURN_IF_ERROR(merge_sstables(std::move(merging_iter_ptr), &builder));
     RETURN_IF_ERROR(wf->close());
 
-    auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
-    for (const auto& sstable : _sstables) {
-        auto input_sstable = txn_log->mutable_op_compaction()->add_input_sstables();
-        auto sstable_pb = sstable->sstable_pb();
-        input_sstable->CopyFrom(sstable_pb);
-        if (txn_log->op_compaction().input_sstables_size() >= max_compaction_versions) {
-            break;
-        }
-    }
+    // record output sstable pb
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(filename);
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(builder.FileSize());
     return Status::OK();
@@ -323,9 +352,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     sstable_pb.CopyFrom(op_compaction.output_sstable());
     sstable_pb.set_version(op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).version());
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    ASSIGN_OR_RETURN(auto rf,
-                     fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
