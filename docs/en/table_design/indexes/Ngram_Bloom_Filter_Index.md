@@ -5,9 +5,9 @@ displayed_sidebar: "English"
 
 # N-gram bloom filter index
 
-The N-gram bloom filter index is a special [Bloom filter index](./Bloomfilter_index.md) which is typically used to accelerate the LIKE queries and the caculation speed of the `ngram_search` and `ngram_search_case_insensitive` functions.
+The N-gram bloom filter index is a special [Bloom filter index](./Bloomfilter_index.md) which is typically used to accelerate the LIKE queries and the calculation speed of the `ngram_search` and `ngram_search_case_insensitive` functions.
 
-The N-gram bloom filter index is only suitable for string (`STRING`, `CHAR`, or `VARCHAR`) type columns. The difference between the N-gram bloom filter index and Bloom filter index is that the N-gram bloom filter index first tokenizes the strings and then writes the resulting substrings into the Bloom filter index. For example, a certain indexed column value is a string `Technical`. For a traditional Bloom filter index, the entire string `Technical` would be directly written into the index. However, for an N-gram bloom filter index with a specified `gram_num` of `4`，the string `Technical` would be first tokenized into the following substrings:
+The N-gram bloom filter index is only suitable for string (`STRING`, `CHAR`, or `VARCHAR`) type columns. The difference between the N-gram bloom filter index and Bloom filter index is that the N-gram bloom filter index first tokenizes the strings and then writes the resulting substrings into the Bloom filter index. For example, a certain indexed column value is a string `Technical`. For a traditional Bloom filter index, the entire string `Technical` would be directly written into the index. However, for an N-gram bloom filter index with a specified `gram_num` of `4`, the string `Technical` would be first tokenized into the following substrings:
 
 ```sql
 "Tech", "echn", "chni", "hnic", "nica", "ical"
@@ -41,7 +41,7 @@ DISTRIBUTED BY HASH(k1);
 
 ```
 
-N-gram bloom filter index related parameters:
+N-gram bloom filter index-related parameters:
 
 | **Parameter**    | **Required** | **Description**                                              |
 | ---------------- | ------------ | ------------------------------------------------------------ |
@@ -75,7 +75,7 @@ You can add and delete the N-gram bloom filter index by using the [ALTER TABLE](
                                               "bloom_filter_fpp" = "0.05") COMMENT '';
   ```
 
-- The following statement to remove the N-gram bloom filter index `new_index_name` from the table `table1`.
+-  Execute the following statement to remove the N-gram bloom filter index `new_index_name` from the table `table1`.
 
   ```SQL
   ALTER TABLE table1 DROP INDEX new_index_name;
@@ -118,7 +118,7 @@ AGGREGATE KEY(k1, k2)
 DISTRIBUTED BY HASH(k1);
 ```
 
-If the index is already created and its paramter `case_sensitive` is set to be `true`, you can alter the paramter of this index to `false` by using:
+If the index is already created and its parameter `case_sensitive` is set to be `true`, you can alter the parameter of this index to `false` by using:
 
 ```SQL
 ALTER TABLE table1 
