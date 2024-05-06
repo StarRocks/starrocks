@@ -498,8 +498,7 @@
                     "label": "DBT",
                     "description": "Modeling and transformation with DBT",
                     "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-                },
-                "integrations/hive_bitmap_udf"
+                }
             ]
         },
         {
@@ -1037,6 +1036,7 @@
                     },
                     "items": [
                         "sql-reference/sql-functions/JAVA_UDF",
+                        "integrations/hive_bitmap_udf",
                         "sql-reference/sql-functions/Window_function",
                         "sql-reference/sql-functions/Lambda_expression",
                         {
@@ -1941,8 +1941,7 @@
                     "label": "DBT",
                     "description": "通过 DBT 实现数据建模与转换",
                     "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-                },
-                "integrations/hive_bitmap_udf"
+                }
             ]
         },
         {
@@ -2480,6 +2479,7 @@
                     },
                     "items": [
                         "sql-reference/sql-functions/JAVA_UDF",
+                        "integrations/hive_bitmap_udf",
                         "sql-reference/sql-functions/Window_function",
                         "sql-reference/sql-functions/Lambda_expression",
                         {
