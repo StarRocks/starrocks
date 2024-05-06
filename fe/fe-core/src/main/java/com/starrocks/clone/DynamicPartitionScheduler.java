@@ -79,6 +79,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDate;
@@ -274,25 +275,31 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, null, null, false));
             } else {
                 // construct distribution desc
-                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-                DistributionDesc distributionDesc = null;
-                if (distributionInfo instanceof HashDistributionInfo) {
-                    HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                    List<String> distColumnNames = new ArrayList<>();
-                    for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-                        distColumnNames.add(distributionColumn.getName());
-                    }
-                    distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
-                            distColumnNames);
-                } else if (distributionInfo instanceof RandomDistributionInfo) {
-                    distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
-                }
+                DistributionDesc distributionDesc = createDistributionDesc(olapTable, dynamicPartitionProperty);
 
                 // add partition according to partition desc and distribution desc
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
             }
         }
         return addPartitionClauses;
+    }
+
+    @Nullable
+    private static DistributionDesc createDistributionDesc(OlapTable olapTable, DynamicPartitionProperty dynamicPartitionProperty) {
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+        DistributionDesc distributionDesc = null;
+        if (distributionInfo instanceof HashDistributionInfo) {
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+            List<String> distColumnNames = new ArrayList<>();
+            for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
+                distColumnNames.add(distributionColumn.getName());
+            }
+            distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
+                    distColumnNames);
+        } else if (distributionInfo instanceof RandomDistributionInfo) {
+            distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
+        }
+        return distributionDesc;
     }
 
     /**
@@ -553,7 +560,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
         Preconditions.checkArgument(partitionColumns.size() == 1);
         Type partitionType = partitionColumns.get(0).getType();
-        PartitionKey ttlLowerBound = null;
+        PartitionKey ttlLowerBound;
 
         LocalDateTime ttlTime = LocalDateTime.now().minus(ttlDuration);
         if (partitionType.isDatetime()) {
