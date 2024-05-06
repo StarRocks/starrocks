@@ -50,7 +50,7 @@ In a nutshell, to use MinIO Access Key authentication you need to gather the fol
 
 ## Use INSERT+FILES()
 
-This method is available from v3.1 onwards and currently supports only the Parquet and ORC file formats.
+This method is available from v3.1 onwards and currently supports only the Parquet, ORC, and CSV file formats.
 
 ### Advantages of INSERT+FILES()
 
