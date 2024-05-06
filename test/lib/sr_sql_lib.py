@@ -28,6 +28,7 @@ import configparser
 import datetime
 import json
 import logging
+import mysql.connector
 import os
 import re
 import subprocess
