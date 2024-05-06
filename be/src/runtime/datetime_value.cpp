@@ -41,6 +41,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "gutil/strings/fastmem.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -681,9 +682,19 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
         ch = *ptr;
         if (ch == '\'') {
             ++ptr;
+
+            const char* text_start = ptr;
             while (ptr < end && *ptr != '\'') {
-                *to++ = *ptr++;
+                ptr++;
             }
+
+            const size_t text_len = ptr - text_start;
+            if (write_size + text_len >= buffer_size) {
+                return false;
+            }
+            strings::memcpy_inlined(to, text_start, text_len);
+            to += text_len;
+
             if (ptr < end && *ptr == '\'') {
                 // skip the '\''
                 ++ptr;
@@ -904,8 +915,9 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             // sr do not support datetime with timezone type， just ignore
             break;
         default:
-            if (write_size + 1 >= buffer_size) return false;
-            *to++ = ch;
+            if (write_size + same_ch_size >= buffer_size) return false;
+            strings::memcpy_inlined(to, ptr, same_ch_size);
+            to += same_ch_size;
             break;
         }
 
