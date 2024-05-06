@@ -91,7 +91,10 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
 
     for (size_t i = 0; i < table_items->key_columns.size(); i++) {
         if (table_items->join_keys[i].is_null_safe_equal) {
-            data_columns.emplace_back(table_items->key_columns[i]);
+            // this means build column is a nullable column and join condition is null safe equal
+            // we need convert the probe column to a nullable column when it's a non-nullable column
+            // to align the type between build and probe columns.
+            data_columns.emplace_back(NullableColumn::wrap_if_necessary((*probe_state->key_columns)[i]));
         } else if (table_items->key_columns[i]->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[i]);
             data_columns.emplace_back(nullable_column->data_column());
@@ -638,7 +641,7 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
     DCHECK_GT(size, 0);
 
     for (size_t i = 0; i < size; i++) {
-        if (!_table_items->key_columns[i]->has_null() || !_table_items->probe_slots[i].slot->is_nullable()) {
+        if (!_table_items->key_columns[i]->has_null()) {
             _table_items->join_keys[i].is_null_safe_equal = false;
         }
     }
