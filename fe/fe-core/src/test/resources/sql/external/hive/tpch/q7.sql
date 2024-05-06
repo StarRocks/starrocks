@@ -92,7 +92,7 @@ OutPut Exchange Id: 23
 
 22:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([50: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([50: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
 |  cardinality: 352
 |  column statistics:
@@ -106,7 +106,7 @@ OutPut Exchange Id: 23
 |  42 <-> [42: n_name, VARCHAR, true]
 |  46 <-> [46: n_name, VARCHAR, true]
 |  49 <-> year[([18: l_shipdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
-|  50 <-> cast([13: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [14: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  50 <-> cast([13: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [14: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 554680
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
