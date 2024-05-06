@@ -8,6 +8,11 @@ displayed_sidebar: "Chinese"
 
 计算两个字符串的 ngram 相似度。
 
+:::info
+- 目前字符编码仅支持 ASCII 编码，不支持 UTF-8 编码。
+- 函数 `ngram_search` 区分大小写。另一个函数 `ngram_search_case_insensitive` 不区分大小写。除此之外，这两个函数是相同的。
+:::
+
 ## 语法
 
 ```SQL
@@ -56,8 +61,3 @@ mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",
 | 31dc496b-760d-6f1a-4521-0500c3a70000 |         0.8787879 |
 +--------------------------------------+-------------------+
 ```
-
-## 更多信息
-
-- 目前仅支持 ASCII 编码。
-- 函数 `ngram_search` 区分大小写。另一个函数 `ngram_search_case_insensitive` 不区分大小写。除此之外，这两个函数是相同的。
