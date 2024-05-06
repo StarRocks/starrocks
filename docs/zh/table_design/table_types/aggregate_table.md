@@ -83,7 +83,7 @@ DISTRIBUTED BY HASH(site_id);
   - 聚合键可以通过 `AGGREGATE KEY` 显式定义。并且 `AGGREGATE KEY` 必须包含除 value 列之外的所有列，则建表会失败。
 
     如果不通过 `AGGREGATE KEY` 显示定义聚合键，则默认除 value 列之外的列均为聚合键。
-  - 聚合键具有唯一性约束，且列的值不支持更新。
+  - 聚合键具有唯一性约束。
 
 - **value 列**：通过在列名后指定聚合函数，定义该列为 value 列。一般为需要汇总统计的数据。
 

@@ -80,7 +80,7 @@ DISTRIBUTED BY HASH(site_id);
   - The aggregate key can be explicitly defined using `AGGREGATE KEY`. The `AGGREGATE KEY` must include all columns except the value columns, otherwise the table fails to be created.
 
     If the aggregate key is not explicitly defined using `AGGREGATE KEY`, all columns except the value columns are considered as the aggregate key by default.
-  - The aggregate key has uniqueness constraint, and the values in these columns can not be updated.
+  - The aggregate key has uniqueness constraint.
 
 - **Value column**: Define a column as the value column by specifying an aggregate function after the column name. This column generally holds data that needs to be aggregated.
 

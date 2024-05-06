@@ -62,7 +62,7 @@ DISTRIBUTED BY HASH(order_id);
 - **Unique Key**:
   - In the CREATE TABLE statement, the unique key must be defined before other columns.
   - The unique key needs to be explicitly defined using `UNIQUE KEY`.
-  - The unique key has uniqueness constraint, and the values in these columns can not be updated.
+  - The unique key has uniqueness constraint.
 
 - **Sort Key**:
 
