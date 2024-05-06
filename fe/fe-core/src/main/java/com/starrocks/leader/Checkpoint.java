@@ -233,7 +233,7 @@ public class Checkpoint extends FrontendDaemon {
         try {
             return starMgrServer.replayAndGenerateImage(imageDir, logVersion);
         } catch (Exception e) {
-            LOG.error("Exception when generate new star mgr image file, {}.", e.getMessage());
+            LOG.error("Exception when generate new star mgr image file", e);
             return false;
         } finally {
             // destroy checkpoint, reclaim memory
