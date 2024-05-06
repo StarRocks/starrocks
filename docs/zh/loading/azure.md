@@ -44,7 +44,7 @@ StarRocks 支持通过以下方式从 Azure 导入数据：
 
 ## 通过 INSERT+FILES() 导入
 
-该特性从 3.2 版本起支持。当前只支持 Parquet 和 ORC 文件格式。
+该特性从 3.2 版本起支持。当前只支持 Parquet、ORC 和 CSV（自 v3.3.0 起）文件格式。
 
 ### INSERT+FILES() 优势
 
