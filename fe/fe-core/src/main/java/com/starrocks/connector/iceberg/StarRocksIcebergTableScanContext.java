@@ -32,6 +32,7 @@ public class StarRocksIcebergTableScanContext {
     private boolean onlyReadCache;
     private int localParallelism;
     private long localPlanningMaxSlotSize;
+    private boolean enableCacheDataFileIdentifierColumnMetrics;
 
     public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
         this.catalogName = catalogName;
@@ -102,5 +103,13 @@ public class StarRocksIcebergTableScanContext {
 
     public void setLocalPlanningMaxSlotSize(long localPlanningMaxSlotSize) {
         this.localPlanningMaxSlotSize = localPlanningMaxSlotSize;
+    }
+
+    public boolean isEnableCacheDataFileIdentifierColumnMetrics() {
+        return enableCacheDataFileIdentifierColumnMetrics;
+    }
+
+    public void setEnableCacheDataFileIdentifierColumnMetrics(boolean enableCacheDataFileIdentifierColumnMetrics) {
+        this.enableCacheDataFileIdentifierColumnMetrics = enableCacheDataFileIdentifierColumnMetrics;
     }
 }
