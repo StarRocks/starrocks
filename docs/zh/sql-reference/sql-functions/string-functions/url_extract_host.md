@@ -1,30 +1,30 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # url_extract_host
 
-## Description
+## 功能
 
-Extracts the host section from a URL.
+从一个 URL 中截取 host 部分。
 
-This function is supported from v3.3 onwards.
+该函数从 3.3 版本开始支持。
 
-## Syntax
+## 语法
 
 ```haskell
 VARCHAR url_extract_host(VARCHAR str)
 ```
 
-## Parameters
+## 参数说明
 
-- `str`: the string to extract its host string. If `str` is not a string, this function will try implicit cast first.
+- `str`: 待截取的字符串。如果 `str` 不是字符串格式，该函数会先尝试进行隐式转换。
 
-## Return value
+## 返回值说明
 
-Returns the host string.
+返回 host 字符串。
 
-## Examples
+## 示例
 
 ```plaintext
 mysql> select url_extract_host('httpa://starrocks.com/test/api/v1');

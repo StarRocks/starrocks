@@ -13,7 +13,7 @@ For example:
 - `select array_contains_seq([1,2,3,4], [1,2,3]);` returns 1.
 - `select array_contains_seq([1,2,3,4], [4,3]);` returns 0.
 
-This function is supported from v3.2.
+This function is supported from v3.3 onwards.
 
 ## Syntax
 

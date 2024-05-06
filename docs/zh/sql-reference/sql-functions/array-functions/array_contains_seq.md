@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
 - `select array_contains_seq([1,2,3,4], [1,2,3]);` 返回 1。
 - `select array_contains_seq([1,2,3,4], [4,3]);` 返回 0。
 
-该函数从 3.2 版本开始支持。
+该函数从 3.3 版本开始支持。
 
 ## 语法
 

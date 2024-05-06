@@ -8,6 +8,8 @@ displayed_sidebar: "English"
 
 Computes the cube root of the argument.
 
+This function is supported from v3.3 onwards.
+
 ## Syntax
 
 ```Haskell
