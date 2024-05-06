@@ -93,7 +93,7 @@ public:
     // used to get content length
     int64_t get_content_length() const {
         double cl = 0.0f;
-        curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
+        curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
         return cl;
     }
 
