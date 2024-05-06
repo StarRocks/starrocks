@@ -106,7 +106,7 @@ You can still choose to tolerate a certain level of data inconsistency by settin
 
 Please note that if you need to refresh by partition, the partitioning keys of the materialized view must be included in that of the base table.
 
-From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transform. Currently, only Iceberg tables with the `identity`, `year`, `month`, `day`, or `hour` transforms are supported.
+From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. Currently, only Iceberg tables with the `identity`, `year`, `month`, `day`, or `hour` transforms are supported.
 
 The following example shows the definition of an Iceberg table with the `day` partition transform and creates a materialized view with aligned partitions upon it:
 
