@@ -28,7 +28,7 @@ function: assert_prepare_execute('test_driver_prepare', 'select 1')
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k1 > ?', [0])
+function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k1 > 0')
 -- result:
 None
 -- !result
