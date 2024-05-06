@@ -1090,13 +1090,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the lock manager. The lock manager provides central management for locks. For example, it can control whether to refine the granularity of metadata locks from the database level to the table level.
 - Introduced in: v3.3.0
 
-##### lock_manager_enable_loading_using_fine_granularity_lock
+##### lock_manager_enable_using_fine_granularity_lock
 
 - Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks is refined to the table level, lock conflicts and contentions can be reduced, which can improve the performance of load concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
+- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks is refined to the table level, lock conflicts and contentions can be reduced, which can improve the performance of load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
 
 ### User, role, and privilege
 

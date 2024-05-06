@@ -1091,13 +1091,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启锁管理。lock manager 可以对锁实现集中管理，例如控制是否将元数据锁的粒度从库级别细化为表级别。
 - 引入版本：v3.3.0
 
-##### lock_manager_enable_loading_using_fine_granularity_lock
+##### lock_manager_enable_using_fine_granularity_lock
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否将元数据锁的粒度从库级别细化为表级别。元数据锁细化为表级别后，可以减小锁冲突和竞争，提高导入并发性能。该参数只在 `lock_manager_enabled` 开启的前提下生效。
+- 描述：是否将元数据锁的粒度从库级别细化为表级别。元数据锁细化为表级别后，可以减小锁冲突和竞争，提高导入和查询的并发性能。该参数只在 `lock_manager_enabled` 开启的前提下生效。
 - 引入版本：v3.3.0
 
 ### 用户，角色及权限
