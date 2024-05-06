@@ -1114,7 +1114,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks is refined to the table level, lock conflicts and contentions can be reduced, which can improve the performance of load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
+- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which can improve the performance of load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
 
 ### User, role, and privilege
 
