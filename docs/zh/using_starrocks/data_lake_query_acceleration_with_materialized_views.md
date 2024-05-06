@@ -107,7 +107,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 从 v3.2.3 版本开始，StarRocks 支持在使用 [Partition Transforms (分区变换)](https://iceberg.apache.org/spec/#partition-transforms) 的 Iceberg 表上创建分区物化视图，物化视图将根据变换后的列进行分区。目前，仅支持使用 `identity`、`year`、`month`、`day` 或 `hour` 变换的 Iceberg 表。
 
-以下示例展示了具有 `day` 分区变换的 Iceberg 表的定义，并在其上创建了分区对齐的物化视图：
+以下示例展示了一个使用 `day` Transform 的 Iceberg 表的定义，并在该表上创建了一个分区对齐的物化视图：
 
 ```SQL
 -- Iceberg 表定义。
