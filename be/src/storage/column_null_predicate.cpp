@@ -84,9 +84,9 @@ public:
         return Status::OK();
     }
 
-    bool support_bloom_filter() const override { return true; }
+    bool support_original_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const BloomFilter* bf) const override { return bf->test_bytes(nullptr, 0); }
+    bool original_bloom_filter(const BloomFilter* bf) const override { return bf->test_bytes(nullptr, 0); }
 
     PredicateType type() const override { return PredicateType::kIsNull; }
 

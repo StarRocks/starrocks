@@ -467,9 +467,9 @@ public:
         return Status::OK();
     }
 
-    bool support_bloom_filter() const override { return true; }
+    bool support_original_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const BloomFilter* bf) const override {
+    bool original_bloom_filter(const BloomFilter* bf) const override {
         static_assert(field_type != TYPE_JSON, "TODO");
         static_assert(field_type != TYPE_HLL, "TODO");
         static_assert(field_type != TYPE_OBJECT, "TODO");
@@ -602,7 +602,7 @@ public:
 
     bool can_vectorized() const override { return false; }
 
-    bool support_bloom_filter() const override { return false; }
+    bool support_original_bloom_filter() const override { return false; }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
@@ -650,9 +650,9 @@ public:
         return type_info->cmp(Datum(this->_value), min) >= 0 && type_info->cmp(Datum(this->_value), max) <= 0;
     }
 
-    bool support_bloom_filter() const override { return true; }
+    bool support_original_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const BloomFilter* bf) const override {
+    bool original_bloom_filter(const BloomFilter* bf) const override {
         Slice padded(Base::_zero_padded_str);
         return bf->test_bytes(padded.data, padded.size);
     }
