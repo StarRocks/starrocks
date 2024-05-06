@@ -41,7 +41,7 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 ## 示例
 
 ```SQL
--- haystack 和 needle 都是常量值
+-- haystack 和 needle 都输常量值
 mysql> select ngram_search("chinese","china",4);
 +----------------------------------+
 | ngram_search('chinese', 'china') |
@@ -49,7 +49,7 @@ mysql> select ngram_search("chinese","china",4);
 |                              0.5 |
 +----------------------------------+
 
--- haystack 是列，needle 是常量值
+-- haystack 是列名，needle 是常量值
 mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",4) as string_similarity from string_table order by string_similarity desc limit 5;
 +--------------------------------------+-------------------+
 | rowkey                               | string_similarity |
