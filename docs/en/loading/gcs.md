@@ -17,7 +17,7 @@ Each of these options has its own advantages, which are detailed in the followin
 
 In most cases, we recommend that you use the INSERT+`FILES()` method, which is much easier to use.
 
-However, the INSERT+`FILES()` method currently supports only the Parquet and ORC file formats. Therefore, if you need to load data of other file formats such as CSV, or [perform data changes such as DELETE during data loading](../loading/Load_to_Primary_Key_tables.md), you can resort to Broker Load.
+However, the INSERT+`FILES()` method currently supports only the Parquet, ORC, and CSV file formats. Therefore, if you need to load data of other file formats such as JSON, or [perform data changes such as DELETE during data loading](../loading/Load_to_Primary_Key_tables.md), you can resort to Broker Load.
 
 ## Before you begin
 
@@ -44,7 +44,7 @@ For information about all the authentication methods available, see [Authenticat
 
 ## Use INSERT+FILES()
 
-This method is available from v3.2 onwards and currently supports only the Parquet and ORC file formats.
+This method is available from v3.2 onwards and currently supports only the Parquet, ORC, and CSV (from v3.3.0 onwards) file formats.
 
 ### Advantages of INSERT+FILES()
 
