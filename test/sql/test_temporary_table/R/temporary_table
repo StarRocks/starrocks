@@ -150,6 +150,10 @@ E: (1050, "Getting analyzing error. Detail message: Table 't1' already exists.")
 create temporary table if not exists `t1` as select * from `t0`;
 -- result:
 -- !result
+create temporary table `t2` as select /*+ SET_VAR(query_mem_limit=1)*/ * from `t0`;
+-- result:
+[REGEX].exceed limit*
+-- !result
 show create table `t1`;
 -- result:
 t1	CREATE TEMPORARY TABLE `t1` (

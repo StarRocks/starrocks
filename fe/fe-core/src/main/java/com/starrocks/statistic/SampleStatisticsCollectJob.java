@@ -17,6 +17,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -93,6 +94,9 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         List<List<Type>> collectTypeList = Lists.partition(columnTypes, splitSize);
         long finishedSQLNum = 0;
         long totalCollectSQL = collectSQLList.size();
+        if (table.isTemporaryTable()) {
+            context.setSessionId(((OlapTable) table).getSessionId());
+        }
 
         for (int i = 0; i < collectSQLList.size(); i++) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), collectSQLList.get(i), collectTypeList.get(i),

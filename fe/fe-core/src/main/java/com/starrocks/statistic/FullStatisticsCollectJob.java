@@ -21,6 +21,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -87,6 +88,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
         List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
         long totalCollectSQL = collectSQLList.size();
+        if (table.isTemporaryTable()) {
+            context.setSessionId(((OlapTable) table).getSessionId());
+        }
 
         // First, the collection task is divided into several small tasks according to the column name and partition,
         // and then the multiple small tasks are aggregated into several tasks
