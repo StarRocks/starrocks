@@ -105,6 +105,7 @@ set(EXPR_FILES
   dictionary_get_expr.cpp
   ngram.cpp
   match_expr.cpp
+  gin_functions.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
