@@ -232,7 +232,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"bloom_filter_columns" = "c2",
+"bloom_filter_columns" = "c1,c2",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -278,4 +278,8 @@ select * from common_duplicate where c2 ="abc" order by c0;
 3	3	abc
 4	4	abc
 5	5	abc
+-- !result
+select * from common_duplicate where c1 = 2;
+-- result:
+2	2	abc
 -- !result
