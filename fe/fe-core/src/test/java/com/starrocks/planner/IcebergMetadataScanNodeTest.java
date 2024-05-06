@@ -23,8 +23,12 @@ import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -186,6 +190,42 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         starRocksAssert.getCtx().getSessionVariable().setPlanMode("distributed");
         ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class,
                 "Failed to execute metadata collection job. run failed",
+                () -> UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql));
+        starRocksAssert.getCtx().getSessionVariable().setPlanMode("local");
+    }
+
+    @Test
+    public void testIcebergDistributedPlanJobBeforeExecError() throws Exception {
+        mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableC.refresh();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableC;
+            }
+        };
+
+        new MockUp<SqlParser>() {
+            @Mock
+            public StatementBase parseOneWithStarRocksDialect(String originSql, SessionVariable sessionVariable) {
+                throw new SemanticException("parse sql failed");
+            }
+        };
+
+
+        String sql = "trace values select * from iceberg_catalog.db.tc";
+        starRocksAssert.getCtx().getSessionVariable().setPlanMode("distributed");
+        ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class,
+                "Failed to execute metadata collection job. Getting analyzing error. Detail message: parse sql failed.",
                 () -> UtFrameUtils.getPlanAndStartScheduling(starRocksAssert.getCtx(), sql));
         starRocksAssert.getCtx().getSessionVariable().setPlanMode("local");
     }
