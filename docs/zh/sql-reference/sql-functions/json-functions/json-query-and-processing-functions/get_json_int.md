@@ -22,7 +22,7 @@ get_json_int(json_str, json_path)
 
 ## 返回值说明
 
-返回值的数据类型 INT。
+返回值的数据类型 BIGINT。
 
 ## 示例
 

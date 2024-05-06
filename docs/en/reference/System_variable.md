@@ -186,8 +186,14 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
 * **Default**: 64
-* **Data type**: Int
 * **Introduced in**: v3.1.9, v3.2.5
+
+### cbo_prune_subfield
+
+* **Description**: Whether to enable JSON subfield pruning. This variable must be used with the BE dynamic parameter `enable_json_flat`. Otherwise, it may degrade JSON data query performance.
+* **Default**: false
+* **Data type**: Int
+* **Introduced in**: v3.3.0
 
 ### enable_sync_materialized_view_rewrite
 
