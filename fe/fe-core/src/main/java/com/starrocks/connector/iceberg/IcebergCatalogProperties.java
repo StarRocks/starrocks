@@ -46,6 +46,8 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_LOCAL_PLANNING_MAX_SLOT_BYTES = "iceberg_local_planning_max_slot_bytes";
     public static final String ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE =
             "enable_distributed_plan_load_data_file_column_statistics_with_eq_delete";
+    public static final String ENABLE_CACHE_DATA_FILE_IDENTIFIER_COLUMN_STATISTICS =
+            "enable_cache_data_file_identifier_column_statistics";
 
     private final Map<String, String> properties;
     private IcebergCatalogType catalogType;
@@ -60,6 +62,7 @@ public class IcebergCatalogProperties {
     private long refreshIcebergManifestMinLength;
     private long localPlanningMaxSlotBytes;
     private boolean enableDistributedPlanLoadColumnStatsWithEqDelete;
+    private boolean enableCacheDataFileIdentifierColumnStatistics;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -95,6 +98,8 @@ public class IcebergCatalogProperties {
                 properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, false);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
                 2 * 1024 * 1024);
+        this.enableCacheDataFileIdentifierColumnStatistics = PropertyUtil.propertyAsBoolean(properties,
+                ENABLE_CACHE_DATA_FILE_IDENTIFIER_COLUMN_STATISTICS, true);
     }
 
     private void initThreadPoolNum() {
@@ -165,5 +170,9 @@ public class IcebergCatalogProperties {
 
     public boolean enableDistributedPlanLoadColumnStatsWithEqDelete() {
         return enableDistributedPlanLoadColumnStatsWithEqDelete;
+    }
+
+    public boolean enableCacheDataFileIdentifierColumnStatistics() {
+        return enableCacheDataFileIdentifierColumnStatistics;
     }
 }

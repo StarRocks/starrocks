@@ -352,6 +352,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         scanContext.setDataFileCache(dataFileCache);
         scanContext.setDeleteFileCache(deleteFileCache);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
+        scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
+                icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
 
         return delegate.getTableScan(table, scanContext);
     }

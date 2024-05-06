@@ -72,7 +72,8 @@ public class StarRocksIcebergTableScan
     private final Map<Integer, InclusiveMetricsEvaluator> inclusiveMetricsEvaluatorCache;
     private final String schemaString;
     private DeleteFileIndex deleteFileIndex;
-    private final boolean dataFileCacheWithMetrics;
+    private boolean dataFileCacheWithMetrics;
+    private boolean enableCacheDataFileIdentifierColumnMetrics;
     private final StarRocksIcebergTableScanContext scanContext;
     private final boolean onlyReadCache;
     private final int localParallelism;
@@ -105,6 +106,7 @@ public class StarRocksIcebergTableScan
         this.dataFileCache = scanContext.getDataFileCache();
         this.deleteFileCache = scanContext.getDeleteFileCache();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
+        this.enableCacheDataFileIdentifierColumnMetrics = scanContext.isEnableCacheDataFileIdentifierColumnMetrics();
         this.onlyReadCache = scanContext.isOnlyReadCache();
         this.localParallelism = scanContext.getLocalParallelism();
         this.localPlanningMaxSlotSize = scanContext.getLocalPlanningMaxSlotSize();
@@ -288,7 +290,8 @@ public class StarRocksIcebergTableScan
                     file -> partitionEvaluatorCache.get(file.specId()).eval(file.partition()));
         }
 
-        if (dataFileCacheWithMetrics) {
+        if (dataFileCacheWithMetrics ||
+                (!tableSchema().identifierFieldIds().isEmpty() && enableCacheDataFileIdentifierColumnMetrics)) {
             matchedDataFiles =  CloseableIterable.filter(
                     scanMetrics().skippedDataFiles(),
                     matchedDataFiles,
@@ -312,6 +315,7 @@ public class StarRocksIcebergTableScan
                         .ignoreDeleted()
                         .withDataFileCache(dataFileCache)
                         .preparedDeleteFileIndex(deleteFileIndex)
+                        .identifierFieldIds(getIdentifierFieldIds())
                         .cacheWithMetrics(dataFileCacheWithMetrics);
 
         if (shouldIgnoreResiduals()) {
@@ -323,6 +327,19 @@ public class StarRocksIcebergTableScan
         }
 
         return manifestGroup.planFiles();
+    }
+
+    private Set<Integer> getIdentifierFieldIds() {
+        if (dataFileCache == null || deleteFileIndex == null || dataFileCacheWithMetrics) {
+            return null;
+        }
+
+        if (!deleteFileIndex.isEmpty() && enableCacheDataFileIdentifierColumnMetrics) {
+            this.dataFileCacheWithMetrics = true;
+            return tableSchema().identifierFieldIds();
+        }
+
+        return null;
     }
 
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
