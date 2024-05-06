@@ -187,3 +187,12 @@ select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA
 drop temporary table `t`;
 
 select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA_LENGTH,MAX_DATA_LENGTH,INDEX_LENGTH,DATA_FREE,AUTO_INCREMENT,TABLE_COMMENT from information_schema.temp_tables where `session`=(select session_id());
+
+
+-- name: test_create_analyze
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create analyze table t;
