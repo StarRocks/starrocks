@@ -542,6 +542,7 @@
                                 "administration/management/resource_management/spill_to_disk",
                                 "administration/management/resource_management/Load_balance",
                                 "administration/management/resource_management/Replica",
+                                "administration/management/resource_management/be_label",
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
@@ -1972,6 +1973,7 @@
                                 "administration/management/resource_management/spill_to_disk",
                                 "administration/management/resource_management/Load_balance",
                                 "administration/management/resource_management/Replica",
+                                "administration/management/resource_management/be_label",
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
