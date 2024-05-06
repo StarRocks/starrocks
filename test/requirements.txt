@@ -9,3 +9,4 @@ flaky==3.7.0
 fuzzywuzzy
 python-Levenshtein
 PyGithub
+mysql-connector
