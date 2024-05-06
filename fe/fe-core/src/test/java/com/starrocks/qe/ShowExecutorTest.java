@@ -870,7 +870,8 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(14));
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
-        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(21));
+        Assert.assertEquals("N/A", resultSet.getString(17));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(22));
     }
 
     @Test
