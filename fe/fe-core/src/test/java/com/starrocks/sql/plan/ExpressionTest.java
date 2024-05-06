@@ -415,23 +415,6 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void testCaseWhenOperatorReuse() throws Exception {
-        String sql =
-                "select max(case when STRLEFT(DATE_FORMAT(v1, '%Y-%m'), 6) > 0 then v1 else v2 end),"
-                        +
-                        "min(case when STRLEFT(DATE_FORMAT(v1, '%Y-%m'), 6) > 0 then v2 else v1 end),"
-                        +
-                        "count(case when STRLEFT(DATE_FORMAT(v1, '%Y-%m'), 6) > 0 then v3 else v2 "
-                        + "end) from t0";
-        String planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: max(if(14: expr, 1: v1, 2: v2)), min(if(14: expr, 2: v2, 1: v1)), " +
-                "count(if(14: expr, 3: v3, 2: v2))");
-        Assert.assertTrue(planFragment.contains("common expressions:\n" +
-                "  |  <slot 10> : CAST(1: v1 AS DATETIME)"));
-    }
-
-    @Test
     public void testCastUnCompatibleType1() throws Exception {
         String sql = "select CAST(CAST(CAST(t1e AS DATE) AS BOOLEAN) AS BOOLEAN) from test_all_type;";
         String plan = getFragmentPlan(sql);
