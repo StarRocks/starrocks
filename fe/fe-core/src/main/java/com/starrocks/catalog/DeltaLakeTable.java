@@ -119,7 +119,7 @@ public class DeltaLakeTable extends Table {
     }
 
     public List<String> getPartitionColumnNames() {
-        return getPartitionColumns().stream().map(Column::getName).collect(Collectors.toList());
+        return partColumnNames;
     }
 
     public boolean isUnPartitioned() {
