@@ -10,6 +10,8 @@ displayed_sidebar: "Chinese"
 
 CRC32 是一个用于错误检测的函数，使用 CRC32 算法来检测源数据和目标数据之间的变化。
 
+该函数从 3.3 版本起支持。
+
 ## 语法
 
 ```Haskell
