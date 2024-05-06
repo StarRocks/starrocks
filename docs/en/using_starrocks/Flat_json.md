@@ -47,7 +47,7 @@ The `a` and `b` fields exist in most rows and their data types are similar (both
 - During data loading, this feature extracts common fields and stores them separately as JSON data. However, type inference is not supported. StarRocks will continuously iterate the Flat JSON feature to support type inference and storage optimization in future versions.
 - Currently, only the top-level JSON fields can be extracted.
 - Both the extracted columns and the original JSON data will be stored. The extracted data is removed when the original data is deleted.
-- Historical data that have been loaded before will not be loaded again.
+- Flat JSON is compatible with historical JSON data. Historical JSON data that have been loaded before will not be overwritten after Flat JSON is enabled.
 - When new data is written, the Flat JSON operation is automatically completed through Compaction.
 
 ## How to use Flat JSON

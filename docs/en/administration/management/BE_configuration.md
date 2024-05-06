@@ -3219,7 +3219,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Double
 - Unit:
 - Is mutable: Yes
-- Description: The proportion of NULL values in the column to extract. A column will not be extracted if its proportion of NULL value is higher than this threshold.
+- Description: The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
 
 ##### json_flat_sparsity_factor
@@ -3228,7 +3228,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Double
 - Unit:
 - Is mutable: Yes
-- Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value.
+- Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
 
 ##### json_flat_internal_column_min_limit
@@ -3237,7 +3237,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit:
 - Is mutable: Yes
-- Description: The minimum number of JSON fields for performing Flat JSON. Flat JSON is not performed if the number of JSON fields is less than this value
+- Description: The minimum number of JSON fields for performing Flat JSON. Flat JSON is not performed if the number of JSON fields is less than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
 
 ##### json_flat_column_max
@@ -3246,7 +3246,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit:
 - Is mutable: Yes
-- Description: The maximum number of sub-fields that can be extracted by Flat JSON.
+- Description: The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
 
 ### Shared-data

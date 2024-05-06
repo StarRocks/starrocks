@@ -3161,7 +3161,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Double
 - 单位：
 - 是否动态：是
-- 描述：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。
+- 描述：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
 
 ##### json_flat_sparsity_factor
@@ -3170,7 +3170,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Double
 - 单位：
 - 是否动态：是
-- 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。
+- 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
 
 ##### json_flat_internal_column_min_limit
@@ -3179,7 +3179,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：
 - 是否动态：是
-- 描述：控制 Flat JSON 时，JSON 内部字段数量限制，低于该数量的 JSON 不执行 Flat JSON 优化，默认为 5。
+- 描述：控制 Flat JSON 时，JSON 内部字段数量限制，低于该数量的 JSON 不执行 Flat JSON 优化，默认为 5。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
 
 ##### json_flat_column_max
@@ -3188,7 +3188,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：
 - 是否动态：是
-- 描述：控制 Flat JSON 时，最多提取的子列数量，默认为 20。
+- 描述：控制 Flat JSON 时，最多提取的子列数量，默认为 20。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
 
 ### 存算分离
