@@ -4,9 +4,9 @@ displayed_sidebar: "Chinese"
 
 # N-Gram bloom filter 索引
 
-N-Gram bloom filter 索引是一种特殊的 [Bloom filter 索引](./Bloomfilter_index.md)，只适用于字符串（`STRING`、`CHAR` 或 `VARCHAR`）类型的列。N-Gram bloom filter 索引与 Bloom filter 索引的区别在于，N-Gram bloom filter 索引会先根据对字符串进行分词，然后将结果子串写入 Bloom filter 索引。
+N-Gram bloom filter 索引是一种特殊的 [Bloom filter 索引](./Bloomfilter_index.md)，通常用于加速 LIKE 查询或 `ngram_search` 和 `ngram_search_case_insensitive` 函数的运算速度。
 
-例如某一个索引列值为字符串 `Technical`，如果是传统的 Bloom filter 索引，则将整个字符串 `Technical` 直接写入索引中。然而如果是 N-Gram bloom filter 索引，并且 `gram_num` 指定为 `4`，则需要先对 `Technical` 进行分词处理为以下子串：
+N-Gram bloom filter 索引只适用于字符串（`STRING`、`CHAR` 或 `VARCHAR`）类型的列。N-Gram bloom filter 索引与 Bloom filter 索引的区别在于，N-Gram bloom filter 索引会先根据对字符串进行分词，然后将结果子串写入 Bloom filter 索引。例如某一个索引列值为字符串 `Technical`，如果是传统的 Bloom filter 索引，则将整个字符串 `Technical` 直接写入索引中。然而如果是 N-Gram bloom filter 索引，并且 `gram_num` 指定为 `4`，则需要先对 `Technical` 进行分词处理为以下子串：
 
 ```SQL
 "Tech", "echn", "chni", "hnic", "nica", "ical"
@@ -16,7 +16,7 @@ N-Gram bloom filter 索引是一种特殊的 [Bloom filter 索引](./Bloomfilter
 
 ## 使用说明
 
-- 对于明细表或主键表，您可以为所有列（字符串类型）创建 N-Gram bloom filter 索引。对于聚合表或更新，您只能为 Key 列（字符串类型）创建 N-Gram bloom filter 索引。
+- 对于明细表或主键表，您可以为所有列（字符串类型）创建 N-Gram bloom filter 索引。对于聚合表或更新表，您只能为 Key 列（字符串类型）创建 N-Gram bloom filter 索引。
 - N-Gram bloom filter 索引只适用于字符串类型（CHAR、STRING 和 VARCHAR）的列。
 - 要确定查询是否命中 N-Gram bloom filter 索引，可以查看查询的 Profile 中的 `BloomFilterFilterRows` 字段。
 - 对于单个列，只能创建 Bloom filter 或 N-Gram bloom filter 其中一种类型的索引。
