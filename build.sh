@@ -145,6 +145,11 @@ RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
+<<<<<<< HEAD
+=======
+WITH_STARCACHE=ON
+WITH_BRPC_KEEPALIVE=OFF
+>>>>>>> 9a62361644 ([Enhancement] Adds config to set socket_keepalive  for brpc. Needs brpc 1.8 (#45070))
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -229,6 +234,11 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+<<<<<<< HEAD
+=======
+            --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
+>>>>>>> 9a62361644 ([Enhancement] Adds config to set socket_keepalive  for brpc. Needs brpc 1.8 (#45070))
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
@@ -362,6 +372,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
+<<<<<<< HEAD
+=======
+                  -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+                  -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE}          \
+>>>>>>> 9a62361644 ([Enhancement] Adds config to set socket_keepalive  for brpc. Needs brpc 1.8 (#45070))
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
