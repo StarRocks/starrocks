@@ -17,7 +17,7 @@ StarRocks 支持通过以下方式从 Azure 导入数据：
 
 一般情况下，建议您使用 INSERT+`FILES()`，更为方便易用。
 
-但是，INSERT+`FILES()` 当前只支持 Parquet 和 ORC 文件格式。因此，如果您需要导入其他格式（如 CSV）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
+但是，INSERT+`FILES()` 当前只支持 Parquet、ORC 和 CSV 文件格式。因此，如果您需要导入其他格式（如 JSON）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
 
 ## 准备工作
 
