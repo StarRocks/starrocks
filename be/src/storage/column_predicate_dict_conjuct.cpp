@@ -45,7 +45,7 @@ public:
     bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
 
     static constexpr PredicateType type() { return PredicateType::kMap; }
-    static constexpr bool support_bloom_filter() { return false; }
+    static constexpr bool support_original_bloom_filter() { return false; }
 
     static constexpr bool can_vectorized() { return true; }
 

@@ -43,7 +43,7 @@ public:
     [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
-    bool support_bloom_filter() const override { return false; }
+    bool support_original_bloom_filter() const override { return false; }
     bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
     bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const override;
     PredicateType type() const override { return PredicateType::kExpr; }
@@ -94,7 +94,7 @@ public:
     [[nodiscard]] Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
-    bool support_bloom_filter() const override { return false; }
+    bool support_original_bloom_filter() const override { return false; }
     PredicateType type() const override { return PredicateType::kTrue; }
     bool can_vectorized() const override { return true; }
     [[nodiscard]] Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,

@@ -155,7 +155,7 @@ public:
     // Return false to filter out a data page.
     virtual bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
 
-    virtual bool support_bloom_filter() const { return false; }
+    virtual bool support_original_bloom_filter() const { return false; }
 
     // return true means this predicate can support ngram bloom filter, don't consider gram number(N)
     // in ngram_bloom_filter(), if gram number is not equal(only happended in ngram_search right now)
@@ -164,7 +164,7 @@ public:
     virtual bool support_ngram_bloom_filter() const { return false; }
 
     // Return false to filter out a data page.
-    virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
+    virtual bool original_bloom_filter(const BloomFilter* bf) const { return true; }
 
     // Return false to filter out a data page.
     virtual bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const {
