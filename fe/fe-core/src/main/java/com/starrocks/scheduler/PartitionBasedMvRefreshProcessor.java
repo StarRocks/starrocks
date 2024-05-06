@@ -1530,7 +1530,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
                 }
 
-                if (table.isOlapTable()) {
+                if (table.isView()) {
+                    // skip to collect snapshots for views
+                } else if (table.isOlapTable()) {
                     Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
