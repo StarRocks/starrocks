@@ -811,8 +811,10 @@ public class StmtExecutor {
 
     private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
-            DDLStmtExecutor.execute(new DropTemporaryTableStmt(
-                    true, stmt.getCreateTableStmt().getDbTbl(), true), context);
+            DropTemporaryTableStmt dropTemporaryTableStmt =
+                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getDbTbl(), true);
+            dropTemporaryTableStmt.setSessionId(context.getSessionId());
+            DDLStmtExecutor.execute(dropTemporaryTableStmt, context);
         } else {
             DDLStmtExecutor.execute(new DropTableStmt(
                     true, stmt.getCreateTableStmt().getDbTbl(), true), context);
