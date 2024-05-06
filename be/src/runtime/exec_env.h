@@ -29,6 +29,7 @@
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
+#include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecssary includes will cause compilatio very slow.
 // So please consider use forward declaraion as much as possible.
@@ -212,6 +213,7 @@ public:
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
+    ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -328,6 +330,8 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
+
+    std::unique_ptr<ThreadPool> _load_rpc_pool;
 };
 
 template <>
