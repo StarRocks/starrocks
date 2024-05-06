@@ -5,7 +5,7 @@ displayed_sidebar: "English"
 
 # N-gram bloom filter index
 
-The N-gram bloom filter index is a special [Bloom filter index](./Bloomfilter_index.md) which is typically used to accelerate the LIKE queries and the caculation speed of or the `ngram_search` and `ngram_search_case_insensitive` functions.
+The N-gram bloom filter index is a special [Bloom filter index](./Bloomfilter_index.md) which is typically used to accelerate the LIKE queries and the caculation speed of the `ngram_search` and `ngram_search_case_insensitive` functions.
 
 The N-gram bloom filter index is only suitable for string (`STRING`, `CHAR`, or `VARCHAR`) type columns. The difference between the N-gram bloom filter index and Bloom filter index is that the N-gram bloom filter index first tokenizes the strings and then writes the resulting substrings into the Bloom filter index. For example, a certain indexed column value is a string `Technical`. For a traditional Bloom filter index, the entire string `Technical` would be directly written into the index. However, for an N-gram bloom filter index with a specified `gram_num` of `4`，the string `Technical` would be first tokenized into the following substrings:
 
