@@ -10,7 +10,7 @@ Calculate the ngram similarity of the two strings.
 
 :::info
 - Currently, the character encoding only supports ASCII encoding and does not support UTF-8 encoding.
-- The function `ngram_search` is case-sensitive. Another function `ngram_search_case_insensitive` is case-insensitive. Other than that, these two functions are the same.
+- The function `ngram_search` is case-sensitive. Another function `ngram_search_case_insensitive` is case-insensitive. Other than that, these two functions are the same. If `haystack` is a column name, and an N-Gram bloom filter index is created for that column in the table, the index can accelerate the computation speed of the `ngram_search` function.
 :::
 
 ## Syntax
@@ -26,7 +26,7 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 
   :::tip
 
-  - The length of the `needle` value can not be larger than 2^15. Otherwise an error will be thrown. If `haystack` is a column name, and an N-Gram bloom filter index is created for that column in the table, then the index can accelerate the computation speed of the `ngram_search` function.
+  - The length of the `needle` value can not be larger than 2^15. Otherwise an error will be thrown.
   - If the length of the `haystack` value is larger than 2^15, this function will return 0.
   - If the length of the `haystack` or `needle` value is smaller than `gram_num`, this fucntion will return 0.
   
