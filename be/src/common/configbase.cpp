@@ -33,7 +33,6 @@
 #include <fmt/format.h>
 
 #include "common/status.h"
-#include "util/logging.h"
 
 namespace starrocks::config {
 
@@ -230,15 +229,7 @@ Status set_config(const std::string& field, const std::string& value) {
     if (!it->second->set_value(value)) {
         return Status::InvalidArgument(fmt::format("Invalid value of config '{}': '{}'", field, value));
     }
-    update_config(field, value);
     return Status::OK();
-}
-
-void update_config(const std::string& field, const std::string& value) {
-    if ("sys_log_level" == field) {
-        // update log level
-        update_logging(field, value);
-    }
 }
 
 std::vector<ConfigInfo> list_configs() {
