@@ -171,6 +171,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
     @Override
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+        if (computeNodeId == null) {
+            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouseId);
+        }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
 

@@ -158,7 +158,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 List<Long> computeNodes = cluster.getComputeNodeIds();
                 for (Long computeNodeId : computeNodes) {
                     ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                            .getComputeNode(computeNodeId);
+                            .getBackendOrComputeNode(computeNodeId);
 
                     List<String> computeNodeInfo = Lists.newArrayList();
                     long warehouseId = node.getWarehouseId();

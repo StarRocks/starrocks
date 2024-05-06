@@ -71,6 +71,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -525,7 +526,7 @@ public class OlapScanNode extends ScanNode {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
                 if (computeNodeIds.isEmpty()) {
-                    throw new UserException(" no backend or compute node in warehouse " + warehouseId);
+                    ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouseId);
                 }
 
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
