@@ -798,7 +798,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
         Optional<List<List<Expr>>> optCandidatePartitionByExprs =
                 canPushDownRuntimeFilterCrossExchange(partitionByExprs);
-        if (!optCandidatePartitionByExprs.isPresent()) {
+        if (optCandidatePartitionByExprs.isEmpty()) {
             return false;
         }
         List<List<Expr>> candidatePartitionByExprs = optCandidatePartitionByExprs.get();

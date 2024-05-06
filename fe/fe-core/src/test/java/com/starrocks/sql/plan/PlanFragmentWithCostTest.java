@@ -848,6 +848,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPushDownRuntimeFilterAcrossSetOperationNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSelectivity(0);
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
@@ -891,6 +892,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         plans.add(plan);
 
         setTableStatistics(t0, 10000);
+        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSelectivity(0.5f);
 
         // === check union plan ====
         {
@@ -909,9 +911,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 360000\n" +
-                    "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (5: v4 + 2)");
+                    "     cardinality: 360000");
             assertContains(unionPlan, "  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
@@ -919,9 +919,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 360000\n" +
-                    "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (1: v1 + 1)");
+                    "     cardinality: 360000");
         }
         // === check except plan ===
         {
@@ -932,9 +930,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  child exprs:\n" +
                     "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
                     "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n");
-            Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
+            Assert.assertTrue(exceptPlan, exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
-            Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
+            Assert.assertTrue(exceptPlan, exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
         }
         // === check intersect plan ====
@@ -946,9 +944,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  child exprs:\n" +
                     "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
                     "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n");
-            Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
+            Assert.assertTrue(intersectPlan, intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
-            Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
+            Assert.assertTrue(intersectPlan, intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
         }
     }

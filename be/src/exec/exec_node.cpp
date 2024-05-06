@@ -170,18 +170,22 @@ void ExecNode::register_runtime_filter_descriptor(RuntimeState* state, RuntimeFi
 
 Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state) {
     _runtime_filter_collector.set_plan_node_id(_id);
-    if (state != nullptr && tnode.__isset.probe_runtime_filters) {
-        for (const auto& desc : tnode.probe_runtime_filters) {
-            RuntimeFilterProbeDescriptor* rf_desc = _pool->add(new RuntimeFilterProbeDescriptor());
-            RETURN_IF_ERROR(rf_desc->init(_pool, desc, _id, state));
-            register_runtime_filter_descriptor(state, rf_desc);
-        }
-    }
     if (state != nullptr && state->query_options().__isset.runtime_filter_wait_timeout_ms) {
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
     }
     if (state != nullptr && state->query_options().__isset.runtime_filter_scan_wait_time_ms) {
         _runtime_filter_collector.set_scan_wait_timeout_ms(state->query_options().runtime_filter_scan_wait_time_ms);
+    }
+    int32_t wait_ms = 0;
+    if (state != nullptr && tnode.__isset.probe_runtime_filters) {
+        for (const auto& desc : tnode.probe_runtime_filters) {
+            RuntimeFilterProbeDescriptor* rf_desc = _pool->add(new RuntimeFilterProbeDescriptor());
+            RETURN_IF_ERROR(rf_desc->init(_pool, desc, _id, state));
+            register_runtime_filter_descriptor(state, rf_desc);
+            wait_ms = std::max(wait_ms, desc.wait_time_ms);
+        }
+        _runtime_filter_collector.set_wait_timeout_ms(wait_ms);
+        _runtime_filter_collector.set_scan_wait_timeout_ms(wait_ms);
     }
     if (tnode.__isset.filter_null_value_columns) {
         _filter_null_value_columns = tnode.filter_null_value_columns;

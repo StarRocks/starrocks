@@ -40,8 +40,10 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 
@@ -99,6 +101,34 @@ public abstract class ScanNode extends PlanNode {
         } else {
             return expr;
         }
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        boolean supported = super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
+        if (!supported) {
+            return false;
+        }
+
+        // we guess the io cost time...
+        int numBackends = ConnectContext.get() != null ? ConnectContext.get().getAliveBackendNumber() : 1;
+        long speed = Math.max(1, numBackends) * StatisticsEstimateCoefficient.DEFAULT_BE_IO_SPEED;
+
+        long maxWaitMs = ConnectContext.get() != null ?
+                ConnectContext.get().getSessionVariable().getRuneTimeFilterScanMaxWaitTime() : 1000;
+        long baseWaitMs = ConnectContext.get() != null ?
+                ConnectContext.get().getSessionVariable().getRuntimeFilterScanWaitTime() : 20;
+
+        // compute wait time on scan node
+        for (RuntimeFilterDescription scanProbeRF : probeRuntimeFilters) {
+            // modify new runtime filter
+            double selectivity = scanProbeRF.getSelectivity();
+            double saveBytes = this.getAvgRowSize() * selectivity * this.getCardinality();
+            double costMs = saveBytes * 1000 / speed;
+            scanProbeRF.setWaitTimeMs((int) Math.max(Math.min(maxWaitMs, costMs), baseWaitMs));
+        }
+        return true;
     }
 
     /**
