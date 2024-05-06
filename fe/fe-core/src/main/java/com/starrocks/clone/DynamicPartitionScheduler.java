@@ -284,7 +284,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     }
                     distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
                             distColumnNames);
-                } else if (distributionInfo instanceof  RandomDistributionInfo) {
+                } else if (distributionInfo instanceof RandomDistributionInfo) {
                     distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
                 }
 
@@ -432,7 +432,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
 
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
-            if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
                 LOG.warn("db: {}({}) has been dropped, skip", db.getFullName(), db.getId());
                 return false;
             }
@@ -451,7 +451,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 try {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
-                } catch (DdlException | AnalysisException e) {
+                } catch (DdlException e) {
                     recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
                 }
             }

@@ -213,10 +213,13 @@ public class StatementPlanner {
              * currently only used in Spark/Flink Connector
              * Because the connector sends only simple queries, it only needs to remove the output fragment
              */
-            return PlanFragmentBuilder.createPhysicalPlan(
+            ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                     resultSinkType,
                     !session.getSessionVariable().isSingleNodeExecPlan());
+            execPlan.setLogicalPlan(logicalPlan);
+            execPlan.setColumnRefFactory(columnRefFactory);
+            return execPlan;
         }
     }
 
@@ -290,6 +293,8 @@ public class StatementPlanner {
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
                 if (isSchemaValid) {
+                    plan.setLogicalPlan(logicalPlan);
+                    plan.setColumnRefFactory(columnRefFactory);
                     return plan;
                 }
 
@@ -388,8 +393,12 @@ public class StatementPlanner {
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
+
         Database db = MetaUtils.getDatabase(catalogName, dbName);
-        Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
+        if (targetTable == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
         if (stmt instanceof DeleteStmt && targetTable instanceof OlapTable &&
                 ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
             return;

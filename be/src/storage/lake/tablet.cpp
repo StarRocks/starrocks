@@ -71,15 +71,17 @@ StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
-                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool) {
+                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool,
+                                                           bool is_compaction) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
+            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool,
+                                                              is_compaction);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
-                                                            flush_pool);
+                                                            flush_pool, is_compaction);
         }
     } else {
         if (type == kHorizontal) {
@@ -104,8 +106,8 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
-StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t index_id) {
-    return _mgr->get_tablet_schema_by_id(_id, index_id);
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
+    return _mgr->get_tablet_schema_by_id(_id, schema_id);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {

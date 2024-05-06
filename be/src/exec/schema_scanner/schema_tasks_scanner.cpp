@@ -25,6 +25,7 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
@@ -53,14 +54,20 @@ Status SchemaTasksScanner::start(RuntimeState* state) {
 
 DatumArray SchemaTasksScanner::_build_row() {
     auto& task = _task_result.tasks.at(_task_index++);
+    if (!task.__isset.catalog) {
+        // Compatible for upgrades
+        task.catalog = "default_catalog";
+    }
+    Datum expire_time = task.__isset.expire_time && task.expire_time > 0
+                                ? TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+    Datum create_time = task.__isset.create_time && task.create_time > 0
+                                ? TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+
     return {
-            Slice(task.task_name),
-            TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj()),
-            Slice(task.schedule),
-            Slice(task.database),
-            Slice(task.definition),
-            TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj()),
-            Slice(task.properties),
+            Slice(task.task_name),  create_time, Slice(task.schedule),   Slice(task.catalog), Slice(task.database),
+            Slice(task.definition), expire_time, Slice(task.properties),
     };
 }
 

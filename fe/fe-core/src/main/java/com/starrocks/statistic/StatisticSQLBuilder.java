@@ -17,13 +17,15 @@ package com.starrocks.statistic;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Type;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
@@ -121,39 +123,54 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_SAMPLE_STATISTIC_TEMPLATE);
     }
 
-    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<Column> columns) {
+    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<String> columnNames,
+                                                     List<Type> columnTypes) {
+        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes);
+
         List<String> querySQL = new ArrayList<>();
-        for (Column column : columns) {
+        nameGroups.forEach((type, names) -> {
             VelocityContext context = new VelocityContext();
             context.put("updateTime", "now()");
-
-            if (column.getType().canStatistic()) {
-                context.put("type", column.getType().toSql());
-            } else {
-                context.put("type", "string");
-            }
-            context.put("predicate", "table_id = " + tableId + " and column_name = \"" + column.getName() + "\"");
+            context.put("type", type);
+            context.put("predicate", "table_id = " + tableId + " and column_name in (" +
+                    names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
             querySQL.add(build(context, QUERY_FULL_STATISTIC_TEMPLATE));
-        }
+        });
+        return Joiner.on(" UNION ALL ").join(querySQL);
+    }
+
+    public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
+                                                             List<Type> columnTypes) {
+        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes);
+
+        List<String> querySQL = new ArrayList<>();
+        nameGroups.forEach((type, names) -> {
+            VelocityContext context = new VelocityContext();
+            context.put("type", type);
+            context.put("predicate",
+                    "table_uuid = \"" + tableUUID + "\"" + " and column_name in (" +
+                            names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
+            querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_TEMPLATE));
+        });
 
         return Joiner.on(" UNION ALL ").join(querySQL);
     }
 
-    public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<Column> columns) {
-        List<String> querySQL = new ArrayList<>();
-        for (Column column : columns) {
-            VelocityContext context = new VelocityContext();
+    private static Map<String, List<String>> groupByTypes(List<String> columnNames, List<Type> columnTypes) {
+        Map<String, List<String>> groupByTypeNames = Maps.newHashMap();
+        for (int i = 0; i < columnNames.size(); i++) {
+            String columnName = columnNames.get(i);
+            Type columnType = columnTypes.get(i);
 
-            if (column.getType().canStatistic()) {
-                context.put("type", column.getType().toSql());
+            if (columnType.isStringType() || !columnType.canStatistic()) {
+                groupByTypeNames.computeIfAbsent("string", k -> Lists.newArrayList()).add(columnName);
+            } else if (columnType.isIntegerType()) {
+                groupByTypeNames.computeIfAbsent("bigint", k -> Lists.newArrayList()).add(columnName);
             } else {
-                context.put("type", "string");
+                groupByTypeNames.computeIfAbsent(columnType.toSql(), k -> Lists.newArrayList()).add(columnName);
             }
-            context.put("predicate", "table_uuid = \"" + tableUUID + "\"" + " and column_name = \"" + column.getName() + "\"");
-            querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_TEMPLATE));
         }
-
-        return Joiner.on(" UNION ALL ").join(querySQL);
+        return groupByTypeNames;
     }
 
     public static String buildDropStatisticsSQL(Long tableId, StatsConstants.AnalyzeType analyzeType) {

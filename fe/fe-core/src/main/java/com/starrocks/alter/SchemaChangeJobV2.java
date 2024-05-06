@@ -290,7 +290,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
-            Long baseIndexId = tbl.getBaseIndexId();
+            long baseIndexId = tbl.getBaseIndexId();
 
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
@@ -313,7 +313,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
-                    List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
                             .setKeysType(originKeysType)
@@ -597,8 +596,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
 
                             int columnIndex = -1;
-                            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
-                                    column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+                            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
                                 String originName = Column.removeNamePrefix(column.getName());
                                 columnIndex = tbl.getFullSchema().indexOf(tbl.getColumn(originName));
                             } else {
@@ -784,8 +782,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             if (shadowSchema.size() == originSchema.size()) {
                 // modify column
                 for (Column col : shadowSchema) {
-                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, col.getName()));
+                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, col.getName()));
                     }
                 }
             } else if (shadowSchema.size() < originSchema.size()) {
@@ -894,16 +892,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             tbl.setIndexes(indexes);
         }
 
-        //update max column unique id
-        int maxColUniqueId = tbl.getMaxColUniqueId();
-        for (Column column : tbl.getFullSchema()) {
-            if (column.getUniqueId() > maxColUniqueId) {
-                maxColUniqueId = column.getUniqueId();
-            }
-        }
-        tbl.setMaxColUniqueId(maxColUniqueId);
-        LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), maxColUniqueId);
-
+        LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), tbl.getMaxColUniqueId());
 
         tbl.setState(OlapTableState.NORMAL);
         tbl.lastSchemaUpdateTime.set(System.nanoTime());

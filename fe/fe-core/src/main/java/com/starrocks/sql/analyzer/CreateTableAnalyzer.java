@@ -44,8 +44,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -65,6 +67,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
@@ -138,7 +141,7 @@ public class CreateTableAnalyzer {
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
         final TableName tableNameObject = statement.getDbTbl();
         MetaUtils.normalizationTableName(context, tableNameObject);
-
+        boolean isCreateTemporaryTable = (statement instanceof CreateTemporaryTableStmt);
         final String tableName = tableNameObject.getTbl();
         FeNameFormat.checkTableName(tableName);
 
@@ -149,20 +152,44 @@ public class CreateTableAnalyzer {
             throw new SemanticException(e.getMessage());
         }
 
+        if (isCreateTemporaryTable) {
+            ((CreateTemporaryTableStmt) statement).setSessionId(context.getSessionId());
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                throw new SemanticException("temporary table must be created under internal catalog");
+            }
+            Map<String, String> properties = statement.getProperties();
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                // temporary table doesn't support colocate_with property, so ignore it
+                properties.remove(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+            }
+        }
+
+
         Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
 
         // check if table exists in db
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
+        if (isCreateTemporaryTable) {
+            UUID sessionId = context.getSessionId();
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            if (temporaryTableMgr.tableExists(sessionId, db.getId(), tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
+        } else {
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
         }
 
         final String engineName = analyzeEngineName(statement.getEngineName(), catalogName).toLowerCase();
+        if (isCreateTemporaryTable && !engineName.equalsIgnoreCase("olap")) {
+            throw new SemanticException("temporary table only support olap engine");
+        }
         statement.setEngineName(engineName);
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
@@ -497,7 +524,7 @@ public class CreateTableAnalyzer {
                     }
 
                     if (!column.getType().matchesType(expr.getType())) {
-                        throw new SemanticException("Illege expression type for Generated Column " +
+                        throw new SemanticException("Illegal expression type for Generated Column " +
                                 "Column Type: " + column.getType().toString() +
                                 ", Expression Type: " + expr.getType().toString());
                     }

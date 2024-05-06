@@ -539,6 +539,8 @@ public class RuntimeFilterDescription {
             }
         }
 
+        t.setBuild_from_group_execution(isBuildFromColocateGroup);
+
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
         } else {

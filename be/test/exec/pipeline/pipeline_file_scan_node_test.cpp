@@ -265,7 +265,7 @@ void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks:
     for (auto& i : scan_nodes) {
         auto* scan_node = (ScanNode*)(i);
         auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
-                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
+                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, false, true,
                 TTabletInternalParallelMode::type::AUTO);
         DCHECK(morsel_queue_factory.ok());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
@@ -415,8 +415,9 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     _pipelines.push_back(
             std::make_shared<starrocks::pipeline::Pipeline>(_context->next_pipe_id(), op_factories, exec_group.get()));
-    exec_group->add_pipeline(_pipelines.back());
-    _fragment_ctx->set_exec_groups({exec_group});
+    exec_group->add_pipeline(_pipelines.back().get());
+    auto pipelines = _pipelines;
+    _fragment_ctx->set_pipelines({exec_group}, std::move(pipelines));
 
     prepare_pipeline();
 

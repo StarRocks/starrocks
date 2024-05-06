@@ -321,6 +321,7 @@ struct TPartitionVersionInfo {
     2: required Types.TVersion version
     3: required Types.TVersionHash version_hash // Deprecated
     4: optional TBinlogConfig binlog_config
+    5: optional i64 gtid
 }
 
 struct TMoveDirReq {
@@ -348,6 +349,7 @@ struct TPublishVersionRequest {
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
     7: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    8: optional i64 gtid
 }
 
 struct TClearAlterTaskRequest {
@@ -423,6 +425,9 @@ struct TTabletMetaInfo {
     6: optional bool enable_persistent_index
     7: optional TBinlogConfig binlog_config
     8: optional i32 primary_index_cache_expire_sec
+    9: optional TTabletSchema tablet_schema;
+    // |create_schema_file| only used when |tablet_schema| exists
+    10: optional bool create_schema_file;
 }
 
 struct TUpdateTabletMetaInfoReq {

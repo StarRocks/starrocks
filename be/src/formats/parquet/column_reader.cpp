@@ -14,29 +14,48 @@
 
 #include "formats/parquet/column_reader.h"
 
-#include <boost/algorithm/string.hpp>
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <boost/algorithm/string/case_conv.hpp>
+#include <boost/iterator/iterator_facade.hpp>
+#include <map>
+#include <ostream>
+#include <unordered_map>
+#include <utility>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "common/compiler_util.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
-#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "formats/parquet/column_converter.h"
+#include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/schema.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
-#include "formats/parquet/utils.h"
+#include "fs/fs.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/parquet_types.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "io/shared_buffered_input_stream.h"
+#include "runtime/types.h"
 #include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
+#include "storage/column_predicate.h"
+#include "storage/types.h"
 #include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "utils.h"
-
-namespace starrocks {
-class RandomAccessFile;
-}
 
 namespace starrocks::parquet {
 

@@ -14,14 +14,28 @@
 
 #include "formats/parquet/stored_column_reader.h"
 
+#include <fmt/core.h>
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <sstream>
+#include <string>
+#include <utility>
+
 #include "column/column.h"
 #include "column_reader.h"
+#include "common/compiler_util.h"
+#include "common/logging.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "formats/parquet/level_codec.h"
+#include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "simd/simd.h"
-#include "util/runtime_profile.h"
+
+namespace tparquet {
+class ColumnChunk;
+} // namespace tparquet
 
 namespace starrocks::parquet {
 

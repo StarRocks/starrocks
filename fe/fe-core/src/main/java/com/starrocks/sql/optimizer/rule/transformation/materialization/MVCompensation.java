@@ -74,7 +74,7 @@ public class MVCompensation {
         }
 
         // No compensate once if mv's freshness is satisfied.
-        if (state.isPrunedCompensate()) {
+        if (state.isCompensate()) {
             return true;
         }
 
@@ -88,7 +88,7 @@ public class MVCompensation {
         }
         if (state.isNoCompensate()) {
             return false;
-        } else if (state.isPrunedCompensate()) {
+        } else if (state.isCompensate()) {
             return !unionRewriteMode.isTransparentRewrite();
         } else {
             return true;

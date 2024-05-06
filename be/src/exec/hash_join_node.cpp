@@ -14,6 +14,7 @@
 
 #include "exec/hash_join_node.h"
 
+#include <glog/logging.h>
 #include <runtime/runtime_state.h>
 
 #include <memory>
@@ -180,8 +181,8 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _init_hash_table_param(&param);
     _ht.create(param);
 
-    _probe_column_count = _ht.get_probe_column_count();
-    _build_column_count = _ht.get_build_column_count();
+    _output_probe_column_count = _ht.get_output_probe_column_count();
+    _output_build_column_count = _ht.get_output_build_column_count();
 
     return Status::OK();
 }
@@ -537,6 +538,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             DCHECK(!runtime_filter_build_desc->has_remote_targets());
             runtime_filter_build_desc->set_num_colocate_partition(num_right_partitions);
         }
+        size_t num_left_partition = context->source_operator(lhs_operators)->degree_of_parallelism();
+        DCHECK_EQ(num_left_partition, num_right_partitions);
         context->fragment_context()->runtime_filter_hub()->add_holder(_id, num_right_partitions);
     } else {
         context->fragment_context()->runtime_filter_hub()->add_holder(_id);
@@ -877,7 +880,7 @@ Status HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
+        return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:

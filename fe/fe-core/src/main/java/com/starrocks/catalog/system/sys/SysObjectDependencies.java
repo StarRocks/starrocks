@@ -26,6 +26,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TObjectDependencyItem;
 import com.starrocks.thrift.TObjectDependencyReq;
@@ -101,10 +102,17 @@ public class SysObjectDependencies {
                     item.setObject_type(mv.getType().toString());
 
                     item.setRef_object_id(refObj.getTableId());
-                    item.setRef_object_name(refObj.getTableName());
                     item.setRef_database(refObj.getDbName());
                     item.setRef_catalog(refObj.getCatalogName());
-                    item.setRef_object_type(getRefObjectType(refObj, mv.getName()));
+                    Optional<Table> refTable = MvUtils.getTableWithIdentifier(refObj);
+                    item.setRef_object_type(getRefObjectType(refTable, mv.getName()));
+                    // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
+                    // BaseTableInfo, so we use the source-of-truth information
+                    if (refTable.isEmpty()) {
+                        item.setRef_object_name(refObj.getTableName());
+                    } else {
+                        item.setRef_object_name(refTable.get().getName());
+                    }
 
                     response.addToItems(item);
                 }
@@ -117,15 +125,14 @@ public class SysObjectDependencies {
     /**
      * We may not be able to obtain the base table information when external catalog is unavailable
      *
-     * @param refObj Base tables for materialized views
+     * @param refTable Base table for materialized views
      * @param mvName materialized view name
      * @return base table type
      */
-    private static String getRefObjectType(BaseTableInfo refObj, String mvName) {
+    private static String getRefObjectType(Optional<Table> refTable, String mvName) {
         String refObjType = "UNKNOWN";
         try {
-            refObjType = refObj.mayGetTable()
-                    .map(x -> x.getType().toString())
+            refObjType = refTable.map(x -> x.getType().toString())
                     .orElse("UNKNOWN");
         } catch (Exception e) {
             LOG.error("can not get table type error, mv name : {}, error-msg : {}",

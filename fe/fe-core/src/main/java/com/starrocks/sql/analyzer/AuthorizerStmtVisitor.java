@@ -37,6 +37,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -87,6 +88,7 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -104,6 +106,7 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -454,6 +457,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             } else {
                 table = ((ViewRelation) tableToBeChecked.getValue()).getView();
             }
+            if (table instanceof MetadataTable) {
+                return;
+            }
+
             if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                 try {
                     Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -1480,8 +1487,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                || r.equals(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
             UserIdentity userIdentity = context.getCurrentUserIdentity();
             if (!userIdentity.equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not grant root or cluster_admin role except root user");
@@ -1501,15 +1508,15 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                || r.equals(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
             UserIdentity userIdentity = context.getCurrentUserIdentity();
             if (!userIdentity.equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not grant root or cluster_admin role except root user");
             }
         }
 
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
             if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not revoke root role from root user");
             }
@@ -1568,7 +1575,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
             } else if (statement.getRole() != null) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-                List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
+                Set<String> roleNames =
+                        authorizationManager.getAllPredecessorRoleNamesByUser(context.getCurrentUserIdentity());
                 if (!roleNames.contains(statement.getRole())) {
                     Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             PrivilegeType.GRANT);
@@ -1974,9 +1982,18 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
         if (statement.getCreateTableAsSelectStmt() != null) {
             visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+        } else if (statement.getDataCacheSelectStmt() != null) {
+            visitDataCacheSelectStatement(statement.getDataCacheSelectStmt(), context);
         } else {
             visitInsertStatement(statement.getInsertStmt(), context);
         }
+        return null;
+    }
+
+    @Override
+    public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+        // check we have permission access source data
+        visitQueryStatement(statement.getInsertStmt().getQueryStatement(), context);
         return null;
     }
 
@@ -2200,6 +2217,19 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 }
             }
         });
+        return null;
+    }
+
+    @Override
+    public Void visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 

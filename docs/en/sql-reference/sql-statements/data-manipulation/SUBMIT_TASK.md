@@ -17,6 +17,7 @@ Supported statements include:
 
 - [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
 - [INSERT](./INSERT.md) (from v3.0 onwards)
+- [CACHE SELECT](../../../data_source/data_cache_warmup.md) (from v3.3 onwards)
 
 You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes).
 
@@ -70,7 +71,7 @@ You can configure asynchronous ETL tasks using the following FE configuration it
 | **Parameter**                | **Default value** | **Description**                                              |
 | ---------------------------- | ----------------- | ------------------------------------------------------------ |
 | task_ttl_second              | 86400             | The period during which a Task is valid. Unit: seconds. Tasks that exceed the validity period are deleted. |
-| task_check_interval_second   | 14400             | The time interval to delete invalid Tasks. Unit: seconds.    |
+| task_check_interval_second   | 3600              | The time interval to delete invalid Tasks. Unit: seconds.    |
 | task_runs_ttl_second         | 86400             | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. |
 | task_runs_concurrency        | 4                 | The maximum number of TaskRuns that can be run in parallel.  |
 | task_runs_queue_length       | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |

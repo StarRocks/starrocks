@@ -140,6 +140,8 @@ struct TRuntimeFilterDescription {
 
   16: optional TRuntimeFilterBuildType filter_type;
   17: optional TRuntimeFilterLayout layout;
+
+  18: optional bool build_from_group_execution
 }
 
 struct TRuntimeFilterProberParams {

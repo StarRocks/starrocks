@@ -45,6 +45,7 @@
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
+#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/inverted/index_descriptor.hpp"
 #include "storage/inverted/inverted_plugin_factory.h"
@@ -327,10 +328,10 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
     return Status::OK();
 }
 
-Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const {
+Status ColumnReader::_parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
-    TypeInfoPtr type_info = get_type_info(delegate_type(_column_type));
+    TypeInfoPtr type_info = get_type_info(delegate_type(type));
     detail->set_has_null(zm.has_null());
 
     if (zm.has_not_null()) {
@@ -518,12 +519,23 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                       std::vector<uint32_t>* pages) {
+    // The type of the predicate may be different from the data type in the segment
+    // file, e.g., the predicate type may be 'BIGINT' while the data type is 'INT',
+    // so it's necessary to use the type of the predicate to parse the zone map string.
+    LogicalType lt;
+    if (!predicates.empty()) {
+        lt = predicates[0]->type_info()->type();
+    } else if (del_predicate) {
+        lt = del_predicate->type_info()->type();
+    } else {
+        return Status::OK();
+    }
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
     int32_t page_size = _zonemap_index->num_pages();
     for (int32_t i = 0; i < page_size; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        RETURN_IF_ERROR(_parse_zone_map(zm, &detail));
+        RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
         bool matched = true;
         for (const auto* predicate : predicates) {
             if (!predicate->zone_map_filter(detail)) {
@@ -544,11 +556,12 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
 }
 
 bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates) const {
-    if (_segment_zone_map == nullptr) {
+    if (_segment_zone_map == nullptr || predicates.empty()) {
         return true;
     }
+    LogicalType lt = predicates[0]->type_info()->type();
     ZoneMapDetail detail;
-    auto st = _parse_zone_map(*_segment_zone_map, &detail);
+    auto st = _parse_zone_map(lt, *_segment_zone_map, &detail);
     CHECK(st.ok()) << st;
     auto filter = [&](const ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
@@ -564,8 +577,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         std::vector<std::unique_ptr<ColumnIterator>> flat_iters;
         // short name path, e.g. 'a'
         std::vector<std::string> flat_paths;
-        // full json path, e.g. '$.a'
-        // std::vector<std::string> full_paths;
+        std::vector<LogicalType> target_types;
+        std::vector<LogicalType> source_types;
         {
             for (auto& p : path->children()) {
                 if (UNLIKELY(!p->children().empty())) {
@@ -574,7 +587,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
                                                    p->absolute_path());
                 }
                 flat_paths.emplace_back(p->path());
-                // full_paths.emplace_back("$." + p->path());
+                target_types.emplace_back(p->value_type().type);
             }
         }
 
@@ -585,6 +598,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
                 if (rd->name() == p) {
                     ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
                     flat_iters.emplace_back(std::move(iter));
+                    source_types.emplace_back(rd->column_type());
                     break;
                 }
             }
@@ -592,14 +606,15 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         if (flat_iters.size() != flat_paths.size()) {
             // we must dynamic flat json, because we don't know other segment wasn't the paths
-            return create_json_dynamic_flat_iterator(std::move(json_iter), flat_paths, path);
+            return create_json_dynamic_flat_iterator(std::move(json_iter), flat_paths, target_types, path);
         }
 
         std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
             ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[0]->new_iterator());
         }
-        return create_json_flat_iterator(this, std::move(null_iterator), std::move(flat_iters), flat_paths, path);
+        return create_json_flat_iterator(this, std::move(null_iterator), std::move(flat_iters), flat_paths,
+                                         target_types, source_types, path);
     } else if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {

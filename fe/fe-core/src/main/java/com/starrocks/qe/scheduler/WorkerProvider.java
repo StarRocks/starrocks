@@ -56,7 +56,7 @@ public interface WorkerProvider {
      * @param workerId The id of the worker to choose.
      * @throws NonRecoverableException if there is no available worker with the given id.
      */
-    void selectWorker(Long workerId) throws NonRecoverableException;
+    void selectWorker(long workerId) throws NonRecoverableException;
 
     /**
      * Select all the available compute nodes.
@@ -67,23 +67,34 @@ public interface WorkerProvider {
 
     Collection<ComputeNode> getAllWorkers();
 
-    ComputeNode getWorkerById(Long workerId);
+    ComputeNode getWorkerById(long workerId);
 
-    boolean isDataNodeAvailable(Long dataNodeId);
+    boolean isDataNodeAvailable(long dataNodeId);
 
     void reportDataNodeNotFoundException() throws NonRecoverableException;
 
     void reportWorkerNotFoundException() throws NonRecoverableException;
 
-    boolean isWorkerSelected(Long workerId);
+    boolean isWorkerSelected(long workerId);
 
     List<Long> getSelectedWorkerIds();
 
     List<Long> getAllAvailableNodes();
 
-    void selectWorkerUnchecked(Long workerId);
+    void selectWorkerUnchecked(long workerId);
 
     default boolean isPreferComputeNode() {
         return false;
     }
+
+    default boolean allowUsingBackupNode() {
+        return false;
+    }
+
+    /**
+     * choose a backup worker for the given workerId, it is up to the WorkerProvider decision how to select it.
+     *
+     * @return -1, no available backup worker
+     */
+    long selectBackupWorker(long workerId);
 }

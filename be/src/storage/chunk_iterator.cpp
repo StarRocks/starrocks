@@ -54,9 +54,20 @@ private:
         return _iter->get_next(chunk, rowid);
     }
 
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override {
+        SCOPED_RAW_TIMER(&_cost);
+        return _iter->get_next(chunk, rssid_rowids);
+    }
+
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override {
         SCOPED_RAW_TIMER(&_cost);
         return _iter->get_next(chunk, source_masks);
+    }
+
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override {
+        SCOPED_RAW_TIMER(&_cost);
+        return _iter->get_next(chunk, source_masks, rssid_rowids);
     }
 
     ChunkIteratorPtr _iter;

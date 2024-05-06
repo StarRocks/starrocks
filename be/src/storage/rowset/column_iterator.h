@@ -41,11 +41,10 @@
 #include "storage/options.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
+#include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
-
-class CondColumn;
 
 class Column;
 class ColumnAccessPath;
@@ -91,19 +90,19 @@ public:
     }
 
     // Seek to the first entry in the column.
-    [[nodiscard]] virtual Status seek_to_first() = 0;
+    virtual Status seek_to_first() = 0;
 
     // Seek to the given ordinal entry in the column.
     // Entry 0 is the first entry written to the column.
     // If provided seek point is past the end of the file,
     // then returns false.
-    [[nodiscard]] virtual Status seek_to_ordinal(ordinal_t ord) = 0;
+    virtual Status seek_to_ordinal(ordinal_t ord) = 0;
 
-    [[nodiscard]] virtual Status next_batch(size_t* n, Column* dst) = 0;
+    virtual ordinal_t num_rows() const = 0;
 
-    [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* dst) {
-        return Status::NotSupported("ColumnIterator Not Support batch read");
-    }
+    virtual Status next_batch(size_t* n, Column* dst) = 0;
+
+    virtual Status next_batch(const SparseRange<>& range, Column* dst);
 
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
         if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
@@ -155,13 +154,14 @@ public:
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
-    /// for vectorized engine
-    [[nodiscard]] virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                            const ColumnPredicate* del_predicate,
-                                                            SparseRange<>* row_ranges) = 0;
+    virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
+        row_ranges->add({0, static_cast<rowid_t>(num_rows())});
+        return Status::OK();
+    }
 
-    [[nodiscard]] virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                                SparseRange<>* row_ranges) {
+    virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                  SparseRange<>* row_ranges) {
         return Status::OK();
     }
 
@@ -172,7 +172,7 @@ public:
 
     // if all data page of this colum are encoded as dictionary encoding.
     // return all dictionary words that store in dict page
-    [[nodiscard]] virtual Status fetch_all_dict_words(std::vector<Slice>* words) const {
+    virtual Status fetch_all_dict_words(std::vector<Slice>* words) const {
         return Status::NotSupported("Not Support dict.");
     }
 
@@ -189,17 +189,15 @@ public:
     // batch of dictionary codes for dictionary encoded values.
     // this method can be invoked only if `all_page_dict_encoded` returns true.
     // type of |dst| must be `FixedLengthColumn<int32_t>` or `NullableColumn(FixedLengthColumn<int32_t>)`.
-    [[nodiscard]] virtual Status next_dict_codes(size_t* n, Column* dst) { return Status::NotSupported(""); }
+    virtual Status next_dict_codes(size_t* n, Column* dst) { return Status::NotSupported(""); }
 
-    [[nodiscard]] virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
-        return Status::NotSupported("");
-    }
+    virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) { return Status::NotSupported(""); }
 
     // given a list of dictionary codes, fill |dst| column with the decoded values.
     // |codes| pointer to the array of dictionary codes.
     // |size| size of dictionary code array.
     // |words| column used to save the columns values, by append into it.
-    [[nodiscard]] virtual Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) {
+    virtual Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) {
         return Status::NotSupported("");
     }
 
@@ -210,7 +208,7 @@ public:
     // Array column is made of offset and element.
     // This function seek to specified ordinal for offset column.
     // As well, calculate the element ordinal for element column.
-    [[nodiscard]] virtual Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) {
+    virtual Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) {
         return Status::NotSupported("seek_to_ordinal_and_calc_element_ordinal");
     }
 
@@ -218,34 +216,29 @@ public:
     // dictionary codes from the column |codes|.
     // |codes| must be of type `FixedLengthColumn<int32_t>` or `NullableColumn<FixedLengthColumn<int32_t>`
     // and assume no `null` value in |codes|.
-    [[nodiscard]] virtual Status decode_dict_codes(const Column& codes, Column* words);
+    virtual Status decode_dict_codes(const Column& codes, Column* words);
 
     // given a list of ordinals, fetch corresponding values.
     // |ordinals| must be ascending sorted.
-    [[nodiscard]] virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    // NOTE: The default implementation is not high-performant.
+    virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values);
+
+    Status fetch_values_by_rowid(const Column& rowids, Column* values);
+
+    virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
 
-    [[nodiscard]] Status fetch_values_by_rowid(const Column& rowids, Column* values);
-
-    [[nodiscard]] virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-        return Status::NotSupported("");
-    }
-
-    [[nodiscard]] Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
+    Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
 
     // for Struct type (Struct)
-    [[nodiscard]] virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) {
-        return next_batch(n, dst);
-    }
+    virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) { return next_batch(n, dst); }
 
-    [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* dst, ColumnAccessPath* path) {
+    virtual Status next_batch(const SparseRange<>& range, Column* dst, ColumnAccessPath* path) {
         return next_batch(range, dst);
     }
 
-    [[nodiscard]] virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-        return Status::OK();
-    }
+    virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
 protected:
     ColumnIteratorOptions _opts;

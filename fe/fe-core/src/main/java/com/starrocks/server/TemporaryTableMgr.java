@@ -64,6 +64,12 @@ public class TemporaryTableMgr {
             }
         }
 
+        public void removeTables(Long databaseId) {
+            try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+                temporaryTables.row(databaseId).clear();
+            }
+        }
+
         public Table<Long, String, Long> getAllTables() {
             try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
                 return HashBasedTable.create(temporaryTables);
@@ -117,6 +123,15 @@ public class TemporaryTableMgr {
                 sessionId.toString(), databaseId, tableName);
     }
 
+    public void dropTemporaryTables(UUID sessionId, long databaseId) {
+        TemporaryTableTable tables = tablesMap.get(sessionId);
+        if (tables == null) {
+            return;
+        }
+        tables.removeTables(databaseId);
+        LOG.info("drop all temporary tables on database[{}], session[{}]", databaseId, sessionId.toString());
+    }
+
     public Table<Long, String, Long> getTemporaryTables(UUID sessionId) {
         TemporaryTableTable tables = tablesMap.get(sessionId);
         if (tables == null) {
@@ -152,6 +167,10 @@ public class TemporaryTableMgr {
 
         });
         return result;
+    }
+
+    public boolean sessionExists(UUID sessionId) {
+        return tablesMap.containsKey(sessionId);
     }
 
     public Set<UUID> listSessions() {

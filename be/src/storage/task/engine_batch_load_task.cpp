@@ -40,9 +40,10 @@
 #include <iostream>
 #include <string>
 
-#include "gen_cpp/AgentService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/spark_load.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
@@ -181,10 +182,10 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
 
     if (request.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-        auto tablet_or = tablet_manager->get_tablet(request.tablet_id);
+        auto tablet_or = tablet_manager->get_tablet(request.tablet_id, request.version);
         if (!tablet_or.ok()) {
-            LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id: " << request.transaction_id
-                         << ", tablet=" << request.tablet_id
+            LOG(WARNING) << "Fail to read tablet metadata. res=" << res << ", txn_id: " << request.transaction_id
+                         << ", tablet=" << request.tablet_id << ", version=" << request.version
                          << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
             StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
             return tablet_or.status();

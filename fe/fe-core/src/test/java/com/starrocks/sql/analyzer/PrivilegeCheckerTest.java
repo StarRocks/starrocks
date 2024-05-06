@@ -486,7 +486,8 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCatalogStatement() throws Exception {
-        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ConnectContext ctx = starRocksAssert.getCtx();
 
         // Anyone can use default_catalog, but can't use other external catalog without any action on it
@@ -524,7 +525,8 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the DROP privilege(s)");
 
         // check show catalogs only show catalog where the user has any privilege on
-        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on catalog test_ex_catalog3 to test", ctx), ctx);
@@ -538,11 +540,21 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testExternalDBAndTablePEntryObject() throws Exception {
-        starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
                 List.of("test_iceberg", "*", "*"));
+        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+
+        dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
+        Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
+        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+        Assert.assertEquals(tablePEntryObject.getDatabaseUUID(), "iceberg_db");
+        Assert.assertEquals(tablePEntryObject.getTableUUID(), "iceberg_tbl");
         Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
     }
 
@@ -3075,6 +3087,47 @@ public class PrivilegeCheckerTest {
         }
 
         sql = "drop role r1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+    }
+
+    @Test
+    public void testRoleCaseSensitive() throws Exception {
+        String sql = "create role Root";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "create user testRoot";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "create user testRoot2";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        String grantSql = "grant user_admin to testRoot";
+        stmt = UtFrameUtils.parseStmtWithNewParser(grantSql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("testRoot", "%"));
+        starRocksAssert.getCtx().setCurrentRoleIds(starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr()
+                .getRoleIdsByUser(new UserIdentity("testRoot", "%")));
+        starRocksAssert.getCtx().setQualifiedUser("testRoot");
+
+        Authorizer.check(UtFrameUtils.parseStmtWithNewParser(
+                "grant Root to testRoot2", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        Authorizer.check(UtFrameUtils.parseStmtWithNewParser(
+                "revoke Root from testRoot2", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        sql = "drop role Root";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "drop user testRoot";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "drop user testRoot2";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
     }

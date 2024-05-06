@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -69,7 +70,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         long finishedSQLNum = 0;
         long totalCollectSQL = columnNames.size();
-
+        if (table.isTemporaryTable()) {
+            context.setSessionId(((OlapTable) table).getSessionId());
+        }
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);

@@ -14,23 +14,37 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
-public class EquivalentShuttleContext {
-    private boolean isRewrittenByEquivalent;
-    private final boolean isRollup;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
 
-    public EquivalentShuttleContext(boolean isRollup) {
+public class EquivalentShuttleContext {
+    private final RewriteContext rewriteContext;
+    private final boolean isRollup;
+    private boolean isUseEquivalent;
+    private boolean isRewrittenByEquivalent;
+
+    public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent) {
+        this.rewriteContext = rewriteContext;
         this.isRollup = isRollup;
+        this.isUseEquivalent = isRewrittenByEquivalent;
     }
 
-    public boolean isRewrittenByEquivalent() {
-        return isRewrittenByEquivalent;
+    public boolean isUseEquivalent() {
+        return isUseEquivalent;
     }
 
     public boolean isRollup() {
         return isRollup;
     }
 
+    public boolean isRewrittenByEquivalent() {
+        return isRewrittenByEquivalent;
+    }
+
     public void setRewrittenByEquivalent(boolean rewrittenByEquivalent) {
         isRewrittenByEquivalent = rewrittenByEquivalent;
+    }
+
+    public RewriteContext getRewriteContext() {
+        return rewriteContext;
     }
 }

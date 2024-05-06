@@ -101,7 +101,7 @@ public class JsonTypeTest extends PlanTestBase {
     @Test
     public void testPredicateImplicitCast() throws Exception {
         assertPlanContains("select parse_json('1') between 0.5 and 0.9",
-                "CAST(3: parse_json AS DOUBLE)");
+                "CAST(parse_json('1') AS DOUBLE)");
 
         List<String> operators = Arrays.asList("<", "<=", "=", ">=", "!=");
         for (String operator : operators) {
@@ -116,7 +116,8 @@ public class JsonTypeTest extends PlanTestBase {
         }
 
         assertPlanContains("select parse_json('1') in (1, 2, 3)", "IN");
-        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))", "OR");
+        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))",
+                "parse_json('1') IN (parse_json('1'), parse_json('2'))");
     }
 
     /**
@@ -194,7 +195,7 @@ public class JsonTypeTest extends PlanTestBase {
     public void testCastJsonArray() throws Exception {
         assertPlanContains("select json_array(parse_json('1'), parse_json('2'))",
                 "json_array(parse_json('1'), parse_json('2'))");
-        assertPlanContains("select json_array(1, 1)", "json_array(3: cast, 3: cast)");
+        assertPlanContains("select json_array(1, 1)", "json_array(CAST(1 AS JSON), CAST(1 AS JSON))");
         assertPlanContains("select json_array(1, '1')", "json_array(CAST(1 AS JSON), CAST('1' AS JSON))");
         assertPlanContains("select json_array(1.1)", "json_array(CAST(1.1 AS JSON))");
         assertPlanContains("select json_array(NULL)", "NULL");
@@ -237,14 +238,18 @@ public class JsonTypeTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: flat_json_meta_v_json");
+                "  |  group by: flat_json_meta");
 
         sql = "select flat_json_meta(v_json), count(1) from tjson_test[_META_]";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1)\n" +
-                "  |  group by: flat_json_meta_v_json");
+                "  |  group by: flat_json_meta");
+
+        sql = "select array_join(flat_json_meta(v_json), ', '), count(1) from tjson_test[_META_]";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_join(14: flat_json_meta, ', ')");
 
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(12) from tjson_test[_META_]"));

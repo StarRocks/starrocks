@@ -26,6 +26,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "util/runtime_profile.h"
@@ -78,12 +79,12 @@ private:
     const int64_t _limit; // -1: no limit
     TInternalScanRange* _scan_range;
 
-    ConjunctivePredicates _not_push_down_predicates;
+    PredicateTree _non_pushdown_pred_tree;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;
-    std::shared_ptr<TabletSchema> _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     int64_t _version = 0;
 
     RuntimeState* _runtime_state = nullptr;
@@ -150,6 +151,7 @@ private:
     RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+    RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;

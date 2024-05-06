@@ -22,11 +22,13 @@
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/group_execution/group_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_operator.h"
@@ -223,6 +225,7 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     }
 
     auto* pred_source_op = source_operator(pred_operators);
+    int64_t limit_size = _prev_limit_size(pred_operators);
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
@@ -241,7 +244,9 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     pred_operators.emplace_back(std::move(local_shuffle_sink));
     add_pipeline(pred_operators);
 
-    return {std::move(local_shuffle_source)};
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_exchange(
@@ -260,6 +265,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
     }
 
     auto* pred_source_op = source_operator(pred_operators);
+    int64_t limit_size = _prev_limit_size(pred_operators);
 
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
                                                               config::local_exchange_buffer_mem_limit_per_driver);
@@ -278,7 +284,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
     pred_operators.emplace_back(std::move(local_shuffle_sink));
     add_pipeline(pred_operators);
 
-    return {std::move(local_shuffle_source)};
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
 }
 
 void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
@@ -299,6 +307,9 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
     auto* source_op = source_operator(pred_operators);
     int logical_dop = source_op->degree_of_parallelism();
 
+    // check should interpolate limit operator
+    int64_t limit_size = _prev_limit_size(pred_operators);
+
     auto mem_mgr =
             std::make_shared<ChunkBufferMemoryManager>(logical_dop, config::local_exchange_buffer_mem_limit_per_driver);
     auto local_shuffle_source =
@@ -313,11 +324,12 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
     local_shuffle_source->set_could_local_shuffle(true);
     local_shuffle_source->set_degree_of_parallelism(physical_dop);
     add_pipeline(pred_operators);
-    // switch to new execution group
-    _execution_groups.emplace_back(std::make_shared<NormalExecutionGroup>());
-    _current_execution_group = _execution_groups.back().get();
+    // switch to new normal group
+    _current_execution_group = _normal_exec_group;
 
-    return {local_shuffle_source};
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_grouped_exchange(int32_t plan_node_id,
@@ -513,6 +525,25 @@ void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
 }
 
+int64_t PipelineBuilderContext::_prev_limit_size(const OpFactories& pred_operators) {
+    for (auto it = pred_operators.rbegin(); it != pred_operators.rend(); ++it) {
+        if (auto limit = dynamic_cast<LimitOperatorFactory*>(it->get())) {
+            return limit->limit();
+        } else if (dynamic_cast<ChunkAccumulateOperatorFactory*>(it->get()) == nullptr) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+void PipelineBuilderContext::_try_interpolate_limit_operator(int32_t plan_node_id, OpFactories& pred_operators,
+                                                             int64_t limit_size) {
+    if (limit_size >= 0 && limit_size < config::pipline_limit_max_delivery) {
+        pred_operators.emplace_back(
+                std::make_shared<LimitOperatorFactory>(next_operator_id(), plan_node_id, limit_size));
+    }
+}
+
 void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {
     bool enable_wait_event = _fragment_context->runtime_state()->enable_wait_dependent_event();
     enable_wait_event &= !_current_execution_group->is_colocate_exec_group();
@@ -528,8 +559,8 @@ OpFactories PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentConte
     return operators;
 }
 
-ExecutionGroups PipelineBuilder::build() {
-    return _context.execution_groups();
+std::pair<ExecutionGroups, Pipelines> PipelineBuilder::build() {
+    return {_context.execution_groups(), _context.pipelines()};
 }
 
 } // namespace starrocks::pipeline

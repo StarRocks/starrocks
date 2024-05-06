@@ -479,6 +479,7 @@ public:
             REG_VAR(EditVersionInfo, creation_time);
             REG_VAR(EditVersionInfo, rowsets);
             REG_VAR(EditVersionInfo, deltas);
+            REG_VAR(EditVersionInfo, gtid);
             REG_METHOD(EditVersionInfo, get_compaction);
         }
         {

@@ -61,7 +61,7 @@ public class PartitionUtils {
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
                         tmpPartitionIds, distributionDesc, warehouseId);
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         boolean success = false;

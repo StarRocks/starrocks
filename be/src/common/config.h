@@ -514,6 +514,7 @@ CONF_mInt64(write_buffer_size, "104857600");
 // impact the load performace when user upgrading StarRocks.
 // user should set these configs properly if necessary.
 CONF_Int32(query_max_memory_limit_percent, "90");
+CONF_Double(query_pool_spill_mem_limit_threshold, "1.0");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
 CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
@@ -611,6 +612,10 @@ CONF_mDouble(storage_high_usage_disk_protect_ratio, "0.1"); // 10%
 
 // Number of thread for flushing memtable per store.
 CONF_mInt32(flush_thread_num_per_store, "2");
+
+// Number of thread for flushing memtable per store in shared-data mode.
+// Default value is cpu cores * 2
+CONF_mInt32(lake_flush_thread_num_per_store, "0");
 
 // Config for tablet meta checkpoint.
 CONF_mInt32(tablet_meta_checkpoint_min_new_rowsets_num, "10");
@@ -761,7 +766,7 @@ CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_Bool(pipeline_analytic_enable_removable_cumulative_process, "true");
-
+CONF_Int32(pipline_limit_max_delivery, "4096");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -972,7 +977,7 @@ CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
-CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
+CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
@@ -981,7 +986,8 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
-CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "5");
+CONF_mInt32(lake_pk_index_sst_max_compaction_bytes, /*1GB*/ "1073741824");
+CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1051,10 +1057,10 @@ CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "false");
-CONF_String(datacache_mem_size, "10%");
-CONF_String(datacache_disk_size, "0");
-CONF_String(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
-CONF_String(datacache_meta_path, "${STARROCKS_HOME}/datacache/");
+CONF_mString(datacache_mem_size, "0");
+CONF_mString(datacache_disk_size, "0");
+CONF_mString(datacache_disk_path, "");
+CONF_String(datacache_meta_path, "");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
 CONF_Bool(datacache_direct_io_enable, "false");
@@ -1087,6 +1093,28 @@ CONF_Bool(datacache_tiered_cache_enable, "true");
 CONF_String(datacache_engine, "");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
+// Whether enable automatically adjust cache space quota.
+// If true, the cache will choose an appropriate quota based on the current remaining space as the quota.
+// and the quota also will be changed dynamiclly.
+// Once the disk space usage reach the urgent level, the quota will be decreased to keep the disk usage
+// around the disk safe level.
+// On the other hand, if the cache is full and the disk usage falls below the disk safe level for a long time,
+// which is configured by `datacache_disk_idle_period_for_expansion`, the cache quota will be increased to keep the
+// disk usage around the disk safe level.
+CONF_mBool(datacache_auto_adjust_enable, "false");
+// The disk usage threshold, which trigger the cache eviction and quota decreased.
+CONF_mInt64(datacache_disk_urgent_level, "80");
+// The disk usage threshold, the cache quota will be decreased to this level once it reach the urgent level.
+CONF_mInt64(datacache_disk_safe_level, "70");
+// The interval seconds to check the disk usage and trigger adjustment.
+CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
+// The silent period, only when the disk usage falls bellow the safe level for a time longer than this period,
+// the disk expansion can be triggered
+CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
+// The minimum total disk quota bytes to adjust, once the quota to adjust is less than this value,
+// cache quota will be reset to zero to avoid overly frequent population and eviction.
+// Default: 100G
+CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -1209,6 +1237,11 @@ CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
 // otherwise, StarRocks will use zone map for one column filter
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
+CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
+CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+CONF_mBool(enable_index_bloom_filter, "true");
+CONF_mBool(enable_index_bitmap_filter, "true");
+
 CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
 
@@ -1223,7 +1256,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
@@ -1263,6 +1296,9 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
+
+// Skip get from pk index when light pk compaction publish is enabled
+CONF_mBool(enable_light_pk_compaction_publish, "true");
 
 // jit LRU cache size for total 32 shards, it will be an auto value if it <=0:
 // mem_limit = system memory or process memory limit if set.

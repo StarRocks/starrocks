@@ -120,7 +120,7 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
 **From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../data-manipulation/INSERT.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
 
-**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and you can insert data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). See [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table).**
+**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). For more information, see [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table) and [Sink data to a Hive table](../../../data_source/catalog/hive_catalog.md#sink-data-to-a-hive-table).**
 
 - For MySQL, specify the following properties:
 
@@ -258,7 +258,7 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - For the naming conventions of partitions, see [System limits](../../../reference/System_limit.md).
-- Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
@@ -329,7 +329,7 @@ Description
 
 You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- The partitioning column can be of a date or integer type.
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
 For more information, see [Data distribution](../../../table_design/Data_distribution.md).
@@ -651,10 +651,10 @@ PROPERTIES (
 
 #### Set fast schema evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation. This parameter is supported since v3.2.0.
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation.
   > **NOTE**
   >
-  > - StarRocks shared-data clusters do not support this parameter.
+  > - This parameter is supported for shared-nothing clusters since v3.2.0, and shared-data clusters since v3.3.0.
   > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution).
 
 ## Examples

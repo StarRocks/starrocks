@@ -28,7 +28,7 @@ public class TestLockManagerReentrantLock {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
+        Config.slow_lock_threshold_ms = 0;
     }
 
     @Test
@@ -61,6 +61,72 @@ public class TestLockManagerReentrantLock {
         LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
         LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
         LockTestUtils.assertLockFail(testLocker1.release(rid, LockType.WRITE), IllegalMonitorStateException.class);
+    }
+
+    @Test
+    public void testXLockReentrant2() {
+        long rid = 1L;
+
+        TestLocker testLocker1 = new TestLocker();
+        //acquire LightWeightLock
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+        //acquire MultiUserLock
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+        //Verify that the same write lock is acquired normally on MultiUserLock
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+
+        LockTestUtils.assertLockFail(testLocker1.release(rid, LockType.WRITE), IllegalMonitorStateException.class);
+    }
+
+    @Test
+    public void testXLockReentrant3() {
+        long rid = 1L;
+
+        TestLocker testLocker1 = new TestLocker();
+        //acquire LightWeightLock
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+        //acquire MultiUserLock
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+        //Verify that the same write lock is acquired normally on MultiUserLock
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.READ));
+
+        LockTestUtils.assertLockFail(testLocker1.release(rid, LockType.WRITE), IllegalMonitorStateException.class);
+        LockTestUtils.assertLockFail(testLocker1.release(rid, LockType.READ), IllegalMonitorStateException.class);
+    }
+
+    @Test
+    public void testXLockReentrant4() {
+        long rid = 1L;
+
+        TestLocker testLocker1 = new TestLocker();
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+        // The write lock can be increased normally because there is a reference count for the write lock
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker1.release(rid, LockType.WRITE));
+        LockTestUtils.assertLockFail(testLocker1.release(rid, LockType.WRITE), IllegalMonitorStateException.class);
+
+        // The write lock cannot be obtained because the write lock has already been released.
+        // It is not possible to upgrade the write lock while holding the read lock.
+        Future<LockResult> lockerFuture = testLocker1.lock(rid, LockType.WRITE);
+        LockTestUtils.assertLockWait(lockerFuture);
     }
 
     @Test
@@ -105,6 +171,19 @@ public class TestLockManagerReentrantLock {
         TestLocker testLocker3 = new TestLocker();
         Future<LockResult> lockerFuture3 = testLocker3.lock(rid, LockType.READ);
         LockTestUtils.assertLockWait(lockerFuture3);
+
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+    }
+
+    @Test
+    public void testLockDowngrade() {
+        long rid = 1L;
+        TestLocker testLocker1 = new TestLocker();
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+
+        TestLocker testLocker2 = new TestLocker();
+        Future<LockResult> lockerFuture2 = testLocker2.lock(rid, LockType.READ);
+        LockTestUtils.assertLockWait(lockerFuture2);
 
         LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.READ));
     }

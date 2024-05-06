@@ -32,6 +32,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -473,6 +475,9 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
+                "getStorageVolumeOfDb", StorageVolumeMgr.DEFAULT));
+        Assert.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
         sdsvm.createBuiltinStorageVolume();
         String defaultSVId = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
 
@@ -522,9 +527,13 @@ public class SharedDataStorageVolumeMgrTest {
         StorageVolume sv = Deencapsulation.invoke(sdsvm, "getStorageVolumeOfTable", "", 1L);
         Assert.assertEquals(testSVId, sv.getId());
         Config.enable_load_volume_from_conf = false;
-        Assert.assertThrows(DdlException.class, () -> Deencapsulation.invoke(sdsvm, "getStorageVolumeOfTable", "", 2L));
+        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
+                "getStorageVolumeOfTable", "", 2L));
+        Assert.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
         Config.enable_load_volume_from_conf = true;
-        Assert.assertThrows(DdlException.class, () -> Deencapsulation.invoke(sdsvm, "getStorageVolumeOfTable", "", 2L));
+        ex = Assert.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
+                "getStorageVolumeOfTable", "", 2L));
+        Assert.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
         sdsvm.createBuiltinStorageVolume();
         String defaultSVId = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
         sv = Deencapsulation.invoke(sdsvm, "getStorageVolumeOfTable", StorageVolumeMgr.DEFAULT, 1L);

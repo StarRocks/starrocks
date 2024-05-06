@@ -84,9 +84,9 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     _scanner_params = scanner_params;
 
     RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
-    Status status = do_init(runtime_state, scanner_params);
+    RETURN_IF_ERROR(do_init(runtime_state, scanner_params));
 
-    return status;
+    return Status::OK();
 }
 
 Status HdfsScanner::_build_scanner_context() {
@@ -185,7 +185,9 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(do_open(runtime_state));
     RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
     _opened = true;
-    VLOG_FILE << "open file success: " << _scanner_params.path;
+    VLOG_FILE << "open file success: " << _scanner_params.path << ", scan range = ["
+              << _scanner_params.scan_range->offset << ","
+              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset) << "]";
     return Status::OK();
 }
 
@@ -193,6 +195,11 @@ void HdfsScanner::close() noexcept {
     if (!_runtime_state) {
         return;
     }
+    VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
+              << _scanner_params.scan_range->offset << ","
+              << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
+              << "], rows = " << _app_stats.rows_read;
+
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
@@ -314,6 +321,19 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
 
 void HdfsScanner::do_update_counter(HdfsScanProfile* profile) {}
 
+Status HdfsScanner::reinterpret_status(const Status& st) {
+    auto msg = fmt::format("file = {}", _scanner_params.path);
+
+    Status ret = st;
+    // After catching the AWS 404 file not found error and returning it to the FE,
+    // the FE will refresh the file information of table and re-execute the SQL operation.
+    if (st.is_io_error() && st.message().find("404") != std::string_view::npos) {
+        ret = Status::RemoteFileNotFound(st.message());
+    }
+
+    return ret.clone_and_append(msg);
+}
+
 void HdfsScanner::update_counter() {
     HdfsScanProfile* profile = _scanner_params.profile;
     if (profile == nullptr) return;
@@ -344,6 +364,16 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
+
+        if (_runtime_state->query_options().__isset.query_type &&
+            _runtime_state->query_options().query_type == TQueryType::LOAD) {
+            // For load query type, we will update load datacache metrics, these metrics are retrived by cache select
+            _runtime_state->update_num_datacache_read_bytes(stats.read_cache_bytes);
+            _runtime_state->update_num_datacache_read_time_ns(stats.read_cache_ns);
+            _runtime_state->update_num_datacache_write_bytes(stats.write_cache_bytes);
+            _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
+            _runtime_state->update_num_datacache_count(1);
+        }
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());

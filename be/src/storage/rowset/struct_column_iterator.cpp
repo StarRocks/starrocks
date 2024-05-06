@@ -22,6 +22,7 @@
 #include "column/struct_column.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/common.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
@@ -43,12 +44,9 @@ public:
 
     [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
 
-    ordinal_t get_current_ordinal() const override { return _field_iters[0]->get_current_ordinal(); }
+    ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
-    /// for vectorized engine
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override;
+    ordinal_t num_rows() const override { return _access_iters[0]->num_rows(); }
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -70,6 +68,7 @@ private:
     // prune subfield by path
     std::vector<ColumnIterator*> _access_iters;
     std::unordered_map<int, int> _access_index_map;
+    ordinal_t _current_ordinal = 0;
 };
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* _reader,
@@ -141,6 +140,7 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
         RETURN_IF_ERROR(_access_iters[i]->next_batch(&num_to_read, fields[i].get()));
     }
 
+    _current_ordinal = _access_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 
@@ -168,6 +168,7 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
         RETURN_IF_ERROR(_access_iters[i]->next_batch(range, fields[i].get()));
     }
 
+    _current_ordinal = _access_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 
@@ -192,6 +193,7 @@ Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
         RETURN_IF_ERROR(_access_iters[i]->fetch_values_by_rowid(rowids, size, fields[i].get()));
     }
 
+    _current_ordinal = _access_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 
@@ -202,6 +204,7 @@ Status StructColumnIterator::seek_to_first() {
     for (auto& iter : _access_iters) {
         RETURN_IF_ERROR(iter->seek_to_first());
     }
+    _current_ordinal = _access_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 
@@ -212,13 +215,7 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
     for (auto& iter : _access_iters) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(ord));
     }
-    return Status::OK();
-}
-
-Status StructColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                        const ColumnPredicate* del_predicate,
-                                                        SparseRange<>* row_ranges) {
-    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
+    _current_ordinal = _access_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 
@@ -263,12 +260,16 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst, ColumnAccessPath
             auto num_to_read = *n;
             RETURN_IF_ERROR(_access_iters[i]->next_batch(&num_to_read, fields[i].get(), predicate_child_paths[i]));
             row_count = fields[i]->size();
+            _current_ordinal = _access_iters[i]->get_current_ordinal();
         }
     }
 
     for (int i = 0; i < _access_iters.size(); ++i) {
         if (!predicate_access_flags[i]) {
-            DCHECK(fields[i]->is_constant());
+            if (!fields[i]->is_constant()) {
+                fields[i]->append_default(1);
+                fields[i] = ConstColumn::create(fields[i], 1);
+            }
             fields[i]->resize(row_count);
         }
     }
@@ -315,6 +316,7 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst,
         }
         RETURN_IF_ERROR(_access_iters[i]->next_batch(range, fields[i].get(), predicate_child_paths[i]));
         row_count = fields[i]->size();
+        _current_ordinal = _access_iters[i]->get_current_ordinal();
     }
 
     for (int i = 0; i < _access_iters.size(); ++i) {
@@ -355,6 +357,7 @@ Status StructColumnIterator::fetch_subfield_by_rowid(const rowid_t* rowids, size
             RETURN_IF_ERROR(_access_iters[i]->fetch_subfield_by_rowid(rowids, size, fields[i].get()));
         }
     }
+    _current_ordinal = _access_iters[0]->get_current_ordinal();
     return Status::OK();
 }
 

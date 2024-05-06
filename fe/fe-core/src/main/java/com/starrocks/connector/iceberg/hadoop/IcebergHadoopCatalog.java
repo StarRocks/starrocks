@@ -48,7 +48,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.iceberg.CatalogProperties.WAREHOUSE_LOCATION;
 

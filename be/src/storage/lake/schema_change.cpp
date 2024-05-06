@@ -14,6 +14,8 @@
 
 #include "storage/lake/schema_change.h"
 
+#include <thrift/protocol/TDebugProtocol.h>
+
 #include <memory>
 
 #include "runtime/current_thread.h"
@@ -24,6 +26,7 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/metadata_util.h"
 #include "storage/schema_change_utils.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -284,7 +287,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         RETURN_IF_ERROR(writer->write(*_new_chunk, _selective->data(), _new_chunk->num_rows()));
     }
 
-    RETURN_IF_ERROR(writer->finish(DeltaWriter::kDontWriteTxnLog));
+    RETURN_IF_ERROR(writer->finish(DeltaWriterFinishMode::kDontWriteTxnLog));
 
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));
@@ -370,14 +373,9 @@ Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaIn
 }
 
 Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
-    if (tablet_meta_info.meta_type != TTabletMetaType::ENABLE_PERSISTENT_INDEX) {
-        return Status::InternalError(fmt::format("unsupported update meta type: {}", tablet_meta_info.meta_type));
-    }
-
-    MonotonicStopWatch timer;
+    auto timer = MonotonicStopWatch{};
     timer.start();
-    LOG(INFO) << "begin to update tablet, tablet: " << tablet_meta_info.tablet_id
-              << ", update meta type: " << tablet_meta_info.meta_type;
+    LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
 
     auto tablet_id = tablet_meta_info.tablet_id;
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(tablet_id));
@@ -387,15 +385,20 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
     txn_log->set_tablet_id(tablet_id);
     txn_log->set_txn_id(txn_id);
     auto op_alter_metadata = txn_log->mutable_op_alter_metadata();
-
     auto metadata_update_info = op_alter_metadata->add_metadata_update_infos();
-    metadata_update_info->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
+    if (tablet_meta_info.__isset.enable_persistent_index) {
+        metadata_update_info->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
+    }
+    if (tablet_meta_info.__isset.tablet_schema) {
+        // FIXME: pass compression type
+        auto compression_type = TCompressionType::LZ4_FRAME;
+        auto new_schema = metadata_update_info->mutable_tablet_schema();
+        RETURN_IF_ERROR(convert_t_schema_to_pb_schema(tablet_meta_info.tablet_schema, compression_type, new_schema));
+        if (tablet_meta_info.create_schema_file) {
+            RETURN_IF_ERROR(_tablet_manager->create_schema_file(tablet_id, *new_schema));
+        }
+    }
 
-    LOG(INFO) << "update lake tablet: " << tablet_id
-              << ", enable_persistent_index: " << tablet_meta_info.enable_persistent_index
-              << ", cost: " << timer.elapsed_time();
-
-    // write txn log
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
 }
