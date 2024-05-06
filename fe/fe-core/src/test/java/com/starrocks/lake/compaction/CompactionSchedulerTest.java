@@ -65,13 +65,38 @@ public class CompactionSchedulerTest {
         Config.max_stream_load_timeout_second = 64800;
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
+<<<<<<< HEAD
                 new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentSystemInfo(),
                         GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+=======
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
+>>>>>>> 1538f7cbf6 ([Enhancement] support disable lake compaction (#44616))
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
         try {
             assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));
         } catch (Exception e) {
             Assert.fail("Transaction failed for lake compaction");
         }
+    }
+
+    @Test
+    public void testDisableTableCompaction() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "12345");
+
+        Assert.assertTrue(compactionScheduler.isTableDisabled(12345L));
+
+        compactionScheduler.disableTables("23456;34567;45678");
+
+        Assert.assertFalse(compactionScheduler.isTableDisabled(12345L));
+        Assert.assertTrue(compactionScheduler.isTableDisabled(23456L));
+        Assert.assertTrue(compactionScheduler.isTableDisabled(34567L));
+        Assert.assertTrue(compactionScheduler.isTableDisabled(45678L));
+
+        compactionScheduler.disableTables("");
+        Assert.assertFalse(compactionScheduler.isTableDisabled(23456L));
     }
 }
