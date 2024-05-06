@@ -28,7 +28,7 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 
   - The length of the `needle` value can not be larger than 2^15. Otherwise an error will be thrown.
   - If the length of the `haystack` value is larger than 2^15, this function will return 0.
-  - If the length of the `haystack` or `needle` value is smaller than `gram_num`, this fucntion will return 0.
+  - If the length of the `haystack` or `needle` value is smaller than `gram_num`, this function will return 0.
   
   :::
 
