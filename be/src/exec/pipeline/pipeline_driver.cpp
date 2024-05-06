@@ -549,8 +549,8 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
     if (this->query_ctx()->is_query_expired()) {
-        bool old_has_log_cancelled = false;
-        if (_has_log_cancelled.compare_exchange_strong(old_has_log_cancelled, true)) {
+        bool expected_has_log_cancelled = false;
+        if (_has_log_cancelled.compare_exchange_strong(expected_has_log_cancelled, true)) {
             LOG(WARNING) << "begin to cancel operators for " << to_readable_string();
         }
     }
