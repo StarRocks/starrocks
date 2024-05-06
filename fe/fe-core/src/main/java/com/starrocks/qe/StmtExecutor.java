@@ -786,6 +786,35 @@ public class StmtExecutor {
         context.userVariables.putAll(userVariablesFromHint);
     }
 
+<<<<<<< HEAD
+=======
+    private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
+        try {
+            if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
+                CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
+                createTemporaryTableStmt.setSessionId(context.getSessionId());
+                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
+            } else {
+                return context.getGlobalStateMgr().getMetadataMgr().createTable(stmt.getCreateTableStmt());
+            }
+        } catch (DdlException e) {
+            throw new AnalysisException(e.getMessage());
+        }
+    }
+
+    private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
+        if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
+            DropTemporaryTableStmt dropTemporaryTableStmt =
+                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getDbTbl(), true);
+            dropTemporaryTableStmt.setSessionId(context.getSessionId());
+            DDLStmtExecutor.execute(dropTemporaryTableStmt, context);
+        } else {
+            DDLStmtExecutor.execute(new DropTableStmt(
+                    true, stmt.getCreateTableStmt().getDbTbl(), true), context);
+        }
+    }
+
+>>>>>>> 39c3272fc4 ([BugFix] fix ctas and statistics collect issues on temporary tables (#45014))
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
 
