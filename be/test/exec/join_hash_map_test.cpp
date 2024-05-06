@@ -1643,7 +1643,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyCoro) {
+TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     Buffer<int32_t> build_data;
@@ -1691,7 +1691,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyCoro) {
         ASSERT_EQ(results[3 * i + 2].second, i + 1);
         ASSERT_EQ(match_count, probe_state.probe_match_index[i]);
     }
-    DO_TEST_PROBE_END()
 }
 
 // Test case for right semi join with other conjunct.
@@ -1729,7 +1728,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunct) {
     }
 }
 
-TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctCoro) {
+TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
     for (auto& join_type : {TJoinOp::RIGHT_SEMI_JOIN, TJoinOp::RIGHT_OUTER_JOIN, TJoinOp::RIGHT_ANTI_JOIN}) {
         JoinHashTableItems table_items;
         HashTableProbeState probe_state;
@@ -1777,7 +1776,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctCoro) {
             ASSERT_EQ(results[3 * i + 2].first, i);
             ASSERT_EQ(results[3 * i + 2].second, i + 1);
         }
-        DO_TEST_PROBE_END()
     }
 }
 
