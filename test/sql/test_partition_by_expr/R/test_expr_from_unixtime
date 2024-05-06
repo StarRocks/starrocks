@@ -65,11 +65,11 @@ insert into partition_unixtime values(null,'1',1.1,1);
 -- !result
 select * from partition_unixtime;
 -- result:
-NULL	1	1	1
+None	1	1	1
 -- !result
 select * from partition_unixtime PARTITION(p1);
 -- result:
-NULL	1	1	1
+None	1	1	1
 -- !result
 drop table partition_unixtime;
 -- result:
