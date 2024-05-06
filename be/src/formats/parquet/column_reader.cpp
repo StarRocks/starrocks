@@ -193,7 +193,7 @@ public:
         } else {
             if (_dict_filter_ctx->is_decode_needed) {
                 ColumnPtr& dict_values = dst;
-                dict_values->resize(0);
+                dict_values->reserve(src->size());
 
                 // decode dict code to dict values.
                 // note that in dict code, there could be null value.
