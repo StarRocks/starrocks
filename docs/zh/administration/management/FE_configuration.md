@@ -1082,8 +1082,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
 - 引入版本：v3.3.0
 
-<<<<<<< HEAD
-=======
 #### lock_manager_enabled
 
 - 默认值：false
@@ -1102,25 +1100,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否将元数据锁的粒度从库级别细化为表级别。元数据锁细化为表级别后，可以减小锁冲突和竞争，提高导入和查询的并发性能。该参数只在 `lock_manager_enabled` 开启的前提下生效。
 - 引入版本：v3.3.0
 
-##### black_host_history_sec
-
-- 默认值：2 * 60
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
-- 引入版本：v3.3.0
-
-##### black_host_connect_failures_within_time
-
-- 默认值：5
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：黑名单中的 BE 节点允许连接失败的上限。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
-- 引入版本：v3.3.0
-
->>>>>>> d93488c9f3 ([Doc] add config (metadata lock at table level) (#44766))
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
