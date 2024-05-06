@@ -1373,7 +1373,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
                 probe_state.handles.insert(join_hash_map->FUNC(_runtime_state.get(), build_data, probe_data)); \
             }                                                                                                  \
             probe_state.active_coroutines = group;                                                             \
-            join_hash_map->_probe_coroutine<FIRST, INIT>(_runtime_state.get(), build_data, probe_data);        \
+            join_hash_map->_probe_coroutine<FIRST>(_runtime_state.get(), build_data, probe_data);              \
             sort_results_from_coroutine(probe_state.probe_index, probe_state.build_index, probe_state.count);  \
         }
 
@@ -1381,7 +1381,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     if (group == 0) {                                                                                     \
         join_hash_map->FUNC<false>(_runtime_state.get(), build_data, probe_data);                         \
     } else {                                                                                              \
-        join_hash_map->_probe_coroutine<false, false>(_runtime_state.get(), build_data, probe_data);      \
+        join_hash_map->_probe_coroutine<false>(_runtime_state.get(), build_data, probe_data);             \
         sort_results_from_coroutine(probe_state.probe_index, probe_state.build_index, probe_state.count); \
     }
 
@@ -1658,7 +1658,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyCoro) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    DO_TEST_PROBE(_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct, true, true)
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
+            _runtime_state.get(), build_data, probe_data);
     std::vector<std::pair<uint32_t, uint32_t>> results;
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_EQ(probe_state.count, 4096);
@@ -1666,7 +1667,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyCoro) {
         results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
 
-    DO_TEST_PROBE_MID(_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct)
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<false>(
+            _runtime_state.get(), build_data, probe_data);
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_FALSE(probe_state.has_remain);
     ASSERT_EQ(probe_state.count, 1904);
@@ -1743,7 +1745,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctCoro) {
         this->prepare_probe_data(&probe_data, probe_row_count);
 
         auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-        DO_TEST_PROBE(_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct, true, true)
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
+                _runtime_state.get(), build_data, probe_data);
         std::vector<std::pair<uint32_t, uint32_t>> results;
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
         ASSERT_EQ(probe_state.count, 4096);
@@ -1751,7 +1754,8 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctCoro) {
             results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
         }
 
-        DO_TEST_PROBE_MID(_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct)
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false>(
+                _runtime_state.get(), build_data, probe_data);
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
         ASSERT_FALSE(probe_state.has_remain);
         ASSERT_EQ(probe_state.count, 1904);
