@@ -93,7 +93,7 @@ public class TableUID {
         String databaseUUID = database.getUUID();
 
         Table table = MetaUtils.getSessionAwareTable(
-                ctx, database, new TableName(catalogName, database.getOriginName(), tableName));
+                ctx, database, new TableName(catalogName, dbName, tableName));
         String tblUUID = table.getUUID();
         return new TableUID(catalogId, databaseUUID, tblUUID);
     }
