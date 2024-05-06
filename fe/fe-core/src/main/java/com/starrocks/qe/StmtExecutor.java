@@ -1483,6 +1483,132 @@ public class StmtExecutor {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
+<<<<<<< HEAD
+=======
+
+        if (!exportStmt.getSync()) {
+            return;
+        }
+        // poll and check export job state
+        int timeoutSeconds = Config.export_task_default_timeout_second + Config.export_checker_interval_second;
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() < (start + timeoutSeconds * 1000L)) {
+            ExportJob exportJob = context.getGlobalStateMgr().getExportMgr().getExportByQueryId(queryId);
+            if (exportJob != null) {
+                timeoutSeconds = exportJob.getTimeoutSecond() + Config.export_checker_interval_second;
+            }
+            if (exportJob == null ||
+                    (exportJob.getState() != ExportJob.JobState.FINISHED
+                            && exportJob.getState() != ExportJob.JobState.CANCELLED)) {
+                try {
+                    Thread.sleep(Config.export_checker_interval_second * 1000L);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                continue;
+            }
+            break;
+        }
+
+        // proxy send show export result
+        String db = exportStmt.getTblName().getDb();
+        String showStmt = String.format("SHOW EXPORT FROM %s WHERE QueryId = \"%s\";", db, queryId);
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
+        ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
+        showExportStmt.setQueryId(queryId);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showExportStmt, context);
+        if (resultSet == null) {
+            // state changed in execute
+            return;
+        }
+        if (isProxy) {
+            proxyResultSet = resultSet;
+            context.getState().setEof();
+            return;
+        }
+
+        sendShowResult(resultSet);
+    }
+
+    private void handleUpdateFailPointStatusStmt() throws Exception {
+        FailPointExecutor executor = new FailPointExecutor(context, parsedStmt);
+        executor.execute();
+    }
+
+    private void handleDeallocateStmt() throws Exception {
+        DeallocateStmt deallocateStmt = (DeallocateStmt) parsedStmt;
+        String stmtName = deallocateStmt.getStmtName();
+        if (context.getPreparedStmt(stmtName) == null) {
+            throw new UserException("PrepareStatement `" + stmtName + "` not exist");
+        }
+        context.removePreparedStmt(stmtName);
+        context.getState().setOk();
+    }
+
+    private void handlePrepareStmt(ExecPlan execPlan) throws Exception {
+        PrepareStmt prepareStmt = (PrepareStmt) parsedStmt;
+        boolean isBinaryRowFormat = context.getCommand() == MysqlCommand.COM_STMT_PREPARE;
+        // register prepareStmt
+        LOG.debug("add prepared statement {}, isBinaryProtocol {}", prepareStmt.getName(), isBinaryRowFormat);
+        context.putPreparedStmt(prepareStmt.getName(), new PrepareStmtContext(prepareStmt, context, execPlan));
+        if (isBinaryRowFormat) {
+            sendStmtPrepareOK(prepareStmt);
+        }
+    }
+
+    private void sendStmtPrepareOK(PrepareStmt prepareStmt) throws IOException {
+        // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html#sect_protocol_com_stmt_prepare_response
+        QueryStatement query = (QueryStatement) prepareStmt.getInnerStmt();
+        int numColumns = query.getQueryRelation().getRelationFields().size();
+        int numParams = prepareStmt.getParameters().size();
+        serializer.reset();
+        // 0x00 OK
+        serializer.writeInt1(0);
+        // statement_id
+        serializer.writeInt4(Integer.valueOf(prepareStmt.getName()));
+        // num_columns
+        serializer.writeInt2(numColumns);
+        // num_params
+        serializer.writeInt2(numParams);
+        // reserved_1
+        serializer.writeInt1(0);
+        // warning_count
+        serializer.writeInt2(0);
+
+        context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+
+        if (numParams > 0) {
+            List<String> colNames = prepareStmt.getParameterLabels();
+            List<Parameter> parameters = prepareStmt.getParameters();
+            for (int i = 0; i < colNames.size(); ++i) {
+                serializer.reset();
+                serializer.writeField(colNames.get(i), parameters.get(i).getType());
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
+            // send EOF
+            serializer.reset();
+            MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
+            eofPacket.writeTo(serializer);
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        }
+
+        if (numColumns > 0) {
+            for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
+                serializer.reset();
+                serializer.writeField(field.getName(), field.getType());
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
+            // send EOF
+            serializer.reset();
+            MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
+            eofPacket.writeTo(serializer);
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        }
+
+        context.getMysqlChannel().flush();
+        context.getState().setStateType(MysqlStateType.NOOP);
+>>>>>>> 1c26046e06 ([BugFix] fix not sending a correct eof packet (#45040))
     }
 
     public void setQueryStatistics(PQueryStatistics statistics) {
