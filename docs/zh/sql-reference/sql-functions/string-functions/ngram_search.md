@@ -16,8 +16,8 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 
 ## 参数说明
 
-- `haystack`: 必填项，要比较的第一个字符串。必须是 VARCHAR 值，可以是列名或常量值。
-- `needle`: 必填项，要比较的第二个字符串。必须是 VARCHAR 值，只能是常量值。
+- `haystack`: 必填项，需要比较的第一个字符串。必须是 VARCHAR 值，可以是列名或常量值。如果 `haystack` 为列名，并且表中已经基于该列创建 N-Gram bloom filter 索引，则该索引可以加速 `ngram_search` 函数的运算速度。
+- `needle`: 必填项，需要比较的第二个字符串。必须是 VARCHAR 值，且只能是常量值。
 
     :::tip
   
