@@ -138,6 +138,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [lpad](./string-functions/lpad.md) |根据指定的长度在字符串前面（左侧）追加字符。  |
 | [ltrim](./string-functions/ltrim.md) |  从字符串的左侧（开始部分）移除连续出现的空格或指定字符。 |
 | [money_format](./string-functions/money_format.md) |  将数字按照货币格式输出，整数部分每隔 3 位用逗号分隔，小数部分保留 2 位。  |
+| [ngram_search](./string-functions/ngram_search.md) |  计算两个字符串的 ngram 相似度。|
 | [null_or_empty](./string-functions/null_or_empty.md) | 如果字符串为空字符串或者 NULL 则返回 true，否则返回 false。 |
 | [parse_url](./string-functions/parse_url.md) |  从目标 URL 中提取一部分信息。 |
 | [repeat](./string-functions/repeat.md) | 将字符串重复 count 次输出，count 小于 1 时返回空字符串。  |
