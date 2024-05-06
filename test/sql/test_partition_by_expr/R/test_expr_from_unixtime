@@ -50,6 +50,31 @@ drop table partition_unixtime;
 -- result:
 -- !result
 CREATE TABLE partition_unixtime (
+        create_time int,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+PARTITION p1 VALUES LESS THAN ("2021-01-01")
+);
+-- result:
+-- !result
+insert into partition_unixtime values(null,'1',1.1,1);
+-- result:
+-- !result
+select * from partition_unixtime;
+-- result:
+NULL	1	1	1
+-- !result
+select * from partition_unixtime PARTITION(p1);
+-- result:
+NULL	1	1	1
+-- !result
+drop table partition_unixtime;
+-- result:
+-- !result
+CREATE TABLE partition_unixtime (
         create_time date,
         sku_id varchar(100),
         total_amount decimal,
