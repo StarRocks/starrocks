@@ -11,9 +11,9 @@ The full-text inverted index is not yet supported in the shared-data clusters.
 
 ## Overview
 
-StarRocks stores its underlying data in the data files organized by columns. Each data file contains the full-text inverted index based on the indexed columns. Each data row (text) in the indexed columns  is tokenized into individual words, and each word after tokenization is treated as an index entry, mapping to the row number in the data file where the word appears. Currently supported tokenization methods for English tokenization, Chinese tokenization, multilingual tokenization, and no tokenization.
+StarRocks stores its underlying data in the data files organized by columns. Each data file contains the full-text inverted index based on the indexed columns. The values in the indexed columns are tokenized into individual words. Each word after tokenization is treated as an index entry, mapping to the row number where the word appears. Currently supported tokenization methods for English tokenization, Chinese tokenization, multilingual tokenization, and no tokenization.
 
-For example, if a data row contains "hello world" and its row number in the data file is 123, the full-text inverted index builds index entries based on this tokenization result and row number: hello->123, world->123.
+For example, if a data row contains "hello world" and its row number is 123, the full-text inverted index builds index entries based on this tokenization result and row number: hello->123, world->123.
 
 During full-text searches, StarRocks can locate index entries containing the search keywords using full-text inverted indexes, and then quickly find the row numbers where the keywords appear, significantly reducing the number of data rows that need to be scanned.
 
@@ -79,9 +79,9 @@ DROP INDEX index idx on t;
 ALTER TABLE t DROP index idx;
 ```
 
-### Query with full-text inverted indexes
+### Accelerate queries by full-text inverted index
 
-For full-text searches, StarRocks identifies index entries that contain the search keywords using full-text inverted indexes, and then quickly locates the row numbers where the keywords appear.
+After creating a full-text inverted index, you also need to consider whether the index column values are tokenized to determine which queries can be accelerated.
 
 #### Supported queries when indexed column is tokenized
 
