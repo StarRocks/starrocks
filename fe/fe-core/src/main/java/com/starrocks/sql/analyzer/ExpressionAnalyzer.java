@@ -1315,7 +1315,7 @@ public class ExpressionAnalyzer {
                         if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
                             throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
                         }
-                        if (!(expr.getType().isFixedPointType())) {
+                        if (!(expr.getType().isFixedPointType()) && !expr.getType().isNull()) {
                             throw new SemanticException(fnName + "'s parameter only support Integer");
                         }
                     }
