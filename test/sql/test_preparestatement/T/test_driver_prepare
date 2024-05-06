@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS prepare_stmt (
     k4 SMALLINT  Default '4',
     k5 varchar(10) Default 'k5',
     v6 BOOLEAN,
-    v7 VARCHAR(2048) Default 'row',
+    v7 VARCHAR(2048) Default 'row')
     PRIMARY KEY (k1, k2, k3, k4, k5)
     DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
 
