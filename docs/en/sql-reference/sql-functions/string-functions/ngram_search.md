@@ -8,6 +8,11 @@ displayed_sidebar: "English"
 
 Calculate the ngram similarity of the two strings.
 
+:::info
+- Currently, the character encoding only supports ASCII encoding and does not support UTF-8 encoding.
+- The function `ngram_search` is case-sensitive. Another function `ngram_search_case_insensitive` is case-insensitive. Other than that, these two functions are the same.
+:::
+
 ## Syntax
 
 ```sql
@@ -16,12 +21,12 @@ DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 
 ## Parameters
 
-- `haystack`: required, the first string to compare. It must be a VARCHAR value, and it can be a column name or a const value.
-- `needle`: required, the second string to compare. It must be a VARCHAR value, and it can only be const value.
+- `haystack`: required, the first string to compare. It must be a VARCHAR value. It can be a column name or a const value.
+- `needle`: required, the second string to compare. It must be a VARCHAR value. It can only be a const value.
 
   :::tip
 
-  - The length of the `needle` value can not be larger than 2^15. Otherwise an error will be thrown.
+  - The length of the `needle` value can not be larger than 2^15. Otherwise an error will be thrown. If `haystack` is a column name, and an N-Gram bloom filter index is created for that column in the table, then the index can accelerate the computation speed of the `ngram_search` function.
   - If the length of the `haystack` value is larger than 2^15, this function will return 0.
   - If the length of the `haystack` or `needle` value is smaller than `gram_num`, this fucntion will return 0.
   
@@ -37,12 +42,12 @@ Returns a value describing how similar these two strings are. The range of retur
 
 ```SQL
 -- The values of haystack and needle are const values.
-mysql> select ngram_search("chinese","china",4);
-+----------------------------------+
-| ngram_search('chinese', 'china') |
-+----------------------------------+
-|                              0.5 |
-+----------------------------------+
+mysql> select ngram_search('English', 'England',4);
++---------------------------------------+
+| ngram_search('English', 'England', 4) |
++---------------------------------------+
+|                                  0.25 |
++---------------------------------------+
 
 -- The value of haystack is a column name and the value of needle is a const value.
 mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",4) as string_similarity from string_table order by string_similarity desc limit 5;
@@ -56,9 +61,3 @@ mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",
 | 31dc496b-760d-6f1a-4521-0500c3a70000 |         0.8787879 |
 +--------------------------------------+-------------------+
 ```
-
-## More information
-
-- Currently only ASCII encoding is supported.
-
-- The function `ngram_search` is case-sensitive, while the other function, `ngram_search_case_insensitive`, is case-insensitive. Other than that, these two functions are identical.
