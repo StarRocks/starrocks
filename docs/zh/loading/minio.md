@@ -49,7 +49,7 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 
 ## 通过 INSERT+FILES() 导入
 
-该特性从 3.1 版本起支持。当前只支持 Parquet 和 ORC 文件格式。
+该特性从 3.1 版本起支持。当前只支持 Parquet、ORC 和 CSV（自 v3.3.0 起）文件格式。
 
 ### INSERT+FILES() 优势
 
