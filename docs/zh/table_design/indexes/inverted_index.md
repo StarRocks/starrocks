@@ -103,7 +103,7 @@ ALTER TABLE t DROP index idx;
 
 #### 索引列进行分词时支持的查询
 
-如果全文倒排索引对索引列进行分词处理，即 `'parser' = 'standard|english|chinese'` ，此时查询条件中仅支持谓词 `MATCH`  使用全文倒排索引进行数据过滤，并且格式必须为 `<col_name> (NOT) MATCH '%keyword%'`。其中 `keyword` 必须是字符串字面量，不支持为表达式。
+如果全文倒排索引对索引列进行分词处理，即 `'parser' = 'standard|english|chinese'` ，此时查询条件中仅支持谓词 `MATCH` 使用全文倒排索引进行数据过滤，并且格式必须为 `<col_name> (NOT) MATCH '%keyword%'`。其中 `keyword` 必须是字符串字面量，不支持为表达式。
 
 1. 创建表并插入几行测试数据。
 
