@@ -21,6 +21,7 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TIcebergMetadata;
 import com.starrocks.thrift.TMetadataEntry;
 import com.starrocks.thrift.TResultBatch;
@@ -110,7 +111,14 @@ public class MetadataParser {
 
         if (context.getState().isError()) {
             String collectErrorMsg = "Failed to execute metadata collection job. ";
-            String errMsgToClient = job.getMetadataJobCoord().getExecStatus().getErrorMsg();
+            Coordinator coord = job.getMetadataJobCoord();
+            String errMsgToClient;
+            if (coord == null) {
+                errMsgToClient = context.getState().getErrorMessage();
+            } else {
+                errMsgToClient = coord.getExecStatus().getErrorMsg();
+            }
+
             this.metadataCollectionException = new StarRocksConnectorException(collectErrorMsg + errMsgToClient);
             fileScanTaskQueue.clear();
             return;
