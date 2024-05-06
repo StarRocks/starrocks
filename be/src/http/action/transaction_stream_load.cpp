@@ -321,6 +321,10 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     request.fileType = TFileType::FILE_STREAM;
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
 
     if (!http_req->header(HTTP_COLUMNS).empty()) {
         request.__set_columns(http_req->header(HTTP_COLUMNS));
