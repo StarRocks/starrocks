@@ -252,17 +252,17 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
 }
 
 void update_logging() {
-	if (iequals(config::sys_log_level, "INFO")) {
+    if (iequals(config::sys_log_level, "INFO")) {
         FLAGS_minloglevel = 0;
-	} else if (iequals(config::sys_log_level, "WARNING")) {
+    } else if (iequals(config::sys_log_level, "WARNING")) {
         FLAGS_minloglevel = 1;
-	} else if (iequals(config::sys_log_level, "ERROR")) {
+    } else if (iequals(config::sys_log_level, "ERROR")) {
         FLAGS_minloglevel = 2;
-	} else if (iequals(config::sys_log_level, "FATAL")) {
+    } else if (iequals(config::sys_log_level, "FATAL")) {
         FLAGS_minloglevel = 3;
-	} else {
+    } else {
         LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
-	}
+    }
 }
 
 } // namespace starrocks
