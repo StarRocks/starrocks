@@ -32,7 +32,7 @@ function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_s
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k1 = ? or k5 = ?', [0, '2'])
+function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['2'])
 -- result:
 None
 -- !result

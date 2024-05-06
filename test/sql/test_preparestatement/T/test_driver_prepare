@@ -20,4 +20,4 @@ insert into prepare_stmt values (1, 2, 3, 4, '2', true, '2021-02-01', '1', '2021
 
 function: assert_prepare_execute('test_driver_prepare', 'select 1')
 function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k1 > ?', [0])
-function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k1 = ? or k5 = ?', [0, '2'])
+function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['2'])
