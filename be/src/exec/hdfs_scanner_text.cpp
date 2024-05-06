@@ -295,6 +295,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
         _column_raw_ptrs[i] = chunk->get()->get_column_by_index(i).get();
+        _column_raw_ptrs[i]->reserve(chunk_size);
     }
 
     csv::Converter::Options options;
