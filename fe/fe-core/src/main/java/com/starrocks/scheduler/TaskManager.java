@@ -687,7 +687,7 @@ public class TaskManager implements MemoryTrackable {
                 return;
             }
         }
-        LOG.info("replayCreateTaskRun:" + status);
+        LOG.debug("replayCreateTaskRun:" + status);
 
         switch (status.getState()) {
             case PENDING:
@@ -722,7 +722,7 @@ public class TaskManager implements MemoryTrackable {
         Constants.TaskRunState fromStatus = statusChange.getFromStatus();
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
-        LOG.info("replayUpdateTaskRun:" + statusChange);
+        LOG.debug("replayUpdateTaskRun:" + statusChange);
         if (fromStatus == Constants.TaskRunState.PENDING) {
 
             // It is possible to update out of order for priority queue.
