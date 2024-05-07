@@ -58,6 +58,33 @@ using std::vector;
 
 namespace starrocks {
 
+static int64_t choose_any_version(int64_t tablet_id) {
+    const int64_t kInvalidVersion = -1;
+    LOG(INFO) << "choosing random read version for tablet " << tablet_id;
+    auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    if (auto res = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id); res != nullptr) {
+        return res->version();
+    }
+    auto res = tablet_mgr->list_tablet_metadata(tablet_id, true);
+    if (!res.ok()) {
+        LOG(ERROR) << "fail to list tablet " << tablet_id << ": " << res.status();
+        return kInvalidVersion;
+    }
+    auto iter = std::move(res).value();
+    if (iter.has_next()) {
+        auto metadata_or = iter.next();
+        if (metadata_or.ok()) {
+            return metadata_or.value()->version();
+        } else {
+            LOG(ERROR) << "fail to read metadata of tablet " << tablet_id << ": " << metadata_or.status();
+            return kInvalidVersion;
+        }
+    } else {
+        LOG(ERROR) << "cannot find any metadata of tablet " << tablet_id;
+        return kInvalidVersion;
+    }
+}
+
 EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTabletInfo>* tablet_infos, int64_t signature,
                                          AgentStatus* res_status, MemTracker* mem_tracker)
         : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature), _res_status(res_status) {
@@ -181,11 +208,14 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
     Status res;
 
     if (request.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        auto tablet_id = request.tablet_id;
+        auto tablet_version = (request.version == -1) ? choose_any_version(tablet_id) : request.version;
+        //                    ^^^^^^^^^^^^^^^^^^^^^^^ This should only happen when the FE version is less than 3.3.0
         auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-        auto tablet_or = tablet_manager->get_tablet(request.tablet_id, request.version);
+        auto tablet_or = tablet_manager->get_tablet(tablet_id, tablet_version);
         if (!tablet_or.ok()) {
             LOG(WARNING) << "Fail to read tablet metadata. res=" << res << ", txn_id: " << request.transaction_id
-                         << ", tablet=" << request.tablet_id << ", version=" << request.version
+                         << ", tablet=" << tablet_id << ", version=" << tablet_version
                          << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
             StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
             return tablet_or.status();
