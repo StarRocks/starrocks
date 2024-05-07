@@ -641,7 +641,7 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
     DCHECK_GT(size, 0);
 
     for (size_t i = 0; i < size; i++) {
-        if (!_table_items->key_columns[i]->has_null() || !_table_items->probe_slots[i].slot->is_nullable()) {
+        if (!_table_items->key_columns[i]->has_null()) {
             _table_items->join_keys[i].is_null_safe_equal = false;
         }
     }
