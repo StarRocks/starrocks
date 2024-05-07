@@ -63,12 +63,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PseudoCluster {
@@ -254,17 +252,6 @@ public class PseudoCluster {
         @Override
         public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
-        }
-
-        @Override
-        public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
-            Set<Long> results = new HashSet<>();
-            shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
-                for (ReplicaInfo info : y.getReplicaInfoList()) {
-                    results.add(info.getWorkerInfo().getWorkerId());
-                }
-            });
-            return results;
         }
     }
 

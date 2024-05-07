@@ -50,6 +50,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -588,7 +589,9 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
-        long workerGroupId = Utils.selectWorkerGroupByBackgroundWarehouse().get();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        long workerGroupId = Utils.selectWorkerGroupByWarehouseName(warehouseManager, Config.lake_background_warehouse)
+                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         return getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
     }
 

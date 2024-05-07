@@ -19,7 +19,6 @@ import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -237,10 +236,14 @@ public class Utils {
         return Optional.of(node.getWarehouseId());
     }
 
-    public static Optional<Long> selectWorkerGroupByBackgroundWarehouse() {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = warehouseManager.getWarehouse(Config.lake_background_warehouse);
+    public static Optional<Long> selectWorkerGroupByWarehouseName(WarehouseManager manager, String warehouseName) {
+        Warehouse warehouse = manager.getWarehouse(warehouseName);
+        if (warehouse == null)  {
+            LOG.warn("failed to get warehouse by name {}", warehouseName);
+            return Optional.empty();
+        }
+
         long warehouseId = warehouse.getId();
-        return selectWorkerGroupByWarehouseId(warehouseManager, warehouseId);
+        return selectWorkerGroupByWarehouseId(manager, warehouseId);
     }
 }

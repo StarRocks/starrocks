@@ -729,6 +729,6 @@ public class StarOSAgentTest {
     }
 
     private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
-        return starosAgent.getAllBackendIdsByShard(shardId, workerGroupId, false);
+        return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
     }
 }

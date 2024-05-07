@@ -25,8 +25,11 @@ import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -84,6 +87,18 @@ public class LakeTableCleanerTest {
             @Mock
             public LakeService getLakeService(TNetworkAddress address) {
                 return lakeService;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
 
@@ -159,6 +174,18 @@ public class LakeTableCleanerTest {
             }
         };
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
@@ -188,6 +215,18 @@ public class LakeTableCleanerTest {
                                        @Mocked LakeTablet tablet,
                                        @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
 
         new Expectations() {
             {
@@ -233,6 +272,18 @@ public class LakeTableCleanerTest {
             }
         };
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
@@ -267,6 +318,18 @@ public class LakeTableCleanerTest {
                                   @Mocked LakeTablet tablet,
                                   @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
 
         new Expectations() {
             {
