@@ -28,6 +28,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -134,5 +135,12 @@ public class LocalWarehouse extends Warehouse {
 
     private void dropNodeFromSystem() throws DdlException {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropNodes(this.getId());
+    }
+
+    @Override
+    public List<Long> getWorkerGroupIds() {
+        List<Long> list = new ArrayList<>(1);
+        list.add(getAnyAvailableCluster().getWorkerGroupId());
+        return list;
     }
 }

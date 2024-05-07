@@ -27,7 +27,10 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.Utils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.HashMap;
@@ -84,7 +87,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
                                 table.getPartitionFileCacheInfo(partitionId), shardGroupId,
-                                originTabletIds, properties);
+                                originTabletIds, properties, warehouseId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -109,11 +112,13 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                          long groupId, List<Long> matchShardIds, Map<String, String> properties)
+                                          long groupId, List<Long> matchShardIds, Map<String, String> properties,
+                                          long warehouseId)
             throws DdlException {
+        WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
         return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
-                        properties);
+                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
+                        Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouseId)
+                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
-
 }
