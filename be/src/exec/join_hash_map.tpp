@@ -776,7 +776,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
             break;
         }
     } else {
-        // as probing results of join keys are not clustered in one chunk, `build_match_index` and `build_match_index`
+        // as probing results of join keys are not clustered in one chunk, `probe_match_index` and `build_match_index`
         // are not completely right, resulting in wrong results when filtering other conjunct.
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_SEMI_JOIN:
