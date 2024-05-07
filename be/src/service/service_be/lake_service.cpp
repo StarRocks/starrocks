@@ -147,7 +147,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
     if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
-        cntl->SetFailed("missing txn_ids and txn_infos");
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, at least one of them needs to be set");
         return;
     }
     if (request->tablet_ids_size() == 0) {
@@ -345,7 +345,7 @@ void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcControlle
         return;
     }
     if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
-        cntl->SetFailed("missing txn_ids and txn_infos");
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, at least one of them needs to be set");
         return;
     }
     if (request->versions_size() == 0) {
@@ -472,7 +472,7 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
     }
 
     if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
-        cntl->SetFailed("missing txn_ids and txn_infos");
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, at least one of them needs to be set");
         return;
     }
 
