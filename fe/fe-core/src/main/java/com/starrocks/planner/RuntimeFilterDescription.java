@@ -91,7 +91,34 @@ public class RuntimeFilterDescription {
         buildCardinality = value;
     }
 
+<<<<<<< HEAD
     public boolean canProbeUse(PlanNode node) {
+=======
+    public RuntimeFilterType runtimeFilterType() {
+        return type;
+    }
+
+    public void setRuntimeFilterType(RuntimeFilterType type) {
+        this.type = type;
+    }
+
+    public SortInfo getSortInfo() {
+        return sortInfo;
+    }
+
+    public void setSortInfo(SortInfo sortInfo) {
+        this.sortInfo = sortInfo;
+    }
+
+    public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        if (!canAcceptFilter(node, rfPushCtx)) {
+            return false;
+        }
+
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
+            ((OlapScanNode) node).setOrderHint(isAscFilter());
+        }
+>>>>>>> ecbc7907bb ([BugFix] Broadcast Join should not generate nondetermistic GRF (#44111))
         // if we don't across exchange node, that's to say this is in local fragment instance.
         // we don't need to use adaptive strategy now. we are using a conservative way.
         if (inLocalFragmentInstance()) {
