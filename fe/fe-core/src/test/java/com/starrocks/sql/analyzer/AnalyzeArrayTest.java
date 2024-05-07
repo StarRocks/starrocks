@@ -61,6 +61,7 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select array_generate(1,9999999999999999, 10000)");
         analyzeSuccess("select array_generate(1,NULL,1)");
         analyzeSuccess("select array_generate(1,NULL)");
+        analyzeSuccess(" select array_generate(1, array_length([1,2,3]),1)");
         analyzeFail("select array_generate()");
         analyzeFail("select array_generate('c')");
         analyzeFail("select array_generate(a,b) from t");
