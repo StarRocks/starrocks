@@ -37,8 +37,8 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -75,11 +75,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 
 public class SharedDataStorageVolumeMgrTest {
     @Mocked

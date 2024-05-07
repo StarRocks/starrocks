@@ -14,7 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

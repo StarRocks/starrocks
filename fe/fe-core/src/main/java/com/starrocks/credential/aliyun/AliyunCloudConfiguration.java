@@ -16,8 +16,8 @@ package com.starrocks.credential.aliyun;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;

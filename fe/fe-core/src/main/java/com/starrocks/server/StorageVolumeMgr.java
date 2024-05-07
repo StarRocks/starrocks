@@ -24,7 +24,7 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;

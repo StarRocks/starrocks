@@ -12,12 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential;
+package com.starrocks.connector.share.credential;
 
 /**
  * Mapping used config key in StarRocks
  */
 public class CloudConfigurationConstants {
+    /**
+     * In S3 SDK this region is implicitly the default one.
+     * So setting it by default to `us-east-1` simulates S3 better
+     * Refer this issue: <a href="https://issues.apache.org/jira/browse/HADOOP-17771">S3AFS creation fails "Unable to find a region via the region provider chain."</a>
+     */
+    public static final String DEFAULT_AWS_REGION = "us-east-1";
+
     // Credential for AWS s3
     public static final String AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
     public static final String AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";

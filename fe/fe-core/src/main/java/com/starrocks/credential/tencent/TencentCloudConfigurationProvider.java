@@ -20,9 +20,9 @@ import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.Map;
 
-import static com.starrocks.credential.CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.TENCENT_COS_ENDPOINT;
-import static com.starrocks.credential.CloudConfigurationConstants.TENCENT_COS_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.TENCENT_COS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.TENCENT_COS_SECRET_KEY;
 
 public class TencentCloudConfigurationProvider implements CloudConfigurationProvider {
     @Override
