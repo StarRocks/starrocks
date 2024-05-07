@@ -242,6 +242,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
+            // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
+            if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
+                dbName = dbName.toLowerCase();
+                tblName = tblName.toLowerCase();
+            }
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             tables.put(identifier, table);
             return table;
