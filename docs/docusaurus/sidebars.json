@@ -153,7 +153,7 @@
                         "table_design/indexes/Prefix_index_sort_key",
                         "table_design/indexes/Bitmap_index",
                         "table_design/indexes/Bloomfilter_index",
-                        "table_design/indexes/Ngram_Bloom_Filter_Index"
+                        "table_design/indexes/Ngram_Bloom_Filter_Index",
                         "table_design/indexes/inverted_index"
                     ]
                 },
@@ -1598,6 +1598,7 @@
                         "table_design/indexes/Prefix_index_sort_key",
                         "table_design/indexes/Bitmap_index",
                         "table_design/indexes/Bloomfilter_index",
+                        "table_design/indexes/Ngram_Bloom_Filter_Index",
                         "table_design/indexes/inverted_index"
                     ]
                 },
