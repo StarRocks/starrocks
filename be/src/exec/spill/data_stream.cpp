@@ -88,6 +88,7 @@ Status BlockSpillOutputDataStream::append(RuntimeState* state, const std::vector
         _cur_block->inc_num_rows(write_num_rows);
         auto flush_bytes = GET_METRICS(_cur_block->is_remote(), _spiller->metrics(), flush_bytes);
         COUNTER_UPDATE(flush_bytes, total_write_size);
+        (*_spiller->metrics().total_spill_bytes) += total_write_size;
     }
     return Status::OK();
 }

@@ -162,8 +162,8 @@ struct TSpillOptions {
   11: optional TSpillMode spill_mode;
   // used to identify which operators allow spill, only meaningful when enable_spill=true
   12: optional i64 spillable_operator_mask;
+  13: optional bool enable_agg_spill_preaggregation;
 
-  
   21: optional bool enable_spill_to_remote_storage;
   22: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
 }
@@ -279,7 +279,7 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
-
+  // Deprecated
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;

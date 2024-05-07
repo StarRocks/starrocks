@@ -46,7 +46,6 @@ size_t OperatorMemoryResourceManager::operator_avaliable_memory_bytes() {
     auto* runtime_state = _op->runtime_state();
     size_t avaliable = runtime_state->spill_mem_table_size() * runtime_state->spill_mem_table_num();
     avaliable = std::max<size_t>(avaliable, runtime_state->spill_operator_min_bytes());
-    avaliable = std::min<size_t>(avaliable, runtime_state->spill_operator_max_bytes());
     return avaliable;
 }
 

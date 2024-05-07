@@ -82,7 +82,7 @@ class QueryContext;
 }
 
 #define EXTRACE_SPILL_PARAM(query_option, spill_option, var) \
-    spill_option.has_value() ? query_option.var : query_option.var
+    spill_option.has_value() ? spill_option->var : query_option.var
 
 constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 
@@ -408,9 +408,6 @@ public:
 
     int64_t spill_operator_min_bytes() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_min_bytes);
-    }
-    int64_t spill_operator_max_bytes() const {
-        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_max_bytes);
     }
     int64_t spill_revocable_max_bytes() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_revocable_max_bytes);

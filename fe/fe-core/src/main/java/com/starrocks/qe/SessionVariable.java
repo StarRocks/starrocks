@@ -65,6 +65,7 @@ import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
+import com.starrocks.thrift.TSpillOptions;
 import com.starrocks.thrift.TSpillToRemoteStorageOptions;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TTimeUnit;
@@ -612,6 +613,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
     public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
     public static final String SPILL_ENABLE_DIRECT_IO = "spill_enable_direct_io";
+    public static final String SPILL_ENABLE_COMPACTION = "spill_enable_compaction";
     // only used in test. spill_mode="RANDOM"
     public static final String SPILL_RAND_RATIO = "spill_rand_ratio";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
@@ -1090,8 +1092,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private double spillMemLimitThreshold = 0.8;
     @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMinBytes = 1024L * 1024 * 50;
-    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
-    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
     // If the operator memory revocable memory exceeds this value, the operator will perform a spill as soon as possible
     @VarAttr(name = SPILL_REVOCABLE_MAX_BYTES)
     private long spillRevocableMaxBytes = 0;
@@ -1108,6 +1108,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SPILL_RAND_RATIO, flag = VariableMgr.INVISIBLE)
     private double spillRandRatio = 0.1;
+
+    @VarAttr(name = SPILL_ENABLE_COMPACTION, flag = VariableMgr.INVISIBLE)
+    private boolean spillEnableCompaction = true;
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
@@ -2558,10 +2561,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.spillOperatorMinBytes;
     }
 
-    public long getSpillOperatorMaxBytes() {
-        return this.spillOperatorMaxBytes;
-    }
-
     public int getSpillEncodeLevel() {
         return this.spillEncodeLevel;
     }
@@ -3804,33 +3803,37 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
-            tResult.setSpill_mem_table_size(spillMemTableSize);
-            tResult.setSpill_mem_table_num(spillMemTableNum);
-            tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
-            tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
-            tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
-            tResult.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
-            tResult.setSpill_encode_level(spillEncodeLevel);
-            tResult.setSpillable_operator_mask(spillableOperatorMask);
-            tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
-            tResult.setSpill_enable_direct_io(spillEnableDirectIO);
-            tResult.setSpill_rand_ratio(spillRandRatio);
+            TSpillOptions spillOptions = new TSpillOptions();
+            spillOptions.setSpill_mem_table_size(spillMemTableSize);
+            spillOptions.setSpill_mem_table_num(spillMemTableNum);
+            spillOptions.setSpill_mem_limit_threshold(spillMemLimitThreshold);
+            spillOptions.setSpill_operator_min_bytes(spillOperatorMinBytes);
+            spillOptions.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
+            spillOptions.setSpill_encode_level(spillEncodeLevel);
+            spillOptions.setSpillable_operator_mask(spillableOperatorMask);
+            spillOptions.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+            spillOptions.setSpill_enable_direct_io(spillEnableDirectIO);
+            spillOptions.setSpill_rand_ratio(spillRandRatio);
+            spillOptions.setSpill_enable_compaction(spillEnableCompaction);
+            spillOptions.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
+
             if (enableSpillToRemoteStorage && !spillStorageVolume.isEmpty()) {
                 // find storage volume config
                 GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
                 StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
                 StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(spillStorageVolume);
                 if (sv != null) {
-                    tResult.setEnable_spill_to_remote_storage(true);
+                    spillOptions.setEnable_spill_to_remote_storage(true);
                     TSpillToRemoteStorageOptions options = new TSpillToRemoteStorageOptions();
                     options.setRemote_storage_paths(sv.getLocations());
                     TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
                     sv.getCloudConfiguration().toThrift(tCloudConfiguration);
                     options.setRemote_storage_conf(tCloudConfiguration);
                     options.setDisable_spill_to_local_disk(disableSpillToLocalDisk);
-                    tResult.setSpill_to_remote_storage_options(options);
+                    spillOptions.setSpill_to_remote_storage_options(options);
                 }
             }
+            tResult.setSpill_options(spillOptions);
         }
 
         // Compression Type
@@ -3871,7 +3874,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
-        tResult.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(true);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
