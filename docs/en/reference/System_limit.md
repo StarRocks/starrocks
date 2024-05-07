@@ -16,7 +16,7 @@ This topic describes the rules and limits that apply when you use StarRocks.
     - Database name cannot exceed 256 characters.
     - Table name and column name cannot exceed 1024 characters.
     - Username cannot exceed 128 characters.
-  - Column, partition, and index names are **not** case-sensitive. Other names are **case-sensitive**.
+  - Column name (column alias), partition name, and index name are **not** case-sensitive. Other names are **case-sensitive**.
 
 - Naming conventions for labels:
   You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (\_), and cannot exceed 128 characters in length. The label name has no requirement for the starting character.
