@@ -540,6 +540,10 @@ void ExecEnv::_stop() {
     // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
     // so when the ThreadPool is destroyed, it will crash.
     _load_channel_mgr->clear();
+
+    if (_load_rpc_pool) {
+        _load_rpc_pool->shutdown();
+    }
 }
 
 void ExecEnv::_destroy() {
@@ -599,6 +603,7 @@ void ExecEnv::_destroy() {
     _metrics = nullptr;
 
     _reset_tracker();
+    _load_rpc_pool.reset();
 }
 
 void ExecEnv::_reset_tracker() {
