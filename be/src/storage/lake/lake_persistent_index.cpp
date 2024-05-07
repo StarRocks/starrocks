@@ -117,8 +117,7 @@ bool LakePersistentIndex::is_memtable_full() const {
 }
 
 Status LakePersistentIndex::minor_compact() {
-    MonotonicStopWatch watch;
-    watch.start();
+    TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
@@ -139,14 +138,12 @@ Status LakePersistentIndex::minor_compact() {
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     _sstables.emplace_back(std::move(sstable));
     TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
-    TRACE_COUNTER_INCREMENT("minor_compact_latency_us", watch.elapsed_time() / 1000);
     return Status::OK();
 }
 
 Status LakePersistentIndex::flush_memtable() {
     if (_immutable_memtable != nullptr) {
         RETURN_IF_ERROR(minor_compact());
-        _immutable_memtable->reset_max_version();
     }
     _immutable_memtable = std::make_unique<PersistentIndexMemtable>();
     _memtable.swap(_immutable_memtable);

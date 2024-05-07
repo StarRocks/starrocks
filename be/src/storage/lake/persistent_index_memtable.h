@@ -60,8 +60,6 @@ public:
 
     const int64_t max_version() const { return _max_version; }
 
-    void reset_max_version() { _max_version = 0; }
-
 private:
     static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
                                    const IndexValue& value);
