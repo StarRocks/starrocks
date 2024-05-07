@@ -107,6 +107,8 @@ public:
 
     std::string debug_string() const;
 
+    SlotDescriptor(const TSlotDescriptor& tdesc);
+
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
@@ -130,7 +132,6 @@ private:
     const bool _is_materialized;
     const bool _is_output_column;
 
-    SlotDescriptor(const TSlotDescriptor& tdesc);
     SlotDescriptor(const PSlotDescriptor& pdesc);
 };
 
