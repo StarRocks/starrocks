@@ -492,7 +492,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
                 updateVisibleVersion(table);
-                updateCatalog(db, table);
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.CANCELLED) {
                 table.setState(OlapTable.OlapTableState.NORMAL);
