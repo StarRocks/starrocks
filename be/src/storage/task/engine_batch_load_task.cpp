@@ -58,30 +58,17 @@ using std::vector;
 
 namespace starrocks {
 
-static int64_t choose_any_version(int64_t tablet_id) {
-    const int64_t kInvalidVersion = -1;
-    LOG(INFO) << "choosing random read version for tablet " << tablet_id;
+static StatusOr<int64_t> choose_any_version(int64_t tablet_id) {
     auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     if (auto res = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id); res != nullptr) {
         return res->version();
     }
-    auto res = tablet_mgr->list_tablet_metadata(tablet_id, true);
-    if (!res.ok()) {
-        LOG(ERROR) << "fail to list tablet " << tablet_id << ": " << res.status();
-        return kInvalidVersion;
-    }
-    auto iter = std::move(res).value();
+    ASSIGN_OR_RETURN(auto iter, tablet_mgr->list_tablet_metadata(tablet_id, true));
     if (iter.has_next()) {
-        auto metadata_or = iter.next();
-        if (metadata_or.ok()) {
-            return metadata_or.value()->version();
-        } else {
-            LOG(ERROR) << "fail to read metadata of tablet " << tablet_id << ": " << metadata_or.status();
-            return kInvalidVersion;
-        }
+        ASSIGN_OR_RETURN(auto metadata, iter.next());
+        return metadata->version();
     } else {
-        LOG(ERROR) << "cannot find any metadata of tablet " << tablet_id;
-        return kInvalidVersion;
+        return Status::NotFound(fmt::format("cannot find any metadata of tablet {}", tablet_id));
     }
 }
 
@@ -209,8 +196,19 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
 
     if (request.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         auto tablet_id = request.tablet_id;
-        auto tablet_version = (request.version == -1) ? choose_any_version(tablet_id) : request.version;
-        //                    ^^^^^^^^^^^^^^^^^^^^^^^ This should only happen when the FE version is less than 3.3.0
+        // Starting from 3.3.0, the tablet schema in different versions of the tablet metadata may be different. We
+        // need to read the tablet of a specific version (request.version) to ensure that the tablet schema used
+        // during import meets the expectations. However, if the FE version is lower than 3.3.0, the request.version
+        // will always be set to -1 by the FE. At this time, we can read any version of the tablet metadata, because
+        // if the FE version is lower than 3.3.0, it means that there will be no fast schema evolution, and the tablet
+        // schema in all versions of the tablet metadata will be the same.
+        auto tablet_version = request.version;
+        if (tablet_version == -1) {
+            LOG(WARNING) << "tablet version is missing from request, try to obtain any version number from cache or "
+                            "remote storage. tablet_id="
+                         << tablet_id;
+            ASSIGN_OR_RETURN(tablet_version, choose_any_version(tablet_id));
+        }
         auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
         auto tablet_or = tablet_manager->get_tablet(tablet_id, tablet_version);
         if (!tablet_or.ok()) {
