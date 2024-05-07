@@ -643,6 +643,8 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
     files_to_delete.reserve(request.tablet_ids_size() * (request.txn_ids_size() + request.txn_infos_size()));
 
     for (auto tablet_id : request.tablet_ids()) {
+        // For each DeleteTxnLogRequest, FE will only set one of txn_ids and txn_infos, here we don't want
+        // to bother with determining which one is set, just iterate through both.
         for (auto txn_id : request.txn_ids()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
             files_to_delete.emplace_back(log_path);
