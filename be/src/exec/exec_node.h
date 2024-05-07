@@ -233,6 +233,8 @@ public:
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
 
+    const std::vector<ExecNode*>& children() const { return _children; }
+
 protected:
     friend class DataSink;
 
