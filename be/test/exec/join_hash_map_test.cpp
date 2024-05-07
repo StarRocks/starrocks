@@ -1735,8 +1735,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
     this->prepare_probe_state(&probe_state, probe_row_count);
     this->prepare_probe_data(&probe_data, probe_row_count);
 
-    auto& runtime_state = _runtime_state;
-
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
     join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
             _runtime_state.get(), build_data, probe_data);
@@ -1825,8 +1823,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
         this->prepare_build_data(&build_data, match_count);
         this->prepare_probe_state(&probe_state, probe_row_count);
         this->prepare_probe_data(&probe_data, probe_row_count);
-
-        auto& runtime_state = _runtime_state;
 
         auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
         join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
