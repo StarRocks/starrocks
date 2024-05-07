@@ -17,6 +17,36 @@ StarRocks 跨集群数据迁移工具是社区提供的 StarRocks 数据迁移�
 
 以下准备工作需要在数据迁移的目标集群中进行。
 
+### 为迁移开启老版本兼容
+
+新版本的集群可能与老版本有些行为不同，带来跨集群数据迁移的问题。因此在数据迁移过程中，目标集群需要手动开启老版本兼容，并在数据迁移完成后关闭。
+
+1. 您可以通过以下语句查看当前集群是否开启老版本兼容：
+
+   ```SQL
+   ADMIN SHOW FRONTEND CONFIG LIKE 'enable_legacy_compatibility_for_replication';
+   ```
+
+   如果返回值为 `true` 则表示已经开启老版本兼容。
+
+2. 动态开启老版本兼容：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="true");
+   ```
+
+3. 为防止数据迁移过程中集群重启后老版本兼容自动关闭，您还需要在 FE 配置文件 **fe.conf** 中添加以下配置项：
+
+   ```Properties
+   enable_legacy_compatibility_for_replication = true
+   ```
+
+数据迁移完成后，您需要删除配置文件中的 `enable_legacy_compatibility_for_replication = true`，并通过以下语句动态关闭老版本兼容：
+
+```SQL
+ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
+```
+
 ### 关闭 Compaction
 
 如果数据迁移的目标集群为存算分离集群，在数据迁移之前，您需要手动关闭 Compaction，并在数据迁移完成后重新开启。
@@ -93,6 +123,8 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 ## 第二步：配置工具
 
+### 迁移相关的配置
+
 进入解压后的文件夹，并修改配置文件 **conf/sync.properties**。
 
 ```Bash
@@ -117,20 +149,25 @@ target_fe_query_port=9030
 target_cluster_user=root
 target_cluster_password=
 
-meta_job_interval_seconds=180
-ddl_job_interval_seconds=15
-ddl_job_batch_size=10
-ddl_job_allow_drop_target_only=false
-ddl_job_allow_drop_schema_change_table=true
-ddl_job_allow_drop_inconsistent_partition=true
-replication_job_interval_seconds=15
-replication_job_batch_size=10
-
 # Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
 # example: db1,db2.tbl2,db3
 # Effective order: 1. include 2. exclude
 include_data_list=
 exclude_data_list=
+
+# If there are no special requirements, please maintain the default values for the following configurations.
+target_cluster_storage_volume=
+target_cluster_replication_num=-1
+
+meta_job_interval_seconds=180
+meta_job_threads=4
+ddl_job_interval_seconds=10
+ddl_job_batch_size=10
+ddl_job_allow_drop_target_only=false
+ddl_job_allow_drop_schema_change_table=true
+ddl_job_allow_drop_inconsistent_partition=true
+replication_job_interval_seconds=10
+replication_job_batch_size=10
 ```
 
 参数说明如下：
@@ -147,7 +184,12 @@ exclude_data_list=
 | target_fe_query_port                      | 目标集群 FE 的查询端口（`query_port`）。                     |
 | target_cluster_user                       | 用于登录目标集群的用户名。此用户需要有 SYSTEM 级 OPERATE 权限。 |
 | target_cluster_password                   | 用于登录目标集群的用户密码。                                 |
+| include_data_list                         | 需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。此项优先于 `exclude_data_list` 生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
+| exclude_data_list                         | 不需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。`include_data_list` 优先于此项生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
+| target_cluster_storage_volume             | 目标集群为存算分离集群时，建表使用的 Storage Volume。使用默认 Storage Volume 时无须配置该项。|
+| target_cluster_replication_num            | 目标集群建表使用的 replication num。默认值表示使用与源集群相同的 replication num。|
 | meta_job_interval_seconds                 | 迁移工具获取源集群和目标集群元数据的周期，单位为秒。此项您可以使用默认值。 |
+| meta_job_threads                          | 迁移工具获取源集群和目标集群元数据使用的线程数。此项您可以使用默认值。 |
 | ddl_job_interval_seconds                  | 迁移工具在目标集群执行 DDL 的周期，单位为秒。此项您可以使用默认值。 |
 | ddl_job_batch_size                        | 迁移工具在目标集群执行 DDL 的批大小。此项您可以使用默认值。  |
 | ddl_job_allow_drop_target_only            | 迁移工具是否自动删除仅在目标集群存在而源集群不存在的数据库，表或分区。默认为 `false`，即不删除。此项您可以使用默认值。 |
@@ -155,8 +197,6 @@ exclude_data_list=
 | ddl_job_allow_drop_inconsistent_partition | 迁移工具是否自动删除源集群和目标集群数据分布方式不一致的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
 | replication_job_interval_seconds          | 迁移工具触发数据同步任务的周期，单位为秒。此项您可以使用默认值。 |
 | replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。     |
-| include_data_list                         | 需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。此项优先于 `exclude_data_list` 生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
-| exclude_data_list                         | 不需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。`include_data_list` 优先于此项生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 
 ### 获取集群 Token
 
@@ -208,6 +248,35 @@ cat fe/meta/image/VERSION | grep token
 
 ```Properties
 token=wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
+```
+
+### 网络相关的配置（可选）
+
+数据迁移过程中迁移工具需要访问源和目标集群上 `show frontends` 返回的网络地址，目标集群需要访问源集群上 `show backends`, `show compute nodes` 返回的网络地址，
+如果这些网络地址为集群内私有地址（例如 k8s 集群内部地址），在集群外部无法访问，则需要配置地址映射，将私有地址映射为集群外能访问的地址，以便在集群外部访问。
+
+进入解压后的文件夹，并修改配置文件 **conf/hosts.properties**。
+
+```Bash
+cd starrocks-cluster-sync
+vi conf/hosts.properties
+```
+
+默认文件内容如下，说明了网络地址映射的配置方式：
+
+```Properties
+# <SOURCE/TARGET>_<domain>=<IP>
+```
+
+例如将源集群私有网络地址 `192.1.1.1` 映射为 `10.1.1.1`，`192.1.1.2` 映射为 `10.1.1.2`，
+并将目标集群私有网络地址 `fe-0.starrocks.svc.cluster.local` 映射为 `10.1.2.1`，
+可在 **conf/hosts.properties** 中配置如下，如有更多网络地址需要映射，都添加进去即可：
+
+```Properties
+# <SOURCE/TARGET>_<domain>=<IP>
+SOURCE_192.1.1.1=10.1.1.1
+SOURCE_192.1.1.2=10.1.1.2
+TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 ```
 
 ## 第三步：启动迁移工具

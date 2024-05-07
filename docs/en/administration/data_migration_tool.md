@@ -17,6 +17,37 @@ The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Communi
 
 The following preparations must be performed on the target cluster for data migration.
 
+### Enable Legacy Compatibility for Replication
+
+The new version of StarRocks may behave differently from the old version, causing problems with cross-cluster data migration.
+Therefore, during the data migration process, the target cluster needs to manually enable legacy compatibility and disable it after the data migration is completed.
+
+1. You can check whether Legacy Compatibility for Replication is enabled by using the following statement:
+
+   ```SQL
+   ADMIN SHOW FRONTEND CONFIG LIKE 'enable_legacy_compatibility_for_replication';
+   ```
+
+   If `true` is returned, it indicates that Legacy Compatibility for Replication is enabled.
+
+2. Dynamically Enable Legacy Compatibility for Replication:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="true");
+   ```
+
+3. To prevent Legacy Compatibility for Replication from automatically disabling during the data migration process in case of cluster restart, you also need to add the following configuration item in the FE configuration file **fe.conf**:
+
+   ```Properties
+   enable_legacy_compatibility_for_replication = true
+   ```
+
+After the data migration is completed, you need to remove the configuration `enable_legacy_compatibility_for_replication = true` from the configuration file, and dynamically disable Legacy Compatibility for Replication using the following statement:
+
+```SQL
+ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
+```
+
 ### Disable Compaction
 
 If the target cluster for data migration is a shared-data cluster, you need to manually disable Compaction before starting the data migration and re-enable it after the data migration is completed.
@@ -93,6 +124,8 @@ It is recommended to install the migration tool on the server where the target c
 
 ## Step 2: Configure the Tool
 
+### Migration related configuration
+
 Navigate to the extracted folder and modify the configuration file **conf/sync.properties**.
 
 ```Bash
@@ -117,20 +150,25 @@ target_fe_query_port=9030
 target_cluster_user=root
 target_cluster_password=
 
-meta_job_interval_seconds=180
-ddl_job_interval_seconds=15
-ddl_job_batch_size=10
-ddl_job_allow_drop_target_only=false
-ddl_job_allow_drop_schema_change_table=true
-ddl_job_allow_drop_inconsistent_partition=true
-replication_job_interval_seconds=15
-replication_job_batch_size=10
-
 # Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
 # example: db1,db2.tbl2,db3
 # Effective order: 1. include 2. exclude
 include_data_list=
 exclude_data_list=
+
+# If there are no special requirements, please maintain the default values for the following configurations.
+target_cluster_storage_volume=
+target_cluster_replication_num=-1
+
+meta_job_interval_seconds=180
+meta_job_threads=4
+ddl_job_interval_seconds=10
+ddl_job_batch_size=10
+ddl_job_allow_drop_target_only=false
+ddl_job_allow_drop_schema_change_table=true
+ddl_job_allow_drop_inconsistent_partition=true
+replication_job_interval_seconds=10
+replication_job_batch_size=10
 ```
 
 The description of the parameters is as follows:
@@ -147,7 +185,12 @@ The description of the parameters is as follows:
 | target_fe_query_port                      | The query port (`query_port`) of the target cluster's FE.    |
 | target_cluster_user                       | The username used to log in to the target cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
 | target_cluster_password                   | The user password used to log in to the target cluster.      |
+| include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
+| exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
+| target_cluster_storage_volume             | The Storage Volume used to create tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default Storage Volume, you do not need to configure this item. |
+| target_cluster_replication_num            | The replication num used to create tables in the target cluster. If you want to use the same replication num as the source cluster, you do not need to configure this item. |
 | meta_job_interval_seconds                 | The interval, in seconds, at which the migration tool retrieves metadata from the source and target clusters. You can use the default value for this item. |
+| meta_job_threads                          | The number of threads used by the migration tool to obtain metadata from source and target cluster. You can use the default value for this item. |
 | ddl_job_interval_seconds                  | The interval, in seconds, at which the migration tool executes DDL statements on the target cluster. You can use the default value for this item. |
 | ddl_job_batch_size                        | The batch size for executing DDL statements on the target cluster. You can use the default value for this item. |
 | ddl_job_allow_drop_target_only            | Whether to allow the migration tool to delete databases, tables, or partitions that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. You can use the default value for this item. |
@@ -155,8 +198,6 @@ The description of the parameters is as follows:
 | ddl_job_allow_drop_inconsistent_partition | Whether to allow the migration tool to delete partitions with inconsistent data distribution between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
 | replication_job_interval_seconds          | The interval, in seconds, at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
 | replication_job_batch_size                | The batch size at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
-| include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
-| exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 
 ### Obtain Cluster Token
 
@@ -208,6 +249,35 @@ Output:
 
 ```Properties
 token=wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
+```
+
+### Network related configuration (Optional)
+
+During the data migration process, the migration tool needs to access the network addresses returned by `show frontends` on the source and target clusters, and the target cluster needs to access the network addresses returned by `show backends` and `show compute nodes` on the source cluster.
+If these network addresses are private within a cluster and cannot be accessed outside the cluster, such as internal network addresses in a k8s cluster, you need to configure network address mapping to map the private network addresses to addresses accessible outside the cluster.
+
+Navigate to the extracted folder and modify the configuration file **conf/hosts.properties**。
+
+```Bash
+cd starrocks-cluster-sync
+vi conf/hosts.properties
+```
+
+The default content of the file is as follows, describing how network address mapping is configured:
+
+```Properties
+# <SOURCE/TARGET>_<domain>=<IP>
+```
+
+For example, map the source cluster private network address `192.1.1.1` to `10.1.1.1`, `192.1.1.2` to `10.1.1.2`,
+And map the target cluster private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1`,
+It can be configured as follows in **conf/hosts.properties**. If there are more network addresses that need to be mapped, just add them:
+
+```Properties
+# <SOURCE/TARGET>_<domain>=<IP>
+SOURCE_192.1.1.1=10.1.1.1
+SOURCE_192.1.1.2=10.1.1.2
+TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 ```
 
 ## Step 3: Start the Migration Tool
