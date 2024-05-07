@@ -231,7 +231,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
         Table actual = metadata.getTable("DB", "TBL");
         Assert.assertTrue(actual instanceof IcebergTable);
         IcebergTable icebergTable = (IcebergTable) actual;
