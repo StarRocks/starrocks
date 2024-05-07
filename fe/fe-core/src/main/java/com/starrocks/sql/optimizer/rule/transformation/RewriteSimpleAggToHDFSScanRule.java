@@ -205,7 +205,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                 .containsAll(groupingKeys.stream().map(x -> x.getName()).collect(Collectors.toList()))) {
             return false;
         }
-        // TODO(yanz): not quite sure why this limitation !
+
+        // no predicate on agg operator
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
