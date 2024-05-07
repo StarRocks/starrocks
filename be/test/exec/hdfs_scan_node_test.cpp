@@ -340,7 +340,7 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
-    _table_desc->create_key_exprs(_runtime_state.get(), _pool, _runtime_state->chunk_size());
+    _table_desc->create_key_exprs(_runtime_state.get(), _pool);
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;

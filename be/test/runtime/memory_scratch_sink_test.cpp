@@ -185,7 +185,6 @@ public:
 private:
     ObjectPool _obj_pool;
     ExecEnv* _exec_env = nullptr;
-    // std::vector<TExpr> _exprs;
     TDescriptorTable _t_desc_table;
     RuntimeState* _state = nullptr;
     TPlanNode _tnode;
