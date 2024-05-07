@@ -144,14 +144,12 @@ void HdfsScanNodeTest::_create_runtime_state() {
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -163,14 +161,12 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_partition() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     // partition_conjuncts
@@ -340,7 +336,7 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
-    _table_desc->create_key_exprs(_runtime_state.get(), _pool, _runtime_state->chunk_size());
+    _table_desc->create_key_exprs(_runtime_state.get(), _pool);
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;

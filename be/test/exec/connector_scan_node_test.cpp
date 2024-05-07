@@ -98,13 +98,11 @@ DescriptorTbl* ConnectorScanNodeTest::create_table_desc(RuntimeState* runtime_st
 
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_cloud() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -176,13 +174,11 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_cl
 
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_hive() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -255,13 +251,11 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_hi
 
 std::shared_ptr<TPlanNode> ConnectorScanNodeTest::create_tplan_node_stream_load() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
