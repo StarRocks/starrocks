@@ -255,8 +255,8 @@ public:
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
-    void push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
-                   std::set<TPlanNodeId>& rf_waiting_set);
+    void push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id, RuntimeFilterProbeCollector* parent,
+                   const std::vector<TupleId>& tuple_ids, std::set<TPlanNodeId>& rf_waiting_set);
     std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() { return _descriptors; }
     const std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() const { return _descriptors; }
 
