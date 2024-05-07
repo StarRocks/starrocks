@@ -5520,4 +5520,69 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
     }
+
+    @Test
+    public void testColumnPruningWithPredicates() {
+        {
+            String mv = "select lo_orderkey, lo_orderdate, lo_linenumber," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_revenue) as total_revenue," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderkey, lo_orderdate, lo_linenumber";
+            String query = "select lo_orderdate," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " where lo_orderkey = 100" +
+                    " group by lo_orderdate";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("1:Project\n" +
+                    "|  <slot 21> : col$: lo_orderdate\n" +
+                    "|  <slot 23> : col$: total_quantity\n" +
+                    "|  <slot 25> : col$: total_tax");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_orderdate, lo_linenumber," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_revenue) as total_revenue," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderkey, lo_orderdate, lo_linenumber";
+            String query = "select lo_orderdate," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " where lo_orderkey = 100 and lo_linenumber = 1" +
+                    " group by lo_orderdate";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("1:Project\n" +
+                    "|  <slot 6> : col$: lo_orderdate\n" +
+                    "|  <slot 18> : col$: total_quantity\n" +
+                    "|  <slot 19> : col$: total_tax");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_orderdate, lo_linenumber," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_revenue) as total_revenue," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderkey, lo_orderdate, lo_linenumber";
+            String query = "select lo_orderdate," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderdate";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("1:AGGREGATE (update serialize)\n" +
+                    "|  STREAMING\n" +
+                    "|  output: sum(col$: total_quantity), sum(col$: total_tax)\n" +
+                    "|  group by: col$: lo_orderdate\n" +
+                    "|\n" +
+                    "0:OlapScanNode\n" +
+                    "TABLE: mv0");
+        }
+    }
 }
