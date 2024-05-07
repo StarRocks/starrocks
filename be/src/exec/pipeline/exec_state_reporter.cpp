@@ -119,7 +119,8 @@ using apache::thrift::transport::TTransportException;
 Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                              const TNetworkAddress& fe_addr) {
     Status fe_status;
-    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
+    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, config::thrift_rpc_timeout_ms,
+                                    &fe_status);
     if (!fe_status.ok()) {
         LOG(WARNING) << "Couldn't get a client for " << fe_addr;
         return fe_status;
@@ -135,7 +136,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
             TTransportException::TTransportExceptionType type = e.getType();
             if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
                 // if not TIMED_OUT, retry
-                rpc_status = coord.reopen();
+                rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
 
                 if (!rpc_status.ok()) {
                     return rpc_status;
