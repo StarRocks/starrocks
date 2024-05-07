@@ -31,6 +31,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
+import com.starrocks.connector.iceberg.IcebergMetaSpec;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
@@ -222,6 +223,11 @@ public class UnifiedMetadataTest {
                 times = 1;
             }
             {
+                icebergMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null);
+                result = new IcebergMetaSpec(null, null, false);
+                times = 1;
+            }
+            {
                 icebergMetadata.getPartitions(icebergTable, ImmutableList.of());
                 result = ImmutableList.of();
                 times = 1;
@@ -268,6 +274,7 @@ public class UnifiedMetadataTest {
         assertTrue(unifiedMetadata.createTable(createTableStmt));
         Assert.assertTrue(unifiedMetadata.getPrunedPartitions(table, null, -1).isEmpty());
         Assert.assertTrue(unifiedMetadata.prepareMetadata(new MetaPreparationItem(icebergTable, null, -1), null));
+        Assert.assertNotNull(unifiedMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null));
     }
 
     @Test

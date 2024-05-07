@@ -26,6 +26,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -153,6 +154,13 @@ public class UnifiedMetadata implements ConnectorMetadata {
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+    }
+
+    @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                             long snapshotId, String serializedPredicate) {
+        ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
+        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
     }
 
     @Override
