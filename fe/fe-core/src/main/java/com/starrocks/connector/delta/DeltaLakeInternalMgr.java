@@ -26,6 +26,7 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
@@ -64,6 +65,10 @@ public class DeltaLakeInternalMgr {
             Util.validateMetastoreUris(hiveMetastoreUris);
         }
         this.metastoreType = MetastoreType.get(hiveMetastoreType);
+    }
+
+    public IMetastore createMetastore() {
+        return createHiveMetastore();
     }
 
     public IHiveMetastore createHiveMetastore() {
