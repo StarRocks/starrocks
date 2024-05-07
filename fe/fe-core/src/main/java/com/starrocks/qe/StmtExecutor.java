@@ -910,7 +910,18 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
                 String jsonString = GSON.toJson(queryDetail);
-                PROFILE_LOG.info(jsonString);
+                if (Config.enable_profile_log_compress) {
+                    byte[] jsonBytes;
+                    try {
+                        jsonBytes = CompressionUtils.gzipCompressString(jsonString);
+                        PROFILE_LOG.info(jsonBytes);
+                    } catch (IOException e) {
+                        LOG.warn("Compress queryDetail string failed, length: {}, reason: {}",
+                                jsonString.length(), e.getMessage());
+                    }
+                } else {
+                    PROFILE_LOG.info(jsonString);
+                }
             }
         };
         return coord.tryProcessProfileAsync(task);
