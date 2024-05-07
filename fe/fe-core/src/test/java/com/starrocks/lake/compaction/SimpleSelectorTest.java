@@ -21,6 +21,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 public class SimpleSelectorTest {
@@ -40,7 +41,7 @@ public class SimpleSelectorTest {
     @Test
     public void testEmpty() {
         List<PartitionStatistics> statisticsList = new ArrayList<>();
-        Assert.assertEquals(0, selector.select(statisticsList).size());
+        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
     }
 
     @Test
@@ -53,7 +54,7 @@ public class SimpleSelectorTest {
         statistics.setCompactionVersion(new PartitionVersion(1, 0));
         statisticsList.add(statistics);
 
-        Assert.assertEquals(0, selector.select(statisticsList).size());
+        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
     }
 
     @Test
@@ -72,7 +73,7 @@ public class SimpleSelectorTest {
         statistics2.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics2);
 
-        Assert.assertSame(statistics2, selector.select(statisticsList).get(0));
+        Assert.assertSame(statistics2, selector.select(statisticsList, new HashSet<Long>()).get(0));
     }
 
     @Test
@@ -87,10 +88,10 @@ public class SimpleSelectorTest {
 
         statistics.setNextCompactionTime(System.currentTimeMillis() + 60 * 1000);
 
-        Assert.assertEquals(0, selector.select(statisticsList).size());
+        Assert.assertEquals(0, selector.select(statisticsList, new HashSet<Long>()).size());
 
         statistics.setNextCompactionTime(System.currentTimeMillis() - 10);
 
-        Assert.assertSame(statistics, selector.select(statisticsList).get(0));
+        Assert.assertSame(statistics, selector.select(statisticsList, new HashSet<Long>()).get(0));
     }
 }
