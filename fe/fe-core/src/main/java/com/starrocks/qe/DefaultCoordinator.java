@@ -467,6 +467,9 @@ public class DefaultCoordinator extends Coordinator {
     public void onFinished() {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         jobSpec.getSlotProvider().releaseSlot(slot);
+        // for async profile, if Be doesn't report profile in time, we upload the most complete profile
+        // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
+        queryProfile.finishAllInstances(Status.OK);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -1142,9 +1145,5 @@ public class DefaultCoordinator extends Coordinator {
             profile.setName("Short Circuit Executor");
             queryProfile.getQueryProfile().addChild(profile);
         }
-    }
-
-    public void finishProfileUpload() {
-        queryProfile.finishAllInstances(Status.OK);
     }
 }
