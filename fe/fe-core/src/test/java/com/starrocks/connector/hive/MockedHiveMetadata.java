@@ -1037,7 +1037,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
                         "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                         Maps.newHashMap());
-        Table lineItemPar = new Table("lineitem_mul_par2", "partitioned_db", null, 0, 0, 0, sd,
+        Table lineItemPar = new Table("lineitem_mul_par3", "partitioned_db", null, 0, 0, 0, sd,
                 ImmutableList.of(new FieldSchema("l_shipdate", "string", null),
                         new FieldSchema("l_orderkey", "int", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");

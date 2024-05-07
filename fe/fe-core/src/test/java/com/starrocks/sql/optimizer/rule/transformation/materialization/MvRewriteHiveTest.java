@@ -322,7 +322,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 "\"query_rewrite_consistency\" = \"loose\"" +
                 ")\n" +
                 "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par2` as a \n " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
 
@@ -336,29 +336,29 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 ImmutableSet.of("p19980101_19980102", "p19980104_19980105", "p19980105_19980106"), toRefreshPartitions);
 
         String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par2` as a \n " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
         String plan = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan, mvName, "UNION");
 
         starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par2` as a \n " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "WHERE l_shipdate='1998-01-02'\n" +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainContains(mvName);
         starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par2` as a \n " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "WHERE l_shipdate='1998-01-03'\n" +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainContains(mvName);
         starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par2` as a \n " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "WHERE l_shipdate='1998-01-01'\n" +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainWithout(mvName);
         starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par2` as a \n " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "WHERE l_shipdate='1998-01-05'\n" +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainWithout(mvName);
