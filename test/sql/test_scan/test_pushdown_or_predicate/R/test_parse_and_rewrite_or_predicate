@@ -1319,7 +1319,7 @@ PROPERTIES (
 -- !result
 insert into t1_copy select * from t1;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Column count doesn't match value count.")
+E: (5604, "Getting analyzing error. Detail message: Inserted target column count: 11 doesn't match select/value column count: 15.")
 -- !result
 analyze table t1_copy;
 -- result:
@@ -1371,7 +1371,7 @@ truncate table t1_copy;
 -- !result
 insert into t1_copy select * from t1;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Column count doesn't match value count.")
+E: (5604, "Getting analyzing error. Detail message: Inserted target column count: 11 doesn't match select/value column count: 15.")
 -- !result
 select count(1) from t1_copy;
 -- result:
