@@ -28,6 +28,7 @@ import configparser
 import datetime
 import json
 import logging
+import mysql.connector
 import os
 import re
 import subprocess
@@ -1683,3 +1684,25 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
+    def assert_prepare_execute(self, db, query, params=()):
+        conn = mysql.connector.connect(
+            host=self.mysql_host,
+            user=self.mysql_user,
+            password="",
+            port=self.mysql_port,
+            database=db
+        )
+        cursor = conn.cursor(prepared=True)
+
+        try:
+            if params:
+                cursor.execute(query, ['2'])
+            else:
+                cursor.execute(query)
+            cursor.fetchall()
+        except mysql.connector.Error as e:
+            tools.assert_true(1 == 0, e)
+
+        finally:
+            cursor.close()
+            conn.close()
