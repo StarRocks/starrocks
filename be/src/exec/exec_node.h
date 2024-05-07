@@ -244,6 +244,16 @@ public:
 
     static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
+<<<<<<< HEAD
+=======
+    void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
+
+    const std::vector<ExecNode*>& children() const { return _children; }
+
+    [[nodiscard]] static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
+                                                       const DescriptorTbl& descs, ExecNode** node);
+
+>>>>>>> ecbc7907bb ([BugFix] Broadcast Join should not generate nondetermistic GRF (#44111))
 protected:
     friend class DataSink;
 
