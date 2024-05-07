@@ -136,6 +136,7 @@ public class RuntimeFilterDescription {
         if (!canAcceptFilter(node)) {
             return false;
         }
+
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
             ((OlapScanNode) node).setOrderHint(isAscFilter());
         }
