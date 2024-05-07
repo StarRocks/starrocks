@@ -257,7 +257,7 @@ public class RoutineLoadJobTest {
                 warehouseManager.getWarehouse(0L);
                 result = new DefaultWarehouse(0, "default_warehouse");
                 warehouseManager.getWarehouse(1L);
-                result = new Exception("Warehouse '1' not exist");
+                result = new Exception("Warehouse id: 1 not exist");
             }
         };
 
@@ -269,7 +269,7 @@ public class RoutineLoadJobTest {
 
         routineLoadJob.setWarehouseId(1L);
         showInfo = routineLoadJob.getShowInfo();
-        Assert.assertEquals("Warehouse '1' not exist", showInfo.get(20));
+        Assert.assertEquals("Warehouse id: 1 not exist", showInfo.get(20));
     }
 
     @Test
