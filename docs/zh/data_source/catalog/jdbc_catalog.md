@@ -159,7 +159,3 @@ DROP Catalog jdbc0;
 系统返回 "Malformed database URL, failed to parse the main URL sections" 报错应该如何处理？
 
 该报错通常是由于 `jdbc_uri` 中传入的 URI 有误而引起的。请检查并确保传入的 URI 是否正确无误。参见本文“[PROPERTIES](#properties)”小节相关的参数说明。
-
-Oracle catalog 查询报错 ERROR 1064 (HY000): 不支持的字符集 (在类路径中添加 orai18n.jar): ZHS16GBK 异常如何处理？
-
-下载 [orai18n.jar](https://repo1.maven.org/maven2/com/oracle/database/nls/orai18n/19.18.0.0/orai18n-19.18.0.0.jar) 并放到 FE 的 lib 目录下即可。
