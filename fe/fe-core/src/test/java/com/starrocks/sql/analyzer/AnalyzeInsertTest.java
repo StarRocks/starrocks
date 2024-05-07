@@ -54,9 +54,9 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsert() {
         analyzeFail("insert into t0 select v4,v5 from t1",
-                "Column count doesn't match value count");
-        analyzeFail("insert into t0 select 1,2", "Column count doesn't match value count");
-        analyzeFail("insert into t0 values(1,2)", "Column count doesn't match value count");
+                "Inserted target column count: 3 doesn't match select/value column count: 2");
+        analyzeFail("insert into t0 select 1,2", "Inserted target column count: 3 doesn't match select/value column count: 2");
+        analyzeFail("insert into t0 values(1,2)", "Inserted target column count: 3 doesn't match select/value column count: 2");
 
         analyzeFail("insert into tnotnull(v1) values(1)",
                 "must be explicitly mentioned in column permutation");
@@ -80,7 +80,8 @@ public class AnalyzeInsertTest {
 
         analyzeSuccess("insert into tmc values (1,2)");
         analyzeSuccess("insert into tmc (id,name) values (1,2)");
-        analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
+        analyzeFail("insert into tmc values (1,2,3)",
+                "Inserted target column count: 2 doesn't match select/value column count: 3");
         analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
     }
 
@@ -127,7 +128,7 @@ public class AnalyzeInsertTest {
             }
         };
         analyzeFail("insert into iceberg_catalog.db.tbl values (1)",
-                "Column count doesn't match value count");
+                "Inserted target column count: 0 doesn't match select/value column count: 1");
 
         new Expectations(metadata) {
             {
