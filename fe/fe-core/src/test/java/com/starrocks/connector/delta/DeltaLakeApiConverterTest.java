@@ -87,6 +87,6 @@ public class DeltaLakeApiConverterTest {
         Type srType = fromDeltaLakeType(deltaType);
         Assert.assertEquals(srType, new StructType(ImmutableList.of(
                 ScalarType.createType(PrimitiveType.INT),
-                ScalarType.createDefaultCatalogString())));
+                ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength()))));
     }
 }
