@@ -400,6 +400,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
 #endif
 
+    // The _load_rpc_pool now handles routine load RPC and table function RPC.
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc
+                            .set_min_threads(10)
+                            .set_max_threads(1000)
+                            .set_max_queue_size(0)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_load_rpc_pool));
     return Status::OK();
 }
 
@@ -533,6 +540,10 @@ void ExecEnv::_stop() {
     // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
     // so when the ThreadPool is destroyed, it will crash.
     _load_channel_mgr->clear();
+
+    if (_load_rpc_pool) {
+        _load_rpc_pool->shutdown();
+    }
 }
 
 void ExecEnv::_destroy() {
@@ -592,6 +603,7 @@ void ExecEnv::_destroy() {
     _metrics = nullptr;
 
     _reset_tracker();
+    _load_rpc_pool.reset();
 }
 
 void ExecEnv::_reset_tracker() {
