@@ -297,7 +297,7 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
         TStatus task_status;
-        task_status.__set_status_code(TStatusCode::CANCELLED);
+        task_status.__set_status_code(TStatusCode::TIMEOUT);
         task_status.__set_error_msgs(std::vector<std::string>{error_msg});
         finish_task_request.__set_task_status(task_status);
 
