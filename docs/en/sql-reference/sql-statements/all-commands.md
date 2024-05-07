@@ -75,6 +75,9 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [SHOW PROC](./Administration/SHOW_PROC.md)
 - [SHOW PROCESSLIST](./Administration/SHOW_PROCESSLIST.md)
 - [SHOW RUNNING QUERIES](./Administration/SHOW_RUNNING_QUERIES.md)
+- [ADD BACKEND BLACKLIST](./Administration/ADD_BACKEND_BLACKLIST.md)
+- [DELETE BACKEND BLACKLIST](./Administration/DELETE_BACKEND_BLACKLIST.md)
+- [SHOW BACKEND BLACKLIST](./Administration/SHOW_BACKEND_BLACKLIST.md)
 
 ### Resource group
 
