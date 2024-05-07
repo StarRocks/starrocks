@@ -158,20 +158,29 @@ struct SyncExecutor {
 struct ASyncExecutor {
     using ExecFunction = std::function<void(workgroup::YieldContext&)>;
 
+    static std::vector<std::future<void>> _futures;
     static Status submit(workgroup::ScanTask task) {
-        (void)std::async([task = std::move(task)]() mutable {
+        _futures.emplace_back(std::async([task = std::move(task)]() mutable {
             do {
                 task.run();
             } while (!task.is_finished());
-        });
+        }));
         return Status::OK();
     }
     static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+
+    static void join() {
+        for (auto& future : _futures) {
+            future.get();
+        }
+    }
 };
+std::vector<std::future<void>> ASyncExecutor::_futures;
 
 class BlockHoleOutputStream final : public spill::SpillOutputDataStream {
 public:
-    Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size) override {
+    Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
+                  size_t write_num_rows) override {
         _write_total_size += total_write_size;
         return Status::OK();
     }
@@ -394,6 +403,7 @@ TEST_F(SpillTest, unsorted_process) {
                 ASSERT_OK(spiller->_spilled_task_status);
             }
         }
+        ASyncExecutor::join();
     }
 
     {

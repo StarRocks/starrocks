@@ -465,8 +465,8 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
         auto block_group = std::make_shared<BlockGroup>();
-        partition->spill_writer->add_block_group(std::move(block_group));
         partition->block_group = block_group;
+        partition->spill_writer->add_block_group(std::move(block_group));
         auto output = create_spill_output_stream(_spiller, partition->block_group.get(), _spiller->block_manager());
         std::lock_guard<std::mutex> l(_mutex);
         DCHECK_EQ(partition->spill_output_stream, nullptr);
