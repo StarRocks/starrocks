@@ -41,12 +41,8 @@ under the License.
         <iceberg.version>1.4.2</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.7.0-incubating</paimon.version>
-<<<<<<< HEAD
         <staros.version>3.2.0</staros.version>
-=======
         <delta-kernel.version>3.1.0</delta-kernel.version>
-        <staros.version>3.3-rc0</staros.version>
->>>>>>> 4919b55d40 ([Enhancement] Use delta kernel to replace delta-standalone (#44767))
         <python>python</python>
     </properties>
 

@@ -56,11 +56,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 
-<<<<<<< HEAD
-public class ExpressionConverter extends AstVisitor<Expression, Void> {
-=======
-public class ExpressionConverter implements AstVisitor<Predicate, Void> {
->>>>>>> 4919b55d40 ([Enhancement] Use delta kernel to replace delta-standalone (#44767))
+public class ExpressionConverter extends AstVisitor<Predicate, Void> {
     private static final Logger LOG = LogManager.getLogger(ExpressionConverter.class);
 
     StructType tableSchema;
