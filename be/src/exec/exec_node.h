@@ -247,6 +247,8 @@ public:
 
     void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
 
+    const std::vector<ExecNode*>& children() const { return _children; }
+
     [[nodiscard]] static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                                        const DescriptorTbl& descs, ExecNode** node);
 
