@@ -233,7 +233,6 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                             // count(non-null constant)
                             return true;
                         }
-                        // TODO(yanz): not quite sure when this case happens.
                         return false;
                     }
                     return false;
