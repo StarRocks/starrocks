@@ -98,6 +98,7 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
