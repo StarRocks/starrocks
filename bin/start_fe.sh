@@ -207,7 +207,7 @@ fi
 
 echo "using java version $JAVA_VERSION"
 echo $final_java_opt
-echo `date`
+echo "start time: $(date), server uptime: $(uptime)"
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
