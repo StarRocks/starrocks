@@ -80,7 +80,7 @@ CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE 
 -- !result
 INSERT INTO t VALUES (1, [1,2], 0.0);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Column count doesn't match value count.")
+E: (5604, "Getting analyzing error. Detail message: Inserted target column count: 2 doesn't match select/value column count: 3.")
 -- !result
 INSERT INTO t (id, array_data, mc) VALUES (1, [1,2], 0.0);
 -- result:
