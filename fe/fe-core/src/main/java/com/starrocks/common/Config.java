@@ -1794,6 +1794,12 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * whether to automatically collect statistics on temporary tables
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_temporary_table_statistic_collect = true;
+
+    /**
      * auto statistic collect on first load flag
      */
     @ConfField(mutable = true)

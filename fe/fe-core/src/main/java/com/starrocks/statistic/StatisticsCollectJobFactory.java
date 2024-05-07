@@ -365,6 +365,10 @@ public class StatisticsCollectJobFactory {
                 return;
             }
         }
+        if (!Config.enable_temporary_table_statistic_collect && table.isTemporaryTable()) {
+            LOG.debug("statistics job doesn't work on temporary table: {}", table.getName());
+            return;
+        }
 
         if (StatisticUtils.isEmptyTable(table)) {
             return;

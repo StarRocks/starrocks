@@ -193,6 +193,10 @@ public class AnalyzeStmtAnalyzer {
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
 
+                    if (analyzeTable.isTemporaryTable()) {
+                        throw new SemanticException("Don't support create analyze job for temporary table");
+                    }
+
                     if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
                         throw new SemanticException("Don't support analyze external table created by resource mapping");
                     }
