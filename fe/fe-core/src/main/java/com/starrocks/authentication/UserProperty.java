@@ -32,7 +32,7 @@ public class UserProperty {
 
     public static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
 
-    public static final String PROP_MAX_USER_IP_CONNECTIONS = "max_user_ip_connections";
+    public static final String PROP_MAX_CONNECTIONS_PER_IP = "max_connections_per_ip";
 
     public long getMaxConn() {
         return maxConn;
@@ -87,25 +87,25 @@ public class UserProperty {
                 if (newMaxConn < newMaxIpConn) {
                     newMaxIpConn = newMaxConn;
                 }
-            } else if (propKey.equalsIgnoreCase(PROP_MAX_USER_IP_CONNECTIONS)) {
+            } else if (propKey.equalsIgnoreCase(PROP_MAX_CONNECTIONS_PER_IP)) {
                 if (keyArr.length != 1) {
-                    throw new DdlException(PROP_MAX_USER_IP_CONNECTIONS + " format error");
+                    throw new DdlException(PROP_MAX_CONNECTIONS_PER_IP + " format error");
                 }
 
                 try {
                     newMaxIpConn = Long.parseLong(value);
                 } catch (NumberFormatException e) {
-                    throw new DdlException(PROP_MAX_USER_IP_CONNECTIONS + " is not a number");
+                    throw new DdlException(PROP_MAX_CONNECTIONS_PER_IP + " is not a number");
                 }
 
                 if (newMaxIpConn <= 0 || newMaxIpConn > 10000) {
-                    throw new DdlException(PROP_MAX_USER_IP_CONNECTIONS +
+                    throw new DdlException(PROP_MAX_CONNECTIONS_PER_IP +
                             " is not valid, the value must be between 1 and 10000");
                 }
 
                 if (newMaxIpConn > newMaxConn) {
                     throw new DdlException(
-                            PROP_MAX_USER_IP_CONNECTIONS +
+                            PROP_MAX_CONNECTIONS_PER_IP +
                                     " is not valid, the value must be less than " + PROP_MAX_USER_CONNECTIONS + "("
                                     + newMaxConn + ")");
                 }

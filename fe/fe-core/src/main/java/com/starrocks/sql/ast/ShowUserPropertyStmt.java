@@ -74,7 +74,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
         long maxConn = authenticationManager.getMaxConn(user);
         long maxIpConn = authenticationManager.getMaxIpConn(user);
         rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_CONNECTIONS, String.valueOf(maxConn)));
-        rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_IP_CONNECTIONS, String.valueOf(maxIpConn)));
+        rows.add(Lists.newArrayList(UserProperty.PROP_MAX_CONNECTIONS_PER_IP, String.valueOf(maxIpConn)));
 
         if (pattern == null) {
             return rows;
