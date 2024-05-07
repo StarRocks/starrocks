@@ -40,6 +40,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_index.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
@@ -411,7 +412,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         _tablet_schema =
                 TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
     } else {
-        _tablet_schema = _tablet->tablet_schema();
+        // struct column prune will modify fields, so deep copy a new schema
+        _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema());
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
@@ -419,8 +421,10 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
 
+    // schema is new object, but fields not
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
+    // will modify schema field, need to copy schema
     RETURN_IF_ERROR(_prune_schema_by_access_paths(&child_schema));
 
     std::vector<RowsetSharedPtr> rowsets;
