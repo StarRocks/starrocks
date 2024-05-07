@@ -49,7 +49,7 @@ You need to enable FQDN access for all the non-Leader Follower FE nodes before e
 1. Navigate to the deployment directory of the FE node, and run the following command to stop the FE node:
 
     ```Shell
-    ./bin/stop_fe.sh --daemon
+    ./bin/stop_fe.sh
     ```
 
 2. Execute the following statement via your MySQL client to check the `Alive` status of the FE node that you have stopped. Wait until the `Alive` status becomes `false`.
@@ -91,7 +91,7 @@ After all the non-Leader FE nodes have been modified and restarted successfully,
 1. Navigate to the deployment directory of the Leader FE node, and run the following command to stop the Leader FE node.
 
     ```Shell
-    ./bin/stop_fe.sh --daemon
+    ./bin/stop_fe.sh
     ```
 
 2. Execute the following statement via your MySQL client to check whether a new Leader FE node has been elected for the cluster.
