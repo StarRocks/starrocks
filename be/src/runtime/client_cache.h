@@ -176,6 +176,9 @@ public:
         }
     }
 
+    // Test only
+    ClientConnection() : _client(nullptr) {}
+
     ClientConnection(const ClientConnection&) = delete;
     void operator=(const ClientConnection&) = delete;
 

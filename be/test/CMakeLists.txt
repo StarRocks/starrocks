@@ -401,6 +401,16 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./storage/delta_writer_test.cpp
+<<<<<<< HEAD
+=======
+        ./storage/rows_mapper_test.cpp
+        ./storage/lake/persistent_index_memtable_test.cpp
+        ./storage/lake/lake_persistent_index_test.cpp
+        ./storage/lake/replication_txn_manager_test.cpp
+        ./storage/lake/persistent_index_sstable_test.cpp
+        ./block_cache/datacache_utils_test.cpp
+        ./util/thrift_rpc_helper_test.cpp
+>>>>>>> 0df1cc03e3 ([Enhancement] frontend RPC error message (#44153))
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
