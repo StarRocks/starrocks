@@ -30,10 +30,12 @@ CREATE TABLE user_access (
     last_access datetime,
     credits double
 )
-DUPLICATE KEY(uid, name);
+ORDER BY (uid, name);
 ```
 
 The above CREATE TABLE example creates a Duplicate Key table. No constraint is added to columns in this type of table, so duplicate data rows can exist in the table. The first two columns of the Duplicate Key table are specified as sort columns to form the sort key. Data is stored after being sorted based on the sort key, which can accelerate indexing during queries.
+
+Since v3.3.0, the Duplicate Key table supports specifying the sort key using `ORDER BY`. If both `ORDER BY` and `DUPLICATE KEY` are used, `DUPLICATE KEY` does not take effect.
 
 <Replicanum />
 
@@ -70,14 +72,15 @@ Create Table: CREATE TABLE `user_access` (
 ) ENGINE=OLAP 
 DUPLICATE KEY(`uid`, `name`)
 DISTRIBUTED BY RANDOM
+ORDER BY(`uid`, `name`)
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"replication_num" = "3"
 );
-1 row in set (0.00 sec)
+1 row in set (0.01 sec)
 ```
 
 ## Understand comprehensive table structure

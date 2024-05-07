@@ -154,6 +154,7 @@
                         "table_design/indexes/Bitmap_index",
                         "table_design/indexes/Bloomfilter_index",
                         "table_design/indexes/Ngram_Bloom_Filter_Index"
+                        "table_design/indexes/inverted_index"
                     ]
                 },
                 "table_design/data_compression",
@@ -275,10 +276,21 @@
                         "data_source/catalog/query_external_data"
                     ]
                 },
+                {
+                    "type": "category",
+                    "label": "Data cache",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/data_cache"
+                    },
+                    "items": [
+                        "data_source/data_cache",
+                        "data_source/data_cache_warmup",
+                        "data_source/data_cache_observe"
+                    ]
+                },
                 "data_source/External_table",
                 "data_source/file_external_table",
-                "data_source/data_cache",
-                "data_source/data_cache_warmup",
                 "data_source/datalake_faq"
             ]
         },
@@ -348,7 +360,8 @@
                     ]
                 },
                 "using_starrocks/sorted_aggregate",
-                "using_starrocks/query_acceleration_with_auto_increment"
+                "using_starrocks/query_acceleration_with_auto_increment",
+                "using_starrocks/Flat_json"
             ]
         },
         {
@@ -487,8 +500,7 @@
                     "label": "DBT",
                     "description": "Modeling and transformation with DBT",
                     "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-                },
-                "integrations/hive_bitmap_udf"
+                }
             ]
         },
         {
@@ -508,6 +520,7 @@
                     },
                     "items": [
                         "administration/management/Scale_up_down",
+                        "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
                         "administration/management/FE_configuration",
                         "administration/management/BE_configuration",
@@ -541,6 +554,7 @@
                                 "administration/management/resource_management/spill_to_disk",
                                 "administration/management/resource_management/Load_balance",
                                 "administration/management/resource_management/Replica",
+                                "administration/management/resource_management/be_label",
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
@@ -715,7 +729,10 @@
                                         "sql-reference/sql-statements/Administration/SHOW_FRONTENDS",
                                         "sql-reference/sql-statements/Administration/SHOW_PROC",
                                         "sql-reference/sql-statements/Administration/SHOW_PROCESSLIST",
-                                        "sql-reference/sql-statements/Administration/SHOW_RUNNING_QUERIES"
+                                        "sql-reference/sql-statements/Administration/SHOW_RUNNING_QUERIES",
+                                        "sql-reference/sql-statements/Administration/ADD_BACKEND_BLACKLIST",
+                                        "sql-reference/sql-statements/Administration/DELETE_BACKEND_BLACKLIST",
+                                        "sql-reference/sql-statements/Administration/SHOW_BACKEND_BLACKLIST"
                                     ]
                                 },
                                 {
@@ -1022,6 +1039,7 @@
                     },
                     "items": [
                         "sql-reference/sql-functions/JAVA_UDF",
+                        "integrations/hive_bitmap_udf",
                         "sql-reference/sql-functions/Window_function",
                         "sql-reference/sql-functions/Lambda_expression",
                         {
@@ -1579,7 +1597,8 @@
                     "items": [
                         "table_design/indexes/Prefix_index_sort_key",
                         "table_design/indexes/Bitmap_index",
-                        "table_design/indexes/Bloomfilter_index"
+                        "table_design/indexes/Bloomfilter_index",
+                        "table_design/indexes/inverted_index"
                     ]
                 },
                 "table_design/data_compression",
@@ -1702,10 +1721,21 @@
                         "data_source/catalog/query_external_data"
                     ]
                 },
+                {
+                    "type": "category",
+                    "label": "Data cache",
+                    "link": {
+                        "type": "doc",
+                        "id": "cover_pages/data_cache"
+                    },
+                    "items": [
+                        "data_source/data_cache",
+                        "data_source/data_cache_warmup",
+                        "data_source/data_cache_observe"
+                    ]
+                },
                 "data_source/External_table",
                 "data_source/file_external_table",
-                "data_source/data_cache",
-                "data_source/data_cache_warmup",
                 "data_source/datalake_faq"
             ]
         },
@@ -1775,7 +1805,8 @@
                     ]
                 },
                 "using_starrocks/sorted_aggregate",
-                "using_starrocks/query_acceleration_with_auto_increment"
+                "using_starrocks/query_acceleration_with_auto_increment",
+                "using_starrocks/Flat_json"
             ]
         },
         {
@@ -1914,8 +1945,7 @@
                     "label": "DBT",
                     "description": "通过 DBT 实现数据建模与转换",
                     "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-                },
-                "integrations/hive_bitmap_udf"
+                }
             ]
         },
         {
@@ -1935,6 +1965,7 @@
                     },
                     "items": [
                         "administration/management/Scale_up_down",
+                        "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
                         "administration/management/FE_configuration",
                         "administration/management/BE_configuration",
@@ -1968,6 +1999,7 @@
                                 "administration/management/resource_management/spill_to_disk",
                                 "administration/management/resource_management/Load_balance",
                                 "administration/management/resource_management/Replica",
+                                "administration/management/resource_management/be_label",
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
@@ -2142,7 +2174,10 @@
                                         "sql-reference/sql-statements/Administration/SHOW_FRONTENDS",
                                         "sql-reference/sql-statements/Administration/SHOW_PROC",
                                         "sql-reference/sql-statements/Administration/SHOW_PROCESSLIST",
-                                        "sql-reference/sql-statements/Administration/SHOW_RUNNING_QUERIES"
+                                        "sql-reference/sql-statements/Administration/SHOW_RUNNING_QUERIES",
+                                        "sql-reference/sql-statements/Administration/ADD_BACKEND_BLACKLIST",
+                                        "sql-reference/sql-statements/Administration/DELETE_BACKEND_BLACKLIST",
+                                        "sql-reference/sql-statements/Administration/SHOW_BACKEND_BLACKLIST"
                                     ]
                                 },
                                 {
@@ -2449,6 +2484,7 @@
                     },
                     "items": [
                         "sql-reference/sql-functions/JAVA_UDF",
+                        "integrations/hive_bitmap_udf",
                         "sql-reference/sql-functions/Window_function",
                         "sql-reference/sql-functions/Lambda_expression",
                         {

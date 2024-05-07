@@ -29,6 +29,7 @@ You can find a built-in function based on the following categories:
   - [Struct functions](#struct-functions)
   - [Table functions](#table-functions)
   - [Utility functions](#utility-functions)
+  - [Dictionary functions](#dictionary-functions)
 
 ## Aggregate functions
 
@@ -249,6 +250,7 @@ You can find a built-in function based on the following categories:
 - [weeks_diff](./date-time-functions/weeks_diff.md)
 - [weeks_sub](./date-time-functions/weeks_sub.md)
 - [year](./date-time-functions/year.md)
+- [yearweek](./date-time-functions/yearweek.md)
 - [years_add](./date-time-functions/years_add.md)
 - [years_diff](./date-time-functions/years_diff.md)
 - [years_sub](./date-time-functions/years_sub.md)
@@ -278,6 +280,7 @@ You can find a built-in function based on the following categories:
 - [parse_json](./json-functions/json-constructor-functions/parse_json.md)
 - [Arrow function](./json-functions/json-query-and-processing-functions/arrow-function.md)
 - [cast](./json-functions/json-query-and-processing-functions/cast.md)
+- [get_json_bool](./json-functions/json-query-and-processing-functions/get_json_bool.md)
 - [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)
 - [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)
 - [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)
@@ -339,6 +342,7 @@ You can find a built-in function based on the following categories:
 - [upper](./string-functions/upper.md)
 - [url_decode](./string-functions/url_decode.md)
 - [url_encode](./string-functions/url_encode.md)
+- [url_extract_host](./string-functions/url_extract_host.md)
 - [url_extract_parameter](./string-functions/url_extract_parameter.md)
 
 ## Map functions
@@ -364,6 +368,7 @@ You can find a built-in function based on the following categories:
 - [atan](./math-functions/atan.md)
 - [atan2](./math-functions/atan2.md)
 - [bin](./math-functions/bin.md)
+- [cbrt](./math-functions/cbrt.md)
 - [ceil, dceil](./math-functions/ceil.md)
 - [ceiling](./math-functions/ceiling.md)
 - [conv](./math-functions/conv.md)
