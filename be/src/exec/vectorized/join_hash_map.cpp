@@ -122,7 +122,16 @@ void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items,
 
     for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
         if (table_items.join_keys[i].is_null_safe_equal) {
-            data_columns.emplace_back((*probe_state->key_columns)[i]);
+            // this means build column is a nullable column and join condition is null safe equal
+            // we need convert the probe column to a nullable column when it's a non-nullable column
+            // to align the type between build and probe columns.
+            if ((*probe_state->key_columns)[i]->is_nullable()) {
+                data_columns.emplace_back((*probe_state->key_columns)[i]);
+            } else {
+                auto tmp_column = NullableColumn::create((*probe_state->key_columns)[i],
+                                                         NullColumn::create(probe_state->probe_row_count, 0));
+                data_columns.emplace_back(tmp_column);
+            }
         } else if ((*probe_state->key_columns)[i]->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[i]);
             data_columns.emplace_back(nullable_column->data_column());
