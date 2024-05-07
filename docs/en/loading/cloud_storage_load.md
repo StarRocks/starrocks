@@ -16,7 +16,7 @@ Additionally, Broker Load supports data transformation at data loading and suppo
 
 <InsertPrivNote />
 
-From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
+From v3.1 onwards, StarRocks supports directly loading the data of specific file formats from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 
 This topic focuses on using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) to load data from cloud storage.
 
