@@ -1678,35 +1678,6 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
-<<<<<<< HEAD
-=======
-    def assert_explain_contains(self, query, *expects):
-        """
-        assert explain result contains expect string
-        """
-        sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
-        for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
-
-    def assert_explain_not_contains(self, query, *expects):
-        """
-        assert explain result contains expect string
-        """
-        sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
-        for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
-
-    def assert_trace_values_contains(self, query, *expects):
-        """
-        assert trace values result contains expect string
-        """
-        sql = "trace values %s" % (query)
-        res = self.execute_sql(sql, True)
-        for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
-
     def assert_prepare_execute(self, db, query, params=()):
         conn = mysql.connector.connect(
             host=self.mysql_host,
@@ -1729,4 +1700,3 @@ class StarrocksSQLApiLib(object):
         finally:
             cursor.close()
             conn.close()
->>>>>>> 1c26046e06 ([BugFix] fix not sending a correct eof packet (#45040))
