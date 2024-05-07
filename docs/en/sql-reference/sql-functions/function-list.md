@@ -317,6 +317,7 @@ You can find a built-in function based on the following categories:
 - [lpad](./string-functions/lpad.md)
 - [ltrim](./string-functions/ltrim.md)
 - [money_format](./string-functions/money_format.md)
+- [ngram_search](./string-functions/ngram_search.md)
 - [null_or_empty](./string-functions/null_or_empty.md)
 - [parse_url](./string-functions/parse_url.md)
 - [repeat](./string-functions/repeat.md)
