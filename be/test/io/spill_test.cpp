@@ -463,6 +463,8 @@ TEST_F(SpillTest, order_by_process) {
     spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    // enable compaction for spill
+    spill_options.enable_block_compaction = true;
 
     spill_options.block_manager = dummy_block_mgr.get();
 
@@ -509,6 +511,7 @@ TEST_F(SpillTest, order_by_process) {
             ASSERT_TRUE(chunk_st.status().is_end_of_file());
         }
         ASSERT_EQ(contain_rows, restored_rows);
+        ASSERT_GT(metrics.compact_count->value(), 0);
     }
 }
 
