@@ -190,6 +190,9 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
                 _row_buffer->start_binary_row(num_columns);
             }
             for (auto& result_column : result_columns) {
+                if (!result_column->is_nullable()) {
+                    _row_buffer->update_field_pos();
+                }
                 result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
             }
             size_t len = _row_buffer->length();

@@ -54,7 +54,7 @@ public:
 
     void start_binary_row(uint32_t num_cols);
 
-    void push_null();
+    void push_null(bool is_binary_protocol = false);
     void push_tinyint(int8_t data) { push_number(data); }
     void push_smallint(int16_t data) { push_number(data); }
     void push_int(int32_t data) { push_number(data); }

@@ -78,8 +78,8 @@ static uint8_t* pack_vlen(uint8_t* packet, uint64_t length) {
     return packet + 8;
 }
 
-void MysqlRowBuffer::push_null() {
-    if (_is_binary_format) {
+void MysqlRowBuffer::push_null(bool is_binary_protocol) {
+    if (is_binary_protocol) {
         uint offset = (_field_pos + 2) / 8 + 1;
         uint bit = (1 << ((_field_pos + 2) & 7));
         /* Room for this as it's allocated start_binary_row*/
