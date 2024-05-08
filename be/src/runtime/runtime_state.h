@@ -409,6 +409,11 @@ public:
     int64_t spill_operator_min_bytes() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_min_bytes);
     }
+
+    int64_t spill_operator_max_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_max_bytes);
+    }
+
     int64_t spill_revocable_max_bytes() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_revocable_max_bytes);
     }

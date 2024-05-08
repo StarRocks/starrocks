@@ -1092,6 +1092,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private double spillMemLimitThreshold = 0.8;
     @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMinBytes = 1024L * 1024 * 50;
+    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
     // If the operator memory revocable memory exceeds this value, the operator will perform a spill as soon as possible
     @VarAttr(name = SPILL_REVOCABLE_MAX_BYTES)
     private long spillRevocableMaxBytes = 0;
@@ -3808,6 +3810,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             spillOptions.setSpill_mem_table_num(spillMemTableNum);
             spillOptions.setSpill_mem_limit_threshold(spillMemLimitThreshold);
             spillOptions.setSpill_operator_min_bytes(spillOperatorMinBytes);
+            spillOptions.setSpill_operator_max_bytes(spillOperatorMaxBytes);
             spillOptions.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
             spillOptions.setSpill_encode_level(spillEncodeLevel);
             spillOptions.setSpillable_operator_mask(spillableOperatorMask);
