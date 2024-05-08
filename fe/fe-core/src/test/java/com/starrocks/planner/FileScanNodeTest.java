@@ -547,7 +547,7 @@ public class FileScanNodeTest {
                 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         ExceptionChecker.expectThrowsWithMsg(UserException.class,
-                "The valid range of values for 'column separator' is [1, 50]",
+                "The valid bytes length for 'column separator' is [1, 50]",
                 () -> scanNode.init(analyzer));
     }
     @Test
@@ -592,7 +592,7 @@ public class FileScanNodeTest {
                 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         ExceptionChecker.expectThrowsWithMsg(UserException.class,
-                "The valid range of values for 'row delimiter' is [1, 50]",
+                "The valid bytes length for 'row delimiter' is [1, 50]",
                 () -> scanNode.init(analyzer));
     }
 }
