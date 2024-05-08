@@ -277,23 +277,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, null, null, false));
             } else {
                 // construct distribution desc
-<<<<<<< HEAD
-                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-                DistributionDesc distributionDesc = null;
-                if (distributionInfo instanceof HashDistributionInfo) {
-                    HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                    List<String> distColumnNames = new ArrayList<>();
-                    for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-                        distColumnNames.add(distributionColumn.getName());
-                    }
-                    distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
-                            distColumnNames);
-                } else if (distributionInfo instanceof  RandomDistributionInfo) {
-                    distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
-                }
-=======
                 DistributionDesc distributionDesc = createDistributionDesc(olapTable, dynamicPartitionProperty);
->>>>>>> d97d27382e ([BugFix] Fix dynamic partition table unexpectly stop scheduling (#45235))
 
                 // add partition according to partition desc and distribution desc
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
