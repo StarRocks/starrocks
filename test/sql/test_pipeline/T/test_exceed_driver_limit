@@ -21,10 +21,10 @@ with
     w4 as (select tt1.k1 from w3 tt1 join [shuffle] w3 tt2 using(k1)),
     w5 as (select tt1.k1 from w4 tt1 join [shuffle] w4 tt2 using(k1)),
     w6 as (select tt1.k1 from w5 tt1 join [shuffle] w5 tt2 using(k1))
-select /*+SET_VAR(pipeline_dop=10240*2)*/ count(1) from w6 join [shuffle] w0 using (k1);
+select /*+SET_VAR(pipeline_dop=20480)*/ count(1) from w6 join [shuffle] w0 using (k1);
 
 -- After the above query fails, we can run the following query to verify that the driver limit is not exceeded.
-select /*+SET_VAR(pipeline_dop=10240*2)*/ count(1) from t1;
+select /*+SET_VAR(pipeline_dop=20480)*/ count(1) from t1;
 
 set pipeline_dop = 1024;
 with 
