@@ -1713,3 +1713,47 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
+<<<<<<< HEAD
+=======
+
+    def assert_explain_costs_contains(self, query, *expects):
+        """
+        assert explain costs result contains expect string
+        """
+        sql = "explain costs %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_trace_values_contains(self, query, *expects):
+        """
+        assert trace values result contains expect string
+        """
+        sql = "trace values %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_prepare_execute(self, db, query, params=()):
+        conn = mysql.connector.connect(
+            host=self.mysql_host,
+            user=self.mysql_user,
+            password="",
+            port=self.mysql_port,
+            database=db
+        )
+        cursor = conn.cursor(prepared=True)
+
+        try:
+            if params:
+                cursor.execute(query, ['2'])
+            else:
+                cursor.execute(query)
+            cursor.fetchall()
+        except mysql.connector.Error as e:
+            tools.assert_true(1 == 0, e)
+
+        finally:
+            cursor.close()
+            conn.close()
+>>>>>>> 78f4392356 ([BugFix] fix getting timstamp type partition null value when iceberg exists partition evolution (#45239))
