@@ -48,6 +48,12 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
@@ -159,7 +165,7 @@ public class ColocateTableIndex implements Writable {
     // lake group, in memory
     private final Set<GroupId> lakeGroups = Sets.newHashSet();
 
-    private final transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final transient ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     public ColocateTableIndex() {
 

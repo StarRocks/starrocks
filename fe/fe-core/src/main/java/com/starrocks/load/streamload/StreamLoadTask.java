@@ -34,6 +34,12 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -222,7 +228,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void init() {
-        this.lock = new ReentrantReadWriteLock(true);
+        this.lock = new FairReentrantReadWriteLock();
         this.taskDeadlineMs = this.createTimeMs + this.timeoutMs;
         this.channels = Lists.newArrayListWithCapacity(this.channelNum);
         for (int i = 0; i < this.channelNum; i++) {

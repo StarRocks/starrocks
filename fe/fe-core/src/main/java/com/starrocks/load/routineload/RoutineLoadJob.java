@@ -63,6 +63,12 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
@@ -308,7 +314,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("os")
     protected OriginStatement origStmt;
 
+<<<<<<< HEAD
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+=======
+    @SerializedName("warehouseId")
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    protected ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
     // TODO(ml): error sample
 
     // save the latest 3 error log urls

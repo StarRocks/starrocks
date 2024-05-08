@@ -39,7 +39,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,7 +68,7 @@ public class DomainResolver extends FrontendDaemon {
 
     private Auth auth;
     private AuthenticationMgr authenticationManager;
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     public DomainResolver(Auth auth) {
         super("domain resolver", 10L * 1000);
