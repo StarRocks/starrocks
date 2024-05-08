@@ -42,7 +42,6 @@ under the License.
         <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.7.0-incubating</paimon.version>
         <staros.version>3.2.0</staros.version>
-        <delta-kernel.version>3.1.0</delta-kernel.version>
         <python>python</python>
     </properties>
 
@@ -320,16 +319,9 @@ under the License.
 
         <dependency>
             <groupId>io.delta</groupId>
-            <artifactId>delta-kernel-api</artifactId>
-            <version>${delta-kernel.version}</version>
+            <artifactId>delta-standalone_2.12</artifactId>
+            <version>0.5.0</version>
         </dependency>
-
-        <dependency>
-            <groupId>io.delta</groupId>
-            <artifactId>delta-kernel-defaults</artifactId>
-            <version>${delta-kernel.version}</version>
-        </dependency>
-
 
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
         <dependency>

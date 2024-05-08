@@ -22,15 +22,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.sql.analyzer.SemanticException;
-import io.delta.kernel.Table;
-import io.delta.kernel.TableNotFoundException;
-import io.delta.kernel.client.TableClient;
-import io.delta.kernel.defaults.client.DefaultTableClient;
-import io.delta.kernel.internal.SnapshotImpl;
-import io.delta.kernel.types.DataType;
-import io.delta.kernel.types.StructField;
-import io.delta.kernel.types.StructType;
+import io.delta.standalone.DeltaLog;
+import io.delta.standalone.actions.Metadata;
+import io.delta.standalone.types.DataType;
+import io.delta.standalone.types.StructField;
+import io.delta.standalone.types.StructType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,32 +40,29 @@ public class DeltaUtils {
 
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                        Configuration configuration, long createTime) {
-        TableClient deltaTableClient = DefaultTableClient.create(configuration);
+        DeltaLog deltaLog = DeltaLog.forTable(configuration, path);
 
-        Table deltaTable = null;
-        SnapshotImpl snapshot = null;
-        try {
-            deltaTable = Table.forPath(deltaTableClient, path);
-            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaTableClient);
-        } catch (TableNotFoundException e) {
-            LOG.error("Failed to find Delta table for {}.{}.{}", catalog, dbName, tblName, e);
-            throw new SemanticException("Failed to find Delta table for " + catalog + "." + dbName + "." + tblName);
+        if (!deltaLog.tableExists()) {
+            throw new IllegalArgumentException(String.format("Delta log not exist for %s.%s.%s",
+                    catalog, dbName, tblName));
         }
 
-        StructType deltaSchema = snapshot.getSchema(deltaTableClient);
-        if (deltaSchema == null) {
+        Metadata metadata = deltaLog.snapshot().getMetadata();
+        StructType tableSchema = metadata.getSchema();
+        List<Column> fullSchema = Lists.newArrayList();
+
+        if (tableSchema == null) {
             throw new IllegalArgumentException(String.format("Unable to find Schema information in Delta log for " +
                     "%s.%s.%s", catalog, dbName, tblName));
         }
 
-        List<Column> fullSchema = Lists.newArrayList();
-        for (StructField field : deltaSchema.fields()) {
+        for (StructField field : metadata.getSchema().getFields()) {
             DataType dataType = field.getDataType();
             Type type;
             try {
                 type = ColumnTypeConverter.fromDeltaLakeType(dataType);
             } catch (InternalError | Exception e) {
-                LOG.error("Failed to convert delta type {} on {}.{}.{}", dataType.toString(), catalog, dbName, tblName, e);
+                LOG.error("Failed to convert delta type {} on {}.{}.{}", dataType.getTypeName(), catalog, dbName, tblName, e);
                 type = Type.UNKNOWN_TYPE;
             }
             Column column = new Column(field.getName(), type, true);
@@ -77,8 +70,7 @@ public class DeltaUtils {
         }
 
         return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName,
-                fullSchema, Lists.newArrayList(snapshot.getMetadata().getPartitionColNames()), snapshot, path,
-                deltaTableClient, createTime);
+                fullSchema, metadata.getPartitionColumns(), deltaLog, createTime);
     }
 
     public static RemoteFileInputFormat getRemoteFileFormat(String format) {

@@ -37,6 +37,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import io.delta.standalone.DeltaLog;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -259,9 +260,10 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                     .add(new Column("col2", Type.STRING))
                     .build();
             List<String> partitionNames = new ArrayList<>();
+            DeltaLog deltaLog = null;
             long createTime = System.currentTimeMillis();
             DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,
-                    columns, partitionNames, null, null, null, createTime);
+                    columns, partitionNames, deltaLog, createTime);
 
             MOCK_TABLE_MAP.put(MOCKED_TABLE_NAME, table);
         }

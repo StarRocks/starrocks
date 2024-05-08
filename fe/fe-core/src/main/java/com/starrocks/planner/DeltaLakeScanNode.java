@@ -41,18 +41,15 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import io.delta.kernel.Scan;
-import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.client.TableClient;
-import io.delta.kernel.data.FilteredColumnarBatch;
-import io.delta.kernel.data.Row;
-import io.delta.kernel.expressions.And;
-import io.delta.kernel.expressions.Predicate;
-import io.delta.kernel.internal.InternalScanFileUtils;
-import io.delta.kernel.internal.actions.Metadata;
-import io.delta.kernel.types.StructType;
-import io.delta.kernel.utils.CloseableIterator;
-import io.delta.kernel.utils.FileStatus;
+import io.delta.standalone.DeltaLog;
+import io.delta.standalone.DeltaScan;
+import io.delta.standalone.Snapshot;
+import io.delta.standalone.actions.AddFile;
+import io.delta.standalone.actions.Metadata;
+import io.delta.standalone.data.CloseableIterator;
+import io.delta.standalone.expressions.And;
+import io.delta.standalone.expressions.Expression;
+import io.delta.standalone.types.StructType;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -72,7 +69,7 @@ public class DeltaLakeScanNode extends ScanNode {
     private DeltaLakeTable deltaLakeTable;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
-    private Optional<Predicate> deltaLakePredicates = Optional.empty();
+    private Optional<Expression> deltaLakePredicates = Optional.empty();
     private CloudConfiguration cloudConfiguration = null;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -111,17 +108,17 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     private void preProcessConjuncts(StructType tableSchema) {
-        List<Predicate> expressions = new ArrayList<>(conjuncts.size());
+        List<Expression> expressions = new ArrayList<>(conjuncts.size());
         ExpressionConverter convertor = new ExpressionConverter(tableSchema);
         for (Expr expr : conjuncts) {
             try {
                 // convert expr to delta expression, some expr can not convert and will throw exception
-                Predicate filterExpr = convertor.convert(expr);
+                Expression filterExpr = convertor.convert(expr);
                 if (filterExpr != null) {
                     expressions.add(filterExpr);
                 }
             } catch (Exception e) {
-                LOG.warn("Failed to convert expr: {}", expr.debugString(), e);
+                LOG.warn("Failed to convert expr: {}", expr.toSql(), e);
             }
         }
 
@@ -136,45 +133,42 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
-        Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
-
-        preProcessConjuncts(deltaMetadata.getSchema());
-        List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
+        DeltaLog deltaLog = deltaLakeTable.getDeltaLog();
+        if (!deltaLog.tableExists()) {
+            return;
+        }
+        // use current snapshot now
+        Snapshot snapshot = deltaLog.snapshot();
+        preProcessConjuncts(snapshot.getMetadata().getSchema());
+        List<String> partitionColumnNames = snapshot.getMetadata().getPartitionColumns();
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        TableClient tableClient = deltaLakeTable.getTableClient();
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(tableClient);
-        Scan scan = deltaLakePredicates.isPresent() ?
-                scanBuilder.withFilter(tableClient, deltaLakePredicates.get()).build() :
-                scanBuilder.build();
+        DeltaScan scan = deltaLakePredicates.isPresent() ? snapshot.scan(deltaLakePredicates.get()) : snapshot.scan();
 
-        for (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(tableClient);
-             scanFilesAsBatches.hasNext(); ) {
-            FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+        for (CloseableIterator<AddFile> it = scan.getFiles(); it.hasNext(); ) {
+            AddFile file = it.next();
+            Map<String, String> partitionValueMap = file.getPartitionValues();
+            List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
+                    Collectors.toList());
 
-            for (CloseableIterator<Row> rows = scanFileBatch.getRows(); rows.hasNext(); ) {
-                Row row = rows.next();
-                FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(row);
-                Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(row);
-                List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
-                        Collectors.toList());
-                PartitionKey partitionKey =
-                        PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
-                                deltaLakeTable.getType());
-                addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
-            }
+            Metadata metadata = snapshot.getMetadata();
+            PartitionKey partitionKey =
+                    PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
+                            deltaLakeTable.getType());
+            addPartitionLocations(partitionKeys, partitionKey, descTbl, file, metadata);
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
     }
 
     private void addPartitionLocations(Map<PartitionKey, Long> partitionKeys, PartitionKey partitionKey,
-                                       DescriptorTable descTbl, FileStatus fileStatus, Metadata metadata) {
+                                       DescriptorTable descTbl, AddFile file, Metadata metadata) {
         long partitionId = -1;
         if (!partitionKeys.containsKey(partitionKey)) {
             partitionId = nextPartitionId();
-            Path filePath = new Path(fileStatus.getPath());
+            String tableLocation = deltaLakeTable.getTableLocation();
+            Path filePath = new Path(tableLocation, file.getPath());
 
             DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
                     new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
@@ -184,20 +178,20 @@ public class DeltaLakeScanNode extends ScanNode {
         } else {
             partitionId = partitionKeys.get(partitionKey);
         }
-        addScanRangeLocations(fileStatus, partitionId, metadata);
+        addScanRangeLocations(file, partitionId, metadata);
 
     }
 
-    private void addScanRangeLocations(FileStatus fileStatus, Long partitionId, Metadata metadata) {
+    private void addScanRangeLocations(AddFile file, Long partitionId, Metadata metadata) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
 
-        hdfsScanRange.setRelative_path(new Path(fileStatus.getPath()).getName());
+        hdfsScanRange.setRelative_path(new Path(file.getPath()).getName());
         hdfsScanRange.setOffset(0);
-        hdfsScanRange.setLength(fileStatus.getSize());
+        hdfsScanRange.setLength(file.getSize());
         hdfsScanRange.setPartition_id(partitionId);
-        hdfsScanRange.setFile_length(fileStatus.getSize());
+        hdfsScanRange.setFile_length(file.getSize());
         hdfsScanRange.setFile_format(DeltaUtils.getRemoteFileFormat(metadata.getFormat().getProvider()).toThrift());
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
