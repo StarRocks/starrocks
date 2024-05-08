@@ -27,6 +27,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.server.GlobalStateMgr;
@@ -47,7 +48,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(MetaRecoveryDaemon.class);
 
     private final Set<UnRecoveredPartition> unRecoveredPartitions = new HashSet<>();
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     public MetaRecoveryDaemon() {
         super("meta_recovery");
