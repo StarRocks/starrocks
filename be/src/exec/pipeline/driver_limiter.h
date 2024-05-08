@@ -42,7 +42,7 @@ public:
     };
     using TokenPtr = std::unique_ptr<Token>;
 
-    explicit DriverLimiter(int max_num_drivers) : _max_num_drivers(max_num_drivers) {}
+    explicit DriverLimiter(int max_num_drivers);
     ~DriverLimiter() = default;
 
     // Return non-ok status, if it cannot acquire `num_drivers` drivers from the limiter.

@@ -14,14 +14,21 @@
 
 #include "exec/pipeline/driver_limiter.h"
 
+#include "util/starrocks_metrics.h"
+
 namespace starrocks::pipeline {
+
+DriverLimiter::DriverLimiter(int max_num_drivers) : _max_num_drivers(max_num_drivers) {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [this]() { return num_total_drivers(); });
+}
 
 StatusOr<DriverLimiter::TokenPtr> DriverLimiter::try_acquire(int num_drivers) {
     int prev_num_total_drivers = _num_total_drivers.fetch_add(num_drivers);
-    if (prev_num_total_drivers >= _max_num_drivers) {
+    if (prev_num_total_drivers + num_drivers > _max_num_drivers) {
         _num_total_drivers.fetch_sub(num_drivers);
         return Status::TooManyTasks(
-                strings::Substitute("BE has overloaded with $0 pipeline drivers", prev_num_total_drivers));
+                strings::Substitute("BE has overloaded with pipeline drivers [limit=$0] [used=$1] [request=$2]",
+                                    _max_num_drivers, prev_num_total_drivers, num_drivers));
     }
     return std::make_unique<DriverLimiter::Token>(_num_total_drivers, num_drivers);
 }
