@@ -56,6 +56,9 @@ public class DeltaMetastoreOperations {
         if (table == null) {
             return null;
         }
+        if (table.isDeltalakeTable()) {
+            return table;
+        }
         HiveTable hiveTable = (HiveTable) table;
         String path = hiveTable.getTableLocation();
         long createTime = table.getCreateTime();
