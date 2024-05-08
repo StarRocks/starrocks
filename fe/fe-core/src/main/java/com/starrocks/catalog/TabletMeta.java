@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -57,7 +58,7 @@ public class TabletMeta {
      */
     private Long toBeCleanedTimeMs = null;
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     public TabletMeta(long dbId, long tableId, long partitionId, long physicalPartitionId, long indexId, int schemaHash,
                       TStorageMedium storageMedium, boolean isLakeTablet) {
