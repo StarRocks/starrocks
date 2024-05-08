@@ -3238,7 +3238,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.systemVariable() != null) {
             VariableExpr variableDesc = (VariableExpr) visit(context.systemVariable());
             Expr expr = (Expr) visit(context.setExprOrDefault());
-            return new SystemVariable(variableDesc.getSetType(), variableDesc.getName(), expr, pos);
+            return new SystemVariable(variableDesc.getSetType() == null ? SetType.SESSION : variableDesc.getSetType(),
+                    variableDesc.getName(), expr, pos);
         } else {
             Expr expr = (Expr) visit(context.setExprOrDefault());
             String variable = ((Identifier) visit(context.identifier())).getValue();
