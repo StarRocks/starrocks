@@ -275,7 +275,9 @@ public class AstToStringBuilder {
                 if (setVar instanceof SystemVariable) {
                     SystemVariable systemVariable = (SystemVariable) setVar;
                     String setVarSql = "";
-                    setVarSql += systemVariable.getType().toString() + " ";
+                    if (systemVariable.getType() != null) {
+                        setVarSql += systemVariable.getType().toString() + " ";
+                    }
                     setVarSql += "`" + systemVariable.getVariable() + "`";
                     setVarSql += " = ";
                     setVarSql += visit(systemVariable.getResolvedExpression());
