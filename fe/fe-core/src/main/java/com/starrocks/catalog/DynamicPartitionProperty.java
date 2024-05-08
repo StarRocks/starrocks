@@ -171,26 +171,15 @@ public class DynamicPartitionProperty {
         return historyPartitionNum;
     }
 
-<<<<<<< HEAD
     public String getPropString() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
-        sb.append(ENABLE + ":" + enable + ",");
+        sb.append(ENABLE + ":" + enabled + ",");
         sb.append(TIME_UNIT + ":" + timeUnit + ",");
         sb.append(TIME_ZONE + ":" + tz.getID() + ",");
         sb.append(START + ":" + start + ",");
         sb.append(END + ":" + end + ",");
         sb.append(PREFIX + ":" + prefix + ",");
-=======
-    public Map<String, String> getProperties() {
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put(ENABLE, String.valueOf(enabled));
-        properties.put(TIME_UNIT, timeUnit);
-        properties.put(TIME_ZONE, tz.getID());
-        properties.put(START, String.valueOf(start));
-        properties.put(END, String.valueOf(end));
-        properties.put(PREFIX, prefix);
->>>>>>> d97d27382e ([BugFix] Fix dynamic partition table unexpectly stop scheduling (#45235))
         if (buckets > 0) {
             sb.append(BUCKETS + ":" + buckets + ",");
         }
