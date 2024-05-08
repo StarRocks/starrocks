@@ -51,6 +51,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
@@ -114,7 +115,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
     private final LoadJobScheduler loadJobScheduler;
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     private final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
             new WarehouseLoadInfoBuilder();

@@ -23,7 +23,12 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
+=======
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -53,7 +58,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 
 public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable {
@@ -74,7 +78,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     @SerializedName("defaultSVId")
     protected String defaultStorageVolumeId = "";
 
-    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    protected final ReadWriteLock rwLock = new FairReentrantReadWriteLock();
 
     // volume id to dbs
     @SerializedName("svToDbs")

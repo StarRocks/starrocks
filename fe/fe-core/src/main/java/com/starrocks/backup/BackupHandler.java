@@ -56,6 +56,12 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.FairReentrantLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -117,7 +123,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     protected Map<Long, AbstractJob> dbIdToBackupOrRestoreJob = Maps.newConcurrentMap();
 
     // this lock is used for handling one backup or restore request at a time.
-    private ReentrantLock seqlock = new ReentrantLock();
+    private ReentrantLock seqlock = new FairReentrantLock();
 
     private boolean isInit = false;
 

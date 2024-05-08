@@ -48,6 +48,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -94,7 +100,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         super("consistency checker");
 
         jobs = Maps.newHashMap();
-        jobsLock = new ReentrantReadWriteLock();
+        jobsLock = new FairReentrantReadWriteLock();
 
         if (!initWorkTime()) {
             LOG.error("failed to init time in ConsistencyChecker. exit");

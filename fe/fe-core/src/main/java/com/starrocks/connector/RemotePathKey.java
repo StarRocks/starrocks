@@ -13,7 +13,14 @@
 // limitations under the License.
 
 
+<<<<<<< HEAD
 package com.starrocks.connector;
+=======
+import com.starrocks.common.util.concurrent.FairReentrantLock;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
 import java.util.Objects;
 import java.util.Optional;
@@ -25,6 +32,21 @@ public class RemotePathKey {
     // The table location must exist in HudiTable
     private final Optional<String> hudiTableLocation;
 
+<<<<<<< HEAD
+=======
+    public static class HudiContext {
+        // ---- concurrent initialization -----
+        public AtomicBoolean init = new AtomicBoolean(false);
+        public ReentrantLock lock = new FairReentrantLock();
+        // ---- actual fields -----
+        public HoodieTableFileSystemView fsView = null;
+        public HoodieTimeline timeline = null;
+        public HoodieInstant lastInstant = null;
+    }
+
+    private HudiContext hudiContext;
+
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
     public static RemotePathKey of(String path, boolean isRecursive) {
         return new RemotePathKey(path, isRecursive, Optional.empty());
     }

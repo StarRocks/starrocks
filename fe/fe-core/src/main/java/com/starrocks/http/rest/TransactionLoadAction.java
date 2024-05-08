@@ -41,6 +41,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -59,6 +60,12 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.function.Function;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
@@ -87,7 +94,13 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<String, OpMetrics> opMetricsMap = new HashMap<>();
 
+<<<<<<< HEAD
     private Map<String, Long> txnNodeMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
+=======
+    private final ReadWriteLock txnNodeMapAccessLock = new FairReentrantReadWriteLock();
+    private final Map<String, Long> txnNodeMap = new LinkedHashMap<>(512, 0.75f, true) {
+        @Override
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
             return size() > (GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() +
                     GlobalStateMgr.getCurrentSystemInfo().getTotalComputeNodeNumber()) * 512;

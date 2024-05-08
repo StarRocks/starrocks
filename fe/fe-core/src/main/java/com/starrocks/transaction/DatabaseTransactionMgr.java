@@ -61,6 +61,14 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTableHelper;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -138,6 +146,39 @@ public class DatabaseTransactionMgr {
     private EditLog editLog;
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
+<<<<<<< HEAD
+=======
+
+    /*
+     * transactionLock is used to control the access to database transaction manager data
+     * Modifications to the following multiple data structures must be protected by this lock
+     * */
+    private final ReentrantReadWriteLock transactionLock = new FairReentrantReadWriteLock();
+
+    // count the number of running transactions of database, except for shapeless.the routine load txn
+    private int runningTxnNums = 0;
+
+    // count only the number of running routine load transactions of database
+    private int runningRoutineLoadTxnNums = 0;
+
+    /*
+     * idToRunningTransactionState: transactionId -> running TransactionState
+     * idToFinalStatusTransactionState: transactionId -> final status TransactionState
+     * finalStatusTransactionStateDeque: to store transactionStates with final status
+     * */
+    private final Map<Long, TransactionState> idToRunningTransactionState = Maps.newHashMap();
+    private final Map<Long, TransactionState> idToFinalStatusTransactionState = Maps.newHashMap();
+    private final ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
+
+    // store committed transactions' dependency relationships
+    private final TransactionGraph transactionGraph = new TransactionGraph();
+
+    /*
+     * `labelToTxnIds` is used for checking if label already used. map label to transaction id
+     * One label may correspond to multiple transactions, and only one is success.
+     */
+    private final Map<String, Set<Long>> labelToTxnIds = Maps.newHashMap();
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
     private long maxCommitTs = 0;
 
     public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {

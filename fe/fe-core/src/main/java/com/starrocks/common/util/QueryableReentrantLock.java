@@ -17,15 +17,14 @@
 
 package com.starrocks.common.util;
 
-import java.util.concurrent.locks.ReentrantLock;
-
 /*
  * This Lock is for exposing the getOwner() method,
  * which is a protected method of ReentrantLock
  */
-public class QueryableReentrantLock extends ReentrantLock {
+public class QueryableReentrantLock extends FairReentrantLock {
     private static final long serialVersionUID = 1L;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/util/QueryableReentrantLock.java
     public QueryableReentrantLock() {
         super();
     }
@@ -34,6 +33,8 @@ public class QueryableReentrantLock extends ReentrantLock {
         super(fair);
     }
 
+=======
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662)):fe/fe-core/src/main/java/com/starrocks/common/util/concurrent/QueryableReentrantLock.java
     @Override
     public Thread getOwner() {
         return super.getOwner();
