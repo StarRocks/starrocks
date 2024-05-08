@@ -30,6 +30,7 @@ import com.starrocks.lake.Utils;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -181,7 +182,8 @@ public class PartitionInfoView {
                         LakeTablet lakeTablet = lakeTabletOptional.get();
                         try {
                             WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                            long workerGroupId = Utils.selectWorkerGroupByWarehouseName(manager, Config.lake_background_warehouse)
+                            Warehouse warehouse = manager.getBackgroundWarehouse();
+                            long workerGroupId = Utils.selectWorkerGroupByWarehouseName(manager, warehouse.getName())
                                     .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
                                     .getShardInfo(lakeTablet.getShardId(), workerGroupId);

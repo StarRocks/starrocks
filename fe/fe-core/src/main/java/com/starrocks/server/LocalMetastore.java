@@ -1410,8 +1410,8 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSetForAll = Sets.newHashSet();
         HashMap<String, Set<Long>> partitionNameToTabletSet = Maps.newHashMap();
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getWarehouse(Config.lake_background_warehouse);
+            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = manager.getBackgroundWarehouse();
             long warehouseId = warehouse.getId();
             if (ConnectContext.get() != null) {
                 warehouseId = ConnectContext.get().getCurrentWarehouseId();

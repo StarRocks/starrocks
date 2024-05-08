@@ -239,4 +239,12 @@ public class WarehouseManager implements Writable {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
+
+    public Warehouse getCompactionWarehouse() {
+        return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    }
+
+    public Warehouse getBackgroundWarehouse() {
+        return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    }
 }

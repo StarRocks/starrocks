@@ -44,6 +44,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -191,7 +192,8 @@ public class LakeTable extends OlapTable {
         try {
             // Ignore the parameter replicationNum
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            long workerGroupId = Utils.selectWorkerGroupByWarehouseName(warehouseManager, Config.lake_background_warehouse)
+            Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+            long workerGroupId = Utils.selectWorkerGroupByWarehouseName(warehouseManager, warehouse.getName())
                     .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
                     workerGroupId);

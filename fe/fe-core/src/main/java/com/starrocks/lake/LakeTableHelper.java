@@ -38,6 +38,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -118,7 +119,8 @@ public class LakeTableHelper {
                     throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
                 }
                 WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                long workerGroupId = Utils.selectWorkerGroupByWarehouseName(warehouseManager, Config.lake_background_warehouse)
+                Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+                long workerGroupId = Utils.selectWorkerGroupByWarehouseName(warehouseManager, warehouse.getName())
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
                         workerGroupId);

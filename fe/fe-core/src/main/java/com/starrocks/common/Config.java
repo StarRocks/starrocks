@@ -2478,15 +2478,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
-    @ConfField(mutable = true)
-    public static String lake_compaction_warehouse = "default_warehouse";
-
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
-
-    @ConfField(mutable = true)
-    public static String lake_background_warehouse = "default_warehouse";
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
