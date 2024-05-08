@@ -208,13 +208,13 @@ public:
         return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
     }
     bool is_asc_hint() const override {
-        if (sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
             return _t_lake_scan_node.output_asc_hint;
         }
         return true;
     }
     std::optional<bool> partition_order_hint() const override {
-        if (sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.partition_order_hint) {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.partition_order_hint) {
             return _t_lake_scan_node.partition_order_hint;
         }
         return std::nullopt;
