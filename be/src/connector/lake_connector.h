@@ -200,6 +200,35 @@ public:
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
 
+<<<<<<< HEAD
+=======
+    // possiable physical distribution optimize of data source
+    bool sorted_by_keys_per_tablet() const override {
+        return _t_lake_scan_node.__isset.sorted_by_keys_per_tablet && _t_lake_scan_node.sorted_by_keys_per_tablet;
+    }
+    bool output_chunk_by_bucket() const override {
+        return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
+    }
+    bool is_asc_hint() const override {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
+            return _t_lake_scan_node.output_asc_hint;
+        }
+        return true;
+    }
+    std::optional<bool> partition_order_hint() const override {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.partition_order_hint) {
+            return _t_lake_scan_node.partition_order_hint;
+        }
+        return std::nullopt;
+    }
+
+    bool could_split() const { return _could_split; }
+
+    bool could_split_physically() const { return _could_split_physically; }
+
+    int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
+
+>>>>>>> 6e16398c92 ([BugFix] Fix order by desc limit regression (#45285))
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
