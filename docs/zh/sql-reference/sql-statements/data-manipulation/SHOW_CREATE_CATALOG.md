@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 查看某个 External Catalog 的创建语句。
 
-当前支持如下 External Catalog:
+当前支持查看如下 External Catalog:
 
 - [Hive Catalog](../../../data_source/catalog/hive_catalog.md)
 - [Iceberg Catalog](../../../data_source/catalog/iceberg_catalog.md)
