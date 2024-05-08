@@ -169,10 +169,10 @@ public class ExpressionConverter extends AstVisitor<Predicate, Void> {
         } else if (dataType instanceof StringType) {
             return Literal.ofString(((StringLiteral) literalExpr).getUnescapedValue());
         } else if (dataType instanceof DateType) {
-            return Literal.ofDate((int) (ChronoUnit.DAYS.between(LocalDate.EPOCH,
+            return Literal.ofDate((int) (ChronoUnit.DAYS.between(LocalDate.ofEpochDay(0),
                     LocalDate.parse(literalExpr.getStringValue()))));
         } else if (dataType instanceof TimestampType) {
-            return Literal.ofTimestamp(ChronoUnit.MICROS.between(LocalDate.EPOCH.atStartOfDay(),
+            return Literal.ofTimestamp(ChronoUnit.MICROS.between(LocalDate.ofEpochDay(0).atStartOfDay(),
                     LocalDateTime.parse(literalExpr.getStringValue(),
                             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
         } else {
