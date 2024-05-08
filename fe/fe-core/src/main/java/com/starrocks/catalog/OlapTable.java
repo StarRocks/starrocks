@@ -311,7 +311,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public boolean dynamicPartitionExists() {
         return tableProperty != null
                 && tableProperty.getDynamicPartitionProperty() != null
-                && tableProperty.getDynamicPartitionProperty().isExist();
+                && tableProperty.getDynamicPartitionProperty().isExists();
     }
 
     public void setBaseIndexId(long baseIndexId) {
@@ -2150,6 +2150,82 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void onCreate(Database db) {
+        super.onCreate(db);
+
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (colocateTableIndex.isColocateTable(getId())) {
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
+                    backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
+        }
+
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
+
+        if (Config.dynamic_partition_enable && getTableProperty().getDynamicPartitionProperty().isEnabled()) {
+            new Thread(() -> {
+                try {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                            .executeDynamicPartitionForTable(db.getId(), getId());
+                } catch (Exception ex) {
+                    LOG.warn("Some problems were encountered in the process of triggering " +
+                            "the execution of dynamic partitioning", ex);
+                }
+            }, "BackgroundDynamicPartitionThread").start();
+        }
+
+        if (isTemporaryTable()) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), name, id);
+            LOG.debug("add temporary table, name[{}] id[{}] session[{}]", name, id, sessionId);
+        }
+    }
+
+    private void analyzePartitionInfo() {
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        // currently, automatic partition only supports one expression
+        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+        // for Partition slot ref, the SlotDescriptor is not serialized, so should
+        // recover it here.
+        // the SlotDescriptor is used by toThrift, which influences the execution
+        // process.
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        // schema change should update slot id
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Column column = fullSchema.get(i);
+            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
+                        column.getType(), column.isAllowNull());
+                slotRefs.get(0).setDesc(slotDescriptor);
+            }
+        }
+    }
+
+    // Remove all Tablets belonging to this table from TabletInvertedIndex
+    public void removeTabletsFromInvertedIndex() {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        Collection<Partition> allPartitions = getAllPartitions();
+        for (Partition partition : allPartitions) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
+            }
+        }
+    }
+
+    // If you are modifying this function, please check if you need to modify LakeTable.onDrop also.
+    @Override
+>>>>>>> d97d27382e ([BugFix] Fix dynamic partition table unexpectly stop scheduling (#45235))
     public void onDrop(Database db, boolean force, boolean replay) {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.

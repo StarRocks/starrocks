@@ -1400,7 +1400,259 @@ public class ShowExecutor {
 
             db.readLock();
             try {
+<<<<<<< HEAD
                 Table table = db.getTable(showStmt.getTableName());
+=======
+                List<List<String>> infos = new ArrayList<>();
+                if (statement.getRole() != null) {
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getRole());
+                    if (granteeRole != null) {
+                        infos.add(granteeRole);
+                    }
+
+                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
+                            authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getRole());
+                    infos.addAll(privilegeToRowString(authorizationManager,
+                            new GrantRevokeClause(null, statement.getRole()), typeToPrivilegeEntryList));
+                } else {
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(statement.getUserIdent());
+                    if (granteeRole != null) {
+                        infos.add(granteeRole);
+                    }
+
+                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
+                            authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
+                    infos.addAll(privilegeToRowString(authorizationManager,
+                            new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
+                }
+                return new ShowResultSet(statement.getMetaData(), infos);
+            } catch (PrivilegeException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        private List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
+                                                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
+                throws PrivilegeException {
+            List<List<String>> infos = new ArrayList<>();
+            for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntry
+                    : typeToPrivilegeEntryList.entrySet()) {
+                for (PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+                    ObjectType objectType = typeToPrivilegeEntry.getKey();
+                    String catalogName;
+                    try {
+                        catalogName = getCatalogNameFromPEntry(objectType, privilegeEntry);
+                    } catch (MetaNotFoundException e) {
+                        // ignore this entry
+                        continue;
+                    }
+                    List<String> info = new ArrayList<>();
+                    info.add(userOrRoleName.getRoleName() != null ?
+                            userOrRoleName.getRoleName() : userOrRoleName.getUserIdentity().toString());
+                    info.add(catalogName);
+
+                    GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
+                            userOrRoleName, null, privilegeEntry.isWithGrantOption());
+
+                    grantPrivilegeStmt.setObjectType(objectType);
+                    ActionSet actionSet = privilegeEntry.getActionSet();
+                    List<PrivilegeType> privList = authorizationManager.analyzeActionSet(objectType, actionSet);
+                    grantPrivilegeStmt.setPrivilegeTypes(privList);
+                    grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
+
+                    try {
+                        info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+                        infos.add(info);
+                    } catch (com.starrocks.sql.common.MetaNotFoundException e) {
+                        //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
+                    }
+                }
+            }
+
+            return infos;
+        }
+
+        private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeEntry privilegeEntry)
+                throws MetaNotFoundException {
+            if (objectType.equals(ObjectType.CATALOG)) {
+                CatalogPEntryObject catalogPEntryObject =
+                        (CatalogPEntryObject) privilegeEntry.getObject();
+                if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                    return null;
+                } else {
+                    return getCatalogNameById(catalogPEntryObject.getId());
+                }
+            } else if (objectType.equals(ObjectType.DATABASE)) {
+                DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
+                if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                    return null;
+                }
+                return getCatalogNameById(dbPEntryObject.getCatalogId());
+            } else if (objectType.equals(ObjectType.TABLE)) {
+                TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
+                if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                    return null;
+                }
+                return getCatalogNameById(tablePEntryObject.getCatalogId());
+            } else {
+                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            }
+        }
+
+        private String getCatalogNameById(long catalogId) throws MetaNotFoundException {
+            if (CatalogMgr.isInternalCatalog(catalogId)) {
+                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            }
+
+            CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+            Optional<Catalog> catalogOptional = catalogMgr.getCatalogById(catalogId);
+            if (!catalogOptional.isPresent()) {
+                throw new MetaNotFoundException("cannot find catalog");
+            }
+
+            return catalogOptional.get().getName();
+        }
+
+        @Override
+        public ShowResultSet visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
+            List<List<String>> infos = new ArrayList<>();
+            AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+            List<String> roles = authorizationManager.getAllRoles();
+            roles.forEach(e -> infos.add(Lists.newArrayList(e,
+                    authorizationManager.isBuiltinRole(e) ? "true" : "false",
+                    authorizationManager.getRoleComment(e))));
+
+            return new ShowResultSet(statement.getMetaData(), infos);
+        }
+
+        @Override
+        public ShowResultSet visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
+            List<List<String>> results;
+            try {
+                results = MetadataViewer.getTabletStatus(statement);
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(statement.getMetaData(), results);
+        }
+
+        @Override
+        public ShowResultSet visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
+                                                                        ConnectContext context) {
+            List<List<String>> results;
+            try {
+                results = MetadataViewer.getTabletDistribution(statement);
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(statement.getMetaData(), results);
+        }
+
+        @Override
+        public ShowResultSet visitAdminShowConfigStatement(AdminShowConfigStmt statement, ConnectContext context) {
+            List<List<String>> results;
+            try {
+                PatternMatcher matcher = null;
+                if (statement.getPattern() != null) {
+                    matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                            CaseSensibility.CONFIG.getCaseSensibility());
+                }
+                results = ConfigBase.getConfigInfo(matcher);
+                // Sort all configs by config key.
+                results.sort(Comparator.comparing(o -> o.get(0)));
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(statement.getMetaData(), results);
+        }
+
+        @Override
+        public ShowResultSet visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
+            List<List<String>> results;
+            try {
+                results = GlobalStateMgr.getCurrentState().getSmallFileMgr().getInfo(statement.getDbName());
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(statement.getMetaData(), results);
+        }
+
+        @Override
+        public ShowResultSet visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+            Database db = context.getGlobalStateMgr().getDb(statement.getDb());
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    for (Table tbl : db.getTables()) {
+                        if (!(tbl instanceof OlapTable)) {
+                            continue;
+                        }
+
+                        DynamicPartitionScheduler dynamicPartitionScheduler =
+                                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler();
+                        OlapTable olapTable = (OlapTable) tbl;
+                        if (!olapTable.dynamicPartitionExists()) {
+                            dynamicPartitionScheduler.removeRuntimeInfo(olapTable.getName());
+                            continue;
+                        }
+
+                        try {
+                            Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
+                                    ConnectContext.get().getCurrentRoleIds(),
+                                    new TableName(db.getFullName(), olapTable.getName()));
+                        } catch (AccessDeniedException e) {
+                            continue;
+                        }
+
+                        DynamicPartitionProperty dynamicPartitionProperty =
+                                olapTable.getTableProperty().getDynamicPartitionProperty();
+                        String tableName = olapTable.getName();
+                        int replicationNum = dynamicPartitionProperty.getReplicationNum();
+                        replicationNum = (replicationNum == DynamicPartitionProperty.NOT_SET_REPLICATION_NUM) ?
+                                olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
+                        rows.add(Lists.newArrayList(
+                                tableName,
+                                String.valueOf(dynamicPartitionProperty.isEnabled()),
+                                dynamicPartitionProperty.getTimeUnit().toUpperCase(),
+                                String.valueOf(dynamicPartitionProperty.getStart()),
+                                String.valueOf(dynamicPartitionProperty.getEnd()),
+                                dynamicPartitionProperty.getPrefix(),
+                                String.valueOf(dynamicPartitionProperty.getBuckets()),
+                                String.valueOf(replicationNum),
+                                dynamicPartitionProperty.getStartOfInfo(),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.LAST_SCHEDULER_TIME),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DYNAMIC_PARTITION_STATE),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG),
+                                String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+                return new ShowResultSet(statement.getMetaData(), rows);
+            }
+
+            return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+        }
+
+        @Override
+        public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+            Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+            MetaUtils.checkDbNullAndReport(db, statement.getDbName());
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
+>>>>>>> d97d27382e ([BugFix] Fix dynamic partition table unexpectly stop scheduling (#45235))
                 if (table == null) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTableName());
                 }
