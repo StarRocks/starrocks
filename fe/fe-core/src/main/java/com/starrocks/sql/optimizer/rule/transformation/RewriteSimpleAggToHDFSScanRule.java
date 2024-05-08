@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -40,6 +39,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
@@ -47,6 +48,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
+    private static final Logger LOG = LogManager.getLogger(RewriteSimpleAggToHDFSScanRule.class);
+
     public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN_NO_PROJECT =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN, true);
     public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN_NO_PROJECT =
@@ -93,14 +96,20 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             int relationId = columnRefFactory.getRelationId(c.getId());
             if (tableRelationId == -1) {
                 tableRelationId = relationId;
-            } else {
-                Preconditions.checkState(tableRelationId == relationId, "Table relation id is different across columns");
+            } else if (tableRelationId != relationId) {
+                LOG.warn("Table relationIds are different in columns, tableRelationId = %d, relationId = %d",
+                        tableRelationId, relationId);
+                return null;
             }
             if (scanOperator.getPartitionColumns().contains(c.getName())) {
                 newScanColumnRefs.put(c, scanOperator.getColRefToColumnMetaMap().get(c));
             }
         }
-        Preconditions.checkState(tableRelationId != -1, "Can not find table relation id in scan operator");
+
+        if (tableRelationId == -1) {
+            LOG.warn("Can not find table relation id in scan operator");
+            return null;
+        }
 
         ColumnRefOperator placeholderColumn = null;
 
@@ -246,6 +255,10 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalScanOperator scanOperator = getScanOperator(input);
         OptExpression result = buildAggScanOperator(aggregationOperator, scanOperator, context);
+        if (result == null) {
+            // Fail to rewrite
+            return Lists.newArrayList(input);
+        }
         return Lists.newArrayList(result);
     }
 }
