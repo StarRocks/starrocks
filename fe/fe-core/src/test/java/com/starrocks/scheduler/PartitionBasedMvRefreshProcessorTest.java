@@ -51,7 +51,6 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -553,12 +552,14 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         taskRun.executeTaskRun();
 
         long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-        TaskRun run = tm.getTaskRunManager().getRunnableTaskRun(taskId);
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        TaskRun run = taskRunScheduler.getRunnableTaskRun(taskId);
         Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), run.getStatus().getPriority());
 
-        while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+        while (taskRunScheduler.getRunningTaskCount() > 0) {
             Thread.sleep(100);
         }
+        starRocksAssert.dropMaterializedView("mv_refresh_priority");
     }
 
     @Test
@@ -2774,5 +2775,3 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         starRocksAssert.dropMaterializedView(mvName);
     }
 }
-
-
