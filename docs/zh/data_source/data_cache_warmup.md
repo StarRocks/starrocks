@@ -30,7 +30,7 @@ StarRocks 提供 `CACHE SELECT` 语法来实现 Data Cache 预热。使用 `CACH
 
 ```sql
 CACHE SELECT <column_name> [, ...]
-FROM [<catalog_name>.]<db_name>.<table_name> [WHERE <boolean_expression>]
+FROM [<catalog_name>.][<db_name>.]<table_name> [WHERE <boolean_expression>]
 [PROPERTIES("verbose"="true")]
 ```
 

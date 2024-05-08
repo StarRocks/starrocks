@@ -21,14 +21,14 @@ Syntax of CACHE SELECT:
 
 ```sql
 CACHE SELECT <column_name> [, ...]
-FROM [<catalog_name>.]<db_name>.<table_name> [WHERE <boolean_expression>]
+FROM [<catalog_name>.][<db_name>.]<table_name> [WHERE <boolean_expression>]
 [PROPERTIES("verbose"="true")]
 ```
 
 Parameters:
 
 - `column_name`: The columns to fetch. You can use `*` to fetch all columns in the external table.
-- `catalog_name`: The name of the external catalog (required only when querying external tables in data lakes). If you have switched to the external catalog using SET CATALOG, it can be left unspecified.
+- `catalog_name`: The name of the external catalog, required only when querying external tables in data lakes. If you have switched to the external catalog using SET CATALOG, it can be left unspecified.
 - `db_name`: The name of the database. If you have switched to that database, it can be left unspecified.
 - `table_name`: The name of the table from which to fetch data.
 - `boolean_expression`: The filter condition.
@@ -60,7 +60,7 @@ Return fields:
 
 ### Warm up specified columns with filter conditions
 
-You can specify columns and predicates to perform more fine-grained warmup, which helps reduce the amount to data to warm up, reducing disk I/O and CPU consumption.
+You can specify columns and predicates to achieve fine-grained warmup, which helps reduce the amount to data to warm up, reducing disk I/O and CPU consumption.
 
 ```plaintext
 mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipdate='1994-10-28';
@@ -102,7 +102,7 @@ mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="t
 
 In verbose mode,  an extra metric will be returned:
 
-- `AVG_READ_CACHE_TIME`: the average lookup time of each node when data cache is hit.
+- `AVG_READ_CACHE_TIME`: the average time for each node to read data when data cache is hit.
 
 ## Periodic scheduling of CACHE SELECT tasks
 
