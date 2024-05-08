@@ -148,6 +148,16 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.version = _version;
     }
 
+<<<<<<< HEAD
+=======
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
+
+    rs_opts.rowid_range_option = params.rowid_range_option;
+    rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+
+>>>>>>> 6e16398c92 ([BugFix] Fix order by desc limit regression (#45285))
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
         ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
@@ -295,6 +305,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
+        if (!_is_asc_hint) {
+            std::reverse(seg_iters.begin(), seg_iters.end());
+        }
         //             UnionIterator
         //                   |
         //       +-----------+-----------+
