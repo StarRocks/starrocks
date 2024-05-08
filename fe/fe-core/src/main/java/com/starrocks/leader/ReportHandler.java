@@ -212,9 +212,16 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             beId = backend.getId();
         } else {
             ComputeNode computeNode = null;
+<<<<<<< HEAD
             // Compute node only reports resource usage.
             if (request.isSetResource_usage()) {
                 computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
+=======
+            // Compute node only reports resource usage or datacache metrics or tasks.
+            if (request.isSetResource_usage() || request.isSetDatacache_metrics() || request.isSetTasks()) {
+                computeNode =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeWithBePort(host, bePort);
+>>>>>>> 5b212bbba5 ([BugFix] Fix AgentTask not finished when node as compute node (#44611))
             }
 
             if (computeNode != null) {

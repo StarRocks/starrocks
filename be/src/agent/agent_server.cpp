@@ -128,7 +128,7 @@ private:
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
     std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
 
-    // Compute node only need _report_resource_usage_workers.
+    // Compute node only need _report_resource_usage_workers and _report_task_workers
     const bool _is_compute_node;
 };
 
@@ -253,13 +253,18 @@ void AgentServer::Impl::init_or_die() {
                               config::push_worker_count_high_priority + config::push_worker_count_normal_priority)
         CREATE_AND_START_POOL(_delete_workers, DeleteTaskWorkerPool,
                               config::delete_worker_count_normal_priority + config::delete_worker_count_high_priority)
-        CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_disk_state_workers, ReportDiskStateTaskWorkerPool, REPORT_DISK_STATE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_tablet_workers, ReportOlapTableTaskWorkerPool, REPORT_OLAP_TABLE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_workgroup_workers, ReportWorkgroupTaskWorkerPool, REPORT_WORKGROUP_WORKER_COUNT)
     }
     CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
                           REPORT_RESOURCE_USAGE_WORKER_COUNT)
+<<<<<<< HEAD
+=======
+    CREATE_AND_START_POOL(_report_datacache_metrics_workers, ReportDataCacheMetricsTaskWorkerPool,
+                          REPORT_DATACACHE_METRICS_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
+>>>>>>> 5b212bbba5 ([BugFix] Fix AgentTask not finished when node as compute node (#44611))
 #undef CREATE_AND_START_POOL
 }
 
@@ -293,12 +298,16 @@ void AgentServer::Impl::stop() {
         // Both PUSH and REALTIME_PUSH type use _push_workers
         STOP_POOL(PUSH, _push_workers);
         STOP_POOL(DELETE, _delete_workers);
-        STOP_POOL(REPORT_TASK, _report_task_workers);
         STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
         STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
         STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
+<<<<<<< HEAD
+=======
+    STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
+    STOP_POOL(REPORT_TASK, _report_task_workers);
+>>>>>>> 5b212bbba5 ([BugFix] Fix AgentTask not finished when node as compute node (#44611))
 #undef STOP_POOL
 }
 
