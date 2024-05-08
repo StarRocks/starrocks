@@ -70,7 +70,7 @@ public class SessionAction extends WebBaseAction {
     private void appendSessionInfo(StringBuilder buffer) {
         buffer.append("<h2>Session Info</h2>");
 
-        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler().listConnection("root");
+        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler().listConnection("root", null);
         List<List<String>> rowSet = Lists.newArrayList();
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
