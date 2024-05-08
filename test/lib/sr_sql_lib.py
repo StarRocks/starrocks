@@ -1684,6 +1684,45 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
+<<<<<<< HEAD
+=======
+    def assert_explain_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_explain_not_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
+
+    def assert_explain_costs_contains(self, query, *expects):
+        """
+        assert explain costs result contains expect string
+        """
+        sql = "explain costs %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_trace_values_contains(self, query, *expects):
+        """
+        assert trace values result contains expect string
+        """
+        sql = "trace values %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+>>>>>>> 78f4392356 ([BugFix] fix getting timstamp type partition null value when iceberg exists partition evolution (#45239))
     def assert_prepare_execute(self, db, query, params=()):
         conn = mysql.connector.connect(
             host=self.mysql_host,
