@@ -413,19 +413,9 @@ public class DynamicPartitionUtil {
         }
     }
 
-<<<<<<< HEAD
-    public static boolean isDynamicPartitionTable(Table table) {
-        if (!(table instanceof OlapTable) ||
-                !(((OlapTable) table).getPartitionInfo().getType().equals(PartitionType.RANGE))) {
-            return false;
-        }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) ((OlapTable) table).getPartitionInfo();
-        TableProperty tableProperty = ((OlapTable) table).getTableProperty();
-        if (tableProperty == null || !tableProperty.getDynamicPartitionProperty().isExist()) {
-=======
+
     private static boolean isTableSchedulable(Table table, boolean checkingDynamicPartitionTable) {
         if (!(table instanceof OlapTable)) {
->>>>>>> d97d27382e ([BugFix] Fix dynamic partition table unexpectly stop scheduling (#45235))
             return false;
         }
 
@@ -438,7 +428,7 @@ public class DynamicPartitionUtil {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         PartitionType partitionType = partitionInfo.getType();
         int partitionColumnSize = -1;
-        boolean result = partitionInfo instanceof RangePartitionInfo;
+        boolean result = partitionType.equals(PartitionType.RANGE);
         if (result) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             partitionColumnSize = rangePartitionInfo.getPartitionColumns().size();
