@@ -55,10 +55,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
+import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -317,6 +318,17 @@ public class QueryAnalyzer {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+                    if (tableRelation.isNeedRewrittenByPolicy()) {
+                        viewRelation.setNeedRewrittenByPolicy(true);
+
+                        new AstTraverser<Void, Void>() {
+                            @Override
+                            public Void visitRelation(Relation relation, Void context) {
+                                relation.setNeedRewrittenByPolicy(true);
+                                return null;
+                            }
+                        }.visit(queryStatement);
+                    }
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
@@ -347,7 +359,7 @@ public class QueryAnalyzer {
                     }
                 }
 
-                if (r.isPolicyRewritten()) {
+                if (!r.isNeedRewrittenByPolicy()) {
                     return r;
                 }
                 assert tableName != null;
@@ -355,7 +367,7 @@ public class QueryAnalyzer {
                 if (policyRewriteQuery == null) {
                     return r;
                 } else {
-                    r.setPolicyRewritten(true);
+                    r.setNeedRewrittenByPolicy(false);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
 
                     // If an alias exists, rewrite the alias into subquery to ensure

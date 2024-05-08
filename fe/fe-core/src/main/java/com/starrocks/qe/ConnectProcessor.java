@@ -69,9 +69,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -419,6 +421,14 @@ public class ConnectProcessor {
 
                 ctx.setIsLastStmt(i == stmts.size() - 1);
 
+                //Build View SQL without Policy Rewrite
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitRelation(Relation relation, Void context) {
+                        relation.setNeedRewrittenByPolicy(true);
+                        return null;
+                    }
+                }.visit(parsedStmt);
                 executor.execute();
 
                 // do not execute following stmt when current stmt failed, this is consistent with mysql server
