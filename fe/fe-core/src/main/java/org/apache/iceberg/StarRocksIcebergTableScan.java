@@ -78,6 +78,7 @@ public class StarRocksIcebergTableScan
     private final boolean onlyReadCache;
     private final int localParallelism;
     private final long localPlanningMaxSlotSize;
+    private boolean isRemotePlanFiles;
 
     public static TableScanContext newTableScanContext(Table table) {
         if (table instanceof BaseTable) {
@@ -135,6 +136,7 @@ public class StarRocksIcebergTableScan
     private CloseableIterable<FileScanTask> planFileTasksRemotely(
             List<ManifestFile> dataManifests, List<ManifestFile> deleteManifests) {
         LOG.info("Planning file tasks remotely for table {}.{}", dbName, tableName);
+        this.isRemotePlanFiles = true;
 
         long liveFilesCount = liveFilesCount(dataManifests);
         scanMetrics().scannedDataManifests().increment(dataManifests.size());
@@ -442,5 +444,9 @@ public class StarRocksIcebergTableScan
 
     private int liveFilesCount(ManifestFile manifest) {
         return manifest.existingFilesCount() + manifest.addedFilesCount();
+    }
+
+    public boolean isRemotePlanFiles() {
+        return isRemotePlanFiles;
     }
 }
