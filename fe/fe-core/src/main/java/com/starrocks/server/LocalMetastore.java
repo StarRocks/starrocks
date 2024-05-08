@@ -1410,9 +1410,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSetForAll = Sets.newHashSet();
         HashMap<String, Set<Long>> partitionNameToTabletSet = Maps.newHashMap();
         try {
-            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = manager.getBackgroundWarehouse();
-            long warehouseId = warehouse.getId();
+            long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
             if (ConnectContext.get() != null) {
                 warehouseId = ConnectContext.get().getCurrentWarehouseId();
             }

@@ -235,15 +235,4 @@ public class Utils {
 
         return Optional.of(node.getWarehouseId());
     }
-
-    public static Optional<Long> selectWorkerGroupByWarehouseName(WarehouseManager manager, String warehouseName) {
-        Warehouse warehouse = manager.getWarehouse(warehouseName);
-        if (warehouse == null)  {
-            LOG.warn("failed to get warehouse by name {}", warehouseName);
-            return Optional.empty();
-        }
-
-        long warehouseId = warehouse.getId();
-        return selectWorkerGroupByWarehouseId(manager, warehouseId);
-    }
 }

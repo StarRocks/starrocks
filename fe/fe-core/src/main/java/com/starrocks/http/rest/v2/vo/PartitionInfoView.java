@@ -23,14 +23,10 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.Utils;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -181,12 +177,8 @@ public class PartitionInfoView {
                     if (lakeTabletOptional.isPresent()) {
                         LakeTablet lakeTablet = lakeTabletOptional.get();
                         try {
-                            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                            Warehouse warehouse = manager.getBackgroundWarehouse();
-                            long workerGroupId = Utils.selectWorkerGroupByWarehouseName(manager, warehouse.getName())
-                                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                                    .getShardInfo(lakeTablet.getShardId(), workerGroupId);
+                                    .getShardInfo(lakeTablet.getShardId(), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                             pvo.setStoragePath(shardInfo.getFilePath().getFullPath());
                         } catch (StarClientException e) {
                             throw new IllegalStateException(e.getMessage(), e);

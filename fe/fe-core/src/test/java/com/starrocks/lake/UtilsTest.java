@@ -84,22 +84,9 @@ public class UtilsTest {
         Assert.assertFalse(workerGroupId.isEmpty());
         Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
 
-        workerGroupId = Utils.selectWorkerGroupByWarehouseName(manager, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        Assert.assertFalse(workerGroupId.isEmpty());
-        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
-
         try {
             workerGroupId = Optional.ofNullable(null);
             workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, 1111L);
-            Assert.assertEquals(1, 2);   // can not be here
-        } catch (ErrorReportException e) {
-            Assert.assertTrue(workerGroupId.isEmpty());
-            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
-        }
-
-        try {
-            workerGroupId = Optional.ofNullable(null);
-            workerGroupId = Utils.selectWorkerGroupByWarehouseName(manager, "no_such_warehouse");
             Assert.assertEquals(1, 2);   // can not be here
         } catch (ErrorReportException e) {
             Assert.assertTrue(workerGroupId.isEmpty());
