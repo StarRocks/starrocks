@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 public class QueryableReentrantLockTest {
 
-    private QueryableReentrantLock lock = new QueryableReentrantLock(true);
+    private QueryableReentrantLock lock = new QueryableReentrantLock();
 
     @Test
     public void test() throws InterruptedException {

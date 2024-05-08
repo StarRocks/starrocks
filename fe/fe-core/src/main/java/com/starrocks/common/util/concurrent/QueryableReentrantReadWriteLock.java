@@ -23,21 +23,21 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+<<<<<<< HEAD
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+=======
+import java.util.stream.Collectors;
+>>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
 /*
  * This Lock is for exposing the getOwner() method,
  * which is a protected method of ReentrantReadWriteLock
  */
-public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
+public class QueryableReentrantReadWriteLock extends FairReentrantReadWriteLock {
     // threadId -> lockTime
     Map<Long, Long> sharedLockThreads = new ConcurrentHashMap<>();
 
     AtomicLong exclusiveLockTime = new AtomicLong(-1L);
-
-    public QueryableReentrantReadWriteLock(boolean fair) {
-        super(fair);
-    }
 
     public void sharedLock() {
         this.readLock().lock();
