@@ -119,16 +119,20 @@ Status DataTranster::transfer(workgroup::YieldContext& yield_ctx, RuntimeState* 
                               const SpillOutputDataStreamPtr& output, const InputStreamPtr& input_stream) {
     // read data from input stream and append to output stream
     bool need_aligned = state->spill_enable_direct_io();
+    auto task_context = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     SerdeContext read_ctx;
     while (true) {
         SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
         if (!input_stream->is_ready()) {
             workgroup::YieldContext restore_yield_ctx;
-            restore_yield_ctx.task_context_data = std::make_shared<SpillIOTaskContext>();
+            auto restore_task_context = std::make_shared<SpillIOTaskContext>();
+            restore_task_context->use_local_io_executor = task_context->use_local_io_executor;
+            restore_yield_ctx.task_context_data = restore_task_context;
             YieldableRestoreTask task(input_stream);
             auto st = task.do_read(restore_yield_ctx, read_ctx);
             RETURN_IF(!st.is_ok_or_eof(), st);
             yield_ctx.need_yield = restore_yield_ctx.need_yield;
+            task_context->use_local_io_executor = restore_task_context->use_local_io_executor;
             RETURN_IF_YIELD(yield_ctx.need_yield);
         }
         DCHECK(input_stream->is_ready());

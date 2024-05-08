@@ -193,7 +193,6 @@ private:
 
     bool _need_compact_block() const;
 
-    size_t _max_block_group_size{};
     BlockGroupSet _block_group_set;
     MemTablePtr _mem_table;
     std::queue<MemTablePtr> _mem_table_pool;
