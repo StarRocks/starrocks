@@ -377,7 +377,7 @@ public class OlapTable extends Table {
     public boolean dynamicPartitionExists() {
         return tableProperty != null
                 && tableProperty.getDynamicPartitionProperty() != null
-                && tableProperty.getDynamicPartitionProperty().isExist();
+                && tableProperty.getDynamicPartitionProperty().isExists();
     }
 
     public void setBaseIndexId(long baseIndexId) {
@@ -2411,6 +2411,44 @@ public class OlapTable extends Table {
     @Override
     public void onCreate() {
         analyzePartitionInfo();
+<<<<<<< HEAD
+=======
+        tryToAssignIndexId();
+    }
+
+    @Override
+    public void onCreate(Database db) {
+        super.onCreate(db);
+
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (colocateTableIndex.isColocateTable(getId())) {
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
+                    backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
+        }
+
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
+
+        if (Config.dynamic_partition_enable && getTableProperty().getDynamicPartitionProperty().isEnabled()) {
+            new Thread(() -> {
+                try {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                            .executeDynamicPartitionForTable(db.getId(), getId());
+                } catch (Exception ex) {
+                    LOG.warn("Some problems were encountered in the process of triggering " +
+                            "the execution of dynamic partitioning", ex);
+                }
+            }, "BackgroundDynamicPartitionThread").start();
+        }
+
+        if (isTemporaryTable()) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), name, id);
+            LOG.debug("add temporary table, name[{}] id[{}] session[{}]", name, id, sessionId);
+        }
+>>>>>>> d97d27382e ([BugFix] Fix dynamic partition table unexpectly stop scheduling (#45235))
     }
 
     private void analyzePartitionInfo() {
