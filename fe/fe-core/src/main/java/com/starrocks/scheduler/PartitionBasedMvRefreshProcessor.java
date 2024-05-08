@@ -230,12 +230,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private Set<String> checkMvToRefreshedPartitions(TaskRunContext context) throws AnalysisException {
-        Set<String> mvToRefreshedPartitions = null;
         if (!database.tryReadLock(MV_TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock database: " + database.getFullName());
         }
         try {
-            Set<String> mvPotentialPartitionNames = getPartitionsToRefreshForMaterializedView(context.getProperties());
+            Set<String> mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(context.getProperties());
             if (mvToRefreshedPartitions.isEmpty()) {
                 LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                 return mvToRefreshedPartitions;
@@ -243,10 +242,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
             filterPartitionByRefreshNumber(mvToRefreshedPartitions, materializedView);
             LOG.info("materialized view partitions to refresh:{}", mvToRefreshedPartitions);
+            return mvToRefreshedPartitions;
         } finally {
             database.readUnlock();
         }
-        return mvToRefreshedPartitions;
     }
 
     private RefreshJobStatus doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity) {
