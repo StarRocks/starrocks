@@ -1010,24 +1010,26 @@ public class DatabaseTransactionMgr {
             transactionState.writeLock();
             try {
                 boolean hasError = false;
+                Set<Long> droppedTableIds = Sets.newHashSet();
                 for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
                     long tableId = tableCommitInfo.getTableId();
                     OlapTable table = (OlapTable) db.getTable(tableId);
                     // table maybe dropped between commit and publish, ignore this error
                     if (table == null) {
-                        transactionState.removeTable(tableId);
+                        droppedTableIds.add(tableId);
                         LOG.warn("table {} is dropped, skip version check and remove it from transaction state {}",
                                 tableId,
                                 transactionState);
                         continue;
                     }
+                    Set<Long> droppedPartitionIds = Sets.newHashSet();
                     PartitionInfo partitionInfo = table.getPartitionInfo();
                     for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                         long partitionId = partitionCommitInfo.getPartitionId();
                         PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                         // partition maybe dropped between commit and publish version, ignore this error
                         if (partition == null) {
-                            tableCommitInfo.removePartition(partitionId);
+                            droppedPartitionIds.add(partitionId);
                             LOG.warn("partition {} is dropped, skip version check and remove it from transaction state {}",
                                     partitionId,
                                     transactionState);
@@ -1129,6 +1131,12 @@ public class DatabaseTransactionMgr {
                             }
                         }
                     }
+                    for (Long partitionId : droppedPartitionIds) {
+                        tableCommitInfo.removePartition(partitionId);
+                    }
+                }
+                for (Long tableId : droppedTableIds) {
+                    transactionState.removeTable(tableId);
                 }
                 if (hasError) {
                     return;
