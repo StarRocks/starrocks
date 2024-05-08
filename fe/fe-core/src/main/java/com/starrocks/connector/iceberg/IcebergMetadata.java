@@ -85,6 +85,7 @@ import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -691,8 +692,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         Optional<ScanReport> metrics = metricsReporter.getReporter(
                 catalogName, dbName, tableName, snapshotId, icebergPredicate, nativeTbl);
 
+        Tracers.Module module = Tracers.Module.EXTERNAL;
         if (metrics.isPresent()) {
-            Tracers.Module module = Tracers.Module.EXTERNAL;
             String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "["  + icebergPredicate + "]";
             String value = metrics.get().scanMetrics().toString();
             if (tracers == null) {
@@ -700,6 +701,17 @@ public class IcebergMetadata implements ConnectorMetadata {
             } else {
                 synchronized (this) {
                     Tracers.record(tracers, module, name, value);
+                }
+            }
+        }
+
+        if (((StarRocksIcebergTableScan) scan).isRemotePlanFiles()) {
+            String name = "ICEBERG.REMOTE_PLAN." + dbName + "." + tableName + "["  + icebergPredicate + "]";
+            if (tracers == null) {
+                Tracers.record(module, name, "true");
+            } else {
+                synchronized (this) {
+                    Tracers.record(tracers, module, name, "true");
                 }
             }
         }
