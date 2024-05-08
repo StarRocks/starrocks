@@ -872,6 +872,7 @@ public class DatabaseTransactionMgr {
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
         db.writeLock();
         try {
+<<<<<<< HEAD
             boolean hasError = false;
             for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
                 long tableId = tableCommitInfo.getTableId();
@@ -906,6 +907,53 @@ public class DatabaseTransactionMgr {
                                     transactionId,
                                     partitionCommitInfo.getVersion(),
                                     partition.getVisibleVersion());
+=======
+            transactionState.writeLock();
+            try {
+                boolean hasError = false;
+                Set<Long> droppedTableIds = Sets.newHashSet();
+                for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
+                    long tableId = tableCommitInfo.getTableId();
+                    OlapTable table = (OlapTable) db.getTable(tableId);
+                    // table maybe dropped between commit and publish, ignore this error
+                    if (table == null) {
+                        droppedTableIds.add(tableId);
+                        LOG.warn("table {} is dropped, skip version check and remove it from transaction state {}",
+                                tableId,
+                                transactionState);
+                        continue;
+                    }
+                    Set<Long> droppedPartitionIds = Sets.newHashSet();
+                    PartitionInfo partitionInfo = table.getPartitionInfo();
+                    for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                        long partitionId = partitionCommitInfo.getPartitionId();
+                        PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                        // partition maybe dropped between commit and publish version, ignore this error
+                        if (partition == null) {
+                            droppedPartitionIds.add(partitionId);
+                            LOG.warn("partition {} is dropped, skip version check and remove it from transaction state {}",
+                                    partitionId,
+                                    transactionState);
+                            continue;
+                        }
+                        // The version of a replication transaction may not continuously
+                        if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                                partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                            // prevent excessive logging
+                            if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
+                                LOG.debug("transactionId {} partition commitInfo version {} is not equal with " +
+                                                "partition visible version {} plus one, need wait",
+                                        transactionId,
+                                        partitionCommitInfo.getVersion(),
+                                        partition.getVisibleVersion());
+                            }
+                            String errMsg =
+                                    String.format("wait for publishing partition %d version %d. self version: %d. table %d",
+                                            partitionId, partition.getVisibleVersion() + 1,
+                                            partitionCommitInfo.getVersion(), tableId);
+                            transactionState.setErrorMsg(errMsg);
+                            return;
+>>>>>>> 8b151cbd78 ([BugFix] Fix ConcurrentModificationException when drop table or partition during publish (#45143))
                         }
                         String errMsg =
                                 String.format("wait for publishing partition %d version %d. self version: %d. table %d",
@@ -991,6 +1039,12 @@ public class DatabaseTransactionMgr {
                             }
                         }
                     }
+                    for (Long partitionId : droppedPartitionIds) {
+                        tableCommitInfo.removePartition(partitionId);
+                    }
+                }
+                for (Long tableId : droppedTableIds) {
+                    transactionState.removeTable(tableId);
                 }
             }
             if (hasError) {
