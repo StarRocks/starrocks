@@ -53,6 +53,7 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -62,6 +63,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
@@ -574,12 +576,20 @@ public class SparkLoadPendingTask extends LoadTask {
         Map<String, String> hiveTableProperties = Maps.newHashMap();
         if (fileGroup.isLoadFromTable()) {
             long srcTableId = fileGroup.getSrcTableId();
-            HiveTable srcHiveTable = (HiveTable) db.getTable(srcTableId);
-            if (srcHiveTable == null) {
+            Table currentTable = db.getTable(srcTableId);
+            if (currentTable == null) {
                 throw new LoadException("table does not exist. id: " + srcTableId);
             }
-            hiveDbTableName = srcHiveTable.getHiveDbTable();
-            hiveTableProperties.putAll(srcHiveTable.getProperties());
+            if (currentTable instanceof HiveTable) {
+                HiveTable srcHiveTable = (HiveTable) currentTable;
+                hiveDbTableName = srcHiveTable.getHiveDbTable();
+                hiveTableProperties.putAll(srcHiveTable.getProperties());
+            }
+            if (currentTable instanceof HudiTable) {
+                HudiTable srcHudiTable = (HudiTable) currentTable;
+                hiveDbTableName = srcHudiTable.getDbName() + "." + srcHudiTable.getTableName();
+                hiveTableProperties.putAll(srcHudiTable.getProperties());
+            }
         }
 
         // check hll and bitmap func
