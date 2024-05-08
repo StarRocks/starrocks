@@ -942,7 +942,6 @@ public class DatabaseTransactionMgr {
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
         db.writeLock();
         try {
-<<<<<<< HEAD
             boolean hasError = false;
             Set<Long> droppedTableIds = Sets.newHashSet();
             for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
