@@ -575,40 +575,71 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return true;
     }
 
+    private void deleteTxnLogIgnoreError(ComputeNode node, DeleteTxnLogRequest request) {
+        try {
+            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            // just ignore the response, for we don't care the result of delete txn log
+            // and vacuum will clan the txn log finally if it failed.
+            lakeService.deleteTxnLog(request);
+        } catch (Exception e) {
+            LOG.warn("delete txn log error: " + e.getMessage());
+        }
+    }
+
+    private Runnable getDeleteTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            // For each partition, send a delete request to all the tablets in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
+                for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
+                    ComputeNode node = entryItem.getKey();
+                    DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                    request.tabletIds = new ArrayList<>(entryItem.getValue());
+                    request.txnIds = txnIds;
+                    deleteTxnLogIgnoreError(node, request);
+                }
+            }
+        };
+    }
+
+    private Runnable getDeleteCombinedTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            List<TxnInfoPB> txnInfoPBList = new ArrayList<>();
+            for (Long txnId : txnIds) {
+                TxnInfoPB txnInfoPB = new TxnInfoPB();
+                txnInfoPB.txnId = txnId;
+                txnInfoPB.combinedTxnLog = true;
+                txnInfoPBList.add(txnInfoPB);
+            }
+            // For each partition, send a delete request to any tablet in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map.Entry<ComputeNode, Set<Long>> entryItem = entry.getValue().entrySet().iterator().next();
+                ComputeNode node = entryItem.getKey();
+                DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                request.tabletIds = new ArrayList<>(entryItem.getValue());
+                request.txnInfos = txnInfoPBList;
+                deleteTxnLogIgnoreError(node, request);
+            }
+        };
+    }
+
     private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch) {
         try {
-            // TODO: do not send abortTxn() requests for transactions with combined txn log.
-            List<Long> txnIds = txnStateBatch.getTxnIds();
-            // submit may throw RejectedExecutionException if the task cannot be scheduled for execution
-            getDeleteTxnLogExecutor().submit(() -> {
-                txnStateBatch.getPartitionToTablets().entrySet().stream().forEach(entry -> {
-                    long partitionId = entry.getKey();
-                    Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
-
-                    for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
-                        // check whether the node is still alive
-                        ComputeNode node = entryItem.getKey();
-                        if (!node.isAlive()) {
-                            LOG.warn("Backend or computeNode {} been dropped or not alive " +
-                                            "while building publish version request",
-                                    entryItem.getKey());
-                            continue;
-                        }
-
-                        DeleteTxnLogRequest request = new DeleteTxnLogRequest();
-                        request.tabletIds = new ArrayList<>(entryItem.getValue());
-                        request.txnIds = txnIds;
-                        try {
-                            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
-                            // just ignore the response, for we don't care the result of delete txn log
-                            // and vacuum will clan the txn log finally if it failed.
-                            lakeService.deleteTxnLog(request);
-                        } catch (Exception e) {
-                            LOG.warn("delete txn log error: " + e.getMessage());
-                        }
-                    }
-                });
-            });
+            List<Long> txnIdsWithNormalTxnLog = new ArrayList<>();
+            List<Long> txnIdsWithCombinedTxnLog = new ArrayList<>();
+            for (TransactionState state : txnStateBatch.getTransactionStates()) {
+                if (state.isUseCombinedTxnLog()) {
+                    txnIdsWithCombinedTxnLog.add(state.getTransactionId());
+                } else {
+                    txnIdsWithNormalTxnLog.add(state.getTransactionId());
+                }
+            }
+            if (!txnIdsWithNormalTxnLog.isEmpty()) {
+                getDeleteTxnLogExecutor().submit(getDeleteTxnLogTask(txnStateBatch, txnIdsWithNormalTxnLog));
+            }
+            if (!txnIdsWithCombinedTxnLog.isEmpty()) {
+                getDeleteTxnLogExecutor().submit(getDeleteCombinedTxnLogTask(txnStateBatch, txnIdsWithCombinedTxnLog));
+            }
         } catch (Exception e) {
             LOG.warn("delete txn log error: " + e.getMessage());
         }

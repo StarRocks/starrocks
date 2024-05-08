@@ -197,11 +197,13 @@ public class LakeTableHelper {
     }
 
     public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
-        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && hasSingleOlapTableSink(sourceType);
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && isLoadingTransaction(sourceType);
     }
 
-    private static boolean hasSingleOlapTableSink(TransactionState.LoadJobSourceType sourceType) {
+    private static boolean isLoadingTransaction(TransactionState.LoadJobSourceType sourceType) {
         return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
-                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK;
+                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
+                sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 }

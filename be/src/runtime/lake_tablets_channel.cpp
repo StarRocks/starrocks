@@ -17,8 +17,6 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
-#include <chrono>
-#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
@@ -120,9 +118,12 @@ private:
             info->set_schema_hash(0); // required field
         }
 
-        void add_txn_log(const TxnLogPtr& txn_log) {
-            std::lock_guard l(_mtx);
-            _response->mutable_lake_tablet_data()->add_txn_logs()->CopyFrom(*txn_log);
+        // NOT thread-safe
+        void add_txn_logs(const std::vector<TxnLogPtr>& logs) {
+            _response->mutable_lake_tablet_data()->mutable_txn_logs()->Reserve(logs.size());
+            for (auto& log : logs) {
+                _response->mutable_lake_tablet_data()->add_txn_logs()->CopyFrom(*log);
+            }
         }
 
     private:
@@ -136,18 +137,59 @@ private:
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
 
+    class TxnLogCollector {
+    public:
+        void add(TxnLogPtr log) {
+            std::lock_guard l(_mtx);
+            _logs.emplace_back(std::move(log));
+        }
+
+        void update_status(const Status& st) {
+            std::lock_guard l(_mtx);
+            _st.update(st);
+        }
+
+        Status status() const {
+            std::lock_guard l(_mtx);
+            return _st;
+        }
+
+        std::vector<TxnLogPtr> logs() {
+            std::lock_guard l(_mtx);
+            return _logs;
+        }
+
+        void wait() {
+            std::unique_lock l(_mtx);
+            while (!_notified) {
+                _cond.wait(l);
+            }
+        }
+
+        void notify() {
+            {
+                std::lock_guard l(_mtx);
+                _notified = true;
+            }
+            _cond.notify_all();
+        }
+
+    private:
+        mutable bthread::Mutex _mtx;
+        bthread::ConditionVariable _cond;
+        std::vector<TxnLogPtr> _logs;
+        Status _st;
+        bool _notified{false};
+    };
+
     // called by open() or incremental_open to build AsyncDeltaWriter for tablets
     Status _create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental);
-
-    Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
     StatusOr<std::unique_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
-
-    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     void _flush_stale_memtables();
 
@@ -185,7 +227,7 @@ private:
     std::unique_ptr<MemPool> _mem_pool;
     bool _is_incremental_channel{false};
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
-
+    TxnLogCollector _txn_log_collector;
     std::set<int64_t> _immutable_partition_ids;
 
     // Profile counters
@@ -414,15 +456,16 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     if (!res.ok()) {
                         context->update_status(res.status());
                         LOG(ERROR) << "Fail to finish tablet " << id << ": " << res.status();
-                    } else if (_finish_mode == lake::DeltaWriterFinishMode::kWriteTxnLog) {
-                        context->add_finished_tablet(id);
-                        VLOG(5) << "Finished tablet " << id;
-                    } else if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
-                        context->add_finished_tablet(id);
-                        context->add_txn_log(res.value());
-                        VLOG(5) << "Finished tablet " << id;
                     } else {
-                        CHECK(false) << "Unhandled finish mode: " << _finish_mode;
+                        context->add_finished_tablet(id);
+                        VLOG(5) << "Finished tablet " << id;
+                    }
+                    if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+                        if (!res.ok()) {
+                            _txn_log_collector.update_status(res.status());
+                        } else {
+                            _txn_log_collector.add(std::move(res).value());
+                        }
                     }
                     count_down_latch.count_down();
                 });
@@ -486,6 +529,21 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
+        if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+            _txn_log_collector.notify();
+        }
+    }
+
+    // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
+    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
+        response->status().status_code() == TStatusCode::OK) {
+        _txn_log_collector.wait();
+        auto st = _txn_log_collector.status();
+        if (st.ok()) {
+            context->add_txn_logs(_txn_log_collector.logs());
+        } else {
+            context->update_status(st);
+        }
     }
 }
 
