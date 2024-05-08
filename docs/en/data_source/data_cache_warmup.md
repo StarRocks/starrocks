@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Data cache warmup
 
-Some data lake analytics and shared-data cluster scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) performance testing. Warming up remote data into local data cache can avoid the need to fetch the same data multiple times, significantly speeding up query execution and minimizing resource usage.
+Some data lake analytics and shared-data cluster scenarios have high performance requirements for queries, such as BI reports and proof of concept (PoC) performance testing. Loading remote data into local data cache can avoid the need to fetch the same data multiple times, significantly speeding up query execution and minimizing resource usage.
 
 StarRocks v3.3 introduces the Data Cache Warmup feature, which is an enhancement to [Data Cache](./data_cache.md). Data Cache is a process of passively populating the cache, in which data is written to the cache during data querying. Data Cache Warmup, however, is an active process of populating the cache. It proactively fetches the desired data from remote storage in advance.
 
