@@ -18,6 +18,11 @@ on:
         required: true
         type: string
         default: 'main'
+      SOURCE_REPO:
+        description: 'SOURCE REPOSITORY'
+        required: true
+        type: string
+        default: 'StarRocks/starrocks'
       DEBUG:
         description: 'DEBUG REPO'
         required: true
@@ -37,6 +42,9 @@ permissions:
   repository-projects: write
   security-events: write
   statuses: write
+
+env:
+  source_repo: ${{ inputs.SOURCE_REPO }}
 
 jobs:
 
@@ -61,6 +69,9 @@ jobs:
     runs-on: [ self-hosted, sync-main ]
     if: inputs.BRANCH == 'main'
     needs: pr-info
+    env:
+      GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+      GH_TOKEN: ${{ secrets.SYNC_PAT }}
     steps:
       - name: clean
         run: |
@@ -87,10 +98,11 @@ jobs:
           destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
         run: |
-          cp -rf /var/local/env/ci-source-code/starrocks starrocks
-          cd starrocks && git pull
+          source_repo_dir=${source_repo#*/}
+          cp -rf /var/local/env/ci-source-code/${source_repo_dir} ${source_repo_dir}
+          cd ${source_repo_dir} && git pull
           git checkout ${source_branch}
-          git remote set-url origin https://${github_token}@github.com/CelerData/celerdata-enterprise.git
+          git remote set-url origin https://${github_token}@github.com/${{ github.repository }}.git
           git push origin ${source_branch}:${destination_branch}
 
       - name: checkout tools
@@ -110,8 +122,6 @@ jobs:
 
       - name: previous check
         id: previous-check
-        env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
           cd ${{ github.workspace }}/elastic-service
           check_res=$(python3 lib/pr_sequence_checker.py new ${{ inputs.BRANCH }} ${{ inputs.PR_ID }} ${{ inputs.COMMIT_ID }})
@@ -137,7 +147,7 @@ jobs:
           PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -177,7 +187,7 @@ jobs:
           HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -216,7 +226,7 @@ jobs:
       - name: clean
         if: always()
         env:
-          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
         run: |
           rm -f ${BODY_FILE}
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
@@ -226,6 +236,9 @@ jobs:
     runs-on: [ self-hosted, sync-branch ]
     if: inputs.BRANCH != 'main'
     needs: pr-info
+    env:
+      GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+      GH_TOKEN: ${{ secrets.SYNC_PAT }}
     steps:
       - name: clean
         run: |
@@ -252,10 +265,11 @@ jobs:
           destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
         run: |
-          cp -rf /var/local/env/ci-source-code/starrocks starrocks
-          cd starrocks && git pull
+          source_repo_dir=${source_repo#*/}
+          cp -rf /var/local/env/ci-source-code/${source_repo_dir} ${source_repo_dir}
+          cd ${source_repo_dir} && git pull
           git checkout ${source_branch}
-          git remote set-url origin https://${github_token}@github.com/CelerData/celerdata-enterprise.git
+          git remote set-url origin https://${github_token}@github.com/${{ github.repository }}.git
           git push origin ${source_branch}:${destination_branch}
 
       - name: checkout tools
@@ -275,8 +289,6 @@ jobs:
 
       - name: previous check
         id: previous-check
-        env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
           cd ${{ github.workspace }}/elastic-service
           check_res=$(python3 lib/pr_sequence_checker.py new ${{ inputs.BRANCH }} ${{ inputs.PR_ID }} ${{ inputs.COMMIT_ID }})
@@ -302,7 +314,7 @@ jobs:
           PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -342,7 +354,7 @@ jobs:
           HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -381,7 +393,7 @@ jobs:
       - name: clean
         if: always()
         env:
-          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
         run: |
           rm -f ${BODY_FILE}
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
