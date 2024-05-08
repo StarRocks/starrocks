@@ -212,8 +212,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             beId = backend.getId();
         } else {
             ComputeNode computeNode = null;
-            // Compute node only reports resource usage.
-            if (request.isSetResource_usage()) {
+            // Compute node only reports resource usage or tasks.
+            if (request.isSetResource_usage() || request.isSetTasks()) {
                 computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
             }
 
