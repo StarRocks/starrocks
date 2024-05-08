@@ -2324,7 +2324,7 @@ public class ShowExecutor {
                             olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
                     rows.add(Lists.newArrayList(
                             tableName,
-                            String.valueOf(dynamicPartitionProperty.getEnable()),
+                            String.valueOf(dynamicPartitionProperty.isEnabled()),
                             dynamicPartitionProperty.getTimeUnit().toUpperCase(),
                             String.valueOf(dynamicPartitionProperty.getStart()),
                             String.valueOf(dynamicPartitionProperty.getEnd()),
@@ -2341,7 +2341,8 @@ public class ShowExecutor {
                             dynamicPartitionScheduler
                                     .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
                             dynamicPartitionScheduler
-                                    .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG)));
+                                    .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG),
+                                String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
                 }
             } finally {
                 db.readUnlock();
