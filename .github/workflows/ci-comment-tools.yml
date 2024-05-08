@@ -24,7 +24,7 @@ jobs:
     name: INFO
     runs-on: [self-hosted, sync-normal]
     if: >
-      ${{ github.event.issue.pull_request }} &&
+      contains(github.event.issue.html_url, '/pull/') &&
       !contains(github.event.comment.body, 'BACKPORT to') &&
       !contains(github.event.comment.body, 'BACKPORT ERROR') &&
       (contains(github.event.comment.body, '@Mergify rebase') ||

@@ -9,9 +9,7 @@ on:
       - main
       - 'branch*'
 
-permissions:
-  issues: write
-  pull-requests: write
+permissions: write-all
 
 jobs:
   doc-checker:
