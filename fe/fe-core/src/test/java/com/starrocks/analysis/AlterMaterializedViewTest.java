@@ -140,6 +140,16 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             currentState.alterMaterializedView(stmt);
         }
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"session.not_exists\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Exception e = Assert.assertThrows(SemanticException.class,
+                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "Unknown system variable 'not_exists', the most similar variables are " +
+                    "{'init_connect', 'connector_max_split_size', 'tx_isolation'}.", e.getMessage());
+        }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
