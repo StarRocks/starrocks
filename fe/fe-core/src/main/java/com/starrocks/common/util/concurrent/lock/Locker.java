@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
@@ -206,6 +207,26 @@ public class Locker {
         for (Database db : dbs) {
             unLockDatabase(db, lockType);
         }
+    }
+
+    /**
+     * Try to lock databases in ascending order of id.
+     * @return: true if all databases are locked successfully, false otherwise.
+     */
+    public boolean tryLockDatabases(List<Database> dbs, LockType lockType, long timeout, TimeUnit unit) {
+        if (dbs == null) {
+            return false;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        List<Database> lockedDbs = Lists.newArrayList();
+        for (Database db : dbs) {
+            if (!tryLockDatabase(db, lockType, timeout, unit)) {
+                lockedDbs.stream().forEach(t -> unLockDatabase(t, lockType));
+                return false;
+            }
+            lockedDbs.add(db);
+        }
+        return true;
     }
 
     /**
