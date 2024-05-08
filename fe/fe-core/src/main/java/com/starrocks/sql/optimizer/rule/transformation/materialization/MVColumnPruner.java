@@ -97,12 +97,9 @@ public class MVColumnPruner {
                 scanBuilder.setColRefToColumnMetaMap(newColumnRefMap);
                 ColumnRefSet outputRefSet = new ColumnRefSet(outputColumns);
                 outputRefSet.except(requiredOutputColumns);
-                if (!outputRefSet.isEmpty()) {
+                if (!outputRefSet.isEmpty() && projection == null) {
                     // should add a projection
                     Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
-                    if (projection != null) {
-                        projectionMap.putAll(projection.getColumnRefMap());
-                    }
                     for (ColumnRefOperator columnRefOperator : outputColumns) {
                         if (outputRefSet.contains(columnRefOperator)) {
                             continue;
