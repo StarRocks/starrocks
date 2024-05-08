@@ -1063,13 +1063,13 @@ public class DatabaseTransactionMgr {
                             }
                         }
                     }
-                    for (Long partitionId : droppedPartitionIds) {
-                        tableCommitInfo.removePartition(partitionId);
-                    }
                 }
-                for (Long tableId : droppedTableIds) {
-                    transactionState.removeTable(tableId);
+                for (Long droppedPartitionId : droppedPartitionIds) {
+                    tableCommitInfo.removePartition(droppedPartitionId);
                 }
+            }
+            for (Long droppedTableId : droppedTableIds) {
+                transactionState.removeTable(droppedTableId);
             }
             if (hasError) {
                 return;
