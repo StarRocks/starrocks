@@ -574,14 +574,22 @@ StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context,
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/bitmap_functions.cpp
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context,
                                                       const starrocks::vectorized::Columns& columns) {
+=======
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, const Columns& columns) {
+>>>>>>> 20a3136336 ([BugFix] Fix the bug of bitmap_to_binary/bitmap_to_base64 processing null (#45275)):be/src/exprs/bitmap_functions.cpp
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> builder(size);
 
     for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
         BitmapValue* bitmap = viewer.value(row);
         int byteSize = bitmap->get_size_in_bytes();
         std::unique_ptr<char[]> buf;
@@ -605,4 +613,149 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context,
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/bitmap_functions.cpp
 } // namespace starrocks::vectorized
+=======
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> range_start_viewer(columns[1]);
+    ColumnViewer<TYPE_BIGINT> limit_viewer(columns[2]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || range_start_viewer.is_null(row) || limit_viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto range_start = range_start_viewer.value(row);
+        auto limit = limit_viewer.value(row);
+
+        // TODO: the result of bitmap_subset_limit(bitmap, -1, -1) maybe invalid
+        if (range_start < 0) {
+            range_start = 0;
+        }
+
+        if (bitmap->cardinality() == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->bitmap_subset_limit_internal(range_start, limit, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_in_range(FunctionContext* context,
+                                                            const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> range_start_viewer(columns[1]);
+    ColumnViewer<TYPE_BIGINT> range_end_viewer(columns[2]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || range_start_viewer.is_null(row) || range_end_viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto range_start = range_start_viewer.value(row);
+        auto range_end = range_end_viewer.value(row);
+
+        if (range_start < 0) {
+            range_start = 0;
+        }
+
+        if (bitmap->cardinality() == 0 || range_start >= range_end) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->bitmap_subset_in_range_internal(range_start, range_end, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_binary(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_VARBINARY> builder(size);
+
+    raw::RawString buf;
+    for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+        BitmapValue* bitmap = viewer.value(row);
+        size_t serialize_size = bitmap->get_size_in_bytes();
+        buf.resize(serialize_size);
+        bitmap->write(buf.data());
+        builder.append(Slice(buf.data(), serialize_size));
+    }
+
+    ColumnPtr col = builder.build(ColumnHelper::is_all_const(columns));
+    std::string err_msg;
+    if (col->capacity_limit_reached(&err_msg)) {
+        return Status::InternalError(
+                strings::Substitute("Size of binary column generated by bitmap_to_binary reaches limit: $0", err_msg));
+    } else {
+        return col;
+    }
+}
+
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_from_binary(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARBINARY> viewer(columns[0]);
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto src_value = viewer.value(row);
+        if (src_value.size == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue bitmap;
+        bool res = bitmap.valid_and_deserialize(src_value.data, src_value.size);
+        if (!res) {
+            builder.append_null();
+        } else {
+            builder.append(std::move(bitmap));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+} // namespace starrocks
+>>>>>>> 20a3136336 ([BugFix] Fix the bug of bitmap_to_binary/bitmap_to_base64 processing null (#45275)):be/src/exprs/bitmap_functions.cpp
