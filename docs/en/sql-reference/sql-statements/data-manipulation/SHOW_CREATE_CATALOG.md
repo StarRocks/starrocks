@@ -6,7 +6,17 @@ displayed_sidebar: "English"
 
 ## Description
 
-Queries the creation statement of an external catalog, such as a Hive, Iceberg, Hudi, Delta Lake, or JDBC catalog. See [Hive Catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg Catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi Catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake Catalog](../../../data_source/catalog/deltalake_catalog.md), and [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md). Note that authentication-related information in the return result will be anonymized.
+Queries the creation statement of an external catalog, including:
+
+- [Hive Catalog](../../../data_source/catalog/hive_catalog.md)
+- [Iceberg Catalog](../../../data_source/catalog/iceberg_catalog.md)
+- [Hudi Catalog](../../../data_source/catalog/hudi_catalog.md)
+- [Delta Lake Catalog](../../../data_source/catalog/deltalake_catalog.md)
+- [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md) (since v3.0)
+- [Unified catalog](../../../data_source/catalog/unified_catalog.md) (since v3.2)
+- [MaxCompute catalog](../../../data_source/catalog/maxcompute_catalog.md) (since v3.3)
+
+Note that authentication-related information in the return result will be anonymized.
 
 This command is supported from v3.0 onwards.
 
