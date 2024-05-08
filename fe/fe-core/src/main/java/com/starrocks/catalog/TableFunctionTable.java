@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -265,18 +266,18 @@ public class TableFunctionTable extends Table {
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
             csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
             int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
-            if (len > 50 || len == 0) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE,
-                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, 50);
+            if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
             }
         }
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
             csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
             int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
-            if (len > 50 || len == 0) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_VALUE_OUT_OF_VALID_RANGE,
-                        PROPERTY_CSV_ROW_DELIMITER, 1, 50);
+            if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_ROW_DELIMITER, 1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
             }
         }
 
