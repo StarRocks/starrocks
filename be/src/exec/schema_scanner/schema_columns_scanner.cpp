@@ -79,6 +79,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
+<<<<<<< HEAD
     {
         SCOPED_TIMER(_param->_rpc_timer);
         if (nullptr != _param->ip && 0 != _param->port) {
@@ -88,6 +89,10 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
+=======
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     return Status::OK();
 }
 
@@ -536,11 +541,15 @@ Status SchemaColumnsScanner::get_new_desc() {
         desc_params.__set_limit(_param->limit);
     }
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::describe_table(*(_param->ip), _param->port, desc_params, &_desc_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    RETURN_IF_ERROR(SchemaHelper::describe_table(_ss_state, desc_params, &_desc_result));
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     _column_index = 0;
 
     return Status::OK();
@@ -566,11 +575,15 @@ Status SchemaColumnsScanner::get_new_table() {
         }
     }
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_table_names(*(_param->ip), _param->port, table_params, &_table_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    RETURN_IF_ERROR(SchemaHelper::get_table_names(_ss_state, table_params, &_table_result));
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     _table_index = 0;
     return Status::OK();
 }
@@ -583,7 +596,6 @@ Status SchemaColumnsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         return Status::InternalError("input parameter is nullptr.");
     }
     {
-        SCOPED_TIMER(_param->_rpc_timer);
         // if user query schema meta such as "select * from information_schema.columns limit 10;",
         // in this case, there is no predicate and limit clause is set,we can call the describe_table
         // interface only once, and no longer call get_db_names and get_table_names interface, which

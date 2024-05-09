@@ -56,11 +56,18 @@ Status SchemaVariablesScanner::start(RuntimeState* state) {
     }
     var_params.__set_threadId(_param->thread_id);
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::show_varialbes(*(_param->ip), _param->port, var_params, &_var_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::show_variables(_ss_state, var_params, &_var_result));
+
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     if (_type != TVarType::VERBOSE) {
         _begin = _var_result.variables.begin();
     } else {

@@ -345,6 +345,13 @@ struct TGetTablesParams {
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
   20: optional Types.TTableType type // getting a certain type of tables
   21: optional i64 limit
+<<<<<<< HEAD
+=======
+
+  // If not set, match default_catalog
+  22: optional string catalog_name
+  23: optional string table_name
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
 }
 
 struct TTableStatus {
@@ -400,6 +407,12 @@ struct TListMaterializedViewStatusResult {
 struct TGetTasksParams {
     1: optional string db
     2: optional Types.TUserIdentity current_user_ident
+    // task's name
+    3: optional string task_name
+    // task run's query_id
+    4: optional string query_id
+    // task's state
+    5: optional string state
 }
 
 struct TTaskInfo {

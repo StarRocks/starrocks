@@ -42,6 +42,10 @@ private:
     TGetDbsResult _db_result;
     TGetTablesResult _table_result;
     TDescribeTableResult _desc_result;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     static SchemaScanner::ColumnDesc _s_col_columns[];
 };
 

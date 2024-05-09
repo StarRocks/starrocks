@@ -47,6 +47,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.thrift.TGetTasksParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
@@ -379,19 +380,26 @@ public class TaskManager implements MemoryTrackable {
         LOG.info("drop tasks:{}", taskIdList);
     }
 
-    public List<Task> showTasks(String dbName) {
-        List<Task> taskList = Lists.newArrayList();
-        if (dbName == null) {
-            taskList.addAll(nameToTaskMap.values());
-        } else {
-            for (Map.Entry<String, Task> entry : nameToTaskMap.entrySet()) {
-                Task task = entry.getValue();
-
-                if (task.getDbName() != null && task.getDbName().equals(dbName)) {
-                    taskList.add(task);
-                }
-            }
+    private boolean isTaskMatched(Task task, TGetTasksParams params) {
+        if (params == null) {
+            return true;
         }
+        String dbName = params.db;
+        if (dbName != null && !dbName.equals(task.getDbName())) {
+            return false;
+        }
+        String taskName = params.task_name;
+        if (taskName != null && !taskName.equalsIgnoreCase(task.getName())) {
+            return false;
+        }
+        return true;
+    }
+
+    public List<Task> filterTasks(TGetTasksParams params) {
+        List<Task> taskList = Lists.newArrayList();
+        nameToTaskMap.values().stream()
+                .filter(t -> isTaskMatched(t, params))
+                .forEach(taskList::add);
         return taskList;
     }
 
@@ -586,11 +594,11 @@ public class TaskManager implements MemoryTrackable {
         SerializeData data = new SerializeData();
         data.tasks = new ArrayList<>(nameToTaskMap.values());
         checksum ^= data.tasks.size();
-        data.runStatus = showTaskRunStatus(null);
+        data.runStatus = getMatchedTaskRunStatus(null);
         int beforeSize = data.runStatus.size();
         if (beforeSize >= Config.task_runs_max_history_number) {
             taskRunManager.getTaskRunHistory().forceGC();
-            data.runStatus = showTaskRunStatus(null);
+            data.runStatus = getMatchedTaskRunStatus(null);
             String s = GsonUtils.GSON.toJson(data);
             LOG.warn("Too much task metadata triggers forced task_run GC, " +
                     "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
@@ -604,7 +612,12 @@ public class TaskManager implements MemoryTrackable {
 
     public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         taskRunManager.getTaskRunHistory().forceGC();
+<<<<<<< HEAD
         List<TaskRunStatus> runStatusList = showTaskRunStatus(null);
+=======
+        List<TaskRunStatus> runStatusList = getMatchedTaskRunStatus(null);
+        LOG.info("saveTasksV2, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
                 2 + nameToTaskMap.size() + runStatusList.size());
         writer.writeJson(nameToTaskMap.size());
@@ -620,6 +633,7 @@ public class TaskManager implements MemoryTrackable {
         writer.close();
     }
 
+<<<<<<< HEAD
     public List<TaskRunStatus> showTaskRunStatus(String dbName) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
         if (dbName == null) {
@@ -640,6 +654,52 @@ public class TaskManager implements MemoryTrackable {
                     .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
 
         }
+=======
+    private boolean isTaskRunStatusMatched(TaskRunStatus taskRunStatus, TGetTasksParams params) {
+        if (params == null) {
+            return true;
+        }
+        String dbName = params.db;
+        if (dbName != null && !dbName.equals(taskRunStatus.getDbName())) {
+            return false;
+        }
+        String taskName = params.task_name;
+        if (taskName != null && !taskName.equalsIgnoreCase(taskRunStatus.getTaskName())) {
+            return false;
+        }
+        String queryId = params.query_id;
+        if (queryId != null && !queryId.equalsIgnoreCase(taskRunStatus.getQueryId())) {
+            return false;
+        }
+        String state = params.state;
+        if (state != null && !state.equalsIgnoreCase(taskRunStatus.getState().name())) {
+            return false;
+        }
+        return true;
+    }
+
+    public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
+        List<TaskRunStatus> taskRunList = Lists.newArrayList();
+        // pending task runs
+        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
+        pendingTaskRuns.stream()
+                .map(TaskRun::getStatus)
+                .filter(t -> isTaskRunStatusMatched(t, params))
+                .forEach(taskRunList::add);
+
+        // running task runs
+        Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
+        runningTaskRuns.stream()
+                .map(TaskRun::getStatus)
+                .filter(t -> isTaskRunStatusMatched(t, params))
+                .forEach(taskRunList::add);
+
+        // history task runs
+        List<TaskRunStatus> historyTaskRuns = taskRunManager.getTaskRunHistory().getAllHistory();
+        historyTaskRuns.stream()
+                .filter(t -> isTaskRunStatusMatched(t, params))
+                .forEach(taskRunList::add);
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
         return taskRunList;
     }
 
@@ -852,7 +912,7 @@ public class TaskManager implements MemoryTrackable {
             return;
         }
         try {
-            List<Task> currentTask = showTasks(null);
+            List<Task> currentTask = filterTasks(null);
             for (Task task : currentTask) {
                 if (task.getType() == Constants.TaskType.PERIODICAL) {
                     TaskSchedule taskSchedule = task.getSchedule();

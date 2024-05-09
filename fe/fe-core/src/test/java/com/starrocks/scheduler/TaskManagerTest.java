@@ -26,6 +26,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -132,8 +133,16 @@ public class TaskManagerTest {
         Constants.TaskRunState state = null;
 
         int retryCount = 0;
+<<<<<<< HEAD
         int maxRetry = 15;
         while (retryCount < maxRetry) {
+=======
+        int maxRetry = 30;
+        TGetTasksParams getTasksParams = new TGetTasksParams();
+        getTasksParams.setDb(realDbName);
+        while (retryCount < maxRetry) {
+            taskRuns = taskManager.getMatchedTaskRunStatus(getTasksParams);
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
             if (taskRuns.size() > 0) {
                 state = taskRuns.get(0).getState();
             }

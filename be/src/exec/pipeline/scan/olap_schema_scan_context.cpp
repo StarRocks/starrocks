@@ -25,11 +25,15 @@ Status OlapSchemaScanContext::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _tnode.conjuncts, &_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(_prepare_params(state));
+    RETURN_IF_ERROR(_prepare_params(state, _conjunct_ctxs));
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/exec/pipeline/scan/olap_schema_scan_context.cpp
 Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
+=======
+Status SchemaScanContext::_prepare_params(RuntimeState* state, const std::vector<ExprContext*>& conjunct_ctxs) {
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981)):be/src/exec/pipeline/scan/schema_scan_context.cpp
     _param = std::make_shared<SchemaScannerParam>();
     if (_tnode.schema_scan_node.__isset.db) {
         _param->db = _obj_pool.add(new std::string(_tnode.schema_scan_node.db));
@@ -114,8 +118,15 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
     if (_tnode.schema_scan_node.__isset.frontends) {
         _param->frontends = _tnode.schema_scan_node.frontends;
     }
+    // expr_contexts
+    _param->expr_contexts = &conjunct_ctxs;
 
+    // tuple_id
+    size_t tuple_id = _tnode.schema_scan_node.tuple_id;
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(tuple_id);
+    for (auto* slot : tuple_desc->slots()) {
+        _param->slot_id_mapping.emplace(slot->id(), slot);
+    }
     return Status::OK();
 }
-
 } // namespace starrocks::pipeline

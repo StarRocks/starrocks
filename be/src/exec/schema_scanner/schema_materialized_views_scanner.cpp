@@ -73,11 +73,16 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
         }
     }
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    RETURN_IF_ERROR(init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     return Status::OK();
 }
 
@@ -296,6 +301,11 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
 Status SchemaMaterializedViewsScanner::get_materialized_views() {
     TGetTablesParams table_params;
     table_params.__set_db(_db_result.dbs[_db_index++]);
+    // table_name
+    std::string table_name;
+    if (_parse_expr_predicate("TABLE_NAME", table_name)) {
+        table_params.__set_table_name(table_name);
+    }
     if (nullptr != _param->wild) {
         table_params.__set_pattern(*(_param->wild));
     }
@@ -311,12 +321,7 @@ Status SchemaMaterializedViewsScanner::get_materialized_views() {
     }
     table_params.__set_type(TTableType::MATERIALIZED_VIEW);
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::list_materialized_view_status(*(_param->ip), _param->port, table_params, &_mv_results));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::list_materialized_view_status(_ss_state, table_params, &_mv_results));
     _table_index = 0;
     return Status::OK();
 }

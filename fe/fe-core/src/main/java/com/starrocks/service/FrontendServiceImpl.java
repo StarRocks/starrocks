@@ -569,31 +569,87 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private List<List<String>> listMaterializedViews(long limit, PatternMatcher matcher,
                                                      UserIdentity currentUser, TGetTablesParams params) {
+=======
+    private void filterAsynchronousMaterializedView(PatternMatcher matcher,
+                                                    UserIdentity currentUser,
+                                                    String dbName,
+                                                    MaterializedView mv,
+                                                    TGetTablesParams params,
+                                                    List<MaterializedView> result) {
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(mv.getName())) {
+            return;
+        }
+
+        try {
+            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
+                    null, dbName, mv);
+        } catch (AccessDeniedException e) {
+            return;
+        }
+
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        if (!PatternMatcher.matchPattern(params.getPattern(), mv.getName(), matcher, caseSensitive)) {
+            return;
+        }
+        result.add(mv);
+    }
+
+    private void filterSynchronousMaterializedView(OlapTable olapTable, PatternMatcher matcher,
+                                                   TGetTablesParams params,
+                                                   List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
+        // synchronized materialized view metadata size should be greater than 1.
+        if (olapTable.getVisibleIndexMetas().size() <= 1) {
+            return;
+        }
+
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(olapTable.getName())) {
+            return;
+        }
+
+        List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
+        long baseIdx = olapTable.getBaseIndexId();
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+            if (baseIdx == mvMeta.getIndexId()) {
+                continue;
+            }
+
+            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                    matcher, caseSensitive)) {
+                continue;
+            }
+            singleTableMVs.add(Pair.create(olapTable, mvMeta));
+        }
+    }
+
+    private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
+                                                                   UserIdentity currentUser, TGetTablesParams params) {
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
         String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
+<<<<<<< HEAD
         boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
         try {
             for (Table table : db.getTables()) {
                 if (table.isMaterializedView()) {
-                    MaterializedView mvTable = (MaterializedView) table;
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                null, dbName, mvTable);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    if (!PatternMatcher.matchPattern(params.getPattern(), mvTable.getName(), matcher, caseSensitive)) {
-                        continue;
-                    }
-
-                    materializedViews.add(mvTable);
+                    filterAsynchronousMaterializedView(matcher, currentUser, dbName,
+                            (MaterializedView) table, params, materializedViews);
                 } else if (table.getType() == Table.TableType.OLAP) {
+<<<<<<< HEAD
                     OlapTable olapTable = (OlapTable) table;
                     List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                     long baseIdx = olapTable.getBaseIndexId();
@@ -608,6 +664,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
                         singleTableMVs.add(Pair.create(olapTable, mvMeta));
                     }
+=======
+                    filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
+                } else {
+                    // continue
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
                 }
 
                 // check limit
@@ -635,7 +696,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<Task> taskList = taskManager.showTasks(null);
+        List<Task> taskList = taskManager.filterTasks(params);
 
         for (Task task : taskList) {
             if (task.getDbName() == null) {
@@ -683,7 +744,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
+        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(null);
 
         for (TaskRunStatus status : taskRunList) {
             if (status.getDbName() == null) {

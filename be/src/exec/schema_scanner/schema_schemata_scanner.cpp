@@ -52,6 +52,7 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
             db_params.__set_user_ip(*(_param->user_ip));
         }
     }
+<<<<<<< HEAD
 
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
@@ -60,6 +61,12 @@ Status SchemaSchemataScanner::start(RuntimeState* state) {
     }
 
     return Status::OK();
+=======
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
+    return SchemaScanner::start(state);
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
 }
 
 Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {

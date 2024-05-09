@@ -58,11 +58,17 @@ Status SchemaViewsScanner::start(RuntimeState* state) {
         }
     }
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     return Status::OK();
 }
 
@@ -199,11 +205,15 @@ Status SchemaViewsScanner::get_new_table() {
     }
     table_params.__set_type(TTableType::VIEW);
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::list_table_status(*(_param->ip), _param->port, table_params, &_table_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    RETURN_IF_ERROR(SchemaHelper::list_table_status(_ss_state, table_params, &_table_result));
+>>>>>>> 927f0a6616 ([Enhancement] [Refactor] Refactor schema scanner & support push predicates into fe for materialized views/task run status (#44981))
     _table_index = 0;
     return Status::OK();
 }
