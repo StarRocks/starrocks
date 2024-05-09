@@ -27,9 +27,10 @@ public class MvPlanContextBuilder {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
 
-        // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
-        // NPE in the planning.
-        ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+        // Use default connect to avoid session variable influence in current session.
+        // TODO: Add more normalized rule checks later, eg: disable join order/agg push down
+        //  if mv rewrite multi stages is enabled?
+        ConnectContext connectContext = new ConnectContext();
 
         List<MvPlanContext> results = Lists.newArrayList();
         try (var guard = connectContext.bindScope()) {
