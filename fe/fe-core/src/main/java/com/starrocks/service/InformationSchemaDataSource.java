@@ -171,7 +171,6 @@ public class InformationSchemaDataSource {
         return resp;
     }
 
-
     private static Map<String, String> genProps(Table table) {
         if (table.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) table;
@@ -305,19 +304,25 @@ public class InformationSchemaDataSource {
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
-                db.readLock();
-                try {
-                    List<Table> allTables = db.getTables();
-                    for (Table table : allTables) {
-                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
-                                continue;
-                            }
-                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
-                                table.getName(), PrivPredicate.SHOW)) {
+                List<Table> allTables = db.getTables();
+                for (Table table : allTables) {
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                             continue;
                         }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
+                            table.getName(), PrivPredicate.SHOW)) {
+                        continue;
+                    }
 
+                    if (request.isSetTable_name()) {
+                        if (!table.getName().equals(request.getTable_name())) {
+                            continue;
+                        }
+                    }
+
+                    db.readLock();
+                    try {
                         TTableInfo info = new TTableInfo();
 
                         info.setTable_catalog(DEF);
@@ -356,9 +361,10 @@ public class InformationSchemaDataSource {
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
+
+                    } finally {
+                        db.readUnlock();
                     }
-                } finally {
-                    db.readUnlock();
                 }
             }
         }
