@@ -2683,7 +2683,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.removeTable(tableId, table, false /* isReplay */);
             }
         }
-        if (Config.dynamic_partition_enable && table.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+        if (Config.dynamic_partition_enable && table.getTableProperty().getDynamicPartitionProperty().isEnabled()) {
             new Thread(() -> {
                 try {
                     GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()

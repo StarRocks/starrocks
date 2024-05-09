@@ -75,7 +75,6 @@ import java.util.Map;
 import java.util.TimeZone;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER;
-import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_TTL;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER;
 
 public class DynamicPartitionUtil {
@@ -449,8 +448,7 @@ public class DynamicPartitionUtil {
         } else {
             Map<String, String> properties = tableProperty.getProperties();
             if (!properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER) &&
-                    !properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER) &&
-                    !properties.containsKey(PROPERTIES_PARTITION_TTL)) {
+                    !properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
                 return false;
             }
             if (!result) {
