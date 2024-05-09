@@ -352,6 +352,11 @@ under the License.
             <version>${delta-kernel.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.databricks</groupId>
+            <artifactId>databricks-sdk-java</artifactId>
+            <version>0.0.1</version>
+        </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
         <dependency>
@@ -365,6 +370,10 @@ under the License.
                 <exclusion>
                     <groupId>org.apache.tomcat</groupId>
                     <artifactId>tomcat-annotations-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents</groupId>
+                    <artifactId>httpcore</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

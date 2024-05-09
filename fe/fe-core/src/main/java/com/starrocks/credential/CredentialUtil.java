@@ -20,6 +20,7 @@ import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
+import com.starrocks.epack.connector.delta.DatabricksUnityMetastore;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -59,6 +60,9 @@ public class CredentialUtil {
         // Mask for odps catalog credential
         doMask(properties, OdpsProperties.ACCESS_ID);
         doMask(properties, OdpsProperties.ACCESS_KEY);
+
+        // Mask for databricks credential
+        doMask(properties, DatabricksUnityMetastore.DATABRICKS_TOKEN);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {

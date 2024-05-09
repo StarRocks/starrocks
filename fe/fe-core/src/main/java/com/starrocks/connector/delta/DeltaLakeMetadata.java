@@ -89,4 +89,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     public MetastoreType getMetastoreType() {
         return deltaOps.getMetastoreType();
     }
+
+    @Override
+    public boolean hasSelfInfoSchema() {
+        return deltaOps.getMetastoreType() == MetastoreType.UNITY;
+    }
+
 }

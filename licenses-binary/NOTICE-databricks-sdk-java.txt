@@ -1,0 +1,43 @@
+Copyright (2023) Databricks, Inc.
+
+This Software includes software developed at Databricks (https://www.databricks.com/) and its use is subject to the included LICENSE file.
+
+This Software contains code from the following open source projects, licensed under the Apache 2.0 license:
+
+FasterXML/jackson-annotations - https://github.com/FasterXML/jackson-annotations
+Copyright Jackson Authors
+License - https://github.com/FasterXML/jackson-annotations/blob/2.15/LICENSE
+
+FasterXML/jackson-databind - https://github.com/FasterXML/jackson-databind
+Copyright Jackson Authors
+License - https://github.com/FasterXML/jackson-databind/blob/2.15/LICENSE
+
+facebookarchive/ini4j - https://github.com/facebookarchive/ini4j
+Copyright 2005,2009 Ivan SZKIBA
+License - https://github.com/facebookarchive/ini4j/blob/master/LICENSE.txt
+
+apache/httpcomponents-client - https://github.com/apache/httpcomponents-client
+Copyright 1999-2023 The Apache Software Foundation
+License - https://github.com/apache/httpcomponents-client/blob/master/LICENSE.txt
+
+apache/commons-io - https://github.com/apache/commons-io
+Copyright 2002-2023 The Apache Software Foundation
+License - https://github.com/apache/commons-io/blob/master/LICENSE.txt
+—--
+
+This software contains code from the following open source projects, licensed under the BSD (3-clause) license.
+
+x/oauth2 - https://cs.opensource.google/go/x/oauth2/+/master:oauth2.go
+Copyright 2014 The Go Authors. All rights reserved.
+License - https://cs.opensource.google/go/x/oauth2/+/master:LICENSE
+
+googleapis/google-auth-library-java - https://github.com/googleapis/google-auth-library-java
+Copyright 2014, Google inc. All rights reserved.
+License - https://github.com/googleapis/google-auth-library-java/blob/main/LICENSE
+—--
+
+This Software contains code from the following open source projects, licensed under the MIT license:
+
+qos-ch/slf4j - https://github.com/qos-ch/slf4j
+Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland) All rights reserved.
+License - https://github.com/qos-ch/slf4j/blob/master/LICENSE.txt
