@@ -246,6 +246,7 @@ add_library(Storage STATIC
     dictionary_cache_manager.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
+    local_primary_key_compaction_conflict_resolver.cpp
     inverted/index_descriptor.hpp
     inverted/inverted_index_iterator.cpp
     inverted/inverted_index_iterator.cpp

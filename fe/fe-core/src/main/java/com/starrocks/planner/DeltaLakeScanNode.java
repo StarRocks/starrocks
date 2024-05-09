@@ -31,6 +31,7 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -62,6 +63,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -156,26 +158,33 @@ public class DeltaLakeScanNode extends ScanNode {
                 scanBuilder.withFilter(tableClient, deltaLakePredicates.get()).build() :
                 scanBuilder.build();
 
-        for (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(tableClient);
-             scanFilesAsBatches.hasNext(); ) {
-            FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(tableClient)) {
+            while (scanFilesAsBatches.hasNext()) {
+                FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
 
-            for (CloseableIterator<Row> rows = scanFileBatch.getRows(); rows.hasNext(); ) {
-                Row row = rows.next();
-                DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(row);
-                if (dv != null) {
-                    ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
-                            "Delta table feature [deletion vectors] is not supported");
+                try (CloseableIterator<Row> scanFileRows = scanFileBatch.getRows()) {
+                    while (scanFileRows.hasNext()) {
+                        Row scanFileRow = scanFileRows.next();
+                        DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
+                        if (dv != null) {
+                            ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
+                                    "Delta table feature [deletion vectors] is not supported");
+                        }
+                        FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(scanFileRow);
+                        Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(scanFileRow);
+                        List<String> partitionValues =
+                                partitionColumnNames.stream().map(partitionValueMap::get).collect(
+                                        Collectors.toList());
+                        PartitionKey partitionKey =
+                                PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
+                                        deltaLakeTable.getType());
+                        addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
+                    }
                 }
-                FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(row);
-                Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(row);
-                List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
-                        Collectors.toList());
-                PartitionKey partitionKey =
-                        PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
-                                deltaLakeTable.getType());
-                addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
             }
+        } catch (IOException e) {
+            LOG.error("Failed to get delta lake scan files", e);
+            throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());

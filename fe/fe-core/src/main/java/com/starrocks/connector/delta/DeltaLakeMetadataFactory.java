@@ -29,10 +29,10 @@ import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevel
 
 public class DeltaLakeMetadataFactory {
     private final String catalogName;
-    private final IMetastore metastore;
-    private final long perQueryMetastoreMaxNum;
+    protected final IMetastore metastore;
+    protected final long perQueryMetastoreMaxNum;
     private final HdfsEnvironment hdfsEnvironment;
-    private final MetastoreType metastoreType;
+    protected final MetastoreType metastoreType;
 
     public DeltaLakeMetadataFactory(String catalogName, IMetastore metastore, CachingHiveMetastoreConf hmsConf,
                                     Map<String, String> properties, HdfsEnvironment hdfsEnvironment,
@@ -48,7 +48,7 @@ public class DeltaLakeMetadataFactory {
         this.metastoreType = metastoreType;
     }
 
-    private IMetastore createQueryLevelCacheMetastore() {
+    protected IMetastore createQueryLevelCacheMetastore() {
         return createQueryLevelInstance((IHiveMetastore) metastore, perQueryMetastoreMaxNum);
     }
 
