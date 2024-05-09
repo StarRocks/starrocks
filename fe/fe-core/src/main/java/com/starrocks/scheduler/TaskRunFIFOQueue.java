@@ -34,8 +34,8 @@ import java.util.function.Predicate;
  * - ordered set is used to sort task runs by priority and created time.
  * - hash map is used to store task runs by task id.
  */
-public class PendingTaskRunFIFOQueue {
-    private static final Logger LOG = LogManager.getLogger(PendingTaskRunFIFOQueue.class);
+public class TaskRunFIFOQueue {
+    private static final Logger LOG = LogManager.getLogger(TaskRunFIFOQueue.class);
 
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final ReentrantReadWriteLock.WriteLock wLock = rwLock.writeLock();
@@ -77,7 +77,12 @@ public class PendingTaskRunFIFOQueue {
      * Get the pending task run queue
      */
     public List<TaskRun> getCopiedPendingTaskRuns() {
-        return ImmutableList.copyOf(gTaskRunQueue);
+        rLock.lock();
+        try {
+            return ImmutableList.copyOf(gTaskRunQueue);
+        } finally {
+            rLock.unlock();
+        }
     }
 
     /**
@@ -107,7 +112,8 @@ public class PendingTaskRunFIFOQueue {
             if (!gTaskRunQueue.add(taskRun)) {
                 return false;
             }
-            Set<TaskRun> taskRuns = gIdToTaskRunsMap.computeIfAbsent(taskRun.getTaskId(), ignored -> Sets.newTreeSet());
+            Set<TaskRun> taskRuns = gIdToTaskRunsMap.computeIfAbsent(taskRun.getTaskId(),
+                    ignored -> Sets.newConcurrentHashSet());
             if (!taskRuns.add(taskRun)) {
                 gTaskRunQueue.remove(taskRun);
                 return false;

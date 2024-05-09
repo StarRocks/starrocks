@@ -31,7 +31,7 @@ import org.junit.Test;
 import java.util.List;
 import java.util.Set;
 
-public class PendingTaskRunFIFOQueueTest {
+public class TaskRunFIFOQueueTest {
 
     private static final int N = 100;
     private static final int M = 5;
@@ -98,7 +98,7 @@ public class PendingTaskRunFIFOQueueTest {
         task.setDefinition("select 1");
         long taskId = 1;
         List<TaskRun> taskRuns = Lists.newArrayList();
-        PendingTaskRunFIFOQueue queue = new PendingTaskRunFIFOQueue();
+        TaskRunFIFOQueue queue = new TaskRunFIFOQueue();
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(true, false, 0), i);
             taskRuns.add(taskRun);
@@ -122,7 +122,7 @@ public class PendingTaskRunFIFOQueueTest {
         task.setDefinition("select 1");
         long taskId = 1;
         List<TaskRun> taskRuns = Lists.newArrayList();
-        PendingTaskRunFIFOQueue queue = new PendingTaskRunFIFOQueue();
+        TaskRunFIFOQueue queue = new TaskRunFIFOQueue();
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(true, false, i), i);
             taskRuns.add(taskRun);
@@ -147,7 +147,7 @@ public class PendingTaskRunFIFOQueueTest {
         long taskId = 1;
         Set<TaskRun> taskRuns = Sets.newConcurrentHashSet();
         Set<TaskRun> result = Sets.newConcurrentHashSet();
-        PendingTaskRunFIFOQueue queue = new PendingTaskRunFIFOQueue();
+        TaskRunFIFOQueue queue = new TaskRunFIFOQueue();
         {
             List<Thread> threads = Lists.newArrayList();
             for (int i = 0; i < M; i++) {

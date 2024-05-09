@@ -35,12 +35,9 @@ import java.util.function.Consumer;
 public class TaskRunScheduler {
     private static final Logger LOG = LogManager.getLogger(TaskRunScheduler.class);
 
-    // TODO: Refactor this to find a better way to store the task runs.
-    // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
-    // so the map value is priority queue need to be sorted by priority from large to small
-    // pending TaskRun Queue, compared by priority and created time
+    // pending task run queue, it will schedule in fifo mode to ensure the task run scheduled in priority order.
     @SerializedName("pendingTaskRunQueue")
-    private final PendingTaskRunFIFOQueue pendingTaskRunQueue = new PendingTaskRunFIFOQueue();
+    private final TaskRunFIFOQueue pendingTaskRunQueue = new TaskRunFIFOQueue();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
