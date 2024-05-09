@@ -160,12 +160,14 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             newMetaScan = new LogicalFileScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
         } else {
-            throw new IllegalStateException("Unknown scan operator: " + scanOperator);
+            LOG.warn("Unexpected scan operator: " + scanOperator);
+            return null;
         }
         try {
             newMetaScan.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
         } catch (AnalysisException e) {
-            throw new IllegalStateException("Set scan operator predicates", e);
+            LOG.warn("Exception caught when set scan operator predicates", e);
+            return null;
         }
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), newAggCalls);
