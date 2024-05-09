@@ -66,6 +66,7 @@ public class LogUtil {
         queryDetail.setRemoteIP(ctx.getRemoteIP());
         queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
