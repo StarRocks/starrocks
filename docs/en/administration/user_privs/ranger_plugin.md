@@ -65,7 +65,11 @@ If you do not have the permissions to operate the Ranger cluster or do not need 
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
+<<<<<<< HEAD
 2. Download [`plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar`](https://www.starrocks.io/download/community) and [`mysql-connector-j`](https://dev.mysql.com/downloads/connector/j/), and place them in the `starrocks` folder.
+=======
+2. Download [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) and [mysql-connector-j.jar](https://dev.mysql.com/downloads/connector/j/), and place them in the `starrocks` folder.
+>>>>>>> 17f6b7c0c0 ([Doc]Update ranger_plugin.md (#44047))
 
 3. Restart Ranger Admin.
 
@@ -92,11 +96,17 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    "implClass": "",
    ```
 
+   If you need Ranger's autocomplete feature (which means you have installed the ranger-starrocks-plugin), you must set `implClass` in the .json file to `org.apache.ranger.services.starrocks.RangerServiceStarRocks`:
+
+   ```JSON
+   "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
+   ```
+
    :::
 
 2. Add StarRocks Service by running the following command as a Ranger administrator.
 
-   ```SQL
+   ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
