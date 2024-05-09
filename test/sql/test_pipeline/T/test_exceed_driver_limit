@@ -13,26 +13,30 @@ insert into t1 values (1);
 
 
 -- This query will exceed the driver limit in BEs.
-with 
-    w0 as (select count(1) as k1 from t1),
-    w1 as (select tt1.k1 from w0 tt1 join [shuffle] w0 tt2 using(k1)),
-    w2 as (select tt1.k1 from w1 tt1 join [shuffle] w1 tt2 using(k1)),
-    w3 as (select tt1.k1 from w2 tt1 join [shuffle] w2 tt2 using(k1)),
-    w4 as (select tt1.k1 from w3 tt1 join [shuffle] w3 tt2 using(k1)),
-    w5 as (select tt1.k1 from w4 tt1 join [shuffle] w4 tt2 using(k1)),
-    w6 as (select tt1.k1 from w5 tt1 join [shuffle] w5 tt2 using(k1))
-select /*+SET_VAR(pipeline_dop=20480)*/ count(1) from w6 join [shuffle] w0 using (k1);
+select /*+SET_VAR(pipeline_dop=10240)*/ * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL 
+select count(1) from t1 group by k1;
+
 
 -- After the above query fails, we can run the following query to verify that the driver limit is not exceeded.
-select /*+SET_VAR(pipeline_dop=20480)*/ count(1) from t1;
+select /*+SET_VAR(pipeline_dop=10240)*/ count(1) from t1;
 
-set pipeline_dop = 1024;
-with 
-    w0 as (select count(1) as k1 from t1),
-    w1 as (select tt1.k1 from w0 tt1 join [shuffle] w0 tt2 using(k1)),
-    w2 as (select tt1.k1 from w1 tt1 join [shuffle] w1 tt2 using(k1)),
-    w3 as (select tt1.k1 from w2 tt1 join [shuffle] w2 tt2 using(k1)),
-    w4 as (select tt1.k1 from w3 tt1 join [shuffle] w3 tt2 using(k1)),
-    w5 as (select tt1.k1 from w4 tt1 join [shuffle] w4 tt2 using(k1)),
-    w6 as (select tt1.k1 from w5 tt1 join [shuffle] w5 tt2 using(k1))
-select /*+SET_VAR(pipeline_dop=1024)*/ count(1) from w6 join [shuffle] w0 using (k1);
+select /*+SET_VAR(pipeline_dop=1024)*/ * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL 
+select count(1) from t1 group by k1;
