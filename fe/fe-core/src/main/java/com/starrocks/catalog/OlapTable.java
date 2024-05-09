@@ -377,7 +377,7 @@ public class OlapTable extends Table {
     public boolean dynamicPartitionExists() {
         return tableProperty != null
                 && tableProperty.getDynamicPartitionProperty() != null
-                && tableProperty.getDynamicPartitionProperty().isExist();
+                && tableProperty.getDynamicPartitionProperty().isExists();
     }
 
     public void setBaseIndexId(long baseIndexId) {
