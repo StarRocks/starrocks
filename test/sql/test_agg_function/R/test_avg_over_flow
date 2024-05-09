@@ -1,3 +1,4 @@
+-- name: test_agg_over_flow
 CREATE TABLE `t1` (
   `v1` varchar(65533) NULL COMMENT "",
   `v2` bigint(20) NULL COMMENT "",
@@ -11,10 +12,18 @@ PROPERTIES (
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
-
+-- result:
+-- !result
 insert into t1 values ('a', 10000000, 3), ('a', 40000000, 5), ('a', 40000000, 5), ('a', 40000000, 5),
 ('b', 10000000, 3), ('b', 40000000, 5), ('b', 40000000, 5), ('b', 40000000, 5);
+-- result:
+-- !result
 insert into t1 values ('a', 10000000, 3), ('a', 40000000, 5), ('a', 40000000, 5), ('a', 40000000, 5),
 ('b', 10000000, 3), ('b', 40000000, 5), ('b', 40000000, 5), ('b', 40000000, 5);
-
+-- result:
+-- !result
 select avg(v2 - 1.86659630566164 * (v3 - 3.062175673706)) from t1 group by v1;
+-- result:
+32499997.316162424349183169
+32499997.316162424349183169
+-- !result
