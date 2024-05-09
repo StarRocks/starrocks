@@ -50,7 +50,8 @@ public:
     ColumnPtr clone_shared() const override;
 
     void append_datum(const Datum& datum) override;
-    void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,
+                              bool is_binary_protocol = false) const override;
     std::string get_name() const override;
     bool is_json() const override { return true; }
 
