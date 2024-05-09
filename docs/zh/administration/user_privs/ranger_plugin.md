@@ -95,6 +95,8 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
    ```
 
+   :::
+
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
    ```Bash

@@ -96,6 +96,8 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
    ```JSON
    "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
+   ```
+
    :::
 
 2. Add StarRocks Service by running the following command as a Ranger administrator.
