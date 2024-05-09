@@ -44,6 +44,7 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
 void FragmentContext::cancel(const Status& status) {
     if (!status.ok() && _runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
         _runtime_state->query_ctx()->release_workgroup_token_once();
+        _driver_token.reset();
     }
 
     _runtime_state->set_is_cancelled(true);
