@@ -1,0 +1,41 @@
+-- name: test_concurrent_create_partition
+create table t(k int) distributed by random buckets 120;
+-- result:
+-- !result
+insert into t select 1 FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t select 2 FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t select 3 FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+create table t1(k int not null) partition by (k);
+-- result:
+-- !result
+set pipeline_dop=16;
+-- result:
+-- !result
+insert into t1 select * from t;
+-- result:
+-- !result
+show create table t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+PARTITION BY (`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+set pipeline_dop=0;
+-- result:
+-- !result
