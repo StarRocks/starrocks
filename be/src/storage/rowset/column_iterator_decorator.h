@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "common/macros.h"
 #include "common/ownership.h"
+#include "gutil/macros.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {
