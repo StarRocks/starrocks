@@ -372,8 +372,9 @@ public class InformationSchemaDataSource {
     }
 
     private static void genPartitionMetaInfo(Database db, OlapTable table,
-            PartitionInfo partitionInfo, Partition partition, PhysicalPartition physicalPartition,
-            TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
+                                             PartitionInfo partitionInfo, Partition partition,
+                                             PhysicalPartition physicalPartition,
+                                             TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
         // PARTITION_NAME
         partitionMetaInfo.setPartition_name(partition.getName());
         // PARTITION_ID
@@ -454,27 +455,33 @@ public class InformationSchemaDataSource {
             Database db = metadataMgr.getDb(catalogName, dbName);
 
             if (db != null) {
-                db.readLock();
-                try {
-                    List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-                    for (String tableName : tableNames) {
-                        BasicTable table = null;
-                        try {
-                            table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
-                        } catch (Exception e) {
-                            LOG.warn(e.getMessage());
-                        }
+                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                for (String tableName : tableNames) {
+                    BasicTable table = null;
+                    try {
+                        table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
+                    } catch (Exception e) {
+                        LOG.warn(e.getMessage());
+                    }
 
-                        if (table == null) {
+                    if (table == null) {
+                        continue;
+                    }
+
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    if (request.isSetTable_name()) {
+                        if (!table.getName().equals(request.getTable_name())) {
                             continue;
                         }
+                    }
 
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
-                        } catch (AccessDeniedException e) {
-                            continue;
-                        }
-
+                    db.readLock();
+                    try {
                         TTableInfo info = new TTableInfo();
 
                         // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
@@ -515,9 +522,9 @@ public class InformationSchemaDataSource {
                             genDefaultConfigInfo(info);
                         }
                         infos.add(info);
+                    } finally {
+                        db.readUnlock();
                     }
-                } finally {
-                    db.readUnlock();
                 }
             }
         }
