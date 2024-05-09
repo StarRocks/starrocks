@@ -889,10 +889,10 @@ public class SchemaChangeHandler extends AlterHandler {
                     "Can not add column which already exists in base table: " + newColName);
         }
 
-        // check if the new column already exist in physical column.
-        // do not support adding new column which already exist in physical column.
+        // check if the new column already exist in column id.
+        // do not support adding new column which already exist in column id.
         Optional<Column> foundPhysicalColumn = olapTable.getBaseSchema().stream()
-                .filter(c -> c.getDirectPhysicalName().equalsIgnoreCase(newColName)).findFirst();
+                .filter(c -> c.getColumnId().getId().equalsIgnoreCase(newColName)).findFirst();
         if (foundPhysicalColumn.isPresent()) {
             throw new DdlException(
                     "Can not add column which already exists in physical column: " + newColName
