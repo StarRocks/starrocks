@@ -17,6 +17,9 @@ void FragmentContext::set_final_status(const Status& status) {
     Status* old_status = nullptr;
     if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
         _s_status = status;
+
+        _driver_token.reset();
+
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
             std::stringstream ss;
@@ -44,7 +47,6 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
 void FragmentContext::cancel(const Status& status) {
     if (!status.ok() && _runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
         _runtime_state->query_ctx()->release_workgroup_token_once();
-        _driver_token.reset();
     }
 
     _runtime_state->set_is_cancelled(true);
