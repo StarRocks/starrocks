@@ -76,6 +76,9 @@ public:
         return now > _delivery_deadline;
     }
     bool is_query_expired() const {
+        if (!config::enable_query_expire) {
+            return false;
+        }
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _query_deadline;
     }

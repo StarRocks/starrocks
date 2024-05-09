@@ -49,7 +49,7 @@ void PipelineDriverPoller::run_internal() {
             if (_local_blocked_drivers.empty() && tmp_blocked_drivers.empty() && _blocked_drivers.empty()) {
                 std::cv_status cv_status = std::cv_status::no_timeout;
                 while (!_is_shutdown.load(std::memory_order_acquire) && this->_blocked_drivers.empty()) {
-                    cv_status = _cond.wait_for(lock, std::chrono::milliseconds(10));
+                    cv_status = _cond.wait_for(lock, std::chrono::milliseconds(config::poll_sleep_time));
                 }
                 if (cv_status == std::cv_status::timeout) {
                     continue;

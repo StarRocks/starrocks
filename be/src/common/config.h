@@ -1075,6 +1075,8 @@ CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
 CONF_Bool(block_cache_checksum_enable, "false");
 CONF_Bool(block_cache_direct_io_enable, "false");
 CONF_String(block_cache_engine, "");
+CONF_mBool(enable_query_expire, "true");
+CONF_mInt64(poll_sleep_time, "10");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 // max wal file size in l0
