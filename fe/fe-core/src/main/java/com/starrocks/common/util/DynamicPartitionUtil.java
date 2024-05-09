@@ -403,25 +403,6 @@ public class DynamicPartitionUtil {
             return false;
         }
 
-<<<<<<< HEAD
-        return rangePartitionInfo.getPartitionColumns().size() == 1 &&
-                tableProperty.getDynamicPartitionProperty().getEnable();
-    }
-
-    public static boolean isTTLPartitionTable(Table table) {
-        if (!(table instanceof OlapTable) ||
-                !(((OlapTable) table).getPartitionInfo().getType().equals(PartitionType.RANGE))) {
-            return false;
-        }
-
-        TableProperty tableProperty = ((OlapTable) table).getTableProperty();
-        if (tableProperty == null || !tableProperty.getProperties().containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
-            return false;
-        }
-
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) ((OlapTable) table).getPartitionInfo();
-        return rangePartitionInfo.getPartitionColumns().size() == 1;
-=======
         OlapTable olapTable = (OlapTable) table;
         TableProperty tableProperty = olapTable.getTableProperty();
         if (tableProperty == null) {
@@ -452,8 +433,7 @@ public class DynamicPartitionUtil {
             }
         } else {
             Map<String, String> properties = tableProperty.getProperties();
-            if (!properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER) &&
-                    !properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            if (!properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
                 return false;
             }
             if (!result) {
@@ -472,7 +452,6 @@ public class DynamicPartitionUtil {
 
     public static boolean isTTLPartitionTable(Table table) {
         return isTableSchedulable(table, false);
->>>>>>> 5ef58ac7d6 ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45313))
     }
 
 

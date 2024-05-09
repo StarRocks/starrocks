@@ -2453,20 +2453,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.removeTable(tableId);
             }
         }
-<<<<<<< HEAD
-=======
-        if (Config.dynamic_partition_enable && table.getTableProperty().getDynamicPartitionProperty().isEnabled()) {
-            new Thread(() -> {
-                try {
-                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
-                            .executeDynamicPartitionForTable(db.getId(), tableId);
-                } catch (Exception ex) {
-                    LOG.warn("Some problems were encountered in the process of triggering " +
-                            "the execution of dynamic partitioning", ex);
-                }
-            }, "BackgroundDynamicPartitionThread").start();
-        }
->>>>>>> 5ef58ac7d6 ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45313))
     }
 
     private void processConstraint(
