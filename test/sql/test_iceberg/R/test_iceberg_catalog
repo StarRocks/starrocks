@@ -25,7 +25,7 @@ select count(*), col_date from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_tra
 1	2020-05-01
 1	2020-06-01
 -- !result
-drop catalog iceberg_sql_test_${uuid0}
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_ts_to_ts;","partitions=2")
 -- result:
 None
 -- !result
