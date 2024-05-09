@@ -44,6 +44,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -1937,7 +1938,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
+        TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
+
         try {
+            // creating partition names is ordered
+            for (String partitionName : creatingPartitionNames) {
+                txnState.lockCreatePartition(partitionName);
+            }
+
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
@@ -1960,13 +1976,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
+<<<<<<< HEAD
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
+=======
+
+            state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
+>>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
         } catch (Exception e) {
             LOG.warn(e);
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
             return result;
+        } finally {
+            for (String partitionName : creatingPartitionNames) {
+                txnState.unlockCreatePartition(partitionName);
+            }
         }
 
 
@@ -1974,6 +1999,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
+<<<<<<< HEAD
         TransactionState txnState =
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
         if (txnState == null) {
@@ -1983,6 +2009,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
+=======
+>>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
         if (txnState.getTransactionStatus().isFinalStatus()) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error: txn %d is %s", request.getTxn_id(),

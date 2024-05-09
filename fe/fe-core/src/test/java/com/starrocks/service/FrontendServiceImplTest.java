@@ -860,4 +860,148 @@ public class FrontendServiceImplTest {
         TSetConfigResponse result = impl.setConfig(request);
         Assert.assertEquals("5.1.1", GlobalVariable.version);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        doThrow(new CommitRateExceededException(1001, now + 100)).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.SR_EAGAIN, result.status.status_code);
+        Assert.assertTrue(result.retry_interval_ms >= (now + 100 - System.currentTimeMillis()));
+    }
+
+    @Test
+    public void testLoadTxnCommitTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new LockTimeoutException("get database write lock timeout")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testLoadTxnCommitFailed() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+    }
+
+    @Test
+    public void testStreamLoadPutTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testMetaNotFound() throws UserException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "foo";
+        request.txnId = 1001L;
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setLoadId(new TUniqueId(1, 2));
+
+        Exception e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("unknown table"));
+
+        request.tbl = "v";
+        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
+
+        request.tbl = "mv";
+        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("is a materialized view"));
+    }
+
+    @Test
+    public void testAddListPartitionConcurrency() throws UserException, TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_list");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1990-04-25");
+        partitionValues.add(values2);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        Database testDb = currentState.getDb("test");
+        OlapTable olapTable = (OlapTable) testDb.getTable("site_access_list");
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+        Partition p19910425 = olapTable.getPartition("p19900425");
+
+        partitionDescs.add(new ListPartitionDesc(Lists.newArrayList("p19900425"),
+                Lists.newArrayList(new SingleItemListPartitionDesc(true, "p19900425",
+                        Lists.newArrayList("1990-04-25"), Maps.newHashMap()))));
+
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDescs.get(0),
+                defaultDistributionInfo.toDistributionDesc(), Maps.newHashMap(), false);
+
+        List<Partition> partitionList = Lists.newArrayList();
+        partitionList.add(p19910425);
+
+        currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
+                addPartitionClause, partitionInfo, partitionList, Sets.newSet("p19900425"));
+
+    }
+
+    @Test
+    public void testgetDictQueryParam() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetDictQueryParamRequest request = new TGetDictQueryParamRequest();
+        request.setDb_name("test");
+        request.setTable_name("site_access_auto");
+
+        TGetDictQueryParamResponse result = impl.getDictQueryParam(request);
+
+        System.out.println(result);
+
+        Assert.assertNotEquals(0, result.getLocation().getTabletsSize());
+    }
+>>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
 }
