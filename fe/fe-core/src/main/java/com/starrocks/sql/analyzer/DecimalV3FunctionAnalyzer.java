@@ -210,7 +210,7 @@ public class DecimalV3FunctionAnalyzer {
             } else if (DECIMAL_AGG_VARIANCE_STDDEV_TYPE.contains(fn.functionName())) {
                 returnType = argType;
             } else if (argType.isDecimalV3() && DECIMAL_SUM_FUNCTION_TYPE.contains(fn.functionName())) {
-                // For decimal aggregation sum/avg, there is a risk of overflow if the scale is too large,
+                // For decimal aggregation sum, there is a risk of overflow if the scale is too large,
                 // so we limit the maximum scale for this case
                 if (((ScalarType) argType).getScalarScale() > 18) {
                     argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
