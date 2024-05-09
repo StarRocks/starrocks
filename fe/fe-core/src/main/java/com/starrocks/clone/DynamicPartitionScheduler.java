@@ -98,15 +98,18 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
     // (DbId, TableId) for a collection of objects marked with partition_ttl_number > 0 on the table
     private final Set<Pair<Long, Long>> ttlPartitionInfo = Sets.newConcurrentHashSet();
 
-    private boolean initialize;
+    private long lastFindingTime = -1;
 
     public enum State {
         NORMAL, ERROR
     }
 
+    public boolean isInScheduler(long dbId, long tableId) {
+        return dynamicPartitionTableInfo.contains(new Pair<>(dbId, tableId));
+    }
+
     public DynamicPartitionScheduler(String name, long intervalMs) {
         super(name, intervalMs);
-        this.initialize = false;
     }
 
     public void registerDynamicPartitionTable(Long dbId, Long tableId) {
@@ -318,7 +321,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         return dropPartitionClauses;
     }
 
-    private void executeDynamicPartition() {
+    private void scheduleDynamicPartition() {
         Iterator<Pair<Long, Long>> iterator = dynamicPartitionTableInfo.iterator();
         OUTER: while (iterator.hasNext()) {
             Pair<Long, Long> tableInfo = iterator.next();
@@ -608,7 +611,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             olapTable = (OlapTable) db.getTable(tableId);
             // Only OlapTable has DynamicPartitionProperty
             if (olapTable == null || !olapTable.dynamicPartitionExists() ||
-                    !olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+                    !olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled()) {
                 if (olapTable == null) {
                     LOG.warn("Automatically removes the schedule because table does not exist, " +
                             "tableId: {}", tableId);
@@ -687,6 +690,201 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    private void scheduleTTLPartition() {
+        Iterator<Pair<Long, Long>> iterator = ttlPartitionInfo.iterator();
+        while (iterator.hasNext()) {
+            Pair<Long, Long> tableInfo = iterator.next();
+            Long dbId = tableInfo.first;
+            Long tableId = tableInfo.second;
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                iterator.remove();
+                LOG.warn("Could not get database={} info. remove it from scheduler", dbId);
+                continue;
+            }
+            Table table = db.getTable(tableId);
+            OlapTable olapTable;
+            if (table instanceof OlapTable) {
+                olapTable = (OlapTable) table;
+            } else {
+                iterator.remove();
+                LOG.warn("database={}-{}, table={}. is not olap table. remove it from scheduler",
+                        db.getFullName(), dbId, tableId);
+                continue;
+            }
+
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            RangePartitionInfo rangePartitionInfo;
+            if (partitionInfo instanceof RangePartitionInfo) {
+                rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            } else {
+                LOG.warn("currently only support range partition." +
+                        "remove database={}, table={} from scheduler", dbId, tableId);
+                continue;
+            }
+
+            if (rangePartitionInfo.getPartitionColumns().size() != 1) {
+                iterator.remove();
+                LOG.warn("currently only support partition with single column. " +
+                        "remove database={}, table={} from scheduler", dbId, tableId);
+                continue;
+            }
+
+            int ttlNumber = olapTable.getTableProperty().getPartitionTTLNumber();
+            if (Objects.equals(ttlNumber, INVALID)) {
+                iterator.remove();
+                LOG.warn("database={}, table={} have no ttl. remove it from scheduler", dbId, tableId);
+                continue;
+            }
+
+            ArrayList<DropPartitionClause> dropPartitionClauses = null;
+            try {
+                dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
+            } catch (AnalysisException e) {
+                LOG.warn("database={}-{}, table={}-{} failed to build drop partition statement.",
+                        db.getFullName(), dbId, table.getName(), tableId, e);
+            }
+            if (dropPartitionClauses == null) {
+                continue;
+            }
+
+            String tableName = olapTable.getName();
+            for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
+                db.writeLock();
+                try {
+                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
+                    clearDropPartitionFailedMsg(tableName);
+                } catch (DdlException e) {
+                    recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
+                } finally {
+                    db.writeUnlock();
+                }
+            }
+
+        }
+    }
+
+
+    private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(OlapTable olapTable, int ttlNumber)
+            throws AnalysisException {
+        ArrayList<DropPartitionClause> dropPartitionClauses = new ArrayList<>();
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+
+        // Currently, materialized views and automatically created partition tables
+        // only support single-column partitioning.
+        Preconditions.checkArgument(partitionColumns.size() == 1);
+        Type partitionType = partitionColumns.get(0).getType();
+        List<Map.Entry<Long, Range<PartitionKey>>> candidatePartitionList = Lists.newArrayList();
+
+        if (partitionType.isDateType()) {
+            LocalDateTime currentDateTime = LocalDateTime.now();
+            PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
+                    ImmutableList.of(currentPartitionValue), partitionColumns);
+            // For expr partitioning table, always has a shadow partition, we should avoid deleting it.
+            PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
+
+            Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
+            for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
+                PartitionKey lowerPartitionKey = partitionRange.getValue().lowerEndpoint();
+
+                if (lowerPartitionKey.compareTo(shadowPartitionKey) == 0) {
+                    continue;
+                }
+
+                if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0) {
+                    candidatePartitionList.add(partitionRange);
+                }
+            }
+        } else if (partitionType.isNumericType()) {
+            candidatePartitionList = new ArrayList<>(rangePartitionInfo.getIdToRange(false).entrySet());
+        } else {
+            throw new AnalysisException("Partition ttl does not support type:" + partitionType);
+        }
+
+        candidatePartitionList.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
+
+        int allPartitionNumber = candidatePartitionList.size();
+        if (allPartitionNumber > ttlNumber) {
+            int dropSize = allPartitionNumber - ttlNumber;
+            for (int i = 0; i < dropSize; i++) {
+                Long checkDropPartitionId = candidatePartitionList.get(i).getKey();
+                Partition partition = olapTable.getPartition(checkDropPartitionId);
+                if (partition != null) {
+                    String dropPartitionName = partition.getName();
+                    dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName,
+                            false, true));
+                }
+            }
+        }
+        return dropPartitionClauses;
+    }
+
+    private void recordCreatePartitionFailedMsg(String dbName, String tableName, String msg) {
+        LOG.warn("dynamic add partition failed: {}, db: {}, table: {}", msg, dbName, tableName);
+        createOrUpdateRuntimeInfo(tableName, DYNAMIC_PARTITION_STATE, State.ERROR.toString());
+        createOrUpdateRuntimeInfo(tableName, CREATE_PARTITION_MSG, msg);
+    }
+
+    private void clearCreatePartitionFailedMsg(String tableName) {
+        createOrUpdateRuntimeInfo(tableName, DYNAMIC_PARTITION_STATE, State.NORMAL.toString());
+        createOrUpdateRuntimeInfo(tableName, CREATE_PARTITION_MSG, DEFAULT_RUNTIME_VALUE);
+    }
+
+    private void recordDropPartitionFailedMsg(String dbName, String tableName, String msg) {
+        LOG.warn("dynamic drop partition failed: {}, db: {}, table: {}", msg, dbName, tableName);
+        createOrUpdateRuntimeInfo(tableName, DYNAMIC_PARTITION_STATE, State.ERROR.toString());
+        createOrUpdateRuntimeInfo(tableName, DROP_PARTITION_MSG, msg);
+    }
+
+    private void clearDropPartitionFailedMsg(String tableName) {
+        createOrUpdateRuntimeInfo(tableName, DYNAMIC_PARTITION_STATE, State.NORMAL.toString());
+        createOrUpdateRuntimeInfo(tableName, DROP_PARTITION_MSG, DEFAULT_RUNTIME_VALUE);
+    }
+
+    private void findSchedulableTables() {
+        Map<String, List<String>> dynamicPartitionTables = new HashMap<>();
+        Map<String, List<String>> ttlPartitionTables = new HashMap<>();
+        long start = System.currentTimeMillis();
+        for (Long dbId : GlobalStateMgr.getCurrentState().getDbIds()) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+            if (db.isSystemDatabase() || db.isStatisticsDatabase()) {
+                continue;
+            }
+
+            db.readLock();
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getDb(dbId).getTables()) {
+                    if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
+                        registerDynamicPartitionTable(db.getId(), table.getId());
+                        dynamicPartitionTables.computeIfAbsent(db.getFullName(), k -> new ArrayList<>())
+                                .add(table.getName());
+                    } else if (DynamicPartitionUtil.isTTLPartitionTable(table)) {
+                        // Table(MV) with dynamic partition enabled should not specify partition_ttl_number(MV) or
+                        // partition_live_number property.
+                        registerTtlPartitionTable(db.getId(), table.getId());
+                        ttlPartitionTables.computeIfAbsent(db.getFullName(), k -> new ArrayList<>())
+                                .add(table.getName());
+                    }
+                }
+            } finally {
+                db.readUnlock();
+            }
+        }
+        LOG.info("finished to find all schedulable tables, cost: {}ms, " +
+                "dynamic partition tables: {}, ttl partition tables: {}, scheduler enabled: {}, scheduler interval: {}s",
+                System.currentTimeMillis() - start, dynamicPartitionTables, ttlPartitionTables,
+                Config.dynamic_partition_enable, Config.dynamic_partition_check_interval_seconds);
+        lastFindingTime = System.currentTimeMillis();
+    }
+
+>>>>>>> 5ef58ac7d6 ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45313))
     @VisibleForTesting
     public void runOnceForTest() {
         runAfterCatalogReady();
@@ -694,14 +892,25 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (!initialize) {
-            // check Dynamic Partition tables only when FE start
-            initDynamicPartitionTable();
+        // Find all tables that need to be scheduled.
+        long now = System.currentTimeMillis();
+        if ((now - lastFindingTime) > Math.max(300000, Config.dynamic_partition_check_interval_seconds)) {
+            findSchedulableTables();
         }
+
+        // Update scheduler interval.
         setInterval(Config.dynamic_partition_check_interval_seconds * 1000L);
+
+        // Schedule tables with dynamic partition enabled(only works for base table).
         if (Config.dynamic_partition_enable) {
-            executeDynamicPartition();
+            scheduleDynamicPartition();
         }
-        executePartitionTimeToLive();
+
+        // Schedule tables(mvs) with ttl partition enabled.
+        // For now, partition_live_number works for base table with
+        // single column range partitioning(including expr partitioning, e.g. ... partition by date_trunc('month', col).
+        // partition_ttl_number and partition_ttl work for mv with
+        // single column range partitioning(including expr partitioning).
+        scheduleTTLPartition();
     }
 }
