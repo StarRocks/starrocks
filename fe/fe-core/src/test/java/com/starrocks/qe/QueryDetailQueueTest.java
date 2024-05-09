@@ -73,8 +73,8 @@ public class QueryDetailQueueTest {
                 + "\"returnRows\":1,"
                 + "\"cpuCostNs\":1002,"
                 + "\"memCostBytes\":100003,"
-                + "\"spillBytes\":-1"
-                + "\"catalog\":\"default_catalog\","
+                + "\"spillBytes\":-1,"
+                + "\"catalog\":\"default_catalog\""
                 + "}]";
         Assert.assertEquals(jsonString, queryDetailString);
 
