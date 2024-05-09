@@ -166,6 +166,8 @@ Together with unnest(), you can achieve the following column-to-row conversion f
 
 ### Expand Bitmap data
 
+You can use Lateral Join with the unnest_bitmap function to expand Bitmap data.
+
 1. Create a table and insert data into this table.
 
     ~~~SQL

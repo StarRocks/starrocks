@@ -170,7 +170,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
 
 ### 展开 Bitmap 类型数据
 
-您可以使用 Lateral Join 功能配合 Unnest_bitmap 功能展开 Bitmap 类型数据。
+您可以使用 Lateral Join 功能配合 unnest_bitmap 函数展开 Bitmap 类型数据。
 
 示例：
 
