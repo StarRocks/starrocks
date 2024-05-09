@@ -460,9 +460,6 @@ public class Optimizer {
         deriveLogicalProperty(tree);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
-        // apply skew join optimize after push down join on expression to child project,
-        // we need to compute the stats of child project(like subfield).
-        skewJoinOptimize(tree, rootTaskContext);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         // @todo: resolve recursive optimization question:
@@ -476,6 +473,7 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
@@ -485,6 +483,13 @@ public class Optimizer {
         if (sessionVariable.isEnableRewriteGroupingsetsToUnionAll()) {
             ruleRewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
         }
+
+        // No heavy metadata operation before external table partition prune
+        prepareMetaOnlyOnce(tree, rootTaskContext);
+
+        // apply skew join optimize after push down join on expression to child project,
+        // we need to compute the stats of child project(like subfield).
+        skewJoinOptimize(tree, rootTaskContext);
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
 
@@ -531,8 +536,6 @@ public class Optimizer {
         ruleRewriteDownTop(tree, rootTaskContext, OnPredicateMoveAroundRule.INSTANCE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
-        // No heavy metadata operation before external table partition prune
-        prepareMetaOnlyOnce(tree, rootTaskContext);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());

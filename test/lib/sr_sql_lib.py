@@ -1761,3 +1761,12 @@ class StarrocksSQLApiLib(object):
         finally:
             cursor.close()
             conn.close()
+
+    def assert_trace_times_contains(self, query, *expects):
+        """
+        assert trace times result contains expect string
+        """
+        sql = "trace times %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
