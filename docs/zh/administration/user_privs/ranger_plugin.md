@@ -84,17 +84,20 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ```
 
    :::note
-   如果您不需要开启 Ranger 的自动补全功能，即在上一步骤中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
+   如果不需要开启 Ranger 的自动补全功能，即在上一步中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
 
    ```JSON
    "implClass": "",
-   ```
 
-   :::
+   如果需要开启 Ranger 的自动补全功能，即在上一步中安装了 ranger-starrocks-plugin，需要修改 .json 文件中的 `implClass` 为 `org.apache.ranger.services.starrocks.RangerServiceStarRocks`，即：
+
+   ```JSON
+   "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
+   ```
 
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
-   ```SQL
+   ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
