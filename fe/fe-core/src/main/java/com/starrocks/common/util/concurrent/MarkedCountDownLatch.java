@@ -97,10 +97,6 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
         if (st.ok()) {
             st = status;
         }
-        // if already 0, do not trigger listeners again.
-        if (getCount() == 0) {
-            return;
-        }
         while (getCount() > 0) {
             super.countDown();
         }
