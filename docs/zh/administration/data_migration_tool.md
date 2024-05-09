@@ -17,31 +17,31 @@ StarRocks 跨集群数据迁移工具是社区提供的 StarRocks 数据迁移�
 
 以下准备工作需要在数据迁移的目标集群中进行。
 
-### 为迁移开启老版本兼容
+### 开启迁移旧版本兼容
 
-新版本的集群可能与老版本有些行为不同，带来跨集群数据迁移的问题。因此在数据迁移过程中，目标集群需要手动开启老版本兼容，并在数据迁移完成后关闭。
+新旧版本的集群间可能存在行为差异，从而导致跨集群数据迁移时出现问题。因此在数据迁移前，您需要为目标集群开启旧版本兼容，并在数据迁移完成后关闭。
 
-1. 您可以通过以下语句查看当前集群是否开启老版本兼容：
+1. 您可以通过以下语句查看当前集群是否开启旧版本兼容：
 
    ```SQL
    ADMIN SHOW FRONTEND CONFIG LIKE 'enable_legacy_compatibility_for_replication';
    ```
 
-   如果返回值为 `true` 则表示已经开启老版本兼容。
+   如果返回值为 `true` 则表示已经开启旧版本兼容。
 
-2. 动态开启老版本兼容：
+2. 动态开启旧版本兼容：
 
    ```SQL
    ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="true");
    ```
 
-3. 为防止数据迁移过程中集群重启后老版本兼容自动关闭，您还需要在 FE 配置文件 **fe.conf** 中添加以下配置项：
+3. 为防止数据迁移过程中集群重启后旧版本兼容自动关闭，您还需要在 FE 配置文件 **fe.conf** 中添加以下配置项：
 
    ```Properties
    enable_legacy_compatibility_for_replication = true
    ```
 
-数据迁移完成后，您需要删除配置文件中的 `enable_legacy_compatibility_for_replication = true`，并通过以下语句动态关闭老版本兼容：
+数据迁移完成后，您需要删除配置文件中的 `enable_legacy_compatibility_for_replication = true`，并通过以下语句动态关闭旧版本兼容：
 
 ```SQL
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
@@ -187,7 +187,7 @@ replication_job_batch_size=10
 | include_data_list                         | 需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。此项优先于 `exclude_data_list` 生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | exclude_data_list                         | 不需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。`include_data_list` 优先于此项生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | target_cluster_storage_volume             | 目标集群为存算分离集群时，建表使用的 Storage Volume。使用默认 Storage Volume 时无须配置该项。|
-| target_cluster_replication_num            | 目标集群建表使用的 replication num。默认值表示使用与源集群相同的 replication num。|
+| target_cluster_replication_num            | 目标集群建表使用的副本数（replication number）。默认值表示使用与源集群相同的副本数。|
 | meta_job_interval_seconds                 | 迁移工具获取源集群和目标集群元数据的周期，单位为秒。此项您可以使用默认值。 |
 | meta_job_threads                          | 迁移工具获取源集群和目标集群元数据使用的线程数。此项您可以使用默认值。 |
 | ddl_job_interval_seconds                  | 迁移工具在目标集群执行 DDL 的周期，单位为秒。此项您可以使用默认值。 |
@@ -252,8 +252,20 @@ token=wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
 
 ### 网络相关的配置（可选）
 
-数据迁移过程中迁移工具需要访问源和目标集群上 `show frontends` 返回的网络地址，目标集群需要访问源集群上 `show backends`, `show compute nodes` 返回的网络地址，
-如果这些网络地址为集群内私有地址（例如 k8s 集群内部地址），在集群外部无法访问，则需要配置地址映射，将私有地址映射为集群外能访问的地址，以便在集群外部访问。
+在数据迁移期间，迁移工具需要访问源和目标集群的**所有** FE 节点，并且目标集群需要访问源集群的**所有** BE 和 CN 节点。
+
+您可以通过在相应集群上执行以下语句来获取这些节点的网络地址：
+
+```SQL
+-- 获取集群中 FE 节点的网络地址。
+SHOW FRONTENDS;
+-- 获取集群中 BE 节点的网络地址。
+SHOW BACKENDS;
+-- 获取集群中 CN 节点的网络地址。
+SHOW COMPUTE NODES;
+```
+
+如果这些节点使用了无法从集群外部访问的私有地址（例如 Kubernetes 集群的内部网络地址），您需要将这些私有地址映射到可以从外部访问的地址。
 
 进入解压后的文件夹，并修改配置文件 **conf/hosts.properties**。
 
@@ -268,9 +280,10 @@ vi conf/hosts.properties
 # <SOURCE/TARGET>_<domain>=<IP>
 ```
 
-例如将源集群私有网络地址 `192.1.1.1` 映射为 `10.1.1.1`，`192.1.1.2` 映射为 `10.1.1.2`，
-并将目标集群私有网络地址 `fe-0.starrocks.svc.cluster.local` 映射为 `10.1.2.1`，
-可在 **conf/hosts.properties** 中配置如下，如有更多网络地址需要映射，都添加进去即可：
+以下示例执行如下操作：
+
+1. 将源集群的私有网络地址 `192.1.1.1` 和 `192.1.1.2` 映射到 `10.1.1.1` 和 `10.1.1.2`。
+2. 将目标集群的私有网络地址 `fe-0.starrocks.svc.cluster.local` 映射到 `10.1.2.1`。
 
 ```Properties
 # <SOURCE/TARGET>_<domain>=<IP>
