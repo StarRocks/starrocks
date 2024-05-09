@@ -114,7 +114,6 @@ displayed_sidebar: "Chinese"
 - 社区提供 StarRocks 数据迁移工具，支持将数据从存算一体集群迁移数据到存算一体集群或者存算分离集群。
 - 支持创建带有 WHERE 子句的同步物化视图。
 - MemTracker 中新增了 Data Cache 内存使用的相关指标。[#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- 新增函数 `array_unique_agg`。
 
 ### 参数变更
 

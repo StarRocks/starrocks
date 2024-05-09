@@ -22,7 +22,7 @@ import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 
 import java.util.HashMap;
@@ -40,7 +40,7 @@ public class DataCacheSelectMetrics {
             .build();
 
     private static final ShowResultSetMetaData VERBOSE_META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("BE_IP", ScalarType.createVarcharType()))
+            .addColumn(new Column("IP", ScalarType.createVarcharType()))
             .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
             .addColumn(new Column("ALREADY_CACHED_SIZE", ScalarType.createVarcharType()))
             .addColumn(new Column("AVG_READ_CACHE_TIME", ScalarType.createVarcharType()))
@@ -75,11 +75,11 @@ public class DataCacheSelectMetrics {
             LoadDataCacheMetrics metrics = entry.getValue();
 
             long backendId = entry.getKey();
-            Backend backend = clusterInfoService.getBackend(backendId);
-            if (backend == null) {
+            ComputeNode computeNode = clusterInfoService.getBackendOrComputeNode(backendId);
+            if (computeNode == null) {
                 row.add("N/A");
             } else {
-                row.add(backend.getIP());
+                row.add(computeNode.getIP());
             }
 
             row.add("SUCCESS");

@@ -1782,6 +1782,12 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * whether to automatically collect statistics on temporary tables
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_temporary_table_statistic_collect = true;
+
+    /**
      * auto statistic collect on first load flag
      */
     @ConfField(mutable = true)
@@ -2752,6 +2758,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
+
+    @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
+    public static int max_mv_check_base_table_change_retry_times = 10;
+
+    @ConfField(mutable = true, comment = "The max retry times for materialized view refresh retry times when failed")
+    public static int max_mv_refresh_failure_retry_times = 1;
 
     /**
      * The refresh partition number when refreshing materialized view at once by default.

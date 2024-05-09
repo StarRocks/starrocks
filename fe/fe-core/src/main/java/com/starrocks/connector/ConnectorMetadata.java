@@ -206,6 +206,11 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support pruning partitions");
     }
 
+    // return true if the connector has self info schema
+    default boolean hasSelfInfoSchema() {
+        return false;
+    }
+
     /**
      * Clean the query level cache after the query.
      */

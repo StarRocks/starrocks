@@ -92,7 +92,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _type(tnode.node_type),
           _pool(pool),
           _tuple_ids(tnode.row_tuples),
-          _row_descriptor(descs, tnode.row_tuples, tnode.nullable_tuples),
+          _row_descriptor(descs, tnode.row_tuples),
           _resource_profile(tnode.resource_profile),
           _debug_phase(TExecNodePhase::INVALID),
           _debug_action(TDebugAction::WAIT),
@@ -148,7 +148,7 @@ void ExecNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterP
     if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
-    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
+    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector) {

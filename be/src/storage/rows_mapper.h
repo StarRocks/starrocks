@@ -23,6 +23,7 @@ namespace starrocks {
 
 class WritableFile;
 class RandomAccessFile;
+class Tablet;
 
 // Build the connection between input rowsets' rows and ouput rowsets' rows,
 // and then write to file.
@@ -74,5 +75,8 @@ private:
 
 // rows mapper file's name for lake table
 StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_id);
+
+// rows mapper file's name for local table
+std::string local_rows_mapper_filename(Tablet* tablet, const std::string& rowset_id);
 
 } // namespace starrocks

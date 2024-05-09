@@ -44,7 +44,7 @@ public class CurrentQueryBackendInstanceProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String name) throws AnalysisException {
-        throw new AnalysisException(name + " does't exist.");
+        throw new AnalysisException(name + " doesn't exist.");
     }
 
     @Override

@@ -85,6 +85,7 @@ import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -299,11 +300,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
+            // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
+            if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
+                dbName = dbName.toLowerCase();
+                tblName = tblName.toLowerCase();
+            }
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             tables.put(identifier, table);
             return table;
-
         } catch (StarRocksConnectorException | NoSuchTableException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
@@ -691,8 +696,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         Optional<ScanReport> metrics = metricsReporter.getReporter(
                 catalogName, dbName, tableName, snapshotId, icebergPredicate, nativeTbl);
 
+        Tracers.Module module = Tracers.Module.EXTERNAL;
         if (metrics.isPresent()) {
-            Tracers.Module module = Tracers.Module.EXTERNAL;
             String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "["  + icebergPredicate + "]";
             String value = metrics.get().scanMetrics().toString();
             if (tracers == null) {
@@ -700,6 +705,17 @@ public class IcebergMetadata implements ConnectorMetadata {
             } else {
                 synchronized (this) {
                     Tracers.record(tracers, module, name, value);
+                }
+            }
+        }
+
+        if (((StarRocksIcebergTableScan) scan).isRemotePlanFiles()) {
+            String name = "ICEBERG.REMOTE_PLAN." + dbName + "." + tableName + "["  + icebergPredicate + "]";
+            if (tracers == null) {
+                Tracers.record(module, name, "true");
+            } else {
+                synchronized (this) {
+                    Tracers.record(tracers, module, name, "true");
                 }
             }
         }
