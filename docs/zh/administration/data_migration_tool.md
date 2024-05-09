@@ -64,7 +64,8 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 | **参数名**                            | **默认值** | **单位** | **描述**                                                     |
 | ------------------------------------- | ---------- | -------- | ------------------------------------------------------------ |
 | replication_max_parallel_table_count  | 100        | -        | 允许并发执行的数据同步任务数。StarRocks 为一张表创建一个同步任务。 |
-| replication_max_parallel_data_size_mb | 10240      | MB       | 允许并发同步的数据量。                                       |
+| replication_max_parallel_replica_count| 10240      | -        | 允许并发同步的 tablet 副本数。                               |
+| replication_max_parallel_data_size_mb | 1048576    | MB       | 允许并发同步的数据量。                                       |
 | replication_transaction_timeout_sec   | 3600       | 秒       | 同步任务的超时时间。                                         |
 
 #### BE 参数
@@ -73,7 +74,7 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 | **参数名**          | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |
-| replication_threads | 0          | -        | 执行同步任务的线程数。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。 |
+| replication_threads | 0          | -        | 执行同步任务的线程数。`0` 表示设置线程数为 BE 所在机器的 CPU 核数的 4 倍。 |
 
 ## 第一步：安装工具
 
