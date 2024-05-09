@@ -213,8 +213,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         int cnt = 0;
         try {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            long workerGroupId = Utils.selectWorkerGroupByWarehouseId(warehouseManager,
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID).get();
+            Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+            long workerGroupId = Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouse.getId())
+                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listWorkerGroupIpPort(workerGroupId);
 
             // filter backend
