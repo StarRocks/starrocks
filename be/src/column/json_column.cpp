@@ -50,7 +50,7 @@ void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
-void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
+void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     JsonValue* value = get_object(idx);
     DCHECK(value != nullptr);
     auto json_str = value->to_string();

@@ -410,11 +410,12 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return xor_checksum;
 }
 
-void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     if (_has_null && _null_column->get_data()[idx]) {
-        buf->push_null();
+        buf->push_null(is_binary_protocol);
     } else {
-        _data_column->put_mysql_row_buffer(buf, idx);
+        buf->update_field_pos();
+        _data_column->put_mysql_row_buffer(buf, idx, is_binary_protocol);
     }
 }
 

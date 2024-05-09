@@ -35,6 +35,8 @@
 #pragma once
 
 #include "storage/uint24.h"
+#include "types/date_value.hpp"
+#include "types/timestamp_value.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
 
@@ -52,7 +54,7 @@ public:
 
     void start_binary_row(uint32_t num_cols);
 
-    void push_null();
+    void push_null(bool is_binary_protocol = false);
     void push_tinyint(int8_t data) { push_number(data); }
     void push_smallint(int16_t data) { push_number(data); }
     void push_int(int32_t data) { push_number(data); }
@@ -64,13 +66,16 @@ public:
     void push_string(const Slice& s) { push_string(s.data, s.size); }
 
     template <typename T>
-    void push_number(T data);
+    void push_number(T data, bool is_binary_protocol = false);
     void push_number(uint24_t data) { push_number((uint32_t)data); }
 
     template <typename T>
     void push_number_binary_format(T data);
 
     void push_decimal(const Slice& s);
+
+    void push_date(const DateValue& data, bool is_binary_protocol = false);
+    void push_timestamp(const TimestampValue& data, bool is_binary_protocol = false);
 
     void begin_push_array() { _enter_scope('['); }
     void finish_push_array() { _leave_scope(']'); }
@@ -91,6 +96,7 @@ public:
     const std::string& data() const { return reinterpret_cast<const std::string&>(_data); }
 
     void reserve(size_t count) { _data.reserve(count); }
+    void update_field_pos() { _field_pos++; }
 
 private:
     char* _resize_extra(size_t n) {

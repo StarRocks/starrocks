@@ -561,7 +561,7 @@ int64_t MapColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return (xor_checksum ^ _values->xor_checksum(element_from, element_to));
 }
 
-void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     DCHECK_LT(idx, size());
     const size_t offset = _offsets->get_data()[idx];
     const size_t map_size = _offsets->get_data()[idx + 1] - offset;
