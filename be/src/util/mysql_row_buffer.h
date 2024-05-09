@@ -35,7 +35,7 @@
 #pragma once
 
 #include "storage/uint24.h"
-#include "types/date_value.h"
+#include "types/date_value.hpp"
 #include "types/timestamp_value.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
