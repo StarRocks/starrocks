@@ -75,11 +75,6 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-<<<<<<< HEAD
-=======
-import org.jetbrains.annotations.Nullable;
-import org.threeten.extra.PeriodDuration;
->>>>>>> f2020dfe6a ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45269))
 
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
@@ -276,7 +271,6 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, null, null, false));
             } else {
                 // construct distribution desc
-<<<<<<< HEAD
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
                 List<String> distColumnNames = new ArrayList<>();
                 for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
@@ -284,34 +278,12 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 }
                 DistributionDesc distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
                                                                              distColumnNames);
-=======
-                DistributionDesc distributionDesc = createDistributionDesc(olapTable, dynamicPartitionProperty);
->>>>>>> f2020dfe6a ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45269))
 
                 // add partition according to partition desc and distribution desc
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
             }
         }
         return addPartitionClauses;
-    }
-
-    @Nullable
-    private static DistributionDesc createDistributionDesc(OlapTable olapTable,
-                                                           DynamicPartitionProperty dynamicPartitionProperty) {
-        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-        DistributionDesc distributionDesc = null;
-        if (distributionInfo instanceof HashDistributionInfo) {
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<String> distColumnNames = new ArrayList<>();
-            for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-                distColumnNames.add(distributionColumn.getName());
-            }
-            distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
-                    distColumnNames);
-        } else if (distributionInfo instanceof RandomDistributionInfo) {
-            distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
-        }
-        return distributionDesc;
     }
 
     /**
@@ -526,15 +498,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
             ArrayList<DropPartitionClause> dropPartitionClauses = null;
             try {
-<<<<<<< HEAD
                 dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
-=======
-                if (!ttlDuration.isZero()) {
-                    dropPartitionClauses = buildDropPartitionClauseByTTLDuration(olapTable, ttlDuration);
-                } else {
-                    dropPartitionClauses = buildDropPartitionClauseByTTLNumber(olapTable, ttlNumber);
-                }
->>>>>>> f2020dfe6a ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45269))
             } catch (AnalysisException e) {
                 LOG.warn("database={}-{}, table={}-{} failed to build drop partition statement.",
                         db.getFullName(), dbId, table.getName(), tableId, e);
@@ -559,56 +523,8 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         }
     }
 
-<<<<<<< HEAD
+
     private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(OlapTable olapTable, int ttlNumber)
-=======
-    /**
-     * Build drop partitions by TTL.
-     * Drop the partition if partition upper endpoint less than TTL lower bound
-     */
-    private ArrayList<DropPartitionClause> buildDropPartitionClauseByTTLDuration(OlapTable olapTable,
-                                                                                 PeriodDuration ttlDuration)
-            throws AnalysisException {
-        if (ttlDuration.isZero()) {
-            return Lists.newArrayList();
-        }
-        ArrayList<DropPartitionClause> dropPartitionClauses = new ArrayList<>();
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-        Preconditions.checkArgument(partitionColumns.size() == 1);
-        Type partitionType = partitionColumns.get(0).getType();
-        PartitionKey ttlLowerBound;
-
-        LocalDateTime ttlTime = LocalDateTime.now().minus(ttlDuration);
-        if (partitionType.isDatetime()) {
-            ttlLowerBound = PartitionKey.ofDateTime(ttlTime);
-        } else if (partitionType.isDate()) {
-            ttlLowerBound = PartitionKey.ofDate(ttlTime.toLocalDate());
-        } else {
-            throw new SemanticException("partition_ttl not support partition type: " + partitionType);
-        }
-
-        PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
-
-        Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
-        for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
-            PartitionKey left = partitionRange.getValue().lowerEndpoint();
-            if (left.compareTo(shadowPartitionKey) == 0) {
-                continue;
-            }
-
-            PartitionKey right = partitionRange.getValue().upperEndpoint();
-            if (right.compareTo(ttlLowerBound) <= 0) {
-                long partitionId = partitionRange.getKey();
-                String dropPartitionName = olapTable.getPartition(partitionId).getName();
-                dropPartitionClauses.add(new DropPartitionClause(true, dropPartitionName, false, true));
-            }
-        }
-        return dropPartitionClauses;
-    }
-
-    private ArrayList<DropPartitionClause> buildDropPartitionClauseByTTLNumber(OlapTable olapTable, int ttlNumber)
->>>>>>> f2020dfe6a ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45269))
             throws AnalysisException {
         ArrayList<DropPartitionClause> dropPartitionClauses = new ArrayList<>();
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
@@ -621,16 +537,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         List<Map.Entry<Long, Range<PartitionKey>>> candidatePartitionList = Lists.newArrayList();
 
         if (partitionType.isDateType()) {
-<<<<<<< HEAD
             LocalDateTime currentDateTime = LocalDateTime.now();
             PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
             PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
                     ImmutableList.of(currentPartitionValue), partitionColumns);
-=======
-            PartitionKey currentPartitionKey = partitionType.isDatetime() ?
-                    PartitionKey.ofDateTime(LocalDateTime.now()) : PartitionKey.ofDate(LocalDate.now());
             // For expr partitioning table, always has a shadow partition, we should avoid deleting it.
->>>>>>> f2020dfe6a ([BugFix] Fix dynamic partition table unexpectly stop scheduling (backport #45235) (#45269))
             PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
 
             Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
