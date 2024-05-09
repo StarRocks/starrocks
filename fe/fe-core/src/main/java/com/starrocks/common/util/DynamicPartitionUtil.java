@@ -142,7 +142,7 @@ public class DynamicPartitionUtil {
         }
         try {
             int dayOfMonth = Integer.parseInt(val);
-            // only support from 1st to 28th, not allow 29th, 30th and 31th to avoid problems
+            // only support from 1st to 28th, not allow 29th, 30th and 31st to avoid problems
             // caused by lunar year and lunar month
             if (dayOfMonth < 1 || dayOfMonth > 28) {
                 throw new DdlException(DynamicPartitionProperty.START_DAY_OF_MONTH + " should between 1 and 28");
@@ -258,7 +258,7 @@ public class DynamicPartitionUtil {
     public static void registerOrRemoveDynamicPartitionTable(long dbId, OlapTable olapTable) {
         if (olapTable.getTableProperty() != null
                 && olapTable.getTableProperty().getDynamicPartitionProperty() != null) {
-            if (olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+            if (olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled()) {
                 GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
                         .registerDynamicPartitionTable(dbId, olapTable.getId());
             } else {
@@ -390,41 +390,68 @@ public class DynamicPartitionUtil {
     public static void checkAlterAllowed(OlapTable olapTable) throws DdlException {
         TableProperty tableProperty = olapTable.getTableProperty();
         if (tableProperty != null && tableProperty.getDynamicPartitionProperty() != null &&
-                tableProperty.getDynamicPartitionProperty().isExist() &&
-                tableProperty.getDynamicPartitionProperty().getEnable()) {
+                tableProperty.getDynamicPartitionProperty().isExists() &&
+                tableProperty.getDynamicPartitionProperty().isEnabled()) {
             throw new DdlException("Cannot add/drop partition on a Dynamic Partition Table, " +
                     "Use command `ALTER TABLE tbl_name SET (\"dynamic_partition.enable\" = \"false\")` firstly.");
         }
     }
 
-    public static boolean isDynamicPartitionTable(Table table) {
-        if (!(table instanceof OlapTable) ||
-                !(((OlapTable) table).getPartitionInfo().getType().equals(PartitionType.RANGE))) {
-            return false;
-        }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) ((OlapTable) table).getPartitionInfo();
-        TableProperty tableProperty = ((OlapTable) table).getTableProperty();
-        if (tableProperty == null || !tableProperty.getDynamicPartitionProperty().isExist()) {
+
+    private static boolean isTableSchedulable(Table table, boolean checkingDynamicPartitionTable) {
+        if (!(table instanceof OlapTable)) {
             return false;
         }
 
-        return rangePartitionInfo.getPartitionColumns().size() == 1 &&
-                tableProperty.getDynamicPartitionProperty().getEnable();
+        OlapTable olapTable = (OlapTable) table;
+        TableProperty tableProperty = olapTable.getTableProperty();
+        if (tableProperty == null) {
+            return false;
+        }
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        PartitionType partitionType = partitionInfo.getType();
+        int partitionColumnSize = -1;
+        boolean result = partitionType.equals(PartitionType.RANGE);
+        if (result) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            partitionColumnSize = rangePartitionInfo.getPartitionColumns().size();
+            if (partitionColumnSize != 1) {
+                result = false;
+            }
+        }
+
+        if (checkingDynamicPartitionTable) {
+            if (!tableProperty.getDynamicPartitionProperty().isExists() ||
+                    !tableProperty.getDynamicPartitionProperty().isEnabled()) {
+                return false;
+            }
+            if (!result) {
+                LOG.info("olap table {}-{} with dynamic partition enabled, but unable to schedule, " +
+                                "partition type: {}, partition column size: {}",
+                        table.getName(), table.getId(), partitionType, partitionColumnSize);
+            }
+        } else {
+            Map<String, String> properties = tableProperty.getProperties();
+            if (!properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
+                return false;
+            }
+            if (!result) {
+                LOG.info("olap table {}-{} with partition ttl enabled, but unable to schedule, " +
+                                "partition type: {}, partition column size: {}",
+                        table.getName(), table.getId(), partitionType, partitionColumnSize);
+            }
+        }
+
+        return true;
+    }
+
+    public static boolean isDynamicPartitionTable(Table table) {
+        return isTableSchedulable(table, true);
     }
 
     public static boolean isTTLPartitionTable(Table table) {
-        if (!(table instanceof OlapTable) ||
-                !(((OlapTable) table).getPartitionInfo().getType().equals(PartitionType.RANGE))) {
-            return false;
-        }
-
-        TableProperty tableProperty = ((OlapTable) table).getTableProperty();
-        if (tableProperty == null || !tableProperty.getProperties().containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
-            return false;
-        }
-
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) ((OlapTable) table).getPartitionInfo();
-        return rangePartitionInfo.getPartitionColumns().size() == 1;
+        return isTableSchedulable(table, false);
     }
 
 
@@ -508,7 +535,7 @@ public class DynamicPartitionUtil {
 
     /**
      * return formatted string of partition range in HOUR granularity.
-     * offset: The offset from the current hour. 0 means current hour, -1 means pre hour, 1 means next hour.
+     * offset: The offset from the current hour. 0 means current hour, -1 means previous hour, 1 means next hour.
      * format: the format of the return hour string.
      * <p>
      * Eg:
@@ -534,7 +561,7 @@ public class DynamicPartitionUtil {
 
     /**
      * return formatted string of partition range in WEEK granularity.
-     * offset: The offset from the current week. 0 means current week, 1 means next week, -1 means last week.
+     * offset: The offset from the current week. 0 means current week, 1 means next week, -1 mean 'last week'.
      * startOf: Define the start day of each week. 1 means MONDAY, 7 means SUNDAY.
      * format: the format of the return date string.
      * <p>
@@ -554,12 +581,12 @@ public class DynamicPartitionUtil {
 
     /**
      * return formatted string of partition range in MONTH granularity.
-     * offset: The offset from the current month. 0 means current month, 1 means next month, -1 means last month.
+     * offset: The offset from the current month. 0 means current month, 1 means next month, -1 means 'last month'.
      * startOf: Define the start date of each month. 1 means start on the 1st of every month.
      * format: the format of the return date string.
      * <p>
      * Eg:
-     * Today is 2020-05-24, offset = 1, startOf.month = 3
+     * Today is 2020-05-24, offset = 1, `startOf.month = 3`
      * It will return 2020-06-03
      */
     private static String getPartitionRangeOfMonth(ZonedDateTime current, int offset, StartOfDate startOf,
