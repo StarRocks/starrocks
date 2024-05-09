@@ -318,6 +318,10 @@ public class QueryAnalyzer {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+
+                    // If tableRelation is an object that needs to be rewritten by policy,
+                    // then when it is changed to ViewRelation, both the view and the table
+                    // after the view is parsed also need to inherit this rewriting logic.
                     if (tableRelation.isNeedRewrittenByPolicy()) {
                         viewRelation.setNeedRewrittenByPolicy(true);
 
