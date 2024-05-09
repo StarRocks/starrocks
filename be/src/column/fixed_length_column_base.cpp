@@ -285,7 +285,6 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
     } else if constexpr (std::is_arithmetic_v<T>) {
         buf->push_number(_data[idx], is_binary_protocol);
     } else {
-        // date/datetime or something else.
         std::string s = _data[idx].to_string();
         buf->push_string(s.data(), s.size());
     }

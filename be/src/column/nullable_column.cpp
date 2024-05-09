@@ -414,6 +414,7 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool 
     if (_has_null && _null_column->get_data()[idx]) {
         buf->push_null(is_binary_protocol);
     } else {
+        buf->update_field_pos();
         _data_column->put_mysql_row_buffer(buf, idx, is_binary_protocol);
     }
 }
