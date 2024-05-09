@@ -97,8 +97,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [to_date](./date-time-functions/to_date.md)| 返回 DATETIME 类型值中的日期部分。  |
 | [to_days](./date-time-functions/to_days.md)| 返回指定日期距离 0000-01-01 的天数。  |
 | [to_iso8601](./date-time-functions/to_iso8601.md)| 将某一个日期转换为 ISO 8601 标准格式的字符串。  |
-| [to_tera_date](./date-time-functions/to_tera_date.md)| 将某一个 VARCHAR 类型的值转换成指定格式的日期。  |
-| [to_tera_timestamp](./date-time-functions/to_tera_timestamp.md)| 将某一个 VARCHAR 类型的值按指定的格式转换成 DATETIME 类型的值。  |
 | [unix_timestamp](./date-time-functions/unix_timestamp.md)| 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。  |
 | [utc_timestamp](./date-time-functions/utc_timestamp.md)| 返回当前 UTC 日期时间。  |
 | [week](./date-time-functions/week.md)| 根据指定的周数计算逻辑，计算指定的日期时间属于一年中的第几周。  |
@@ -277,7 +275,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [array_sortby](./array-functions/array_sortby.md)| 对数组中的元素根据另外一个键值数组元素或者 Lambda 函数生成的键值数组元素进行升序排列。 |
 |  [array_sum](./array-functions/array_sum.md)| 对数组中的所有元素求和。 |
 |  [array_to_bitmap](./array-functions/array_to_bitmap.md)| 将 array 类型转化为 bitmap 类型。 |
-|  [array_unique_agg](../sql-functions/array-functions/array_unique_agg.md) |  将一列中的 distinct 值（包括空值 null）串联成一个数组（多行转一行）。  |
 |  [cardinality](./array-functions/cardinality.md)| 计算数组中的元素个数， |
 |  [element_at](./array-functions/element_at.md)| 获取 Array 数组中指定位置的元素。 |
 |  [reverse](./string-functions/reverse.md)| 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。 |
