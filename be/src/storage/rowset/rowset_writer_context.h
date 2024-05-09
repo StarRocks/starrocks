@@ -89,6 +89,14 @@ public:
 
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+<<<<<<< HEAD
+=======
+
+    // gtid
+    int64_t gtid = 0;
+    // Is pk compaction output writer
+    bool is_pk_compaction = false;
+>>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
 };
 
 } // namespace starrocks
