@@ -19,8 +19,7 @@ The following preparations must be performed on the target cluster for data migr
 
 ### Enable Legacy Compatibility for Replication
 
-The new version of StarRocks may behave differently from the old version, causing problems with cross-cluster data migration.
-Therefore, during the data migration process, the target cluster needs to manually enable legacy compatibility and disable it after the data migration is completed.
+StarRocks may behave differently between the old and new versions, causing problems with cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed.
 
 1. You can check whether Legacy Compatibility for Replication is enabled by using the following statement:
 
@@ -30,7 +29,7 @@ Therefore, during the data migration process, the target cluster needs to manual
 
    If `true` is returned, it indicates that Legacy Compatibility for Replication is enabled.
 
-2. Dynamically Enable Legacy Compatibility for Replication:
+2. Dynamically enable Legacy Compatibility for Replication:
 
    ```SQL
    ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="true");
@@ -124,7 +123,7 @@ It is recommended to install the migration tool on the server where the target c
 
 ## Step 2: Configure the Tool
 
-### Migration related configuration
+### Migration-related configuration
 
 Navigate to the extracted folder and modify the configuration file **conf/sync.properties**.
 
@@ -187,10 +186,10 @@ The description of the parameters is as follows:
 | target_cluster_password                   | The user password used to log in to the target cluster.      |
 | include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
-| target_cluster_storage_volume             | The Storage Volume used to create tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default Storage Volume, you do not need to configure this item. |
-| target_cluster_replication_num            | The replication num used to create tables in the target cluster. If you want to use the same replication num as the source cluster, you do not need to configure this item. |
+| target_cluster_storage_volume             | The storage volume used to store tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default storage volume, you do not need to specify this item. |
+| target_cluster_replication_num            | The replication number of the tables to be created in the target cluster. If you want to use the same replication number as the source cluster, you do not need to specify this item. |
 | meta_job_interval_seconds                 | The interval, in seconds, at which the migration tool retrieves metadata from the source and target clusters. You can use the default value for this item. |
-| meta_job_threads                          | The number of threads used by the migration tool to obtain metadata from source and target cluster. You can use the default value for this item. |
+| meta_job_threads                          | The number of threads used by the migration tool to obtain metadata from the source and the target cluster. You can use the default value for this item. |
 | ddl_job_interval_seconds                  | The interval, in seconds, at which the migration tool executes DDL statements on the target cluster. You can use the default value for this item. |
 | ddl_job_batch_size                        | The batch size for executing DDL statements on the target cluster. You can use the default value for this item. |
 | ddl_job_allow_drop_target_only            | Whether to allow the migration tool to delete databases, tables, or partitions that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. You can use the default value for this item. |
@@ -251,12 +250,24 @@ Output:
 token=wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
 ```
 
-### Network related configuration (Optional)
+### Network-related configuration (Optional)
 
-During the data migration process, the migration tool needs to access the network addresses returned by `show frontends` on the source and target clusters, and the target cluster needs to access the network addresses returned by `show backends` and `show compute nodes` on the source cluster.
-If these network addresses are private within a cluster and cannot be accessed outside the cluster, such as internal network addresses in a k8s cluster, you need to configure network address mapping to map the private network addresses to addresses accessible outside the cluster.
+During data migration, the migration tool needs to access **all** FE nodes of both the source and target clusters, and the target cluster needs to access **all** BE and CN nodes of the source cluster.
 
-Navigate to the extracted folder and modify the configuration file **conf/hosts.properties**。
+You can obtain the network addresses of these nodes by executing the following statements on the corresponding cluster:
+
+```SQL
+-- Obtain the network addresses of FE nodes in a cluster.
+SHOW FRONTENDS;
+-- Obtain the network addresses of BE nodes in a cluster.
+SHOW BACKENDS;
+-- Obtain the network addresses of CN nodes in a cluster.
+SHOW COMPUTE NODES;
+```
+
+If these nodes use private addresses that cannot be accessed outside the cluster, such as internal network addresses within a Kubernetes cluster, you need to map these private addresses to addresses that can be accessed from outside.
+
+Navigate to the extracted folder of the tool and modify the configuration file **conf/hosts.properties**。
 
 ```Bash
 cd starrocks-cluster-sync
@@ -269,9 +280,10 @@ The default content of the file is as follows, describing how network address ma
 # <SOURCE/TARGET>_<domain>=<IP>
 ```
 
-For example, map the source cluster private network address `192.1.1.1` to `10.1.1.1`, `192.1.1.2` to `10.1.1.2`,
-And map the target cluster private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1`,
-It can be configured as follows in **conf/hosts.properties**. If there are more network addresses that need to be mapped, just add them:
+The following example does as listed below:
+
+1. Map the source cluster's private network addresses `192.1.1.1` and `192.1.1.2` to `10.1.1.1` and `10.1.1.2`.
+2. Map the target cluster's private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1`.
 
 ```Properties
 # <SOURCE/TARGET>_<domain>=<IP>
