@@ -21,7 +21,7 @@ namespace starrocks::io {
 Status JindoOutputStream::write(const void* data, int64_t size) {
     if (_write_handle == nullptr) {
         JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
-        _write_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_APPEND, 0777);
+        _write_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_OVERWRITE, 0777);
         Status init_status = io::check_jindo_status(jdo_ctx);
         jdo_freeContext(jdo_ctx);
         if (!init_status.ok()) {
