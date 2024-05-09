@@ -255,10 +255,10 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     std::unique_lock l1(_lock);
     std::unique_lock l2(_rowsets_lock);
 
-    std::vector<TabletSegmentId> tsids;
+    std::unordered_set<TabletSegmentId> tsids;
     for (auto& [rsid, rowset] : _rowsets) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            tsids.emplace_back(TabletSegmentId{_tablet.tablet_id(), rsid + i});
+            tsids.insert(TabletSegmentId{_tablet.tablet_id(), rsid + i});
         }
     }
 
@@ -346,10 +346,24 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     }
     del_vector_cardinality_by_rssid.clear();
 
+    for (auto& [rsid, rowset] : _rowsets) {
+        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+            tsids.insert(TabletSegmentId{_tablet.tablet_id(), rsid + i});
+        }
+    }
+
     l2.unlock(); // _rowsets_lock
 
+    std::vector<TabletSegmentId> tsids_vec;
+    tsids_vec.resize(tsids.size());
+    for (const auto& tsid : tsids) {
+        tsids_vec.emplace_back(tsid);
+    }
+
     RETURN_IF_ERROR(_load_pending_rowsets());
-    StorageEngine::instance()->update_manager()->clear_cached_del_vec(tsids);
+    StorageEngine::instance()->update_manager()->clear_cached_del_vec(tsids_vec);
+    StorageEngine::instance()->update_manager()->clear_cached_delta_column_group(tsids_vec);
+    StorageEngine::instance()->update_manager()->index_cache().try_remove_by_key(_tablet.tablet_id());
 
     _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
     VLOG(1) << "load tablet " << _debug_string(false, true);
