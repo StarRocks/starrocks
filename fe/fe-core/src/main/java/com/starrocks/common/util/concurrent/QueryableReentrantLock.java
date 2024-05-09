@@ -17,18 +17,12 @@
 
 package com.starrocks.common.util.concurrent;
 
-import java.util.concurrent.locks.ReentrantLock;
-
 /*
  * This Lock is for exposing the getOwner() method,
  * which is a protected method of ReentrantLock
  */
-public class QueryableReentrantLock extends ReentrantLock {
+public class QueryableReentrantLock extends FairReentrantLock {
     private static final long serialVersionUID = 1L;
-
-    public QueryableReentrantLock(boolean fair) {
-        super(fair);
-    }
 
     @Override
     public Thread getOwner() {

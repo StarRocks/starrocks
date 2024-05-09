@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.starrocks.common.CloseableLock;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +31,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // TemporaryTableMgr is used to manage all temporary tables in the cluster,
 // all interfaces are thread-safe.
@@ -43,7 +43,7 @@ public class TemporaryTableMgr {
         // database id, table name, table id
         private Table<Long, String, Long> temporaryTables = HashBasedTable.create();
 
-        private ReadWriteLock rwLock = new ReentrantReadWriteLock();
+        private ReadWriteLock rwLock = new FairReentrantReadWriteLock();
 
         public Long getTableId(Long databaseId, String tableName) {
             try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {

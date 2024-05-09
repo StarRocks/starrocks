@@ -16,6 +16,7 @@
 package com.starrocks.system;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.util.concurrent.FairReentrantLock;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,7 +32,7 @@ public class BackendCoreStat {
 
     private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
     private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(-1);
-    private static ReentrantLock lock = new ReentrantLock();
+    private static ReentrantLock lock = new FairReentrantLock();
 
     public static void setNumOfHardwareCoresOfBe(long be, int numOfCores) {
         Integer previous = numOfHardwareCoresPerBe.put(be, numOfCores);

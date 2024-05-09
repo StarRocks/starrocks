@@ -107,7 +107,7 @@ public class TaskManager implements MemoryTrackable {
         nameToTaskMap = Maps.newConcurrentMap();
         periodFutureMap = Maps.newConcurrentMap();
         taskRunManager = new TaskRunManager();
-        taskLock = new QueryableReentrantLock(true);
+        taskLock = new QueryableReentrantLock();
         taskRunScheduler = taskRunManager.getTaskRunScheduler();
     }
 

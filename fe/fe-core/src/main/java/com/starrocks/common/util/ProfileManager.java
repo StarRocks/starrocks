@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.memory.MemoryTrackable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -128,7 +129,7 @@ public class ProfileManager implements MemoryTrackable {
     }
 
     private ProfileManager() {
-        ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+        ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
         readLock = lock.readLock();
         writeLock = lock.writeLock();
         profileMap = new LinkedHashMap<>();
