@@ -65,11 +65,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-<<<<<<< HEAD
-2. 下载 [`plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar`](https://www.starrocks.io/download/community) 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
-=======
 2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j.jar](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
->>>>>>> 17f6b7c0c0 ([Doc]Update ranger_plugin.md (#44047))
 
 3. 重启 Ranger Admin。
 
