@@ -14,6 +14,7 @@
 
 #include "runtime/runtime_filter_worker.h"
 
+#include <cstddef>
 #include <random>
 
 #include "exec/pipeline/query_context.h"
@@ -879,6 +880,10 @@ void RuntimeFilterWorker::execute() {
         if (!_queue.blocking_get(&ev)) {
             break;
         }
+
+        LOG_IF_EVERY_N(INFO, _queue.get_size() > CpuInfo::num_cores() * 10, 10)
+                << "runtime filter worker queue may be too large, size: " << _queue.get_size();
+
         switch (ev.type) {
         case RECEIVE_TOTAL_RF: {
             _receive_total_runtime_filter(ev.transmit_rf_request);
@@ -939,6 +944,10 @@ void RuntimeFilterWorker::execute() {
         }
     }
     LOG(INFO) << "RuntimeFilterWorker going to exit.";
+}
+
+size_t RuntimeFilterWorker::queue_size() const {
+    return _queue.get_size();
 }
 
 } // namespace starrocks

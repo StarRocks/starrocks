@@ -142,6 +142,8 @@ public:
                                        const std::vector<TRuntimeFilterDestination>& destinations, int timeout_ms,
                                        int64_t rpc_http_min_size);
 
+    size_t queue_size() const;
+
 private:
     void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);
     void _process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
