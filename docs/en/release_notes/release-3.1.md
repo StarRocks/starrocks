@@ -116,7 +116,6 @@ Release date: February 5, 2024
 - StarRocks Community provides the StarRocks Cross-cluster Data Migration Tool, which supports migrating data from a shared-nothing cluster to either another shared-nothing cluster or a shared-data cluster.
 - Supports creating synchronous materialized views with the WHERE clause specified.
 - Added metrics that show memory usage of the data cache to MemTracker. [#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- Added an array function, `array_unique_agg`.
 
 ### Parameter Change
 
