@@ -88,6 +88,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    ```JSON
    "implClass": "",
+   ```
 
    如果需要开启 Ranger 的自动补全功能，即在上一步中安装了 ranger-starrocks-plugin，需要修改 .json 文件中的 `implClass` 为 `org.apache.ranger.services.starrocks.RangerServiceStarRocks`，即：
 
