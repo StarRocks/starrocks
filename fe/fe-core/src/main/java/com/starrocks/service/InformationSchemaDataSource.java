@@ -355,7 +355,8 @@ public class InformationSchemaDataSource {
     }
 
     private static void genPartitionMetaInfo(Database db, OlapTable table,
-            PartitionInfo partitionInfo, Partition partition, TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
+                                             PartitionInfo partitionInfo, Partition partition,
+                                             TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
         // PARTITION_NAME
         partitionMetaInfo.setPartition_name(partition.getName());
         // PARTITION_ID
@@ -427,16 +428,23 @@ public class InformationSchemaDataSource {
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
-                db.readLock();
-                try {
-                    List<Table> allTables = db.getTables();
-                    for (Table table : allTables) {
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
-                        } catch (AccessDeniedException e) {
+
+                List<Table> allTables = db.getTables();
+                for (Table table : allTables) {
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    if (request.isSetTable_name()) {
+                        if (!table.getName().equals(request.getTable_name())) {
                             continue;
                         }
+                    }
 
+                    db.readLock();
+                    try {
                         TTableInfo info = new TTableInfo();
 
                         info.setTable_catalog(DEF);
@@ -475,9 +483,10 @@ public class InformationSchemaDataSource {
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
+
+                    } finally {
+                        db.readUnlock();
                     }
-                } finally {
-                    db.readUnlock();
                 }
             }
         }
