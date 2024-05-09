@@ -574,14 +574,17 @@ StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context,
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context,
-                                                      const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, const vectorized::Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> builder(size);
 
     for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
         BitmapValue* bitmap = viewer.value(row);
         int byteSize = bitmap->get_size_in_bytes();
         std::unique_ptr<char[]> buf;
