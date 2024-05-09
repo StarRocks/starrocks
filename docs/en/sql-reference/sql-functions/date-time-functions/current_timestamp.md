@@ -27,7 +27,9 @@ MySQL > select current_timestamp();
 +---------------------+
 ```
 
-```
+When you create a table, you can use this function for a column so that the current time is used as the default value for the column.
+
+```SQL
 mysql> CREATE TABLE IF NOT EXISTS sr_member (
     ->     sr_id            INT,
     ->     name             STRING,
