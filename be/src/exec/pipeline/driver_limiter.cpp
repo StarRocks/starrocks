@@ -14,13 +14,7 @@
 
 #include "exec/pipeline/driver_limiter.h"
 
-#include "util/starrocks_metrics.h"
-
 namespace starrocks::pipeline {
-
-DriverLimiter::DriverLimiter(int max_num_drivers) : _max_num_drivers(max_num_drivers) {
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [this]() { return num_total_drivers(); });
-}
 
 StatusOr<DriverLimiter::TokenPtr> DriverLimiter::try_acquire(int num_drivers) {
     int prev_num_total_drivers = _num_total_drivers.fetch_add(num_drivers);
