@@ -148,10 +148,6 @@ public:
 
     void set_columns(const Columns& columns) { _columns = columns; }
 
-    void set_source_filename(const std::string& source_filename) { _source_filename = source_filename; }
-
-    const std::string& source_filename() const { return _source_filename; }
-
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     ChunkUniquePtr clone_empty() const;
     ChunkUniquePtr clone_empty_with_slot() const;
@@ -298,7 +294,6 @@ private:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
-    std::string _source_filename;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {
