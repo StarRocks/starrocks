@@ -9,8 +9,8 @@ distribution type: GATHER
 limit: 100
 cardinality: 100
 column statistics:
-* s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-* count-->[0.0, 1600097.8717994562, 0.0, 8.0, 40000.0] ESTIMATE
+* s_name-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+* count-->[0.0, 1600097.8717994564, 0.0, 8.0, 1000000.0] ESTIMATE
 
 PLAN FRAGMENT 1(F15)
 
