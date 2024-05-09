@@ -422,6 +422,15 @@ TEST_F(RowsetTest, ConditionUpdateWithMultipleSegmentsTest) {
     test_final_merge(true);
 }
 
+TEST_F(RowsetTest, UnSupportFuncTest) {
+    Chunk chunk;
+    std::vector<uint64_t> rssid_rowids;
+    std::vector<uint32_t> column_indexes;
+    RowsetWriter writer;
+    ASSERT_TRUE(writer.add_chunk(chunk, rssid_rowids).is_not_supported());
+    ASSERT_TRUE(writer.add_columns(chunk, column_indexes, true, rssid_rowids).is_not_supported());
+}
+
 TEST_F(RowsetTest, FinalMergeVerticalTest) {
     auto tablet = create_tablet(12345, 1111);
     RowsetSharedPtr rowset;
