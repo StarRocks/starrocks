@@ -187,7 +187,7 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
         for (T offset = 0; offset < num_rows; ++offset) {
             ordinal_data[offset] = static_cast<T>((chunk_idx << _offset_in_chunk_bits) | offset);
         }
-        partial_sort_chunk->append_column(ordinal_column, ORDINAL_COLUMN_SLOT_ID);
+        partial_sort_chunk->append_column(ordinal_column, Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
         ++chunk_idx;
     }
 }
@@ -232,7 +232,7 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
     static_assert(type_is_ordinal<T>, "T must be uint32_t or uint64_t");
     const auto num_rows = sorted_eager_chunk->num_rows();
     auto sorted_lazy_chunk = _late_materialized_chunks[0]->clone_empty(num_rows);
-    auto ordinal_column = sorted_eager_chunk->get_column_by_slot_id(ORDINAL_COLUMN_SLOT_ID);
+    auto ordinal_column = sorted_eager_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
     auto& ordinal_data = down_cast<OrdinalColumn<T>*>(ordinal_column.get())->get_data();
     T _offset_in_chunk_mask = static_cast<T>((1L << _offset_in_chunk_bits) - 1);
     for (auto i = 0; i < num_rows; ++i) {

@@ -68,7 +68,6 @@ private:
     [[nodiscard]] Status _partial_sort(RuntimeState* state, bool done);
     [[nodiscard]] Status _merge_sorted(RuntimeState* state);
     void _split_late_and_early_chunks();
-    static constexpr SlotId ORDINAL_COLUMN_SLOT_ID = -2;
     void _assign_ordinals();
     template <typename T>
     void _assign_ordinals_tmpl();
