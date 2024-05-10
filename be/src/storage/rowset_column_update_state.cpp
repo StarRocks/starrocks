@@ -433,8 +433,8 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
     auto clear_update_chunk_cache_fn = [&]() {
         // clear cache if Update MemTracker limit exceeded
         // Notice: if `batch_append_rowids` in ascending order, we don't need to clear cache,
-        // because we will use `read_from_update_by_rowid` instead of cache,
-        // so we can keep this cache for later vist.
+        // because we will use `fetch_upt_by_rowids` instead of read from cache,
+        // so we can keep this cache for later visit.
         if (tracker->limit_exceeded() && !is_batch_append_rowids_inorder &&
             _update_chunk_cache[cur_update_file_id].get() != nullptr) {
             tracker->release(_update_chunk_cache[cur_update_file_id]->memory_usage());
@@ -447,6 +447,23 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
         // only support fetch rows by ascending order rowids.
         return tracker->limit_exceeded() && is_batch_append_rowids_inorder &&
                _update_chunk_cache[cur_update_file_id].get() == nullptr;
+    };
+    // fetch upt file using column iter's `fetch_values_by_rowid` func.
+    auto fetch_upt_by_rowids_fn = [&]() {
+        auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, batch_append_rowids.size());
+        RETURN_IF_ERROR(fetch_upt_by_rowids(partial_tschema, rowset, cur_update_file_id, batch_append_rowids, stats,
+                                            tmp_chunk.get()));
+        result_chunk->append(*tmp_chunk);
+        return Status::OK();
+    };
+    // fetch upt file using upt file cache.
+    auto fetch_upt_by_cache_fn = [&]() {
+        RETURN_IF_ERROR(prepare_update_chunk_cache_fn());
+        DCHECK(_update_chunk_cache[cur_update_file_id]->num_rows() >= batch_append_rowids.size());
+        result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
+                                       batch_append_rowids.size());
+        clear_update_chunk_cache_fn();
+        return Status::OK();
     };
     for (const auto& each : rowid_to_update_rowid) {
         rowids.push_back(each.first);
@@ -465,16 +482,9 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
         } else {
             // meet different update file, handle this round.
             if (use_fetch_upt_by_rowids()) {
-                auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, batch_append_rowids.size());
-                RETURN_IF_ERROR(fetch_upt_by_rowids(partial_tschema, rowset, cur_update_file_id, batch_append_rowids,
-                                                    stats, tmp_chunk.get()));
-                result_chunk->append(*tmp_chunk);
+                RETURN_IF_ERROR(fetch_upt_by_rowids_fn());
             } else {
-                RETURN_IF_ERROR(prepare_update_chunk_cache_fn());
-                DCHECK(_update_chunk_cache[cur_update_file_id]->num_rows() >= batch_append_rowids.size());
-                result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
-                                               batch_append_rowids.size());
-                clear_update_chunk_cache_fn();
+                RETURN_IF_ERROR(fetch_upt_by_cache_fn());
             }
             cur_update_file_id = each.second.first;
             batch_append_rowids.clear();
@@ -483,11 +493,11 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
     }
     if (!batch_append_rowids.empty()) {
         // finish last round.
-        RETURN_IF_ERROR(prepare_update_chunk_cache_fn());
-        DCHECK(_update_chunk_cache[cur_update_file_id]->num_rows() >= batch_append_rowids.size());
-        result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
-                                       batch_append_rowids.size());
-        clear_update_chunk_cache_fn();
+        if (use_fetch_upt_by_rowids()) {
+            RETURN_IF_ERROR(fetch_upt_by_rowids_fn());
+        } else {
+            RETURN_IF_ERROR(fetch_upt_by_cache_fn());
+        }
     }
     return Status::OK();
 }
