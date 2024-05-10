@@ -317,6 +317,9 @@ private:
 // ------------------------------------------------------------------------------------
 
 struct CompoundNodeContext {
+    template <CompoundNodeType Type>
+    const ColumnPredicateMap& cid_to_col_preds(const PredicateCompoundNode<Type>& node) const;
+
     std::vector<uint8_t> selection_buffer;
     std::vector<uint16_t> selected_idx_buffer;
 
@@ -325,6 +328,8 @@ struct CompoundNodeContext {
         std::vector<ConstPredicateNodePtr> vec_children;
     };
     std::optional<CompoundAndContext> and_context;
+
+    mutable std::optional<ColumnPredicateMap> _cached_cid_to_col_preds;
 };
 
 /// Stores multiple ColumnPredicates in a tree. Internal nodes are AND or OR relations, and leaf nodes are ColumnPredicates.
