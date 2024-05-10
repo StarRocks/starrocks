@@ -35,7 +35,6 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.iceberg.util.ByteBuffers;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.apache.iceberg.util.ByteBuffers.toByteArray;
 import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 
 public class IcebergMetadataScanner extends ConnectorScanner {
@@ -243,6 +243,8 @@ public class IcebergMetadataScanner extends ConnectorScanner {
                 return file.dataSequenceNumber();
             case "column_stats":
                 return getIcebergMetrics(file);
+            case "key_metadata":
+                return file.keyMetadata() == null ? null : toByteArray(file.keyMetadata());
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
         }
@@ -299,7 +301,7 @@ public class IcebergMetadataScanner extends ConnectorScanner {
         return byteBufferMap.entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        entry -> ByteBuffers.toByteArray(entry.getValue())));
+                        entry -> toByteArray(entry.getValue())));
     }
 
     private void parseRequiredTypes() {
