@@ -54,7 +54,6 @@ import java.util.Objects;
 import java.util.StringJoiner;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
-
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class SqlParser {

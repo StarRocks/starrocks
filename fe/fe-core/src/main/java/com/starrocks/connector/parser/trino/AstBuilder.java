@@ -145,6 +145,7 @@ import io.trino.sql.tree.Node;
 import io.trino.sql.tree.NotExpression;
 import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
+import io.trino.sql.tree.Offset;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
@@ -186,11 +187,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
-<<<<<<< HEAD
-=======
-import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
->>>>>>> cadf909d7d ([Enhancement] Give more error message for trino parser (#45401))
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static java.util.stream.Collectors.toList;
@@ -240,12 +237,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     private <T> List<T> visit(List<? extends Node> nodes, ParseTreeContext context, Class<T> clazz) {
-<<<<<<< HEAD
-        return nodes.stream().map(child -> this.process(child, context)).
-                map(clazz::cast).collect(Collectors.toList());
-=======
         return nodes.stream().map(child -> this.process(child, context)).map(clazz::cast).collect(Collectors.toList());
->>>>>>> cadf909d7d ([Enhancement] Give more error message for trino parser (#45401))
     }
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
@@ -375,20 +367,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             resultSelectRelation.setOrderBy(new ArrayList<>());
         }
-<<<<<<< HEAD
-        resultSelectRelation.setLimit((LimitElement) processOptional(node.getLimit(), context));
-=======
 
-        LimitElement limitElement = (LimitElement) processOptional(node.getLimit(), context);
-        if (node.getOffset().isPresent()) {
-            if (limitElement == null) {
-                throw unsupportedException("Trino Parser on StarRocks does not support OFFSET without LIMIT now");
-            }
-            LimitElement offsetElement = (LimitElement) processOptional(node.getOffset(), context);
-            limitElement = new LimitElement(offsetElement.getOffset(), limitElement.getLimit());
-        }
-        resultSelectRelation.setLimit(limitElement);
->>>>>>> cadf909d7d ([Enhancement] Give more error message for trino parser (#45401))
+        resultSelectRelation.setLimit((LimitElement) processOptional(node.getLimit(), context));
         return resultSelectRelation;
     }
 
@@ -552,6 +532,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         boolean isAsc = node.getOrdering() == SortItem.Ordering.ASCENDING;
         return new OrderByElement((Expr) visit(node.getSortKey(), context), isAsc,
                 getNullOrderingType(isAsc, node.getNullOrdering()));
+    }
+
+    @Override
+    protected ParseNode visitOffset(Offset node, ParseTreeContext context) {
+        long offset = ((LiteralExpr) visit(node.getRowCount(), context)).getLongValue();
+        return new LimitElement(offset, LimitElement.NO_LIMIT.getLimit());
     }
 
     @Override

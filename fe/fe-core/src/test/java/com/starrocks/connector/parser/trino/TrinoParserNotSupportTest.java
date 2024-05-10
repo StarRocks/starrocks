@@ -38,13 +38,6 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "StarRocks does not support Window clause now");
     }
 
-    // refer to https://trino.io/docs/current/sql/select.html#offset-clause
-    @Test
-    public void testOffsetWithoutLimit() {
-        String sql = "select v1 from t0 order by v1 offset 2";
-        analyzeFail(sql, "Trino Parser on StarRocks does not support OFFSET without LIMIT now");
-    }
-
     // refer to https://trino.io/docs/current/sql/select.html#limit-or-fetch-first-clause
     @Test
     public void testLimitAll() {
