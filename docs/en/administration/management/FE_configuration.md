@@ -1124,7 +1124,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
-- Introduced in: v3.1.11, v3.2.7
+- Introduced in: v3.1.10, v3.2.6
 
 ### User, role, and privilege
 
