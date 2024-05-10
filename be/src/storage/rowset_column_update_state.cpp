@@ -367,16 +367,51 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
     return Status::OK();
 }
 
+// Fetch from upt file using column iter's `fetch_values_by_rowid` function.
+// We need this function when `update` memory is full, and we don't want to read all rows from upt files.
+static Status fetch_upt_by_rowids(const TabletSchema& partial_tschema, Rowset* rowset, uint32_t update_file_id,
+                                  const std::vector<uint32_t>& rowids, OlapReaderStatistics* stats,
+                                  Chunk* result_chunk) {
+    if (update_file_id >= rowset->num_update_files()) {
+        return Status::InternalError(fmt::format("fetch_upt_by_rowids failed, update_file_id {}/{} overflow",
+                                                 update_file_id, rowset->num_update_files()));
+    }
+    if (partial_tschema.columns().size() != result_chunk->columns().size()) {
+        return Status::InternalError(fmt::format("fetch_upt_by_rowids failed, schema error: {}/{}",
+                                                 partial_tschema.columns().size(), result_chunk->columns().size()));
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+    std::string seg_path = Rowset::segment_upt_file_path(rowset->rowset_path(), rowset->rowset_id(), update_file_id);
+    ASSIGN_OR_RETURN(auto segment, Segment::open(fs, FileInfo{seg_path}, update_file_id, rowset->schema()));
+    ColumnIteratorOptions iter_opts;
+    iter_opts.stats = stats;
+    iter_opts.use_page_cache = true;
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(segment->file_info()));
+    iter_opts.read_file = read_file.get();
+    size_t colid_offset = 0;
+    for (const auto& col : partial_tschema.columns()) {
+        ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(col.unique_id(), nullptr));
+        RETURN_IF_ERROR(col_iter->init(iter_opts));
+        RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(),
+                                                        result_chunk->columns()[colid_offset++].get()));
+    }
+    return Status::OK();
+}
+
 // this function have two goals:
 // 1. get the rows from update files, store in `result_chunk`
 // 2. generate `rowids`, the rowid list marks the rows in source segment file which be updated.
 Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid,
+                                                        const TabletSchema& partial_tschema,
                                                         const Schema& partial_schema, MemTracker* tracker,
                                                         Rowset* rowset, OlapReaderStatistics* stats,
                                                         std::vector<uint32_t>& rowids, Chunk* result_chunk) {
     // We split the task into multiple rounds according to the update file where the updated rows are located.
     std::vector<uint32_t> batch_append_rowids;
     uint32_t cur_update_file_id = UINT32_MAX;
+    // Is `batch_append_rowids` in ascending order.
+    bool is_batch_append_rowids_inorder = true;
+    // prepare upt file cache
     auto prepare_update_chunk_cache_fn = [&]() {
         if (_update_chunk_cache[cur_update_file_id].get() == nullptr) {
             _update_chunk_cache[cur_update_file_id] = ChunkHelper::new_chunk(partial_schema, 0);
@@ -394,12 +429,24 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
         }
         return Status::OK();
     };
+    // reclaim upt file cache
     auto clear_update_chunk_cache_fn = [&]() {
         // clear cache if Update MemTracker limit exceeded
-        if (tracker->any_limit_exceeded() && _update_chunk_cache[cur_update_file_id].get() != nullptr) {
+        // Notice: if `batch_append_rowids` in ascending order, we don't need to clear cache,
+        // because we will use `read_from_update_by_rowid` instead of cache,
+        // so we can keep this cache for later vist.
+        if (tracker->limit_exceeded() && !is_batch_append_rowids_inorder &&
+            _update_chunk_cache[cur_update_file_id].get() != nullptr) {
             tracker->release(_update_chunk_cache[cur_update_file_id]->memory_usage());
             _update_chunk_cache[cur_update_file_id].reset(nullptr);
         }
+    };
+    auto use_fetch_upt_by_rowids = [&]() {
+        // Fetch upt file by rowids when `update` memory is full and we don't have cache for this upt file.
+        // And also we already have rowids in ascending order, because `fetch_values_by_rowid`
+        // only support fetch rows by ascending order rowids.
+        return tracker->limit_exceeded() && is_batch_append_rowids_inorder &&
+               _update_chunk_cache[cur_update_file_id].get() == nullptr;
     };
     for (const auto& each : rowid_to_update_rowid) {
         rowids.push_back(each.first);
@@ -408,15 +455,27 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
             cur_update_file_id = each.second.first;
             batch_append_rowids.push_back(each.second.second);
         } else if (cur_update_file_id == each.second.first) {
+            // decide whether rowids in ascending order.
+            if (is_batch_append_rowids_inorder && !batch_append_rowids.empty() &&
+                batch_append_rowids.back() >= each.second.second) {
+                is_batch_append_rowids_inorder = false;
+            }
             // same update file, batch them in one round, handle them later.
             batch_append_rowids.push_back(each.second.second);
         } else {
             // meet different update file, handle this round.
-            RETURN_IF_ERROR(prepare_update_chunk_cache_fn());
-            DCHECK(_update_chunk_cache[cur_update_file_id]->num_rows() >= batch_append_rowids.size());
-            result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
-                                           batch_append_rowids.size());
-            clear_update_chunk_cache_fn();
+            if (use_fetch_upt_by_rowids()) {
+                auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, batch_append_rowids.size());
+                RETURN_IF_ERROR(fetch_upt_by_rowids(partial_tschema, rowset, cur_update_file_id, batch_append_rowids,
+                                                    stats, tmp_chunk.get()));
+                result_chunk->append(*tmp_chunk);
+            } else {
+                RETURN_IF_ERROR(prepare_update_chunk_cache_fn());
+                DCHECK(_update_chunk_cache[cur_update_file_id]->num_rows() >= batch_append_rowids.size());
+                result_chunk->append_selective(*_update_chunk_cache[cur_update_file_id], batch_append_rowids.data(), 0,
+                                               batch_append_rowids.size());
+                clear_update_chunk_cache_fn();
+            }
             cur_update_file_id = each.second.first;
             batch_append_rowids.clear();
             batch_append_rowids.push_back(each.second.second);
@@ -725,8 +784,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             int64_t t2 = MonotonicMillis();
             std::vector<uint32_t> rowids;
             auto update_chunk_ptr = ChunkHelper::new_chunk(partial_schema, each.second.size());
-            RETURN_IF_ERROR(_read_chunk_from_update(each.second, partial_schema, tracker, rowset, &stats, rowids,
-                                                    update_chunk_ptr.get()));
+            RETURN_IF_ERROR(_read_chunk_from_update(each.second, *partial_tschema, partial_schema, tracker, rowset,
+                                                    &stats, rowids, update_chunk_ptr.get()));
             const size_t update_chunk_size = update_chunk_ptr->memory_usage();
             tracker->consume(update_chunk_size);
             DeferOp tracker_defer2([&]() { tracker->release(update_chunk_size); });
