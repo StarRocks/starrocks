@@ -1532,11 +1532,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(otherMsg);
 
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                if (warehouse != null) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                     row.add(warehouse.getName());
-                } else {
-                    row.add("");
+                } catch (Exception e) {
+                    row.add(e.getMessage());
                 }
             }
             row.add(getSourceProgressString());
