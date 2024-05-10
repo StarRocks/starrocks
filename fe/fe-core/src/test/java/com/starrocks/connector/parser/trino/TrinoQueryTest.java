@@ -156,14 +156,16 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testDecimal() throws Exception {
+        // If Trino parser parse failed, it wll rollback to StarRocks parser,
+        // decimal32, decimal64, decimal128 could parsed by StarRocks parser.
         String sql = "select cast(tj as decimal32) from tall";
-        analyzeFail(sql, "Unknown type: decimal32");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal64) from tall";
-        analyzeFail(sql, "Unknown type: decimal64");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal128) from tall";
-        analyzeFail(sql, "Unknown type: decimal128");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal) from tall";
         assertPlanContains(sql, "CAST(10: tj AS DECIMAL128(38,0))");
@@ -803,9 +805,6 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select v1 from t0 order by v1 offset 2 limit 20";
         assertPlanContains(sql, "offset: 2", "limit: 20");
-
-        sql = "select v1 from t0 order by v1 offset 2";
-        analyzeFail(sql);
     }
 
     @Test
