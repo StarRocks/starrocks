@@ -2394,11 +2394,11 @@ Status TimeFunctions::jodatime_format_close(FunctionContext* context, FunctionCo
     return Status::OK();
 }
 
-bool joda_standard_format_one_row(const TimestampValue& timestamp_value, char* buf, const std::string& fmt) {
+bool joda_standard_format_one_row(const TimestampValue& timestamp_value, char* buf, std::string_view fmt) {
     int year, month, day, hour, minute, second, microsecond;
     timestamp_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
     DateTimeValue dt(TIME_DATETIME, year, month, day, hour, minute, second, microsecond);
-    bool b = dt.to_joda_format_string(fmt.c_str(), fmt.size(), buf);
+    bool b = dt.to_joda_format_string(fmt.data(), fmt.size(), buf);
     return b;
 }
 
@@ -2453,7 +2453,7 @@ void common_joda_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TY
         return;
     }
 
-    auto format = viewer_format->value(i).to_string();
+    std::string_view format = viewer_format->value(i);
     if (format == "yyyyMMdd") {
         builder->append(format_for_yyyyMMdd(viewer_date->value(i)));
     } else if (format == "yyyy-MM-dd") {
@@ -2469,7 +2469,7 @@ void common_joda_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TY
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = joda_standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
+        bool b = joda_standard_format_one_row(ts, buf, format);
         builder->append(Slice(std::string(buf)), !b);
     }
 }
@@ -2823,7 +2823,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_wdc(FunctionContext* context, const 
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + wdc->dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, const Columns& columns) {
@@ -2847,7 +2847,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, con
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -2914,7 +2914,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_wdc(FunctionContext* context, co
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - wdc->dow_weekday) % 7 + 1));
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context, const Columns& columns) {
@@ -2938,7 +2938,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context,
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 Status TimeFunctions::previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {

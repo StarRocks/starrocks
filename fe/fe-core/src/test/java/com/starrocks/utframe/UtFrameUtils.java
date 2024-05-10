@@ -1220,6 +1220,10 @@ public class UtFrameUtils {
         // build a small cache for test
         Config.mv_plan_cache_max_size = 10;
 
+        // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
+        // task run will only refresh 1 partition and will produce wrong result.
+        Config.default_mv_partition_refresh_number = -1;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
 

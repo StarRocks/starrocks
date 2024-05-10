@@ -59,6 +59,8 @@ select bitmap_from_binary(to_binary(""));
 
 -- Input is null
 select bitmap_from_binary(null);
+select bitmap_to_binary(null);
+select bitmap_to_binary(bitmap_from_string("abc"));
 
 -- string
 truncate table t1;

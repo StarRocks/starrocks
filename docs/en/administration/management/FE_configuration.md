@@ -1081,6 +1081,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+#### lock_manager_enabled
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the lock manager. The lock manager performs central management for locks. For example, it can control whether to refine the granularity of metadata locks from the database level to the table level.
+- Introduced in: v3.3.0
+
+##### lock_manager_enable_using_fine_granularity_lock
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which improves load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
+- Introduced in: v3.3.0
+
+##### black_host_history_sec
+
+- Default: 2 * 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration for retaining historical connection failures of BE nodes in the BE Blacklist. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold of connection failures allowed for a blacklisted BE node. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+##### enable_legacy_compatibility_for_replication
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
+- Introduced in: v3.1.10, v3.2.6
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1234,8 +1279,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: whether to collect metrics for materialized view by default.
-- Introduced in: v3.1.11
+- Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
+- Introduced in: v3.1.11, v3.2.5
 
 ##### enable_materialized_view_text_based_rewrite
 
@@ -1243,7 +1288,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: whether to enable text based rewrite by default, if true it will build ast tree in materialized view initialization.
+- Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
 - Introduced in: v3.2.5
 
 ##### enable_mv_automatic_active_check
@@ -3070,6 +3115,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
 - Introduced in: v3.2.0
 
+##### lake_compaction_disable_tables
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
+- Introduced in: v3.1.11
+
 ### Other
 
 ##### tmp_dir
@@ -4783,28 +4837,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
 - Introduced in: -
-
-<!--
-##### black_host_history_sec
-
-- Default: 2 * 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- Default: 5
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### jdbc_connection_pool_size
 

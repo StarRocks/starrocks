@@ -27,6 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.UserException;
@@ -42,7 +43,9 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BrokerFileGroupTest {
     @Mocked
@@ -155,5 +158,19 @@ public class BrokerFileGroupTest {
         fileGroup.parse(db, desc);
         Assert.assertEquals(Lists.newArrayList("k1", "k2"), fileGroup.getFileFieldNames());
         Assert.assertEquals(10, fileGroup.getSrcTableId());
+    }
+
+    @Test
+    public void testTableFunctionTableCSVDelimiter() throws UserException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "fake://some_bucket/some_path/*");
+        properties.put("format", "CSV");
+        properties.put("csv.column_separator", "\\x01");
+        properties.put("csv.row_delimiter", "\\x02");
+
+        TableFunctionTable table = new TableFunctionTable(properties);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(table);
+        Assert.assertEquals("\1", fileGroup.getColumnSeparator());
+        Assert.assertEquals("\2", fileGroup.getRowDelimiter());
     }
 }

@@ -679,10 +679,6 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATC
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 = "abc";
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 LIKE "%abc%";
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 IN ("bcd", "ab");
-
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
 
@@ -711,3 +707,27 @@ INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
 CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
 function: wait_materialized_view_cancel()
 DROP TABLE t_create_mv_with_match;
+
+-- name: test_alter_gin_col_into_other_type
+CREATE TABLE `t_alter_gin_col_into_other_type` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 BIGINT;
+INSERT INTO t_alter_gin_col_into_other_type VALUES (1, "abc");
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 VARCHAR(2000);
+function: wait_alter_table_finish()
+
+SHOW CREATE TABLE t_alter_gin_col_into_other_type;
+SELECT * FROM t_alter_gin_col_into_other_type;
+DROP TABLE t_alter_gin_col_into_other_type;

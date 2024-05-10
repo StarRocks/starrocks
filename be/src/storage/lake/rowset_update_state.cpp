@@ -507,6 +507,24 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
     // currently assume it's a partial update
     const auto& txn_meta = op_write.txn_meta();
     std::vector<ColumnId> unmodified_column_ids = get_read_columns_ids(op_write, tablet_schema);
+
+    bool has_auto_increment_col = false;
+    for (uint32_t i = 0; i < tablet_schema->num_columns(); i++) {
+        if (tablet_schema->column(i).is_auto_increment()) {
+            has_auto_increment_col = true;
+        }
+    }
+    // Correct the unmodified_column_ids if there is a auto increment column in the schema
+    // This is a very special scene which we only partial update the auto increment column itself
+    // but not other columns.
+    // In this case, txn_meta.partial_update_column_unique_ids() will be always empty and we
+    // will get unmodified_column_ids is full schema which is wrong.
+    // To solve it, we can simply clear the unmodified_column_ids.
+    if (has_auto_increment_col && unmodified_column_ids.size() == tablet_schema->num_columns() &&
+        _partial_update_states.size() == 0) {
+        unmodified_column_ids.clear();
+    }
+
     std::vector<bool> need_rename(rowset_meta.segments_size(), true);
     for (int i = 0; i < rowset_meta.segments_size(); i++) {
         const auto& src_path = rowset_meta.segments(i);

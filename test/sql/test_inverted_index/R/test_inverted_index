@@ -1212,17 +1212,6 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATC
 -- result:
 1
 -- !result
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 = "abc";
--- result:
--- !result
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 LIKE "%abc%";
--- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
--- !result
-SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" AND v2 IN ("bcd", "ab");
--- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
--- !result
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
 -- result:
 1
@@ -1270,5 +1259,58 @@ function: wait_materialized_view_cancel()
 None
 -- !result
 DROP TABLE t_create_mv_with_match;
+-- result:
+-- !result
+-- name: test_alter_gin_col_into_other_type
+CREATE TABLE `t_alter_gin_col_into_other_type` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 BIGINT;
+-- result:
+E: (1064, 'Cannot modify a column with GIN into non-string type')
+-- !result
+INSERT INTO t_alter_gin_col_into_other_type VALUES (1, "abc");
+-- result:
+-- !result
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 VARCHAR(2000);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t_alter_gin_col_into_other_type;
+-- result:
+t_alter_gin_col_into_other_type	CREATE TABLE `t_alter_gin_col_into_other_type` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(2000) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN("parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+SELECT * FROM t_alter_gin_col_into_other_type;
+-- result:
+1	abc
+-- !result
+DROP TABLE t_alter_gin_col_into_other_type;
 -- result:
 -- !result

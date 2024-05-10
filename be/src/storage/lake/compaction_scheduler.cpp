@@ -99,7 +99,7 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
           _contexts(),
           _task_queues(config::compact_threads) {
     CHECK_GT(_task_queues.task_queue_size(), 0);
-    auto st = ThreadPoolBuilder("clound_native_compact")
+    auto st = ThreadPoolBuilder("cloud_native_compact")
                       .set_min_threads(0)
                       .set_max_threads(INT_MAX)
                       .set_max_queue_size(INT_MAX)
@@ -303,7 +303,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         ThreadPool* flush_pool = nullptr;
         if (config::lake_enable_compaction_async_write) {
             // CAUTION: we reuse delta writer's memory table flush pool here
-            flush_pool = StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+            flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
             if (UNLIKELY(flush_pool == nullptr)) {
                 return Status::InternalError("Get memory table flush pool failed");
             }
