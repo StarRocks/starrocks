@@ -166,6 +166,8 @@ Together with unnest(), you can achieve the following column-to-row conversion f
 
 ### Expand Bitmap data
 
+You can use Lateral Join with the unnest_bitmap function to expand Bitmap data.
+
 1. Create a table and insert data into this table.
 
     ~~~SQL
@@ -209,14 +211,14 @@ Together with unnest(), you can achieve the following column-to-row conversion f
 4. Expand data in `v2` into multiple rows.
 
     ~~~Plain Text
-    select v1,unnest from lateral_test3, unnest(bitmap_to_array(v2)) as unnest;
+    mysql> select v1, unnest_bitmap from lateral_test3, unnest_bitmap(v2) as unnest_bitmap;
 
-    +------+--------+
-    | v1   | unnest |
-    +------+--------+
-    |    1 |      1 |
-    |    1 |      2 |
-    |    1 |      3 |
-    |    2 |      3 |
-    +------+--------+
+    +------+---------------+
+    | v1   | unnest_bitmap |
+    +------+---------------+
+    |    1 |             1 |
+    |    1 |             2 |
+    |    1 |             3 |
+    |    2 |             3 |
+    +------+---------------+
     ~~~
