@@ -247,12 +247,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     private <T> List<T> visit(List<? extends Node> nodes, ParseTreeContext context, Class<T> clazz) {
-        return nodes.stream().map(child -> {
-            if (child instanceof AtTimeZone) {
-                throw unsupportedException("Time zone is not supported now");
-            }
-            return this.process(child, context);
-        }).map(clazz::cast).collect(Collectors.toList());
+        return nodes.stream().map(child -> this.process(child, context)).map(clazz::cast).collect(Collectors.toList());
     }
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
