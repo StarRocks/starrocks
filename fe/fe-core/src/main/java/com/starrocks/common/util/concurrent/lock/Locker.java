@@ -219,14 +219,21 @@ public class Locker {
         }
         dbs.sort(Comparator.comparingLong(Database::getId));
         List<Database> lockedDbs = Lists.newArrayList();
-        for (Database db : dbs) {
-            if (!tryLockDatabase(db, lockType, timeout, unit)) {
-                lockedDbs.stream().forEach(t -> unLockDatabase(t, lockType));
-                return false;
+        boolean isLockSuccess = false;
+        try {
+            for (Database db : dbs) {
+                if (!tryLockDatabase(db, lockType, timeout, unit)) {
+                    return false;
+                }
+                lockedDbs.add(db);
             }
-            lockedDbs.add(db);
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                lockedDbs.stream().forEach(t -> unLockDatabase(t, lockType));
+            }
         }
-        return true;
+        return isLockSuccess;
     }
 
     /**

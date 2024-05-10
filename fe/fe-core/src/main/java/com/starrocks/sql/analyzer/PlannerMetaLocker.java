@@ -74,14 +74,21 @@ public class PlannerMetaLocker {
     public boolean tryLock(long timeout, TimeUnit unit) {
         Locker locker = new Locker();
         List<Database> lockedDbs = Lists.newArrayList();
-        for (Map.Entry<Long, Database> e : dbs.entrySet()) {
-            if (!locker.tryLockDatabase(e.getValue(), LockType.READ, timeout, unit)) {
-                lockedDbs.stream().forEach(db -> locker.unLockDatabase(db, LockType.READ));
-                return false;
+        boolean isLockSuccess = false;
+        try {
+            for (Map.Entry<Long, Database> e : dbs.entrySet()) {
+                if (!locker.tryLockDatabase(e.getValue(), LockType.READ, timeout, unit)) {
+                    return false;
+                }
+                lockedDbs.add(e.getValue());
             }
-            lockedDbs.add(e.getValue());
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                lockedDbs.stream().forEach(db -> locker.unLockDatabase(db, LockType.READ));
+            }
         }
-        return true;
+        return isLockSuccess;
     }
 
     public void lock() {
