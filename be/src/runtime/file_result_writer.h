@@ -66,8 +66,12 @@ struct ResultFileOptions {
             hdfs_properties = t_opt.hdfs_properties;
             is_local_file = false;
         }
-        if (t_opt.__isset.use_broker) {
-            use_broker = t_opt.use_broker;
+        if (t_opt.__isset.use_broker && !t_opt.use_broker) {
+            // old FE only support use broker,
+            // so set use_broker to false only when use_broker in TResultFileSinkOptions is explicitly set false.
+            use_broker = false;
+        } else {
+            use_broker = true;
         }
         if (t_opt.__isset.broker_properties) {
             broker_properties = t_opt.broker_properties;
