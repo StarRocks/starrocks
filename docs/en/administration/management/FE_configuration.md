@@ -2559,16 +2559,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
 ##### tablet_sched_be_down_tolerate_time_s
 
 - Default: 900
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Longest duration the scheduler will tolerate for a backend being in an inactive state. After timeout, tablets on that backend will be migrated to other active backends.
+- Introduced in: 2.5.7
 
 <!--
 ##### tablet_sched_colocate_be_down_tolerate_time_s
