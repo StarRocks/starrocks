@@ -112,14 +112,12 @@ protected:
 
 std::shared_ptr<TPlanNode> StreamOperatorsTest::_create_tplan_node(int node_id, int tuple_id) {
     std::vector<::starrocks::TTupleId> tuple_ids{tuple_id};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(node_id);
     tnode->__set_node_type(TPlanNodeType::STREAM_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 

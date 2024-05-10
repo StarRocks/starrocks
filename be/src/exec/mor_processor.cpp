@@ -38,8 +38,8 @@ Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& p
     RETURN_IF_ERROR(Expr::open(_join_exprs, runtime_state));
 
     _build_row_desc =
-            std::make_unique<RowDescriptor>(runtime_state->desc_tbl().get_tuple_descriptor(params.mor_tuple_id), false);
-    _probe_row_desc = std::make_unique<RowDescriptor>(params.tuple_desc, false);
+            std::make_unique<RowDescriptor>(runtime_state->desc_tbl().get_tuple_descriptor(params.mor_tuple_id));
+    _probe_row_desc = std::make_unique<RowDescriptor>(params.tuple_desc);
 
     const auto param = _pool.add(
             new HashJoinerParam(&_pool, _hash_join_node, 1, TPlanNodeType::HASH_JOIN_NODE,
