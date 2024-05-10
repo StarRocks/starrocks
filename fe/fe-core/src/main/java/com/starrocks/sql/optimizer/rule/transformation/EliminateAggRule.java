@@ -105,21 +105,32 @@ public class EliminateAggRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
+
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(aggOp.getAggregations());
+
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
             if (fnName.equals(FunctionSet.COUNT)) {
-                return rewriteCountFunction(input);
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> rewriteEntry : rewriteCountFunction(input)
+                        .entrySet()) {
+                    newProjectMap.put(rewriteEntry.getKey(), rewriteEntry.getValue());
+                }
             } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
                     fnName.equals(FunctionSet.FIRST_VALUE) ||
                     fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN) ||
                     fnName.equals(FunctionSet.GROUP_CONCAT)) {
-                return rewriteCastFunction(input);
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> rewriteEntry : rewriteCastFunction(input)
+                        .entrySet()) {
+                    newProjectMap.put(rewriteEntry.getKey(), rewriteEntry.getValue());
+                }
             }
         }
-        return List.of(input);
+
+        LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
+        return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
     }
 
-    private List<OptExpression> rewriteCountFunction(OptExpression input) {
+    private Map<ColumnRefOperator, ScalarOperator> rewriteCountFunction(OptExpression input) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
@@ -141,19 +152,17 @@ public class EliminateAggRule extends TransformationRule {
             newProjectMap.put(entry.getKey(), callOperator);
         }
 
-        LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
-        return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
+        return newProjectMap;
     }
 
-    private List<OptExpression> rewriteCastFunction(OptExpression input) {
+    private Map<ColumnRefOperator, ScalarOperator> rewriteCastFunction(OptExpression input) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             newProjectMap.put(entry.getKey(), entry.getValue().getArguments().get(0));
         }
 
-        LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
-        return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
+        return newProjectMap;
     }
 
 }
