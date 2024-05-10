@@ -70,7 +70,7 @@ displayed_sidebar: "Chinese"
 - **基于视图的改写**：针对视图的查询，支持改写至基于视图创建的物化视图上。具体信息，参考 [基于视图的物化视图查询改写](https://docs.starrocks.io/zh/docs/3.3/using_starrocks/query_rewrite_with_materialized_views/#基于视图的物化视图查询改写)。
 - **基于文本的改写**：引入基于文本的改写能力，用于改写具有相同抽象语法树的查询（或其子查询）。具体信息，参考 [基于文本的物化视图改写](https://docs.starrocks.io/zh/docs/3.3/using_starrocks/query_rewrite_with_materialized_views/#基于文本的物化视图改写)。
 - **物化视图改写控制的新属性**：通过 `enable_query_rewrite` 属性实现禁用查询改写，减少整体开销。具体信息，参考 [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/3.3/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#参数-1)。
-- **物化视图改写代价优化**：增加候选物化视图个数的控制，以及更好的筛选算法。增加 MV plan cache。从而整体降低改写阶段 Optimizer 耗时。具体信息，参考 `query_including_mv_names` 及 `query_excluding_mv_names`。
+- **物化视图改写代价优化**：增加候选物化视图个数的控制，以及更好的筛选算法。增加 MV plan cache。从而整体降低改写阶段 Optimizer 耗时。具体信息，参考 [`cbo_materialized_view_rewrite_related_mvs_limit`](https://docs.starrocks.io/zh/docs/3.3/reference/System_variable/#cbo_materialized_view_rewrite_related_mvs_limit)。
 - **Iceberg 物化视图更新**：Iceberg 物化视图现支持分区更新触发的增量刷新和 Iceberg Partition Transforms。具体信息，参考 [使用物化视图加速数据湖查询](https://docs.starrocks.io/zh/docs/3.3/using_starrocks/data_lake_query_acceleration_with_materialized_views/#选择合适的刷新策略)。
 - **增强的物化视图可观测性**：改进物化视图的监控和管理，以获得更好的系统洞察。具体信息，参考 [异步物化视图监控项](https://docs.starrocks.io/zh/docs/3.3/administration/management/monitoring/metrics/#异步物化视图监控项)。
 - **提升大规模物化视图刷新的效率。**
