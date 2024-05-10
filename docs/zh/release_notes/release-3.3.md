@@ -22,7 +22,7 @@ displayed_sidebar: "Chinese"
   - 新增 [缓存预热 (Warmup)](https://docs.starrocks.io/zh/docs/3.3/data_source/data_cache_warmup/) 命令 CACHE SELECT，用于填充查询热点数据，可以结合 SUBMIT TASK 完成周期性填充。
   - 增加了多项 [Data Cache 可观测性指标](https://docs.starrocks.io/zh/docs/3.3/data_source/data_cache_observe/)。
 - **Parquet Reader 性能提升**：
-  - 针对 Page Index 的优化，显著减少 Scan 数据规模。
+  - 优化 Page Index，显著减少 Scan 数据规模。
   - 在有 Page Index 的情况下，降低 Page 多读的情况。
   - 使用 SIMD 加速计算判断数据行是否为空。
 - **ORC Reader性能提升**：
