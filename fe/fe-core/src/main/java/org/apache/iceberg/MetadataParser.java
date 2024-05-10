@@ -236,6 +236,9 @@ public class MetadataParser {
         // build equality field id
         int[] equalityFieldIds = thrift.isSetEquality_ids() ? ArrayUtil.toIntArray(thrift.getEquality_ids()) : null;
 
+        // build key metadata
+        ByteBuffer keyMetadata = thrift.isSetKey_metadata() ? ByteBuffer.wrap(thrift.getKey_metadata()) : null;
+
         BaseFile<?> baseFile;
         // TODO(stephen): add keyMetadata field
         if (content == FileContent.DATA) {
@@ -246,7 +249,7 @@ public class MetadataParser {
                     partitionData,
                     fileLength,
                     metrics,
-                    null,
+                    keyMetadata,
                     splitOffsets,
                     null);
         } else {
@@ -261,7 +264,7 @@ public class MetadataParser {
                     equalityFieldIds,
                     sortId,
                     splitOffsets,
-                    null
+                    keyMetadata
             );
         }
 
