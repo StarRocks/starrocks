@@ -76,12 +76,23 @@ public class EliminateAggRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
+            String fnName = entry.getValue().getFnName();
+            if (!(fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.COUNT) ||
+                    fnName.equals(FunctionSet.AVG) ||
+                    fnName.equals(FunctionSet.FIRST_VALUE) ||
+                    fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN) ||
+                    fnName.equals(FunctionSet.GROUP_CONCAT))) {
+                return false;
+            }
+        }
+
         // collect uk pk key
         UKFKConstraintsCollector collector = new UKFKConstraintsCollector();
         input.getOp().accept(collector, input, null);
-
         OptExpression childOptExpression = input.inputAt(0);
-        LogicalAggregationOperator aggOp = input.getOp().cast();
         for (ColumnRefOperator columnRefOperator : aggOp.getGroupingKeys()) {
             if (childOptExpression.getConstraints().getUniqueConstraint(columnRefOperator.getId()) == null) {
                 return false;
@@ -98,7 +109,8 @@ public class EliminateAggRule extends TransformationRule {
             String fnName = entry.getValue().getFnName();
             if (fnName.equals(FunctionSet.COUNT)) {
                 return rewriteCountFunction(input);
-            } else if (fnName.equals(FunctionSet.AVG) || fnName.equals(FunctionSet.FIRST_VALUE) ||
+            } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
+                    fnName.equals(FunctionSet.FIRST_VALUE) ||
                     fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN) ||
                     fnName.equals(FunctionSet.GROUP_CONCAT)) {
                 return rewriteCastFunction(input);
