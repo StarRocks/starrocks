@@ -60,6 +60,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("schema columns scanner not inited.");
     }
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     if (_param->without_db_table) {
         return Status::OK();
     }
@@ -83,7 +84,6 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
     return Status::OK();
 }
