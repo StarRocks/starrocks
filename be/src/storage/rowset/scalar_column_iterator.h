@@ -66,8 +66,8 @@ public:
     ordinal_t num_rows() const override { return _reader->num_rows(); }
 
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* range) override;
+                                                    const ColumnPredicate* del_predicate, SparseRange<>* range,
+                                                    CompoundNodeType pred_relationn) override;
 
     [[nodiscard]] Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                         SparseRange<>* range) override;

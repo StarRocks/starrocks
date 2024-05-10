@@ -222,9 +222,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
     PredicateTree pred_tree_for_zone_map;
-    RETURN_IF_ERROR(
-            ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree, pred_tree_for_zone_map));
-    rs_opts.predicates_for_zone_map = pred_tree_for_zone_map.get_immediate_column_predicate_map();
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
