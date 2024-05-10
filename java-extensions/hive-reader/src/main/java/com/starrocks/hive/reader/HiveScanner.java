@@ -14,6 +14,7 @@
 
 package com.starrocks.hive.reader;
 
+import com.google.common.base.Splitter;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;

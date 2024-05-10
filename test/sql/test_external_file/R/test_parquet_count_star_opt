@@ -58,6 +58,13 @@ select count(*) from array_data_only;
 -- result:
 51
 -- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+-- result:
+-- !result
+select count(*) from array_data_only;
+-- result:
+51
+-- !result
 CREATE EXTERNAL TABLE map_data_only
 (
     data map<string, int>    
@@ -71,6 +78,13 @@ PROPERTIES
 -- result:
 -- !result
 set enable_count_star_optimization = true;
+-- result:
+-- !result
+select count(*) from map_data_only;
+-- result:
+62
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
 -- !result
 select count(*) from map_data_only;
@@ -92,6 +106,13 @@ PROPERTIES
 -- result:
 -- !result
 set enable_count_star_optimization = true;
+-- result:
+-- !result
+select count(*) from struct_data_only;
+-- result:
+73
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
 -- !result
 select count(*) from struct_data_only;
