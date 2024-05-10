@@ -2568,16 +2568,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
 ##### tablet_sched_be_down_tolerate_time_s
 
 - Default: 900
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes.
+- Introduced in: v2.5.7
 
 <!--
 ##### tablet_sched_colocate_be_down_tolerate_time_s
