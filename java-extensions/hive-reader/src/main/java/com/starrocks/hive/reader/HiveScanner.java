@@ -14,6 +14,7 @@
 
 package com.starrocks.hive.reader;
 
+import com.google.common.base.Splitter;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -92,7 +93,8 @@ public class HiveScanner extends ConnectorScanner {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
         this.hiveColumnTypes = params.get("hive_column_types").split("#");
-        this.requiredFields = params.get("required_fields").split(",");
+        this.requiredFields =
+                Splitter.on(',').omitEmptyStrings().splitToList(params.get("required_fields")).toArray(new String[0]);
         this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.dataFilePath = params.get("data_file_path");
         this.blockOffset = Long.parseLong(params.get("block_offset"));
