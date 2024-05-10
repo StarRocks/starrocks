@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -52,6 +53,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -213,6 +215,65 @@ public class TableFunctionTable extends Table {
                 throw new DdlException("failed to parse auto_detect_sample_files: ", e);
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_ROWS)) {
+            autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
+        } else {
+            try {
+                autoDetectSampleRows = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_ROWS));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
+            csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
+            csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_ROW_DELIMITER, 1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.enclose");
+            }
+            csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.escape");
+            }
+            csvEscape = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_SKIP_HEADER)) {
+            try {
+                csvSkipHeader = Integer.parseInt(properties.get(PROPERTY_CSV_SKIP_HEADER));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse csv.skip_header: ", e);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_TRIM_SPACE)) {
+            csvTrimSpace = Boolean.parseBoolean(properties.get(PROPERTY_CSV_TRIM_SPACE));
+        }
+>>>>>>> d496918fc7 ([BugFix] Multi bytes CSV row/column delimiter for `files()` (#45006))
     }
 
     private void parseFiles() throws DdlException {
@@ -252,6 +313,26 @@ public class TableFunctionTable extends Table {
         params.setSrc_slot_ids(new ArrayList<>());
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
+<<<<<<< HEAD
+=======
+        params.setSchema_sample_file_row_count(autoDetectSampleRows);
+        params.setEnclose(csvEnclose);
+        params.setEscape(csvEscape);
+        params.setSkip_header(csvSkipHeader);
+        params.setTrim_space(csvTrimSpace);
+        params.setFlexible_column_mapping(true);
+        if (csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length == 1) {
+            params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
+        } else {
+            params.setMulti_column_separator(csvColumnSeparator);
+        }
+
+        if (csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length == 1) {
+            params.setRow_delimiter(csvRowDelimiter.getBytes()[0]);
+        } else {
+            params.setMulti_row_delimiter(csvRowDelimiter);
+        }
+>>>>>>> d496918fc7 ([BugFix] Multi bytes CSV row/column delimiter for `files()` (#45006))
 
         try {
             THdfsProperties hdfsProperties = new THdfsProperties();

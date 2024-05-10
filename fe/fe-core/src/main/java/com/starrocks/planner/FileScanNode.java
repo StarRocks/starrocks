@@ -62,6 +62,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -103,7 +104,6 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
@@ -292,14 +292,16 @@ public class FileScanNode extends LoadScanNode {
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
         if (column_separator.length != 1) {
-            if (column_separator.length > 50) {
-                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+            if (column_separator.length > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH) {
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "column separator",
+                        1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
             }
             params.setMulti_column_separator(fileGroup.getColumnSeparator());
         }
         if (row_delimiter.length != 1) {
-            if (row_delimiter.length > 50) {
-                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+            if (row_delimiter.length > CsvFormat.MAX_ROW_DELIMITER_LENGTH){
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "row delimiter",
+                        1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
             }
             params.setMulti_row_delimiter(fileGroup.getRowDelimiter());
         }

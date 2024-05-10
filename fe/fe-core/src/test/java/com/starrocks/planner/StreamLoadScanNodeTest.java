@@ -92,6 +92,8 @@ public class StreamLoadScanNodeTest {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setColumnSeparator(",");
+        request.setRowDelimiter("\n");
         return request;
     }
 
