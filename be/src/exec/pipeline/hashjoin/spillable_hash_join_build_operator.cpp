@@ -157,7 +157,7 @@ Status SpillableHashJoinBuildOperator::append_hash_columns(const ChunkPtr& chunk
         ASSIGN_OR_RETURN(auto res, expr_ctx->evaluate(chunk.get()));
         res->fnv_hash(hash_values.data(), 0, num_rows);
     }
-    chunk->append_column(std::move(hash_column), -1);
+    chunk->append_column(std::move(hash_column), Chunk::HASH_JOIN_SPILL_HASH_SLOT_ID);
     return Status::OK();
 }
 
