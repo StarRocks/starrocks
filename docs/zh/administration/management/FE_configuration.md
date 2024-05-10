@@ -2567,7 +2567,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：调度器容忍 Backend 处于不存活状态的最长时间, 超时之后该节点上的 Tablet 会被迁移到其他存活的 Backend 上。
+- 描述：调度器容忍 BE 节点保持不存活状态的最长时间。超时之后该节点上的 Tablet 会被迁移到其他存活的 BE 节点上。
 - 引入版本：2.5.7
 
 <!--
