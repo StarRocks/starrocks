@@ -20,6 +20,15 @@ import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.Statement;
 
+<<<<<<< HEAD
+=======
+import java.time.format.DateTimeParseException;
+import java.util.HashSet;
+import java.util.Set;
+
+import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
+
+>>>>>>> cadf909d7d ([Enhancement] Give more error message for trino parser (#45401))
 public class TrinoParserUtils {
     public static StatementBase toStatement(String query, long sqlMode) {
         String trimmedQuery = query.trim();
@@ -27,7 +36,7 @@ public class TrinoParserUtils {
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze) {
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
-            throw new UnsupportedOperationException("Unsupported statement type: " + statement.getClass().getName());
+            throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
         }
     }
 }

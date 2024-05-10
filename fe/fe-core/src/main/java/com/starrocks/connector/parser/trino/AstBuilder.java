@@ -61,7 +61,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -187,7 +186,13 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
+import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
+>>>>>>> cadf909d7d ([Enhancement] Give more error message for trino parser (#45401))
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
@@ -235,8 +240,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     private <T> List<T> visit(List<? extends Node> nodes, ParseTreeContext context, Class<T> clazz) {
+<<<<<<< HEAD
         return nodes.stream().map(child -> this.process(child, context)).
                 map(clazz::cast).collect(Collectors.toList());
+=======
+        return nodes.stream().map(child -> this.process(child, context)).map(clazz::cast).collect(Collectors.toList());
+>>>>>>> cadf909d7d ([Enhancement] Give more error message for trino parser (#45401))
     }
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
@@ -247,8 +256,19 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitNode(Node node, ParseTreeContext context) {
         if (node instanceof JsonArrayElement) {
             return visit(((JsonArrayElement) node).getValue(), context);
+        } else {
+            throw trinoParserUnsupportedException(String.format("Unsupported node [%s]", node.toString()));
         }
-        return null;
+    }
+
+    @Override
+    protected ParseNode visitRelation(io.trino.sql.tree.Relation node, ParseTreeContext context) {
+        throw trinoParserUnsupportedException(String.format("Unsupported relation [%s]", node.toString()));
+    }
+
+    @Override
+    protected ParseNode visitExpression(Expression node, ParseTreeContext context) {
+        throw trinoParserUnsupportedException(String.format("Unsupported expression [%s]", node.toString()));
     }
 
     @Override
@@ -355,7 +375,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             resultSelectRelation.setOrderBy(new ArrayList<>());
         }
+<<<<<<< HEAD
         resultSelectRelation.setLimit((LimitElement) processOptional(node.getLimit(), context));
+=======
+
+        LimitElement limitElement = (LimitElement) processOptional(node.getLimit(), context);
+        if (node.getOffset().isPresent()) {
+            if (limitElement == null) {
+                throw unsupportedException("Trino Parser on StarRocks does not support OFFSET without LIMIT now");
+            }
+            LimitElement offsetElement = (LimitElement) processOptional(node.getOffset(), context);
+            limitElement = new LimitElement(offsetElement.getOffset(), limitElement.getLimit());
+        }
+        resultSelectRelation.setLimit(limitElement);
+>>>>>>> cadf909d7d ([Enhancement] Give more error message for trino parser (#45401))
         return resultSelectRelation;
     }
 
@@ -464,7 +497,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
 
         if (node.getGroupingElements().stream().map(g -> g.getClass().getName()).distinct().count() > 1) {
-            throw new ParsingException("StarRocks do not support Combining multiple grouping expressions now");
+            throw unsupportedException("Trino Parser on StarRocks does not support Combining multiple grouping " +
+                    "expressions now");
         }
 
         GroupingElement groupingElement = node.getGroupingElements().get(0);
@@ -548,7 +582,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else if (parts.size() == 1) {
             return new TableName(null, null, qualifiedName.getParts().get(0));
         } else {
-            throw new ParsingException("error table name ");
+            throw new ParsingException(String.format("error table name: %s", qualifiedName));
         }
     }
 
@@ -558,7 +592,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Relation right = (Relation) visit(node.getRight(), context);
         JoinOperator joinType = JOIN_TYPE_MAP.get(node.getType());
         if (joinType == null) {
-            throw new SemanticException("Join Type %s is illegal", node.getType());
+            throw new ParsingException("Join Type %s is illegal", node.getType());
         }
 
         Expr predicate = null;
@@ -611,7 +645,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 return new ExceptRelation(Lists.newArrayList(left, right), setQualifier);
             }
         } else {
-            throw new IllegalArgumentException("Unsupported set operation: " + node);
+            throw new ParsingException("Unsupported set operation: " + node);
         }
     }
 
@@ -703,7 +737,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 return AnalyticWindow.Type.ROWS;
         }
 
-        throw new IllegalArgumentException("Unsupported frame type: " + type);
+        throw new ParsingException("Unsupported window frame type: " + type);
     }
 
     @Override
@@ -721,7 +755,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 return new AnalyticWindow.Boundary(FOLLOWING, (Expr) visit(node.getValue().get(), context));
         }
 
-        throw new IllegalArgumentException("Unsupported frame bound type: " + node.getType());
+        throw new ParsingException("Unsupported frame bound type: " + node.getType());
     }
 
     @Override
@@ -754,8 +788,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private ParseNode visitWindow(FunctionCallExpr functionCallExpr, Window windowSpec, ParseTreeContext context) {
         if (windowSpec instanceof WindowSpecification) {
             return visitWindowSpecification(functionCallExpr, (WindowSpecification) windowSpec, context);
+        } else {
+            throw unsupportedException("Trino Parser on StarRocks does not support Window clause now");
         }
-        return null;
     }
 
     private FunctionCallExpr visitDistinctFunctionCall(FunctionCall node, ParseTreeContext context) {
@@ -844,7 +879,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 throw new ParsingException("Numeric overflow " + intLiteral);
             }
         } catch (NumberFormatException | AnalysisException e) {
-            throw new ParsingException("Invalid numeric literal: " + node.toString());
+            throw new ParsingException("Invalid numeric literal: " + node);
         }
     }
 
@@ -854,7 +889,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
                 return new FloatLiteral(node.getValue());
             } else if (Double.isInfinite(node.getValue())) {
-                throw new SemanticException("Numeric overflow " + node.getValue());
+                throw new ParsingException("Numeric overflow " + node.getValue());
             } else {
                 BigDecimal decimal = BigDecimal.valueOf(node.getValue());
                 int precision = DecimalLiteral.getRealPrecision(decimal);
@@ -939,7 +974,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
             return new DateLiteral(value, Type.DATETIME);
         } catch (AnalysisException e) {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
+            throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
     }
 
@@ -994,7 +1029,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitComparisonExpression(ComparisonExpression node, ParseTreeContext context) {
         BinaryType binaryOp = COMPARISON_OPERATOR_MAP.get(node.getOperator());
         if (binaryOp == null) {
-            throw new SemanticException("Do not support the comparison type %s", node.getOperator());
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support the comparison type %s",
+                    node.getOperator()));
         }
         return new BinaryPredicate(binaryOp, (Expr) visit(node.getLeft(), context), (Expr) visit(node.getRight(),
                 context));
@@ -1183,7 +1219,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 return ScalarType.createType(PrimitiveType.DATETIME);
             }
         } else {
-            throw new SemanticException("StarRocks do not support the type %s", dataType);
+            throw trinoParserUnsupportedException(String.format("Trino parser on StarRocks does not support the " +
+                    "type %s now", dataType));
         }
     }
 
@@ -1214,7 +1251,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
             return ScalarType.createUnifiedDecimalType(38, 0);
         } else if (typeName.contains("decimal")) {
-            throw new SemanticException("Unknown type: %s", typeName);
+            throw new ParsingException("Unknown type: %s", typeName);
         } else if (typeName.equals("real")) {
             return ScalarType.createType(PrimitiveType.FLOAT);
         } else {
