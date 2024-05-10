@@ -23,6 +23,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -55,7 +56,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVRefreshTestBase.beforeClass();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
         starRocksAssert
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`jdbc_parttbl_mv0`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +

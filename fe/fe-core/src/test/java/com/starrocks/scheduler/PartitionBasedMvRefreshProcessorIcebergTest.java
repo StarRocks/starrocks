@@ -49,7 +49,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVRefreshTestBase.beforeClass();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
     }
 
     @AfterClass

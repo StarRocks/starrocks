@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Map;
 
+import static com.starrocks.sql.plan.ConnectorPlanTestBase.MOCK_PAIMON_CATALOG_NAME;
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -45,7 +46,7 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVRefreshTestBase.beforeClass();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockCatalog(connectContext, MOCK_PAIMON_CATALOG_NAME, temp.newFolder().toURI().toString());
     }
 
     @AfterClass

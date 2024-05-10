@@ -55,8 +55,23 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVRefreshTestBase.beforeClass();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
-        starRocksAssert
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
+                        "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
+                        "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
+                        "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
@@ -200,62 +215,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         ExecPlan execPlan = mvContext.getExecPlan();
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("4:HASH JOIN"));
-    }
-
-    @Test
-    public void testcreateUnpartitionedPmnMaterializeView() throws Exception {
-        //unparitioned
-        starRocksAssert.useDatabase("test")
-                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`paimon_parttbl_mv2`\n" +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                        "DISTRIBUTED BY HASH(`pk`) BUCKETS 10\n" +
-                        "REFRESH DEFERRED MANUAL\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
-                        ")\n" +
-                        "AS SELECT pk, d  FROM `paimon0`.`pmn_db1`.`unpartitioned_table` as a;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-
-        MaterializedView unpartitionedMaterializedView = ((MaterializedView) testDb.getTable("paimon_parttbl_mv2"));
-        triggerRefreshMv(testDb, unpartitionedMaterializedView);
-
-        Collection<Partition> partitions = unpartitionedMaterializedView.getPartitions();
-        Assert.assertEquals(1, partitions.size());
-    }
-
-    @Test
-    public void testCreatePartitionedPmnMaterializeView() throws Exception {
-        //paritioned
-        starRocksAssert.useDatabase("test")
-                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`paimon_parttbl_mv1`\n" +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                        "PARTITION BY (`pt`)\n" +
-                        "DISTRIBUTED BY HASH(`pk`) BUCKETS 10\n" +
-                        "REFRESH DEFERRED MANUAL\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
-                        ")\n" +
-                        "AS SELECT pk, pt,d  FROM `paimon0`.`pmn_db1`.`partitioned_table` as a;");
-
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("paimon_parttbl_mv1"));
-        triggerRefreshMv(testDb, partitionedMaterializedView);
-
-        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
-        Assert.assertEquals(10, partitions.size());
-        triggerRefreshMv(testDb, partitionedMaterializedView);
-
-        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
-                partitionedMaterializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
-
-        BaseTableInfo baseTableInfo = new BaseTableInfo("paimon0", "pmn_db1", "partitioned_table", "partitioned_table");
-        versionMap.get(baseTableInfo).put("pt=2026-11-22", new MaterializedView.BasePartitionInfo(1, 2, -1));
-        triggerRefreshMv(testDb, partitionedMaterializedView);
-
-        Assert.assertEquals(10, partitionedMaterializedView.getPartitions().size());
-        triggerRefreshMv(testDb, partitionedMaterializedView);
     }
 
     private static void triggerRefreshMv(Database testDb, MaterializedView partitionedMaterializedView)
