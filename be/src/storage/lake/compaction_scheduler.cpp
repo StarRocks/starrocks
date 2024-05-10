@@ -99,7 +99,7 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
           _contexts(),
           _task_queues(config::compact_threads) {
     CHECK_GT(_task_queues.task_queue_size(), 0);
-    auto st = ThreadPoolBuilder("clound_native_compact")
+    auto st = ThreadPoolBuilder("cloud_native_compact")
                       .set_min_threads(0)
                       .set_max_threads(INT_MAX)
                       .set_max_queue_size(INT_MAX)
