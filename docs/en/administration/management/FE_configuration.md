@@ -1059,6 +1059,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+##### enable_legacy_compatibility_for_replication
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
+- Introduced in: v3.1.10, v3.2.6
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
