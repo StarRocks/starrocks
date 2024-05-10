@@ -142,6 +142,7 @@ struct TIcebergMetadata {
     11: optional i64 file_sequence_number
     12: optional i64 data_sequence_number
     13: optional binary column_stats;
+    14: optional binary key_metadata;
 }
 
 // Metadata data for metadata table
