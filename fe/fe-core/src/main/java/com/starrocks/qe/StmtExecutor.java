@@ -472,10 +472,8 @@ public class StmtExecutor {
                 context.setExplainLevel(null);
             }
 
-            // execPlan is the output of new planner
+            // execPlan is the output of planner
             ExecPlan execPlan = null;
-            boolean execPlanBuildByNewPlanner = false;
-
             try (Timer ignored = Tracers.watchScope("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
@@ -525,7 +523,6 @@ public class StmtExecutor {
                             context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
                         }
                     }
-                    execPlanBuildByNewPlanner = true;
                 }
             } catch (SemanticException e) {
                 dumpException(e);
@@ -535,7 +532,7 @@ public class StmtExecutor {
                 if (e.getType().equals(ErrorType.USER_ERROR)) {
                     throw e;
                 } else {
-                    LOG.warn("New planner error: " + originStmt.originStmt, e);
+                    LOG.warn("Planner error: " + originStmt.originStmt, e);
                     throw e;
                 }
             }
@@ -588,7 +585,6 @@ public class StmtExecutor {
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
                         }
 
-                        Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
                         handleQueryStmt(retryContext.getExecPlan());
                         break;
                     } catch (Exception e) {
@@ -640,11 +636,7 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof SetCatalogStmt) {
                 handleSetCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
-                if (execPlanBuildByNewPlanner) {
-                    handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
-                } else {
-                    throw new AnalysisException("old planner does not support CTAS statement");
-                }
+                handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
             } else if (parsedStmt instanceof DmlStmt) {
                 handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt);
             } else if (parsedStmt instanceof DdlStmt) {
@@ -832,7 +824,7 @@ public class StmtExecutor {
         // and for other cases the exception will throw and the rest of the code will not be executed.
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
-            ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
+            ExecPlan execPlan = StatementPlanner.plan(insertStmt, context);
             handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 dropTableCreatedByCTAS(createTableAsSelectStmt);
@@ -1235,10 +1227,10 @@ public class StmtExecutor {
         if (analyzeStmt.isExternal()) {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
-                    new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
-                            db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
+                        new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
+                                db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
+                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties()),
                         analyzeStatus,
                         false);
             } else {
