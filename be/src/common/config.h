@@ -1054,7 +1054,6 @@ CONF_mInt32(pindex_major_compaction_limit_per_disk, "1");
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
-CONF_mBool(enable_reab_pindex_by_page, "true");
 // use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
 // 1. The records to be found are in the index, bloom filter is no usage
 // 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
@@ -1071,7 +1070,7 @@ CONF_mBool(enable_pindex_compression, "false");
 CONF_mBool(enable_pindex_rebuild_in_compaction, "false");
 
 // enable read pindex by page
-CONF_mBool(enable_pindex_read_by_page, "false");
+CONF_mBool(enable_pindex_read_by_page, "true");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
