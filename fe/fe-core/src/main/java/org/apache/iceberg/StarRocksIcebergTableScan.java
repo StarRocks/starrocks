@@ -79,6 +79,7 @@ public class StarRocksIcebergTableScan
     private final int localParallelism;
     private final long localPlanningMaxSlotSize;
     private boolean isRemotePlanFiles;
+    private ConnectContext connectContext;
 
     public static TableScanContext newTableScanContext(Table table) {
         if (table instanceof BaseTable) {
@@ -98,6 +99,7 @@ public class StarRocksIcebergTableScan
         this.dbName = scanContext.getDbName();
         this.tableName = scanContext.getTableName();
         this.planMode = scanContext.getPlanMode();
+        this.connectContext = scanContext.getConnectContext();
         this.scanContext = scanContext;
         this.specStringCache = specCache(PartitionSpecParser::toJson);
         this.residualCache = specCache(this::newResidualEvaluator);
@@ -148,8 +150,7 @@ public class StarRocksIcebergTableScan
         MetadataCollectJob metadataCollectJob = new IcebergMetadataCollectJob(
                 catalogName, dbName, tableName, TResultSinkType.METADATA_ICEBERG, snapshotId(), icebergSerializedPredicate);
 
-        // TODO(stephen): pass ConnectContext instance to here
-        metadataCollectJob.init(ConnectContext.get().getSessionVariable());
+        metadataCollectJob.init(connectContext.getSessionVariable());
 
         long currentTimestamp = System.currentTimeMillis();
         String threadNamePrefix = String.format("%s-%s-%s-%d", catalogName, dbName, tableName, currentTimestamp);
