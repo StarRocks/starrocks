@@ -25,6 +25,8 @@
 #include "formats/utils.h"
 #include "util/url_coding.h"
 #include "utils.h"
+#include "connector/sink_memory_manager.h"
+#include "connector/async_io_poller.h"
 
 namespace starrocks::connector {
 
@@ -33,12 +35,15 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
                              std::unique_ptr<LocationProvider> location_provider,
                              std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
                              RuntimeState* state)
-        : _partition_column_names(std::move(partition_columns)),
+        : ConnectorChunkSink(),
+          _partition_column_names(std::move(partition_columns)),
           _partition_column_evaluators(std::move(partition_column_evaluators)),
           _location_provider(std::move(location_provider)),
           _file_writer_factory(std::move(file_writer_factory)),
           _max_file_size(max_file_size),
-          _state(state) {}
+          _state(state) {
+    _op_mem_mgr->init(&_writer_stream_pairs, std::bind_front(&FileChunkSink::callback_on_success, this));
+}
 
 Status FileChunkSink::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
@@ -55,48 +60,49 @@ Status FileChunkSink::add(ChunkPtr chunk) {
                                                                             _partition_column_evaluators, chunk.get()));
     }
 
-    auto it = _partition_writers.find(partition);
-    if (it != _partition_writers.end()) {
-        auto* writer = it->second.writer.get();
+    auto it = _writer_stream_pairs.find(partition);
+    if (it != _writer_stream_pairs.end()) {
+        Writer* writer = it->second.first.get();
         if (writer->get_written_bytes() >= _max_file_size) {
             callback_on_success(writer->commit());
-            _pending_streams.push_back(std::move(it->second.stream));
-            _partition_writers.erase(it);
+            _writer_stream_pairs.erase(it);
             auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
             ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
-            auto* new_writer =  new_writer_and_stream.writer.get();
-            auto* new_stream = new_writer_and_stream.stream.get();
+            std::unique_ptr<Writer> new_writer =  std::move(new_writer_and_stream.writer);
+            std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
             RETURN_IF_ERROR(new_writer->init());
             RETURN_IF_ERROR(new_writer->write(chunk));
-            _partition_writers.emplace(partition, std::move(new_writer_and_stream));
-            _io_poller->enqueue(new_stream->io_status());
+            _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
+            _io_poller->enqueue(std::move(new_stream));
         } else {
             RETURN_IF_ERROR(writer->write(chunk));
         }
     } else {
         auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
         ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
-        auto* new_writer = new_writer_and_stream.writer.get();
-        auto* new_stream = new_writer_and_stream.stream.get();
+        std::unique_ptr<Writer> new_writer =  std::move(new_writer_and_stream.writer);
+        std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
         RETURN_IF_ERROR(new_writer->init());
         RETURN_IF_ERROR(new_writer->write(chunk));
-        _partition_writers.emplace(partition, std::move(new_writer_and_stream));
-        _io_poller->enqueue(new_stream->io_status());
+        _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
+        _io_poller->enqueue(std::move(new_stream));
     }
 
     return Status::OK();
 }
 
 Status FileChunkSink::finish() {
-    for (auto& [_, writer_and_stream] : _partition_writers) {
-        callback_on_success(writer_and_stream.writer->commit());
-        _pending_streams.push_back(std::move(writer_and_stream.stream));
+    for (auto& [_, writer_and_stream] : _writer_stream_pairs) {
+        callback_on_success(writer_and_stream.first->commit());
     }
     return Status::OK();
 }
 
 void FileChunkSink::callback_on_success(const formats::FileWriter::CommitResult& result) {
-    DCHECK(result.io_status.ok());
+    if (!result.io_status.ok()) {
+        return;
+    }
+
     _state->update_num_rows_load_sink(result.file_statistics.record_count);
 }
 

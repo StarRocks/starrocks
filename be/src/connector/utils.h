@@ -106,35 +106,4 @@ private:
     std::map<std::string, int> _partition2index;
 };
 
-class IOStatusPoller {
-public:
-    IOStatusPoller() = default;
-
-    DISALLOW_COPY(IOStatusPoller);
-
-    void enqueue(std::future<Status>&& f) {
-        _io_status_queue.push(std::move(f));
-    }
-
-    // return a pair of
-    // 1. io status
-    // 2. bool indicates if all io finished
-    std::pair<Status, bool> poll() {
-        Status status;
-        while (!_io_status_queue.empty()) {
-            auto& f = _io_status_queue.front();
-            if (!is_ready(f)) {
-                break;
-            }
-            status.update(f.get());
-            _io_status_queue.pop();
-        }
-
-        return {status, _io_status_queue.empty()};
-    }
-
-private:
-    std::queue<std::future<Status>> _io_status_queue;
-};
-
 } // namespace starrocks::connector

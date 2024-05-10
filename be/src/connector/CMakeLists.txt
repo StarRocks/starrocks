@@ -32,4 +32,7 @@ add_library(Connector STATIC
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp
         utils.cpp
+        sink_memory_manager.h
+        async_io_poller.cpp
+        async_io_poller.h
 )

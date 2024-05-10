@@ -29,9 +29,17 @@
 namespace starrocks::connector {
 
 class IOStatusPoller;
+class SinkOperatorMemoryManager;
+
+using Writer = formats::FileWriter;
+using Stream = io::AsyncFlushOutputStream;
+using WriterAndStream = std::pair<std::unique_ptr<Writer>, Stream*>;
+using CommitFunc = std::function<void(const formats::FileWriter::CommitResult& result)>;
 
 class ConnectorChunkSink {
 public:
+    ConnectorChunkSink() = default;
+
     virtual ~ConnectorChunkSink() = default;
 
     virtual Status init() = 0;
@@ -44,8 +52,13 @@ public:
         _io_poller = poller;
     }
 
+    void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) {
+        _op_mem_mgr = op_mem_mgr;
+    }
+
 protected:
-    IOStatusPoller* _io_poller;
+    IOStatusPoller* _io_poller = nullptr;
+    SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
 };
 
 struct ConnectorChunkSinkContext {

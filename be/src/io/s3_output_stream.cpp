@@ -35,7 +35,7 @@ S3OutputStream::S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::s
           _buffer(),
           _upload_id(),
           _etags() {
-    CHECK(_client != nullptr);
+    DCHECK(_client != nullptr);
 }
 
 Status S3OutputStream::write(const void* data, int64_t size) {

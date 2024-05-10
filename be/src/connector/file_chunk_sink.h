@@ -58,9 +58,7 @@ private:
     const int64_t _max_file_size;
     RuntimeState* _state;
 
-    std::map<std::string, formats::WriterAndStream> _partition_writers;
-    std::vector<std::unique_ptr<io::AsyncFlushOutputStream>> _pending_streams;
-
+    std::unordered_map<std::string, WriterAndStream> _writer_stream_pairs;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 };
 
