@@ -79,7 +79,11 @@ public class ExecuteScriptExecutor {
     }
 
     private static ShowResultSet executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+<<<<<<< HEAD
         ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(stmt.getBeId());
+=======
+        ComputeNode be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(stmt.getBeId());
+>>>>>>> 25116c9b9d ([Enhancement] Allow CN to run script (backport #44982) (#44992))
         if (be == null) {
             throw new UserException("node not found: " + stmt.getBeId());
         }
