@@ -184,6 +184,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     @SerializedName("jo")
     protected JSONOptions jsonOptions = new JSONOptions();
 
+    @SerializedName("fcm")
+    protected boolean flexibleColumnMapping = false;
+
     public int getProgress() {
         return this.progress;
     }
@@ -457,6 +460,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.JSONROOT)) {
                 jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
+            }
+
+            if (properties.containsKey(LoadStmt.NULL_FOR_MISSING_COLUMN)) {
+                flexibleColumnMapping = Boolean.parseBoolean(properties.get(LoadStmt.NULL_FOR_MISSING_COLUMN));
             }
         }
     }
