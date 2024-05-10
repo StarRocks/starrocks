@@ -29,8 +29,8 @@ Release date: May 10, 2024
   - Uses column ID for predicate pushdown to read ORC files after Schema Change.
   - Optimized the processing logic for ORC tiny stripes.
 - **Iceberg table format enhancements**
-  -  Queries on Parquet-formatted Iceberg v2 tables support [equality deletes](https://docs.starrocks.io/docs/3.3/data_source/catalog/iceberg_catalog/#usage-notes).
-- **Enhancements in collecting external table statistics**
+  - Queries on Parquet-formatted Iceberg v2 tables support [equality deletes](https://docs.starrocks.io/docs/3.3/data_source/catalog/iceberg_catalog/#usage-notes).
+- **[Enhancements in collecting external table statistics](https://docs.starrocks.io/docs/3.3/using_starrocks/Cost_based_optimizer/#collect-statistics-of-hiveiceberghudi-tables)**
   - ANALYZE TABLE can be used to collect histograms of external tables, which helps prevent data skews.
   - Supports collecting statistics of STRUCT subfields.
 - **Table sink enhancements**
@@ -58,7 +58,7 @@ Release date: May 10, 2024
 
 - **[Enhanced flexibility of range partitioning](https://docs.starrocks.io/docs/3.3/table_design/Data_distribution/#range-partitioning):** Three time functions can be used as partitioning columns. These functions convert timestamps or strings in the partitioning columns into date values and then the data can be partitioned based on the converted date values.
 - **FE memory observability**: Provides detailed memory usage metrics for each module within the FE to better manage resources.
-- **[Optimized metadata locks in FE](https://docs.starrocks.io/zh/docs/3.3/administration/management/FE_configuration/#lock_manager_enabled)**: Provides Lock manager to achieve centralized management for metadata locks in FE. For example, it can refine the granularity of metadata lock from the database level to the table level, which improves load and query concurrency. In a scenario of 100 concurrent load jobs, the load time can be reduced by 35%.
+- **[Optimized metadata locks in FE](https://docs.starrocks.io/docs/3.3/administration/management/FE_configuration/#lock_manager_enabled)**: Provides Lock manager to achieve centralized management for metadata locks in FE. For example, it can refine the granularity of metadata lock from the database level to the table level, which improves load and query concurrency. In a scenario of 100 concurrent load jobs, the load time can be reduced by 35%.
 - **[Supports adding labels on BEs](https://docs.starrocks.io/docs/3.3/administration/management/resource_management/be_label/):** Supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures even data distribution among racks and data centers, and facilitates disaster recovery in case of power failures in certain racks or faults in data centers.
 - **[Optimized the sort key](https://docs.starrocks.io/docs/3.3/table_design/indexes/Prefix_index_sort_key/#usage-notes):** Duplicate Key tables, Aggregate tables, and Unique Key tables all support specifying sort keys through the `ORDER BY` clause.
 - **Optimized the storage efficiency of non-string scalar data:** This type of data supports dictionary encoding, reducing storage space usage by 12%.
@@ -82,7 +82,7 @@ Release date: May 10, 2024
 
 - DATETIME fields support microsecond precision. The new time unit is supported in related time functions and during data loading.
 - Added the following functions:
-  - [String functions](https://docs.starrocks.io/docs/3.3/cover_pages/functions_string/:): crc32, url_extract_host, ngram_search
+  - [String functions](https://docs.starrocks.io/docs/3.3/cover_pages/functions_string/): crc32, url_extract_host, ngram_search
   - Array functions: [array_contains_seq](https://docs.starrocks.io/docs/3.3/sql-reference/sql-functions/array-functions/array_contains_seq/)
   - Date and time functions: [yearweek](https://docs.starrocks.io/docs/3.3/sql-reference/sql-functions/date-time-functions/yearweek/)
   - Math functions: [cbrt](https://docs.starrocks.io/docs/3.3/sql-reference/sql-functions/math-functions/cbrt/)
