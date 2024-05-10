@@ -678,8 +678,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                 }
                 for (auto i : invalid_row_indexs) {
                     if (state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(),
-                                                              chunk->source_filename());
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(), "");
                     } else {
                         break;
                     }
@@ -905,8 +904,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
                     std::string error_msg =
                             strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg,
-                                                          chunk->source_filename());
+                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg, "");
                 }
             }
         }
@@ -942,8 +940,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                     _validate_selection[j] = VALID_SEL_FAILED;
                     // If enable_log_rejected_record is true, we need to log the rejected record.
                     if (nullable->is_null(j) && state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
-                                                              chunk->source_filename());
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
                     }
                 }
 #if BE_TEST
@@ -983,8 +980,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         }
 #endif
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
                         }
                     }
                 }
@@ -1023,8 +1019,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg =
                                     strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
                                                         binary->get_slice(j).size, desc->col_name(), desc->type().len);
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
                         }
                     }
                 }
@@ -1049,8 +1044,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg = strings::Substitute(
                                     "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
                                     desc->col_name(), desc->type().debug_string());
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
                         }
                     }
                 }
