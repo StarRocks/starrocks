@@ -41,13 +41,12 @@ Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& p
             std::make_unique<RowDescriptor>(runtime_state->desc_tbl().get_tuple_descriptor(params.mor_tuple_id));
     _probe_row_desc = std::make_unique<RowDescriptor>(params.tuple_desc);
 
-    const auto param = _pool.add(
-            new HashJoinerParam(&_pool, _hash_join_node, 1, TPlanNodeType::HASH_JOIN_NODE,
-                                std::vector<bool>(params.equality_slots.size(), false), _join_exprs, _join_exprs,
-                                std::vector<ExprContext*>(), std::vector<ExprContext*>(), *_build_row_desc,
-                                *_probe_row_desc, *_probe_row_desc, TPlanNodeType::HDFS_SCAN_NODE,
-                                TPlanNodeType::HDFS_SCAN_NODE, true, std::list<RuntimeFilterBuildDescriptor*>(),
-                                std::set<SlotId>(), probe_output_slot_ids, TJoinDistributionMode::PARTITIONED, true));
+    const auto param = _pool.add(new HashJoinerParam(
+            &_pool, _hash_join_node, std::vector<bool>(params.equality_slots.size(), false), _join_exprs, _join_exprs,
+            std::vector<ExprContext*>(), std::vector<ExprContext*>(), *_build_row_desc, *_probe_row_desc,
+            TPlanNodeType::HDFS_SCAN_NODE, TPlanNodeType::HDFS_SCAN_NODE, true,
+            std::list<RuntimeFilterBuildDescriptor*>(), std::set<SlotId>(), probe_output_slot_ids,
+            TJoinDistributionMode::PARTITIONED, true, false));
 
     _hash_joiner = _pool.add(new HashJoiner(*param));
     RETURN_IF_ERROR(_hash_joiner->prepare_builder(runtime_state, _runtime_profile));
