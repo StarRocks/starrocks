@@ -15,3 +15,6 @@ show full columns from test_column_default;
 select COLUMN_NAME, DATA_TYPE, NUMERIC_SCALE, COLUMN_DEFAULT, COLUMN_COMMENT AS DESCRIPTION, COLUMN_TYPE
 from INFORMATION_SCHEMA.COLUMNS
 where table_name = 'test_column_default';
+
+-- query information_schema.columns without db
+select if(count(*) > 1, "OK", "FAILED") from INFORMATION_SCHEMA.COLUMNS;
