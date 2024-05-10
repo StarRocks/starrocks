@@ -137,7 +137,8 @@ public class ConnectScheduler {
     public Pair<Boolean, String> registerConnection(ConnectContext ctx) {
         if (numberConnection.get() >= maxConnections.get()) {
             return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
-                    ", connectionMap.size=" + connectionMap.size());
+                    ", connectionMap.size=" + connectionMap.size() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         // Check user
         connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
@@ -147,7 +148,8 @@ public class ConnectScheduler {
             return new Pair<>(false, "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
                     ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
                     "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
-                    ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum());
+                    ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         numberConnection.incrementAndGet();
         connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
@@ -183,6 +185,7 @@ public class ConnectScheduler {
         ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
 
         for (ConnectContext ctx : connectionMap.values()) {
+            // Check authorization first.
             if (!ctx.getQualifiedUser().equals(currUser)) {
                 try {
                     Authorizer.checkSystemAction(currContext.getCurrentUserIdentity(),
@@ -192,7 +195,7 @@ public class ConnectScheduler {
                 }
             }
 
-            // Check whether it's the connection for the specified user
+            // Check whether it's the connection for the specified user.
             if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
                 continue;
             }
