@@ -98,7 +98,6 @@ public class SqlParser {
         } catch (TrinoParserUnsupportedException e) {
             // We only support Trino partial syntax now, and for Trino parser unsupported statement,
             // try to use StarRocks parser to parse
-            LOG.warn("Unsupported sql for trino parser: [{}], cause by {}, try to use starrocks parser.", sql, e);
             return tryParseWithStarRocksDialect(sql, sessionVariable, e);
         } catch (UnsupportedException e) {
             // For unsupported statement, it can not be parsed by trino or StarRocks parser, both parser
