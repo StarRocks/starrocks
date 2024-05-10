@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -44,6 +45,7 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVRefreshTestBase.beforeClass();
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert
                 .withTable("CREATE TABLE `t1` (\n" +
                         "    `k1`  date not null, \n" +
