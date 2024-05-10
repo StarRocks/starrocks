@@ -21,6 +21,7 @@
 
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/raw_container.h"
 #include "fs/fs.h"
@@ -77,7 +78,7 @@ public:
 
     Status write(const uint8_t* data, int64_t size) {
         _total_size += size;
-        DCHECK(_slice_chunk_queue.empty() || _slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full())
+        DCHECK(_slice_chunk_queue.empty() || (_slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full()))
             << "empty or at most one not full buffer";
         while (size > 0) {
             // append a new buffer if queue is empty or the last buffer is full
@@ -139,7 +140,7 @@ public:
 
     // called exactly once
     Status close() {
-        DCHECK(_slice_chunk_queue.empty() || _slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full())
+        DCHECK(_slice_chunk_queue.empty() || (_slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full()))
                         << "empty or at most one not full buffer";
 
         std::vector<Task> to_enqueue_tasks;
