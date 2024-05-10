@@ -21,6 +21,13 @@ Release date: May 10, 2024
 - **Data Cache enhancements**
   - Added the [Data Cache Warmup](https://docs.starrocks.io/docs/3.3/data_source/data_cache_warmup/) command CACHE SELECT to fetch hotspot data from data lakes, which speeds up queries and minimizes resource usage. CACHE SELECT can work with SUBMIT TASK to achieve periodic cache warmup.
   - Added metrics and monitoring methods to enhance the [observability of Data Cache](https://docs.starrocks.io/docs/3.3/data_source/data_cache_observe/).
+- **Parquet reader performance enhancements**
+  - Optimized Page Index, significantly reducing the data scan size.
+  - Reduced the occurrences of reading unnecessary pages when Page Index is used.
+  - Uses SIMD to accelerate the computation to determine whether data rows are empty.
+- **ORC reader performance enhancements**
+  - Uses column ID for predicate pushdown to read ORC files after Schema Change.
+  - Optimized the processing logic for ORC tiny stripes.
 - **Iceberg table format enhancements**
   -  Queries on Parquet-formatted Iceberg v2 tables support [equality deletes](https://docs.starrocks.io/docs/3.3/data_source/catalog/iceberg_catalog/#usage-notes).
 - **Enhancements in collecting external table statistics**
@@ -60,16 +67,16 @@ Release date: May 10, 2024
 
 ### Materialized Views
 
-- **Supports view-based query rewrite.** With this feature enabled, queries against views can be rewritten to materialized views created upon those views. For more information, see [View-based materialized view rewrite](https://docs.starrocks.io/docs/3.3/using_starrocks/query_rewrite_with_materialized_views/#view-based-materialized-view-rewrite).
-- **Supports text-based query rewrite.** With this feature enabled, queries (or their sub-queries) that have the same abstract syntax trees (AST) as the materialized views can be transparently rewritten. For more information, see [Text-based materialized view rewrite](https://docs.starrocks.io/docs/3.3/using_starrocks/query_rewrite_with_materialized_views/#text-based-materialized-view-rewrite).
-- **Supports a new property to control materialized view rewrite.** Users can set the `enable_query_rewrite` property to `false` to disable query rewrite based on a specific materialized view, reducing query rewrite overhead. For more information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/3.3/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#parameters-1).
+- **Supports view-based query rewrite:** With this feature enabled, queries against views can be rewritten to materialized views created upon those views. For more information, see [View-based materialized view rewrite](https://docs.starrocks.io/docs/3.3/using_starrocks/query_rewrite_with_materialized_views/#view-based-materialized-view-rewrite).
+- **Supports text-based query rewrite:** With this feature enabled, queries (or their sub-queries) that have the same abstract syntax trees (AST) as the materialized views can be transparently rewritten. For more information, see [Text-based materialized view rewrite](https://docs.starrocks.io/docs/3.3/using_starrocks/query_rewrite_with_materialized_views/#text-based-materialized-view-rewrite).
+- **Supports a new property to control materialized view rewrite:** Users can set the `enable_query_rewrite` property to `false` to disable query rewrite based on a specific materialized view, reducing query rewrite overhead. For more information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/3.3/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#parameters-1).
 - **Optimized the cost of materialized view rewrite.**
   - Supports specifying the number of candidate materialized views and enhanced the filter algorithms. For more information, see [`cbo_materialized_view_rewrite_related_mvs_limit`](https://docs.starrocks.io/docs/3.3/reference/System_variable/#cbo_materialized_view_rewrite_related_mvs_limit).
   - Supports materialized view plan cache to reduce the time consumption of the Optimizer at the query rewrite phase.
-- **Optimized materialized views created upon Iceberg catalogs.** Materialized views based on Iceberg catalogs now support incremental refresh triggered by partition updates and partition alignment for Iceberg tables using Partition Transforms. For more information, see [Data lake query acceleration with materialized views](https://docs.starrocks.io/docs/3.3/using_starrocks/data_lake_query_acceleration_with_materialized_views/#choose-a-suitable-refresh-strategy).
-- **Enhanced the observability of materialized views.** Improved the monitoring and management of materialized views for better system insights. For more information, see [Metrics for asynchronous materialized views](https://docs.starrocks.io/docs/3.3/administration/management/monitoring/metrics/#metrics-for-asynchronous-materialized-views).
+- **Optimized materialized views created upon Iceberg catalogs:** Materialized views based on Iceberg catalogs now support incremental refresh triggered by partition updates and partition alignment for Iceberg tables using Partition Transforms. For more information, see [Data lake query acceleration with materialized views](https://docs.starrocks.io/docs/3.3/using_starrocks/data_lake_query_acceleration_with_materialized_views/#choose-a-suitable-refresh-strategy).
+- **Enhanced the observability of materialized views:** Improved the monitoring and management of materialized views for better system insights. For more information, see [Metrics for asynchronous materialized views](https://docs.starrocks.io/docs/3.3/administration/management/monitoring/metrics/#metrics-for-asynchronous-materialized-views).
 - **Improved the efficiency of large-scale materialized view refresh.**
-- **Supports refresh triggered by multiple fact tables.** Materialized views created upon multiple fact tables now support partition-level incremental refresh when data in any of the fact tables is updated, increasing data management flexibility. For more information, see [Align partitions with multiple base tables](https://docs.starrocks.io/docs/3.3/using_starrocks/create_partitioned_materialized_view/#align-partitions-with-multiple-base-tables).
+- **Supports refresh triggered by multiple fact tables:** Materialized views created upon multiple fact tables now support partition-level incremental refresh when data in any of the fact tables is updated, increasing data management flexibility. For more information, see [Align partitions with multiple base tables](https://docs.starrocks.io/docs/3.3/using_starrocks/create_partitioned_materialized_view/#align-partitions-with-multiple-base-tables).
 
 ### SQL Functions
 
