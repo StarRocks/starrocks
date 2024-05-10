@@ -1863,8 +1863,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Number of threads that are used for flushing MemTable in each store.
 - Introduced in: -
 
-<<<<<<< HEAD
-=======
 ##### lake_flush_thread_num_per_store
 
 - Default: 0
@@ -1876,7 +1874,6 @@ When this value is set to `0`, the system uses twice of the CPU core count as th
 When this value is set to less than `0`, the system uses the product of its absolute value and the CPU core count as the value.
 - Introduced in: 3.1.12, 3.2.7
 
->>>>>>> ebfd7bbbec ([Doc] Fix the doc about lake_flush_thread_num_per_store (#44873))
 ##### max_runnings_transactions_per_txn_map
 
 - Default: 100
