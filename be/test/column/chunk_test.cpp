@@ -22,8 +22,8 @@
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "testutil/parallel_test.h"
 #include "testutil/column_test_helper.h"
+#include "testutil/parallel_test.h"
 
 namespace starrocks {
 
