@@ -19,7 +19,7 @@ The following preparations must be performed on the target cluster for data migr
 
 ### Enable Legacy Compatibility for Replication
 
-StarRocks may behave differently between the old and new versions, causing problems with cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed.
+StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed.
 
 1. You can check whether Legacy Compatibility for Replication is enabled by using the following statement:
 
@@ -187,9 +187,9 @@ The description of the parameters is as follows:
 | include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | target_cluster_storage_volume             | The storage volume used to store tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default storage volume, you do not need to specify this item. |
-| target_cluster_replication_num            | The replication number of the tables to be created in the target cluster. If you want to use the same replication number as the source cluster, you do not need to specify this item. |
+| target_cluster_replication_num            | The number of replicas specified when creating tables in the target cluster. If you want to use the same replica number as the source cluster, you do not need to specify this item. |
 | meta_job_interval_seconds                 | The interval, in seconds, at which the migration tool retrieves metadata from the source and target clusters. You can use the default value for this item. |
-| meta_job_threads                          | The number of threads used by the migration tool to obtain metadata from the source and the target cluster. You can use the default value for this item. |
+| meta_job_threads                          | The number of threads used by the migration tool to obtain metadata from the source and target clusters. You can use the default value for this item. |
 | ddl_job_interval_seconds                  | The interval, in seconds, at which the migration tool executes DDL statements on the target cluster. You can use the default value for this item. |
 | ddl_job_batch_size                        | The batch size for executing DDL statements on the target cluster. You can use the default value for this item. |
 | ddl_job_allow_drop_target_only            | Whether to allow the migration tool to delete databases, tables, or partitions that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. You can use the default value for this item. |
@@ -280,7 +280,7 @@ The default content of the file is as follows, describing how network address ma
 # <SOURCE/TARGET>_<domain>=<IP>
 ```
 
-The following example does as listed below:
+The following example performs these operations:
 
 1. Map the source cluster's private network addresses `192.1.1.1` and `192.1.1.2` to `10.1.1.1` and `10.1.1.2`.
 2. Map the target cluster's private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1`.
