@@ -491,6 +491,19 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### dictionary_encoding_ratio_for_non_string_column
+
+- 默认值：0
+- 类型：Double
+- 单位：
+- 是否动态：否
+- 描述：存储非字符串标量类型的数据时是否使用字典编码，减少存储空间。取值：`0` 或 `1`。
+  ::: info
+  - BOOLEAN, TINYINT 类型数据的范围比较小，因此不支持字典编码。
+  - 开启字典编码后，如果需要回滚，则仅支持回滚到 v3.2.7。
+  - 开启字典编码后，导入和查询性能会有衰退。
+- 引入版本：v3.3.0
+
 ##### drop_tablet_worker_count
 
 - 默认值：3
@@ -1617,17 +1630,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值：1048576
 - 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### dictionary_encoding_ratio_for_non_string_column
-
-- 默认值：0
-- 类型：Double
 - 单位：
 - 是否动态：否
 - 描述：
