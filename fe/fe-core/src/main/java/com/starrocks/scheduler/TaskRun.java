@@ -57,12 +57,13 @@ public class TaskRun implements Comparable<TaskRun> {
     @SerializedName("taskId")
     private long taskId;
 
-    @SerializedName("properties")
+    @SerializedName("taskRunId")
+    private final String taskRunId;
+
     private Map<String, String> properties;
 
     private final CompletableFuture<Constants.TaskRunState> future;
 
-    @SerializedName("task")
     private Task task;
 
     private ConnectContext runCtx;
@@ -71,17 +72,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private TaskRunProcessor processor;
 
-    @SerializedName("status")
     private TaskRunStatus status;
 
-    @SerializedName("type")
     private Constants.TaskType type;
 
-    @SerializedName("executeOption")
     private ExecuteOption executeOption;
-
-    @SerializedName("taskRunId")
-    private final String taskRunId;
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -330,22 +325,24 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        TaskRunStatus taskRunStatus = this.getStatus();
-        TaskRunStatus otherTaskRunStatus = taskRun.getStatus();
-        if (taskRunStatus == null) {
-            // prefer other
-            return 1;
-        } else if (otherTaskRunStatus == null) {
+        int ret = comparePriority(this.status, taskRun.status);
+        if (ret != 0) {
+            return ret;
+        }
+        return taskRunId.compareTo(taskRun.taskRunId);
+    }
+
+    private int comparePriority(TaskRunStatus t0, TaskRunStatus t1) {
+        if (t0 == null || t1 == null) {
             // prefer this
-            return -1;
+            return 0;
+        }
+        // if priority is different, return the higher priority
+        if (t0.getPriority() != t1.getPriority()) {
+            return Integer.compare(t1.getPriority(), t0.getPriority());
         } else {
-            // if priority is different, return the higher priority
-            if (taskRunStatus.getPriority() != otherTaskRunStatus.getPriority()) {
-                return otherTaskRunStatus.getPriority() - taskRunStatus.getPriority();
-            } else {
-                // if priority is the same, return the older task
-                return taskRunStatus.getCreateTime() > otherTaskRunStatus.getCreateTime() ? 1 : -1;
-            }
+            // if priority is the same, return the older task
+            return Long.compare(t0.getCreateTime(), t1.getCreateTime());
         }
     }
 
@@ -392,9 +389,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 "taskId=" + taskId +
                 ", type=" + type +
                 ", uuid=" + taskRunId +
-                ", task_state=" + status.getState() +
+                ", task_state=" + (status != null ? status.getState() : "") +
                 ", properties=" + properties +
-                ", extra_message =" + status.getExtraMessage() +
+                ", extra_message =" + (status != null ? status.getExtraMessage() : "") +
                 '}';
     }
 }
