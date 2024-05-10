@@ -1117,6 +1117,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which improves load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
 - Introduced in: v3.3.0
 
+##### enable_legacy_compatibility_for_replication
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed.
+- Introduced in: v3.1.11, 3.2.7
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
