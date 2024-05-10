@@ -42,11 +42,11 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    virtual void update_jni_scanner_params();
+    virtual Status update_jni_scanner_params();
     Status reinterpret_status(const Status& st) override { return st; }
 
 protected:
-    Status fill_empty_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list);
+    StatusOr<size_t> fill_empty_chunk(ChunkPtr* chunk);
 
     Filter _chunk_filter;
 
@@ -82,7 +82,7 @@ private:
     Status _fill_column(FillColumnArgs* args);
 
     // fill chunk according to slot_desc_list(with or without partition columns)
-    Status _fill_chunk(JNIEnv* env, ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list);
+    StatusOr<size_t> _fill_chunk(JNIEnv* env, ChunkPtr* chunk);
 
     Status _release_off_heap_table(JNIEnv* env);
 

@@ -129,6 +129,7 @@ public:
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
     ColumnPtr get_row_delete_filter(const std::set<int64_t>& deleted_pos);
+    size_t get_row_delete_number(const std::set<int64_t>& deleted_pos);
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
 
