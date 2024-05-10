@@ -61,6 +61,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("schema columns scanner not inited.");
     }
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     if (_param->without_db_table) {
         return Status::OK();
     }
@@ -84,6 +85,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
+<<<<<<< HEAD
     {
         SCOPED_TIMER(_param->_rpc_timer);
         _timeout_ms = state->query_options().query_timeout * 1000;
@@ -95,6 +97,9 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
+=======
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
+>>>>>>> c92d3de91f ([BugFix] Fix querying information_schema.columns without db bug (#45423))
     return Status::OK();
 }
 

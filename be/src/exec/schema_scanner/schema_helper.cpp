@@ -27,11 +27,19 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 Status SchemaHelper::get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& request,
                                   TGetDbsResult* result, const int timeout_ms) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port, [&request, &result](FrontendServiceConnection& client) { client->getDbNames(*result, request); },
             timeout_ms);
+=======
+Status SchemaHelper::_call_rpc(const SchemaScannerState& state,
+                               std::function<void(ClientConnection<FrontendServiceClient>&)> callback) {
+    DCHECK(state.param);
+    SCOPED_TIMER((state.param)->_rpc_timer);
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, callback, state.timeout_ms);
+>>>>>>> c92d3de91f ([BugFix] Fix querying information_schema.columns without db bug (#45423))
 }
 
 Status SchemaHelper::get_table_names(const std::string& ip, const int32_t port, const TGetTablesParams& request,

@@ -88,6 +88,21 @@ Status SchemaScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SchemaScanner::init_schema_scanner_state(RuntimeState* state) {
+    if (nullptr == _param || nullptr == _param->ip || 0 == _param->port) {
+        return Status::InternalError("IP or port doesn't exists");
+    }
+    _ss_state.ip = *(_param->ip);
+    _ss_state.port = _param->port;
+    _ss_state.timeout_ms = state->query_options().query_timeout * 1000;
+    VLOG(1) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
+    _ss_state.param = _param;
+    return Status::OK();
+}
+
+>>>>>>> c92d3de91f ([BugFix] Fix querying information_schema.columns without db bug (#45423))
 Status SchemaScanner::init(SchemaScannerParam* param, ObjectPool* pool) {
     if (_is_init) {
         return Status::OK();
