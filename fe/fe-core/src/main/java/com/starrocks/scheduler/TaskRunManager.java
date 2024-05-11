@@ -138,10 +138,6 @@ public class TaskRunManager implements MemoryTrackable {
                     LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",
                             oldTaskRun, taskRun);
 
-<<<<<<< HEAD
-                    taskRunScheduler.removePendingTaskRunFromQueue(oldTaskRun);
-                    iter.remove();
-=======
                     // Update follower's state to SUCCESS, otherwise the merged task run will always be PENDING.
                     // TODO: 1. add a MERGED state later. 2. support batch update to reduce the number of edit logs.
                     oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
@@ -150,7 +146,6 @@ public class TaskRunManager implements MemoryTrackable {
                     GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
 
                     taskRunScheduler.removePendingTaskRun(oldTaskRun);
->>>>>>> fbf2335779 ([Refactor] [BugFix] Refactor all pending/running scheduler operations into TaskRunScheduler class (#44515))
                 }
             }
             if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
