@@ -165,6 +165,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |tablet_sched_min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
 |tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。参数别名 `max_clone_task_timeout_sec`。|
 |tablet_sched_max_not_being_scheduled_interval_ms|15 \* 60 \* 100|克隆 Tablet 调度时，如果超过该时间一直未被调度，则将该 Tablet 的调度优先级升高，以尽可能优先调度。|
+|tablet_sched_be_down_tolerate_time_s|900|调度器容忍 BE 节点保持不存活状态的最长时间。超时之后该节点上的 Tablet 会被迁移到其他存活的 BE 节点上。单位：Seconds。|
 
 #### 其他动态参数
 
