@@ -19,6 +19,7 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -31,8 +32,8 @@ public class ListComparator<T extends List<Comparable>> implements Comparator<T>
     boolean isDesc;
     int indicesLen;
 
-    public ListComparator(int... indicec) {
-        this(false, indicec);
+    public ListComparator(int... indices) {
+        this(false, indices);
     }
 
     public ListComparator(boolean isDesc, int... indices) {
@@ -46,6 +47,14 @@ public class ListComparator<T extends List<Comparable>> implements Comparator<T>
     public ListComparator(OrderByPair... orderByPairs) {
         this.orderByPairs = orderByPairs;
         this.indicesLen = orderByPairs.length;
+    }
+
+    public ListComparator(List<OrderByPair> orderByPairs) {
+        if (orderByPairs == null) {
+            orderByPairs = Collections.emptyList();
+        }
+        this.orderByPairs = orderByPairs.toArray(new OrderByPair[0]);
+        this.indicesLen = orderByPairs.size();
     }
 
     @Override

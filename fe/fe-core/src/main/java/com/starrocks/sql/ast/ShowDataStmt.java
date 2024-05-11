@@ -15,8 +15,10 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -42,18 +44,20 @@ public class ShowDataStmt extends ShowStmt {
 
     private String dbName;
     private final String tableName;
+    private List<OrderByElement> orderByElements;
+    private List<OrderByPair> orderByPairs;
     private final List<List<String>> totalRows;
 
-    public ShowDataStmt(String dbName, String tableName) {
-        this(dbName, tableName, NodePosition.ZERO);
+    public ShowDataStmt(String dbName, String tableName,  List<OrderByElement> orderByElements) {
+        this(dbName, tableName, orderByElements, NodePosition.ZERO);
     }
 
-    public ShowDataStmt(String dbName, String tableName, NodePosition pos) {
+    public ShowDataStmt(String dbName, String tableName,  List<OrderByElement> orderByElements, NodePosition pos) {
         super(pos);
         this.dbName = dbName;
         this.tableName = tableName;
-
         this.totalRows = new LinkedList<>();
+        this.orderByElements = orderByElements;
     }
 
     public String getDbName() {
@@ -72,6 +76,18 @@ public class ShowDataStmt extends ShowStmt {
         return this.tableName != null;
     }
 
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public List<OrderByPair> getOrderByPairs() {
+        return orderByPairs;
+    }
+
+    public void setOrderByPairs(List<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
+    }
+
     public List<List<String>> getResultRows() {
         return totalRows;
     }
@@ -88,6 +104,13 @@ public class ShowDataStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowDataStatement(this, context);
+    }
+
+    public static int analyzeColumn(String tableName, String columnName) {
+        ShowResultSetMetaData metaData = (tableName == null)
+                ? SHOW_TABLE_DATA_META_DATA
+                : SHOW_INDEX_DATA_META_DATA;
+        return metaData.getColumnIdx(columnName);
     }
 }
 

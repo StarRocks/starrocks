@@ -350,8 +350,8 @@ recoverDbStmt
     ;
 
 showDataStmt
-    : SHOW DATA
-    | SHOW DATA FROM qualifiedName
+    : SHOW DATA (ORDER BY sortItem (',' sortItem)*)?
+    | SHOW DATA FROM qualifiedName (ORDER BY sortItem (',' sortItem)*)?
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
