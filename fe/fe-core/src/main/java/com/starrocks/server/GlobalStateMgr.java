@@ -615,7 +615,7 @@ public class GlobalStateMgr {
         return nodeMgr.getClusterInfo();
     }
 
-    private HeartbeatMgr getHeartbeatMgr() {
+    public HeartbeatMgr getHeartbeatMgr() {
         return heartbeatMgr;
     }
 
