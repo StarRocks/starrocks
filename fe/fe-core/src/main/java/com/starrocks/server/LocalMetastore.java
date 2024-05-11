@@ -4661,7 +4661,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void modifyTableFastSchemaEvolution(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         TableProperty tableProperty = table.getTableProperty();
         if (tableProperty == null) {
             tableProperty = new TableProperty(properties);
