@@ -115,7 +115,7 @@ public class EliminateAggRule extends TransformationRule {
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
-            ScalarOperator newOperator = handleAggregationFunction(fnName, entry.getValue(), input);
+            ScalarOperator newOperator = handleAggregationFunction(fnName, entry.getValue());
             if (newOperator != null) {
                 newProjectMap.put(entry.getKey(), newOperator);
             }
@@ -125,7 +125,7 @@ public class EliminateAggRule extends TransformationRule {
         return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
     }
 
-    private ScalarOperator handleAggregationFunction(String fnName, CallOperator callOperator, OptExpression input) {
+    private ScalarOperator handleAggregationFunction(String fnName, CallOperator callOperator) {
         if (fnName.equals(FunctionSet.COUNT)) {
             return rewriteCountFunction(callOperator);
         } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
