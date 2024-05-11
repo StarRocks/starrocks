@@ -63,5 +63,6 @@ displayed_sidebar: "Chinese"
 
 ## 文档模板
 
-- [函数文档模板](./sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)
+- [函数文档模板](./sql-reference//How_to_Write_Functions_Documentation.md)
 - [SQL命令模板](./sql-reference/How_to_write_SQL_command_doc.md)
+- [参数/变量模板](./sql-reference/template_for_config.md)

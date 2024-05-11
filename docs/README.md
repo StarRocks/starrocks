@@ -67,7 +67,7 @@ Before contributing, please read this article carefully to quickly understand th
 
 ## Documentation template
 
-- [SQL function template](../docs/en/sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)
-- [SQL command template](../docs/en/sql-reference/sql-statements/SQL_command_template.md)
-- [FE/BE config and variable temple](../docs/en/sql-reference/sql-statements/template_for_config.md)
+- [SQL function template](../docs/en/sql-reference/How_to_Write_Functions_Documentation.md)
+- [SQL command template](../docs/en/sql-reference//SQL_command_template.md)
+- [FE/BE config and variable temple](../docs/en/sql-reference/template_for_config.md)
 - [Loading data template](../docs/en/loading/Loading_data_template.md)

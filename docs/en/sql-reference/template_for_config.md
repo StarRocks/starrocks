@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Template for writing FE/BE parameters and variables
 
-> When you add, modify, or delete an FE/BE parameter or a variable in code, do remember to update the documentation. [FE configuration](https://docs.starrocks.io/docs/administration/management/FE_configuration/), [BE configuration](https://docs.starrocks.io/docs/administration/management/BE_configuration/), [System variables](https://docs.starrocks.io/docs/reference/System_variable/)
+> When you add, modify, or delete an FE/BE parameter or a variable in code, do remember to update the documentation. [FE configuration](https://docs.starrocks.io/docs/administration/management/FE_configuration/), [BE configuration](https://docs.starrocks.io/docs/administration/management/BE_configuration/), [System variables](https://docs.starrocks.io/docs/reference/System_variable/).
 
 The parameter or variable description usually contains the following fields:
 
