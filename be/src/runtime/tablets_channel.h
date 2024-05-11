@@ -68,6 +68,8 @@ public:
     // timeout: in microseconds
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
 
+    virtual void update_profile() = 0;
+
 protected:
     // counter of remaining senders
     std::atomic<int> _num_remaining_senders = 0;

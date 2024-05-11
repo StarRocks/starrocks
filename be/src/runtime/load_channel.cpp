@@ -331,6 +331,16 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
     return Status::OK();
 }
 
+std::vector<int64_t> LoadChannel::_get_index_ids() {
+    std::vector<int64_t> index_ids;
+    std::lock_guard l(_lock);
+    index_ids.reserve(_tablets_channels.size());
+    for (auto& it : _tablets_channels) {
+        index_ids.push_back(it.first);
+    }
+    return index_ids;
+}
+
 void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print_profile) {
     // report profile if enable profile or the query has run for a long time
     if (!_enable_profile) {
@@ -360,6 +370,13 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     }
 
     COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
+    auto index_ids = _get_index_ids();
+    for (auto index_id : index_ids) {
+        auto channel = get_tablets_channel(index_id);
+        if (channel != nullptr) {
+            channel->update_profile();
+        }
+    }
     _profile->inc_version();
 
     if (print_profile) {

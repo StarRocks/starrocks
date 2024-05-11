@@ -432,6 +432,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // remove tablets channel and load channel after all things done
     if (close_channel) {
+        // LoadChannel can't get this tablets channel, and call update_profile()
+        // after removing it, so update the profile before remove
+        update_profile();
         _load_channel->remove_tablets_channel(_index_id);
     }
 }
@@ -954,6 +957,12 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
         }
     }
     delete this;
+}
+
+void LocalTabletsChannel::update_profile() {
+    if (_profile != nullptr) {
+        // TODO
+    }
 }
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

@@ -125,6 +125,7 @@ private:
     void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
+    std::vector<int64_t> _get_index_ids();
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;

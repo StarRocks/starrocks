@@ -79,6 +79,10 @@ public:
 
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
 
+    void update_profile() override {
+        // TODO add profile for lake
+    }
+
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
