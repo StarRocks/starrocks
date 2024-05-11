@@ -18,6 +18,10 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksHttpException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.rest.ExecuteSqlAction;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -116,5 +120,42 @@ public class ConnectionLimitTest {
         System.out.println(resultSet.getResultRows());
         Assert.assertEquals(1, resultSet.getResultRows().size());
         Assert.assertTrue(resultSet.getResultRows().get(0).contains("test"));
+
+        ShowProcesslistStmt showProcesslistStmt = new ShowProcesslistStmt(true);
+        Assert.assertNull(showProcesslistStmt.getForUser());
+    }
+
+    private HttpConnectContext createHttpConnectContextForUser(String qualifiedName) {
+        HttpConnectContext context = new HttpConnectContext();
+        context.setQualifiedUser(qualifiedName);
+        context.setCurrentUserIdentity(new UserIdentity(qualifiedName, "%"));
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setConnectionId(connectionId++);
+
+        return context;
+    }
+
+    @Test
+    public void testHttpConnectContextReachLimit() {
+        ExecuteSqlAction executeSqlAction = new ExecuteSqlAction(null);
+        Config.qe_max_connection = 1;
+        ExecuteEnv.setup();
+
+        Deencapsulation.invoke(executeSqlAction,
+                "registerContext",
+                "select 1",
+                createHttpConnectContextForUser("test"));
+        try {
+            Deencapsulation.invoke(executeSqlAction,
+                    "registerContext",
+                    "select 1",
+                    createHttpConnectContextForUser("test"));
+        } catch (StarRocksHttpException e) {
+            Assert.assertTrue(e.getMessage().contains("Reach cluster-wide connection limit"));
+        }
+
+        // reset
+        Config.qe_max_connection = 4096;
+        ExecuteEnv.setup();
     }
 }
