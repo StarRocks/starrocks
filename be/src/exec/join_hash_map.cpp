@@ -459,6 +459,14 @@ void JoinHashTable::_init_build_column(const HashTableParam& param) {
             }
 
             _table_items->build_slots.emplace_back(hash_table_slot);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+            if (slot->is_nullable()) {
+                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+                nullable_column->append_default_not_null_value();
+            } else {
+                column->append_default();
+            }
+            _table_items->build_chunk->append_column(std::move(column), slot->id());
             _table_items->build_column_count++;
         }
     }
