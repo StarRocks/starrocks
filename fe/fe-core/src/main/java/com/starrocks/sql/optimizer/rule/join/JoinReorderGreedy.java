@@ -8,6 +8,8 @@ import com.google.common.collect.MinMaxPriorityQueue;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
 import java.util.Comparator;
@@ -21,6 +23,8 @@ import java.util.stream.Collectors;
  * This implementation refer to gporca CJoinOrderDPv2 and CJoinOrderGreedy
  */
 public class JoinReorderGreedy extends JoinOrder {
+
+    private static final Logger LOGGER = LogManager.getLogger(JoinReorderGreedy.class);
     protected final MinMaxPriorityQueue<ExpressionInfo> topKExpr;
 
     public JoinReorderGreedy(OptimizerContext context) {
@@ -135,6 +139,13 @@ public class JoinReorderGreedy extends JoinOrder {
             if (groupInfo.bestExprInfo.cost < bestCost) {
                 bestExpr = groupInfo;
                 bestCost = groupInfo.bestExprInfo.cost;
+            }
+        }
+
+        if (bestExpr == null) {
+            LOGGER.warn("cannot find best expr {}");
+            for (GroupInfo groupInfo : groupInfos) {
+                LOGGER.warn(groupInfo);
             }
         }
         return bestExpr;

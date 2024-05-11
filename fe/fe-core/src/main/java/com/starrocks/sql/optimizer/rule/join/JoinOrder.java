@@ -85,6 +85,20 @@ public abstract class JoinOrder {
                     && Objects.equals(leftChildExpr, other.leftChildExpr)
                     && Objects.equals(rightChildExpr, other.rightChildExpr);
         }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ExpressionInfo:{ \n");
+            sb.append(expr.explain()).append("\n");
+            sb.append("leftChild:\n");
+            sb.append(leftChildExpr).append("\n");
+            sb.append("rightChild:\n");
+            sb.append(rightChildExpr).append("\n");
+            sb.append("Costs: ").append(cost).append("\n");
+            sb.append("}");
+            return sb.toString();
+        }
     }
 
     /**
@@ -115,6 +129,19 @@ public abstract class JoinOrder {
 
             GroupInfo other = (GroupInfo) obj;
             return atoms.equals(other.atoms);
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("\nGroupInfo:{ \n");
+            sb.append(bestExprInfo).append("\n");
+            sb.append("atoms: \n");
+            sb.append(atoms).append("\n");
+            sb.append("lowestExprCost: \n");
+            sb.append(lowestExprCost).append("\n");
+            sb.append("}");
+            return sb.toString();
         }
     }
 
@@ -245,7 +272,13 @@ public abstract class JoinOrder {
     }
 
     protected List<GroupInfo> getGroupForLevel(int level) {
-        return joinLevels.get(level).groups;
+        List<GroupInfo> res = joinLevels.get(level).groups;
+        for (GroupInfo groupInfo : res) {
+            if (groupInfo == null) {
+                LOGGER.warn("find empty groupInfo in level: {}", level);
+            }
+        }
+        return res;
     }
 
     protected void calculateStatistics(OptExpression expr) {
