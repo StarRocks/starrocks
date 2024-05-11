@@ -93,6 +93,11 @@ public class EliminateAggRule extends TransformationRule {
         UKFKConstraintsCollector collector = new UKFKConstraintsCollector();
         input.getOp().accept(collector, input, null);
         OptExpression childOptExpression = input.inputAt(0);
+
+        if (aggOp.getGroupingKeys().isEmpty()) {
+            return false;
+        }
+
         for (ColumnRefOperator columnRefOperator : aggOp.getGroupingKeys()) {
             if (childOptExpression.getConstraints().getUniqueConstraint(columnRefOperator.getId()) == null) {
                 return false;
@@ -131,8 +136,9 @@ public class EliminateAggRule extends TransformationRule {
     }
 
     private Map<ColumnRefOperator, ScalarOperator> rewriteCountFunction(OptExpression input) {
-        LogicalAggregationOperator aggOp = input.getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             IsNullPredicateOperator isNullPredicateOperator =
                     new IsNullPredicateOperator(entry.getValue().getArguments().get(0));
@@ -156,8 +162,9 @@ public class EliminateAggRule extends TransformationRule {
     }
 
     private Map<ColumnRefOperator, ScalarOperator> rewriteCastFunction(OptExpression input) {
-        LogicalAggregationOperator aggOp = input.getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             newProjectMap.put(entry.getKey(), entry.getValue().getArguments().get(0));
         }
