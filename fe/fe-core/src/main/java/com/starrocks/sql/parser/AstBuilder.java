@@ -2752,8 +2752,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
+        String forUser = null;
+        if (context.FOR() != null) {
+            forUser =  ((StringLiteral) visit(context.string())).getValue();
+        }
         boolean isShowFull = context.FULL() != null;
+<<<<<<< HEAD
         return new ShowProcesslistStmt(isShowFull);
+=======
+        return new ShowProcesslistStmt(isShowFull, forUser, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowProfilelistStatement(StarRocksParser.ShowProfilelistStatementContext context) {
+        int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
+        return new ShowProfilelistStmt(limit, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowRunningQueriesStatement(StarRocksParser.ShowRunningQueriesStatementContext context) {
+        int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
+        return new ShowRunningQueriesStmt(limit, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowResourceGroupUsageStatement(
+            StarRocksParser.ShowResourceGroupUsageStatementContext context) {
+        if (context.GROUPS() != null) {
+            return new ShowResourceGroupUsageStmt(null, createPos(context));
+        }
+
+        Identifier groupName = (Identifier) visit(context.identifier());
+        return new ShowResourceGroupUsageStmt(groupName.getValue(), createPos(context));
+>>>>>>> d686f55b34 ([Enhancement] Refine the error message when connection limit reached (#45405))
     }
 
     @Override
