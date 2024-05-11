@@ -92,12 +92,11 @@ public class EliminateAggRule extends TransformationRule {
         // collect uk pk key
         UKFKConstraintsCollector collector = new UKFKConstraintsCollector();
         input.getOp().accept(collector, input, null);
-        OptExpression childOptExpression = input.inputAt(0);
-
         if (aggOp.getGroupingKeys().isEmpty()) {
             return false;
         }
 
+        OptExpression childOptExpression = input.inputAt(0);
         for (ColumnRefOperator columnRefOperator : aggOp.getGroupingKeys()) {
             if (childOptExpression.getConstraints().getUniqueConstraint(columnRefOperator.getId()) == null) {
                 return false;
