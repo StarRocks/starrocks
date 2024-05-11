@@ -138,30 +138,20 @@ public class ConnectScheduler {
                     ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         // Check user
-<<<<<<< HEAD
-        if (connByUser.get(ctx.getQualifiedUser()) == null) {
-            connByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
-        }
-        int conns = connByUser.get(ctx.getQualifiedUser()).get();
-        long currentConns;
+        connByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
+        int currentConn = connByUser.get(ctx.getQualifiedUser()).get();
+        long currentUserMaxConn;
         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-            currentConns = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
+            currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
         } else {
-            currentConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
+            currentUserMaxConn = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
         }
-        if (conns >= currentConns) {
-            return false;
-=======
-        connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
-        int currentConn = connCountByUser.get(ctx.getQualifiedUser()).get();
-        long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
         if (currentConn >= currentUserMaxConn) {
             return new Pair<>(false, "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
                     ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
                     "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
-                    ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
+                    ", connByUser.totConn=" + connByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
                     ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
->>>>>>> d686f55b34 ([Enhancement] Refine the error message when connection limit reached (#45405))
         }
         numberConnection.incrementAndGet();
         connByUser.get(ctx.getQualifiedUser()).incrementAndGet();
@@ -196,25 +186,16 @@ public class ConnectScheduler {
         ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
 
         for (ConnectContext ctx : connectionMap.values()) {
-<<<<<<< HEAD
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!ctx.getQualifiedUser().equals(user) &&
+                if (!ctx.getQualifiedUser().equals(currUser) &&
                         !PrivilegeActions.checkSystemAction(currContext, PrivilegeType.OPERATE)) {
                     continue;
                 }
             } else {
                 // Check auth
-                if (!ctx.getQualifiedUser().equals(user) &&
+                if (!ctx.getQualifiedUser().equals(currUser) &&
                         !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(currContext,
                                 PrivPredicate.GRANT)) {
-=======
-            // Check authorization first.
-            if (!ctx.getQualifiedUser().equals(currUser)) {
-                try {
-                    Authorizer.checkSystemAction(currContext.getCurrentUserIdentity(),
-                            currContext.getCurrentRoleIds(), PrivilegeType.OPERATE);
-                } catch (AccessDeniedException e) {
->>>>>>> d686f55b34 ([Enhancement] Refine the error message when connection limit reached (#45405))
                     continue;
                 }
             }
@@ -237,15 +218,6 @@ public class ConnectScheduler {
         return getAllConnThreadInfoByUser(context, currUser, null);
     }
 
-<<<<<<< HEAD
-=======
-    public Set<UUID> listAllSessionsId() {
-        Set<UUID> sessionIds = new HashSet<>();
-        connectionMap.values().forEach(ctx -> sessionIds.add(ctx.getSessionId()));
-        return sessionIds;
-    }
-
->>>>>>> d686f55b34 ([Enhancement] Refine the error message when connection limit reached (#45405))
     private class LoopHandler implements Runnable {
         ConnectContext context;
 
