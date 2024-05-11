@@ -394,8 +394,12 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
     return Status::OK();
 }
 
-bool ScalarColumnIterator::has_bloom_filter_index() const {
-    return _reader->has_bloom_filter_index();
+bool ScalarColumnIterator::has_original_bloom_filter_index() const {
+    return _reader->has_original_bloom_filter_index();
+}
+
+bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
+    return _reader->has_ngram_bloom_filter_index();
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,

@@ -164,7 +164,8 @@ public:
         return Status::OK();
     }
 
-    virtual bool has_bloom_filter_index() const { return false; }
+    virtual bool has_original_bloom_filter_index() const { return false; }
+    virtual bool has_ngram_bloom_filter_index() const { return false; }
     /// Consider the relation among |predicates| is disjunction,
     /// that is, keep the row_ranges that satisfy any predicate in predicates.
     virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
