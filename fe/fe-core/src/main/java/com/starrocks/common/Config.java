@@ -2739,6 +2739,22 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max retry times for materialized view refresh retry times when failed")
     public static int max_mv_refresh_failure_retry_times = 1;
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true, comment = "The max retry times when materialized view refresh try lock " +
+            "timeout failed")
+    public static int max_mv_refresh_try_lock_failure_retry_times = 3;
+
+    @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
+    public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
+
+    /**
+     * The refresh partition number when refreshing materialized view at once by default.
+     */
+    @ConfField(mutable = true)
+    public static int default_mv_partition_refresh_number = 1;
+
+>>>>>>> 91e3645cfb ([BugFix] (MV) Optimize PartitionBasedMvRefreshProcessor db locks(Part 2) (#45056))
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
