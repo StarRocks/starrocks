@@ -77,6 +77,9 @@ public class EliminateAggRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
+        if (aggOp.getGroupingKeys().isEmpty()) {
+            return false;
+        }
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
@@ -92,9 +95,6 @@ public class EliminateAggRule extends TransformationRule {
         // collect uk pk key
         UKFKConstraintsCollector collector = new UKFKConstraintsCollector();
         input.getOp().accept(collector, input, null);
-        if (aggOp.getGroupingKeys().isEmpty()) {
-            return false;
-        }
 
         OptExpression childOptExpression = input.inputAt(0);
         for (ColumnRefOperator columnRefOperator : aggOp.getGroupingKeys()) {
