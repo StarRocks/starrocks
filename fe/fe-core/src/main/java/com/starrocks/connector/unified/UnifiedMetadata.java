@@ -29,6 +29,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -183,9 +184,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         ConnectorMetadata metadata = metadataOfTable(item.getTable());
-        return metadata.prepareMetadata(item, tracers);
+        return metadata.prepareMetadata(item, tracers, connectContext);
     }
 
     @Override

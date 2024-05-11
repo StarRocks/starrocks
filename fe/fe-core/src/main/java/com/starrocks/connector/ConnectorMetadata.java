@@ -199,7 +199,7 @@ public interface ConnectorMetadata {
         return Statistics.builder().build();
     }
 
-    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         return true;
     }
 
