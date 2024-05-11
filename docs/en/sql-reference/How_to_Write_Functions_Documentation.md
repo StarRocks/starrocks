@@ -4,14 +4,16 @@ displayed_sidebar: "English"
 
 # convert_tz
 
-> - *This article uses* `*CONVERT_TZ*` *as an example to illustrate the requirements for writing functions documentation.*
-> - If the documentation cites the following syntax and examples, please use code blocks.
+> *- When you write new function docs, please provide complete example data so users can test it, including the CREATE TABLE, INSERT/LOAD data examples.*
+> *- This article uses `CONVERT_TZ` as an example to illustrate the requirements for writing function documentation.*
 
 ## Description
 
 Converts a datetime value from one time zone to another.
 
-> *What does this function do.*
+This function is supported from v2.0.
+
+> *What does this function do, its usage scenario, some details, difference with a similar function, the supported version.*
 
 ## Syntax
 
@@ -37,8 +39,8 @@ DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 
 Returns a value of the DATETIME data type.
 
-> - *The data type must be capitalized.*
-> - *Additional notes can be provided if necessary, for example,*
+> *Additional notes can be provided if necessary:*
+>
 > - *Types of the return value if the input value supports multiple data types.*
 > - *Type of the error returned (for example, NULL) if the data type of the input value is not supported.*
 
@@ -68,7 +70,7 @@ MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles'
 +--------------------------------------------------------------------+
 ```
 
-> - *Provide examples for using this function and describe the purpose of each example to help users quickly understand the example.*
-> - *Enclose the code of different use scenarios in different code blocks.*
-> - *If you need to describe more than one scenario in an example, add a comment for each scenario to help* *users quickly distinguish between them.*
-> - *If the returned result is simple, the format in example* *1* *is recommended. Otherwise, the format in example 2 is recommended.*
+> - *Provide common examples for using this function and describe the purpose of each example to help users quickly understand the example.*
+> - *Please include complete data examples so users can test, including CREATE TABLE, INSERT/LOAD, and query.*
+> - *If you need to describe more than one scenario in an example, add a comment for each scenario to help users understand.*
+> - *If the example is complex, explain the return result.*
