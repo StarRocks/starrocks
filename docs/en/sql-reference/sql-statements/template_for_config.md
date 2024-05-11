@@ -51,9 +51,9 @@ If this parameter is deleted:
 - Whether it is replaced by another parameter
 - The features that will also be deleted with this parameter
 
-## Default value change
+## Default value/unit change
 
-If the default value is changed, explain why it is changed.
+If the default value or unit of a parameter is changed, explain why it is changed.
 
 ## Parameter name change
 
