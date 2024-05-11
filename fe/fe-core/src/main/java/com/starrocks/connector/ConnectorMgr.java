@@ -17,9 +17,12 @@ package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.memory.MemoryTrackable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -110,4 +113,24 @@ public class ConnectorMgr {
         this.connectorLock.writeLock().unlock();
     }
 
+    public Map<String, MemoryTrackable> getMemTrackers() {
+        Map<String, MemoryTrackable> memoryTrackers = new HashMap<>();
+        readLock();
+        try {
+            for (Map.Entry<String, CatalogConnector> connectorEntry : connectors.entrySet()) {
+                CatalogConnector catalogConnector = connectorEntry.getValue();
+                if (!catalogConnector.supportMemoryTrack()) {
+                    continue;
+                }
+
+                String catalogName = connectorEntry.getKey();
+                String connectorClassName = catalogConnector.normalConnectorClassName();
+                String labelName = connectorClassName + "." + catalogName;
+                memoryTrackers.put(labelName, catalogConnector);
+            }
+        } finally {
+            readUnlock();
+        }
+        return memoryTrackers;
+    }
 }
