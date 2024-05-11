@@ -20,6 +20,8 @@ import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.Statement;
 
+import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
+
 public class TrinoParserUtils {
     public static StatementBase toStatement(String query, long sqlMode) {
         String trimmedQuery = query.trim();
@@ -27,7 +29,7 @@ public class TrinoParserUtils {
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze) {
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
-            throw new UnsupportedOperationException("Unsupported statement type: " + statement.getClass().getName());
+            throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
         }
     }
 }
