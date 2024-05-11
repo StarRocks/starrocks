@@ -118,7 +118,8 @@ public class ConnectScheduler {
     public Pair<Boolean, String> registerConnection(ConnectContext ctx) {
         if (numberConnection.get() >= maxConnections.get()) {
             return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
-                    ", connectionMap.size=" + connectionMap.size());
+                    ", connectionMap.size=" + connectionMap.size() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         // Check user
         connByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
@@ -133,7 +134,8 @@ public class ConnectScheduler {
             return new Pair<>(false, "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
                     ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
                     "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
-                    ", connByUser.totConn=" + connByUser.values().stream().mapToInt(AtomicInteger::get).sum());
+                    ", connByUser.totConn=" + connByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         numberConnection.incrementAndGet();
         connByUser.get(ctx.getQualifiedUser()).incrementAndGet();
