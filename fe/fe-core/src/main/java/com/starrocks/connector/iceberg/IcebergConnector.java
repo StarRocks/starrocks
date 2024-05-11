@@ -137,4 +137,19 @@ public class IcebergConnector implements Connector {
             refreshOtherFeExecutor.shutdown();
         }
     }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return icebergCatalogProperties.enableIcebergMetadataCache() && icebergNativeCatalog != null;
+    }
+
+    @Override
+    public long estimateSize() {
+        return icebergNativeCatalog.estimateSize();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return icebergNativeCatalog.estimateCount();
+    }
 }
