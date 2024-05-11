@@ -15,8 +15,8 @@
 package com.starrocks.http.rest.v2.vo;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.Index;
+import com.starrocks.sql.ast.IndexDef;
 
 import java.util.List;
 import java.util.Map;
