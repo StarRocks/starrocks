@@ -435,7 +435,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         IcebergFilter key;
         IcebergTable icebergTable;
         icebergTable = (IcebergTable) item.getTable();
@@ -457,8 +457,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 // Only record the number of tables that need to be prepared in parallel
             }
         }
+        if (connectContext == null) {
+            connectContext = ConnectContext.get();
+        }
 
-        triggerIcebergPlanFilesIfNeeded(key, icebergTable, item.getPredicate(), item.getLimit(), tracers);
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable, item.getPredicate(), item.getLimit(), tracers, connectContext);
         return true;
     }
 
@@ -494,22 +497,23 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         String serializedTable = SerializationUtil.serializeToBase64(new SerializableTable(nativeTable, fileIO));
-        boolean loadColumnStats = enableCollectColumnStatistics() ||
-                (!deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
+        boolean loadColumnStats = enableCollectColumnStatistics(ConnectContext.get()) ||
+                (!matchingDeleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
                         catalogProperties.enableDistributedPlanLoadColumnStatsWithEqDelete());
 
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
     }
 
     private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
-        triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null);
+        triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null, ConnectContext.get());
     }
 
     private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate,
-                                                 long limit, Tracers tracers) {
+                                                 long limit, Tracers tracers, ConnectContext connectContext) {
         if (!scannedTables.contains(key)) {
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.processSplit." + key)) {
-                collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit, tracers);
+            tracers = tracers == null ? Tracers.get() : tracers;
+            try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.processSplit." + key)) {
+                collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit, tracers, connectContext);
             }
         }
     }
@@ -588,7 +592,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         return partitionKeys;
     }
 
-    private void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate, long limit, Tracers tracers) {
+    private void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate,
+                                                            long limit, Tracers tracers, ConnectContext connectContext) {
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         // empty table
@@ -610,12 +615,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, planMode()))
+                catalogName, dbName, tableName, planMode(connectContext), connectContext))
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);
 
-        if (enableCollectColumnStatistics()) {
+        if (enableCollectColumnStatistics(connectContext)) {
             scan = scan.includeColumnStats();
         }
 
@@ -649,7 +654,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             FileScanTask scanTask = fileScanTasks.next();
 
             FileScanTask icebergSplitScanTask = scanTask;
-            if (enableCollectColumnStatistics()) {
+            if (enableCollectColumnStatistics(connectContext)) {
                 try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
                     icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
                 }
@@ -1025,16 +1030,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         return true;
     }
 
-    private PlanMode planMode() {
-        if (ConnectContext.get() == null) {
+    private PlanMode planMode(ConnectContext connectContext) {
+        if (connectContext == null) {
             return PlanMode.LOCAL;
         }
 
-        if (ConnectContext.get().getSessionVariable() == null) {
+        if (connectContext.getSessionVariable() == null) {
             return PlanMode.LOCAL;
         }
 
-        return PlanMode.fromName(ConnectContext.get().getSessionVariable().getPlanMode());
+        return PlanMode.fromName(connectContext.getSessionVariable().getPlanMode());
     }
 
     private boolean enablePruneManifest() {
@@ -1049,16 +1054,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         return ConnectContext.get().getSessionVariable().isEnablePruneIcebergManifest();
     }
 
-    private boolean enableCollectColumnStatistics() {
-        if (ConnectContext.get() == null) {
+    private boolean enableCollectColumnStatistics(ConnectContext connectContext) {
+        if (connectContext == null) {
             return false;
         }
 
-        if (ConnectContext.get().getSessionVariable() == null) {
+        if (connectContext.getSessionVariable() == null) {
             return false;
         }
 
-        return ConnectContext.get().getSessionVariable().enableIcebergColumnStatistics();
+        return connectContext.getSessionVariable().enableIcebergColumnStatistics();
     }
 
     @Override

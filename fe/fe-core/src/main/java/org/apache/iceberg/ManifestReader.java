@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.cache.Cache;
+import com.starrocks.connector.iceberg.DataFileWrapper;
+import com.starrocks.connector.iceberg.DeleteFileWrapper;
 import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.exceptions.RuntimeIOException;
@@ -266,9 +268,10 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                         Set<DataFile> dataFiles = dataFileCache.getIfPresent(file.location());
                         if (dataFiles != null && entry.isLive()) {
                             DataFile dataFile = (DataFile) entry.file();
-                            dataFiles.add(dataFileCacheWithMetrics ?
+                            DataFile copiedDataFile = dataFileCacheWithMetrics ?
                                     dataFile.copyWithStats(identifierFieldIds.isEmpty() ? null : identifierFieldIds) :
-                                    dataFile.copyWithoutStats());
+                                    dataFile.copyWithoutStats();
+                            dataFiles.add(DataFileWrapper.wrap(copiedDataFile));
                         }
                         return entry;
                     });
@@ -279,7 +282,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                     entry -> {
                         Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(file.location());
                         if (deleteFiles != null && entry.isLive()) {
-                            deleteFiles.add((DeleteFile) entry.file().copy());
+                            deleteFiles.add(DeleteFileWrapper.wrap((DeleteFile) entry.file().copy()));
                         }
                         return entry;
                     });

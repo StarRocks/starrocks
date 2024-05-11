@@ -1350,4 +1350,46 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertNotNull(collectJob.getMetadataJobCoord());
         Assert.assertTrue(collectJob.getResultQueue().isEmpty());
     }
+
+    @Test
+    public void testFileWrapper() {
+        DataFileWrapper wrapper = DataFileWrapper.wrap(FILE_B_1);
+        Assert.assertEquals(wrapper.pos(), FILE_B_1.pos());
+        Assert.assertEquals(wrapper.specId(), FILE_B_1.specId());
+        Assert.assertEquals(wrapper.pos(), FILE_B_1.pos());
+        Assert.assertEquals(wrapper.path(), FILE_B_1.path());
+        Assert.assertEquals(wrapper.format(), FILE_B_1.format());
+        Assert.assertEquals(wrapper.partition(), FILE_B_1.partition());
+        Assert.assertEquals(wrapper.recordCount(), FILE_B_1.recordCount());
+        Assert.assertEquals(wrapper.fileSizeInBytes(), FILE_B_1.fileSizeInBytes());
+        Assert.assertEquals(wrapper.columnSizes(), FILE_B_1.columnSizes());
+        Assert.assertEquals(wrapper.valueCounts(), FILE_B_1.valueCounts());
+        Assert.assertEquals(wrapper.nullValueCounts(), FILE_B_1.nullValueCounts());
+        Assert.assertEquals(wrapper.nanValueCounts(), FILE_B_1.nanValueCounts());
+        Assert.assertEquals(wrapper.lowerBounds(), FILE_B_1.lowerBounds());
+        Assert.assertEquals(wrapper.upperBounds(), FILE_B_1.upperBounds());
+        Assert.assertEquals(wrapper.splitOffsets(), FILE_B_1.splitOffsets());
+        Assert.assertEquals(wrapper.keyMetadata(), FILE_B_1.keyMetadata());
+
+        DeleteFileWrapper deleteFileWrapper = DeleteFileWrapper.wrap(FILE_C_1);
+        Assert.assertEquals(deleteFileWrapper.pos(), FILE_C_1.pos());
+        Assert.assertEquals(deleteFileWrapper.specId(), FILE_C_1.specId());
+        Assert.assertEquals(deleteFileWrapper.pos(), FILE_C_1.pos());
+        Assert.assertEquals(deleteFileWrapper.path(), FILE_C_1.path());
+        Assert.assertEquals(deleteFileWrapper.format(), FILE_C_1.format());
+        Assert.assertEquals(deleteFileWrapper.partition(), FILE_C_1.partition());
+        Assert.assertEquals(deleteFileWrapper.recordCount(), FILE_C_1.recordCount());
+        Assert.assertEquals(deleteFileWrapper.fileSizeInBytes(), FILE_C_1.fileSizeInBytes());
+        Assert.assertEquals(deleteFileWrapper.columnSizes(), FILE_C_1.columnSizes());
+        Assert.assertEquals(deleteFileWrapper.valueCounts(), FILE_C_1.valueCounts());
+        Assert.assertEquals(deleteFileWrapper.nullValueCounts(), FILE_C_1.nullValueCounts());
+        Assert.assertEquals(deleteFileWrapper.nanValueCounts(), FILE_C_1.nanValueCounts());
+        Assert.assertEquals(deleteFileWrapper.lowerBounds(), FILE_C_1.lowerBounds());
+        Assert.assertEquals(deleteFileWrapper.upperBounds(), FILE_C_1.upperBounds());
+        Assert.assertEquals(deleteFileWrapper.splitOffsets(), FILE_C_1.splitOffsets());
+        Assert.assertEquals(deleteFileWrapper.keyMetadata(), FILE_C_1.keyMetadata());
+        Assert.assertEquals(deleteFileWrapper.content(), FILE_C_1.content());
+        Assert.assertEquals(deleteFileWrapper.dataSequenceNumber(), FILE_C_1.dataSequenceNumber());
+        Assert.assertEquals(deleteFileWrapper.fileSequenceNumber(), FILE_C_1.fileSequenceNumber());
+    }
 }
