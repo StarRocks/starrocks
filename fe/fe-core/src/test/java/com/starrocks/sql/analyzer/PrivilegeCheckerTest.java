@@ -72,6 +72,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
@@ -80,6 +81,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetPassVar;
@@ -4010,6 +4012,14 @@ public class PrivilegeCheckerTest {
             String sql = "select * from db_for_ranger.tbl1";
 
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
             Analyzer.analyze(stmt, context);
 
             QueryStatement queryStatement = (QueryStatement) stmt;
@@ -4027,6 +4037,14 @@ public class PrivilegeCheckerTest {
 
             sql = "select k1 from db_for_ranger.tbl1";
             stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
             Analyzer.analyze(stmt, context);
             queryStatement = (QueryStatement) stmt;
             Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);

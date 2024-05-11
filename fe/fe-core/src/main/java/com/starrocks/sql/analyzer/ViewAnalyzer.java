@@ -24,12 +24,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 
@@ -51,14 +49,6 @@ public class ViewAnalyzer {
             final String tableName = stmt.getTableName().getTbl();
             FeNameFormat.checkTableName(tableName);
 
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setPolicyRewritten(true);
-                    return null;
-                }
-            }.visit(stmt.getQueryStatement());
             Analyzer.analyze(stmt.getQueryStatement(), context);
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
             if (hasTemporaryTable) {
@@ -86,15 +76,6 @@ public class ViewAnalyzer {
             AlterClause alterClause = stmt.getAlterClause();
             if (alterClause instanceof AlterViewClause) {
                 AlterViewClause alterViewClause = (AlterViewClause) alterClause;
-
-                //Build View SQL without Policy Rewrite
-                new AstTraverser<Void, Void>() {
-                    @Override
-                    public Void visitRelation(Relation relation, Void context) {
-                        relation.setPolicyRewritten(true);
-                        return null;
-                    }
-                }.visit(alterViewClause.getQueryStatement());
                 Analyzer.analyze(alterViewClause.getQueryStatement(), context);
                 boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
                 if (hasTemporaryTable) {
