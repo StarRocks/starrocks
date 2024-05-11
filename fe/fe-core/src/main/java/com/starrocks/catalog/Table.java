@@ -179,10 +179,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     protected List<Column> fullSchema = new CopyOnWriteArrayList<>();
 
     /**
-     * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
+     * nameToColumn and idToColumn are both indexes of fullSchema.
+     * nameToColumn is the index of column name, idToColumn is the index of column id,
+     * column names can change, but the column ID of a specific column will never change.
+     * Use case-insensitive tree map, because the column name is case-insensitive in the system.
      */
     protected Map<String, Column> nameToColumn;
-
     protected Map<ColumnId, Column> idToColumn;
 
     // DO NOT persist this variable.

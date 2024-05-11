@@ -697,10 +697,9 @@ public class OlapTable extends Table {
 
     public void renameColumn(String oldName, String newName) {
         Column column = this.nameToColumn.remove(oldName);
-        if (column != null) {
-            column.setName(newName);
-            this.nameToColumn.put(newName, column);
-        }
+        Preconditions.checkState(column != null, "column of name: " + oldName + " does not exist");
+        column.setName(newName);
+        this.nameToColumn.put(newName, column);
     }
 
     public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum,
@@ -2206,8 +2205,8 @@ public class OlapTable extends Table {
         for (Column column : this.fullSchema) {
             newNameToColumn.put(column.getName(), column);
             // For OlapTable: fullSchema contains columns from baseIndex
-            // and columns with SHADOW_NAME_PREFIX (when doing schema changes).
-            // To avoid base columns being replaced by SHADOW_NAME_PREFIX columns,
+            // and columns from shadow indexes (when doing schema changes).
+            // To avoid base columns being replaced by shadow columns,
             // put the columns with the same ColumnId once.
             if (!newIdToColumn.containsKey(column.getColumnId())) {
                 newIdToColumn.put(column.getColumnId(), column);
