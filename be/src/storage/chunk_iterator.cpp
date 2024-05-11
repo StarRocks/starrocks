@@ -16,6 +16,35 @@
 
 namespace starrocks {
 
+Status ChunkIterator::do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
+    return Status::NotSupported("Chunk* chunk, vector<uint32_t>* rowid) not supported");
+}
+
+Status ChunkIterator::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+    return Status::NotSupported("Chunk* chunk, vector<uint64_t>* rssid_rowids) not supported");
+}
+
+Status ChunkIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
+    if (source_masks == nullptr) {
+        return do_get_next(chunk);
+    } else {
+        RETURN_IF_ERROR(do_get_next(chunk));
+        source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{0, false});
+        return Status::OK();
+    }
+}
+
+Status ChunkIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                                  std::vector<uint64_t>* rssid_rowids) {
+    if (source_masks == nullptr) {
+        return do_get_next(chunk, rssid_rowids);
+    } else {
+        RETURN_IF_ERROR(do_get_next(chunk, rssid_rowids));
+        source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{0, false});
+        return Status::OK();
+    }
+}
+
 class TimedChunkIterator final : public ChunkIterator {
 public:
     TimedChunkIterator(ChunkIteratorPtr iter, RuntimeProfile::Counter* counter)

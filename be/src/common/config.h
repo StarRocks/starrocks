@@ -1314,4 +1314,7 @@ CONF_mInt64(arrow_read_batch_size, "4096");
 CONF_mBool(brpc_socket_keepalive, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
+// Any value less than 2 means no limit
+CONF_mInt64(lake_compaction_max_merge_way_count, "0");
+
 } // namespace starrocks::config

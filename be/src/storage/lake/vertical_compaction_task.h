@@ -39,16 +39,18 @@ public:
 
     ~VerticalCompactionTask() override = default;
 
-    Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
+protected:
+    StatusOr<RowsetPtr> compact(const RowsetList& input_rowsets, const CancelFunc& cancel_func,
+                                ThreadPool* flush_pool) override;
 
 private:
-    StatusOr<int32_t> calculate_chunk_size_for_column_group(const std::vector<uint32_t>& column_group);
+    StatusOr<int32_t> calculate_chunk_size_for_column_group(const RowsetList& input_rowsets,
+                                                            const std::vector<uint32_t>& column_group);
 
-    Status compact_column_group(bool is_key, int column_group_index, size_t num_column_groups,
-                                const std::vector<uint32_t>& column_group, std::unique_ptr<TabletWriter>& writer,
-                                RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks,
-                                const CancelFunc& cancel_func);
-    std::shared_ptr<const TabletSchema> _tablet_schema;
+    Status compact_column_group(const RowsetList& input_rowsets, bool is_key, int column_group_index,
+                                size_t num_column_groups, const std::vector<uint32_t>& column_group,
+                                std::unique_ptr<TabletWriter>& writer, RowSourceMaskBuffer* mask_buffer,
+                                std::vector<RowSourceMask>* source_masks, const CancelFunc& cancel_func);
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;

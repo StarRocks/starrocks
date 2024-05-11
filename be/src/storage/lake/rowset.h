@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/ownership.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
@@ -31,8 +32,8 @@ class Rowset : public BaseRowset {
 public:
     static std::vector<RowsetPtr> get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata);
 
-    // Does NOT take the ownership of |tablet_mgr| and |metadata|.
-    explicit Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
+    // Does NOT take the ownership of |tablet_mgr|
+    explicit Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int32_t index,
                     TabletSchemaPtr tablet_schema);
 
     // Create a Rowset based on the rowset metadata of index |rowset_index| saved in the tablet metadata
@@ -46,13 +47,13 @@ public:
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index);
 
-    virtual ~Rowset();
+    ~Rowset() override;
 
     DISALLOW_COPY_AND_MOVE(Rowset);
 
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
 
-    [[nodiscard]] StatusOr<size_t> get_read_iterator_num();
+    StatusOr<size_t> get_read_iterator_num();
 
     // only used for updatable tablets' rowset, for update state load, it wouldn't load delvec
     // simply get iterators to iterate all rows without complex options like predicates
@@ -60,8 +61,8 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema,
-                                                                                    OlapReaderStatistics* stats);
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema,
+                                                                      OlapReaderStatistics* stats);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
@@ -70,8 +71,9 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
-            const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats);
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(const Schema& schema, int64_t version,
+                                                                                  const MetaFileBuilder* builder,
+                                                                                  OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
@@ -87,35 +89,36 @@ public:
 
     [[nodiscard]] RowsetId rowset_id() const override;
 
-    [[nodiscard]] int index() const { return _index; }
+    [[nodiscard]] int32_t index() const { return _index; }
 
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
+    StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache);
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
-                                                             bool fill_metadata_cache);
-
-    // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
-
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
-                                       bool fill_metadata_cache);
+    Status load_segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache);
 
     int64_t tablet_id() const { return _tablet_id; }
 
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
+    TabletSchemaPtr tablet_schema() const { return _tablet_schema; }
+
+    void take_metadata_ownership() { _metadata_ownership = kTakesOwnership; }
+
+    void set_first_segment_id(uint32_t first_segment_id) { _first_segment_id = first_segment_id; }
+
 private:
+    Ownership _metadata_ownership{kDontTakeOwnership};
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     const RowsetMetadataPB* _metadata;
-    int _index;
+    int32_t _index;
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    uint32_t _first_segment_id{0};
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {

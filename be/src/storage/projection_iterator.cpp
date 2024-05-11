@@ -28,6 +28,8 @@ public:
         build_index_map(this->_schema, _child->schema());
     }
 
+    const char* type() const override { return "ProjectionIterator"; }
+
     void close() override;
 
     size_t merged_rows() const override { return _child->merged_rows(); }

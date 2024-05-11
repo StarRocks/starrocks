@@ -614,6 +614,8 @@ public:
     SegmentIteratorWrapper(std::shared_ptr<Rowset> rowset, ChunkIteratorPtr iter)
             : ChunkIterator(iter->schema(), iter->chunk_size()), _guard(std::move(rowset)), _iter(std::move(iter)) {}
 
+    const char* type() const override { return "SegmentIteratorWrapper"; }
+
     void close() override {
         _iter->close();
         _iter.reset();

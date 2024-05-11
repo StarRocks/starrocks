@@ -18,7 +18,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
@@ -31,11 +30,18 @@
 
 namespace starrocks::lake {
 
-Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+using RowsetMetadataPtr = CompactionTask::RowsetMetadataPtr;
+using RowsetPtr = CompactionTask::RowsetPtr;
 
+StatusOr<RowsetPtr> VerticalCompactionTask::compact(const RowsetList& input_rowsets, const CancelFunc& cancel_func,
+                                                    ThreadPool* flush_pool) {
+    DCHECK(!input_rowsets.empty());
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+    _total_num_rows = 0;
+    _total_data_size = 0;
+    _total_input_segs = 0;
     _tablet_schema = _tablet.get_schema();
-    for (auto& rowset : _input_rowsets) {
+    for (auto& rowset : input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
         _total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
@@ -71,53 +77,39 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             // read mask buffer from the beginning
             RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
-        RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer, mask_buffer.get(),
-                                             source_masks.get(), cancel_func));
+        RETURN_IF_ERROR(compact_column_group(input_rowsets, is_key, i, column_group_size, column_groups[i], writer,
+                                             mask_buffer.get(), source_masks.get(), cancel_func));
     }
-    // Adjust the progress here for 2 reasons:
-    // 1. For primary key, due to the existence of the delete vector, the number of rows read may be less than the
-    //    number of rows counted in the metadata.
-    // 2. If the number of rows is 0, the progress will not be updated
-    _context->progress.update(100);
 
     RETURN_IF_ERROR(writer->finish());
 
     // update writer stats
     _context->stats->segment_write_ns += writer->stats().segment_write_ns;
 
-    auto txn_log = std::make_shared<TxnLog>();
-    auto op_compaction = txn_log->mutable_op_compaction();
-    txn_log->set_tablet_id(_tablet.id());
-    txn_log->set_txn_id(_txn_id);
-    for (auto& rowset : _input_rowsets) {
-        op_compaction->add_input_rowsets(rowset->id());
-    }
-    for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(std::move(file.path));
-        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-    }
+    auto output_rowset = std::make_unique<RowsetMetadataPB>();
 
-    op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
-    op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
-    op_compaction->mutable_output_rowset()->set_overlapped(false);
-    RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
-    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // preload primary key table's compaction state
-        Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
+    for (auto& file : writer->files()) {
+        output_rowset->add_segments(std::move(file.path));
+        output_rowset->add_segment_size(file.size.value());
     }
+    output_rowset->set_num_rows(writer->num_rows());
+    output_rowset->set_data_size(writer->data_size());
+    output_rowset->set_overlapped(false);
 
     LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
               << ", statistics: " << _context->stats->to_json_stats();
 
-    return Status::OK();
+    // Note that the rowset index will be used to determine whether a delete predicate is effective for the rowset.
+    // The rowset index of the ourput rowset here must be equal to or greater than "input_rowsets[0]->index()", so
+    // as to ensure that an earlier version of delete predicate will not be applied to the output rowset in the next
+    // round of merge.
+    return build_rowset_from_metadata(output_rowset.release(), input_rowsets[0]->index());
 }
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
-        const std::vector<uint32_t>& column_group) {
+        const RowsetList& input_rowsets, const std::vector<uint32_t>& column_group) {
     int64_t total_mem_footprint = 0;
-    for (auto& rowset : _input_rowsets) {
+    for (auto& rowset : input_rowsets) {
         // in vertical compaction, there may be a lot of column groups, it will waste a lot of time to
         // load segments (footer and column index) every time if segments are not in the cache.
         //
@@ -142,19 +134,17 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
                                                 _total_num_rows, total_mem_footprint, _total_input_segs);
 }
 
-Status VerticalCompactionTask::compact_column_group(bool is_key, int column_group_index, size_t column_group_size,
-                                                    const std::vector<uint32_t>& column_group,
-                                                    std::unique_ptr<TabletWriter>& writer,
-                                                    RowSourceMaskBuffer* mask_buffer,
-                                                    std::vector<RowSourceMask>* source_masks,
-                                                    const CancelFunc& cancel_func) {
-    ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
+Status VerticalCompactionTask::compact_column_group(
+        const RowsetList& input_rowsets, bool is_key, int column_group_index, size_t column_group_size,
+        const std::vector<uint32_t>& column_group, std::unique_ptr<TabletWriter>& writer,
+        RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks, const CancelFunc& cancel_func) {
+    ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(input_rowsets, column_group));
 
     Schema schema = column_group_index == 0 ? (_tablet_schema->sort_key_idxes().empty()
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
-    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;

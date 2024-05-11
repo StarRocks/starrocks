@@ -152,6 +152,8 @@ public:
 
     ~MergeIterator() override { close(); }
 
+    const char* type() const override { return "MergeIterator"; }
+
     void close() override;
 
     size_t merged_rows() const override { return _merged_rows; }
@@ -224,6 +226,8 @@ public:
 
     // In PK table compaction, we need to get chunk and each row's rssid & rowid
     bool need_rssid_rowids = false;
+
+    const char* type() const override { return "HeapMergeIterator"; }
 
 protected:
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
@@ -453,6 +457,8 @@ public:
             : MergeIterator(std::move(children)), _chunks(_children.size()), _mask_buffer(mask_buffer) {
         DCHECK(_mask_buffer);
     }
+
+    const char* type() const override { return "MaskMergeIterator"; }
 
 protected:
     Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }

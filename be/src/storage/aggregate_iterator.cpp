@@ -54,6 +54,8 @@ public:
                  << ", AGG CHUNKS: " << _agg_chunk_nums << ", FACTOR: " << (int)_pre_aggregate_factor;
     }
 
+    const char* type() const override { return "AggregatorIterator"; }
+
     void close() override;
 
     size_t merged_rows() const override { return _aggregator->merged_rows(); }

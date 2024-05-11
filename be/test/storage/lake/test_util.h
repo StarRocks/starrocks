@@ -300,5 +300,4 @@ inline std::vector<TScanRangeParams> create_scan_ranges_cloud(std::vector<Tablet
 
     return scan_ranges;
 }
-
 } // namespace starrocks::lake

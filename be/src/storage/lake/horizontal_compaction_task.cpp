@@ -30,21 +30,25 @@
 
 namespace starrocks::lake {
 
-Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
+using RowsetMetadataPtr = CompactionTask::RowsetMetadataPtr;
+using RowsetPtr = CompactionTask::RowsetPtr;
+
+StatusOr<RowsetPtr> HorizontalCompactionTask::compact(const RowsetList& input_rowsets, const CancelFunc& cancel_func,
+                                                      ThreadPool* flush_pool) {
+    DCHECK(!input_rowsets.empty());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    auto tablet_schema = _tablet.get_schema();
     int64_t total_num_rows = 0;
-    for (auto& rowset : _input_rowsets) {
+    for (auto& rowset : input_rowsets) {
         total_num_rows += rowset->num_rows();
     }
 
-    ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
+    ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size(input_rowsets));
 
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
-    Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets);
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
@@ -78,7 +82,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         {
             SCOPED_RAW_TIMER(&reader_time_ns);
             auto st = Status::OK();
-            if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+            if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
                 st = reader.get_next(chunk.get(), &rssid_rowids);
             } else {
                 st = reader.get_next(chunk.get());
@@ -89,7 +93,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                 return st;
             }
         }
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
         if (rssid_rowids.empty()) {
             RETURN_IF_ERROR(writer->write(*chunk));
         } else {
@@ -99,6 +103,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         chunk->reset();
         rssid_rowids.clear();
 
+        // TODO: fix progress
         _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
         VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
     }
@@ -116,51 +121,40 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // update writer stats
     _context->stats->segment_write_ns += writer->stats().segment_write_ns;
 
-    auto txn_log = std::make_shared<TxnLog>();
-    auto op_compaction = txn_log->mutable_op_compaction();
-    txn_log->set_tablet_id(_tablet.id());
-    txn_log->set_txn_id(_txn_id);
-    for (auto& rowset : _input_rowsets) {
-        op_compaction->add_input_rowsets(rowset->id());
-    }
-
+    auto output_rowset = std::make_unique<RowsetMetadataPB>();
     for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file.path);
-        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
+        output_rowset->add_segments(file.path);
+        output_rowset->add_segment_size(file.size.value());
     }
 
-    op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
-    op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
-    op_compaction->mutable_output_rowset()->set_overlapped(false);
-    RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
-    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
-    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // preload primary key table's compaction state
-        Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, tablet_schema);
-    }
+    output_rowset->set_num_rows(writer->num_rows());
+    output_rowset->set_data_size(writer->data_size());
+    output_rowset->set_overlapped(false);
 
     LOG(INFO) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
               << ", statistics: " << _context->stats->to_json_stats();
 
-    return Status::OK();
+    // Note that the rowset index will be used to determine whether a delete predicate is effective for the rowset.
+    // The rowset index of the ourput rowset here must be equal to or greater than "input_rowsets[0]->index()", so
+    // as to ensure that an earlier version of delete predicate will not be applied to the output rowset in the next
+    // round of merge.
+    return build_rowset_from_metadata(output_rowset.release(), input_rowsets[0]->index());
 }
 
-StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
+StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size(const RowsetList& input_rowsets) {
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
-    auto tablet_schema = _tablet.get_schema();
-    for (auto& rowset : _input_rowsets) {
+    for (auto& rowset : input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
-        auto fill_meta_cache = false;
+        auto fill_meta_cache = true;
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
-                auto uid = tablet_schema->column(i).unique_id();
+                auto uid = _tablet_schema->column(i).unique_id();
                 const auto* column_reader = segment->column_with_uid(uid);
                 if (column_reader == nullptr) {
                     continue;

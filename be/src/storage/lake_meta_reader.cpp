@@ -105,9 +105,11 @@ Status LakeMetaReader::_init_seg_meta_collecters(const lake::VersionedTablet& ta
 }
 
 Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments) {
+    auto io_options = LakeIOOptions{.fill_data_cache = false};
+    auto fill_meta_cache = true;
     auto rowsets = tablet.get_rowsets();
     for (const auto& rowset : rowsets) {
-        ASSIGN_OR_RETURN(auto rowset_segs, rowset->segments(true));
+        ASSIGN_OR_RETURN(auto rowset_segs, rowset->segments(io_options, fill_meta_cache));
         segments->insert(segments->end(), rowset_segs.begin(), rowset_segs.end());
     }
     return Status::OK();
