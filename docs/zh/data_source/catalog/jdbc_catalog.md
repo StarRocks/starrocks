@@ -11,7 +11,7 @@ JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执�
 
 此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
 
-目前 JDBC Catalog 支持 MySQL 和 PostgreSQL。
+目前 JDBC Catalog 支持 MySQL 和 PostgreSQL 和 Oracle。
 
 ## 前提条件
 
@@ -84,6 +84,17 @@ PROPERTIES
     "jdbc_uri"="jdbc:mysql://127.0.0.1:3306",
     "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
     "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+ 
+CREATE EXTERNAL CATALOG jdbc2
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521:ORCL",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver"
 );
 ```
 
