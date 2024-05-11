@@ -805,6 +805,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - **Introduced in**: v3.0.9
 
+##### tablet_sched_be_down_tolerate_time_s
+
+- Default: 900
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes.
+- Introduced in: v2.5.7
+
 ### Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
