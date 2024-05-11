@@ -209,15 +209,6 @@ public class ConnectScheduler {
         return getAllConnThreadInfoByUser(context, currUser, null);
     }
 
-<<<<<<< HEAD
-=======
-    public Set<UUID> listAllSessionsId() {
-        Set<UUID> sessionIds = new HashSet<>();
-        connectionMap.values().forEach(ctx -> sessionIds.add(ctx.getSessionId()));
-        return sessionIds;
-    }
-
->>>>>>> d686f55b34 ([Enhancement] Refine the error message when connection limit reached (#45405))
     private class LoopHandler implements Runnable {
         ConnectContext context;
 
