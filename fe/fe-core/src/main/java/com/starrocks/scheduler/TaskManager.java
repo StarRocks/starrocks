@@ -676,6 +676,13 @@ public class TaskManager implements MemoryTrackable {
                 .map(TaskRun::getStatus)
                 .filter(t -> isShowTaskRunStatus(t, dbName))
                 .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+
+        // history task runs
+        List<TaskRunStatus> historyTaskRuns = taskRunManager.getTaskRunHistory().getAllHistory();
+        historyTaskRuns.stream()
+                .filter(t -> t.getSource() == Constants.TaskSource.MV)
+                .filter(t -> isShowTaskRunStatus(t, dbName))
+                .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
         return mvNameRunStatusMap;
     }
 
