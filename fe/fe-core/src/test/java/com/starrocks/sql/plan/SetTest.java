@@ -666,7 +666,6 @@ public class SetTest extends PlanTestBase {
     public void testEliminateAgg() throws Exception {
         String sql = "select avg(t1), sum(t2) from unique_key_demo group by t0;";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  6 <-> cast([2: t1, VARCHAR, true] as DOUBLE)\n" +
@@ -680,7 +679,7 @@ public class SetTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  6 <-> [1: t0, BIGINT, false]\n" +
+                "  |  6 <-> if[(1: t0 IS NULL, 0, 1); args: BOOLEAN,INT,INT; result: TINYINT; args nullable: false; result nullable: true]\n" +
                 "  |  7 <-> [2: t1, VARCHAR, true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +

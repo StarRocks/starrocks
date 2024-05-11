@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -37,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -111,23 +111,13 @@ public class EliminateAggRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
 
-        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(aggOp.getAggregations());
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
-            if (fnName.equals(FunctionSet.COUNT)) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> rewriteEntry : rewriteCountFunction(input)
-                        .entrySet()) {
-                    newProjectMap.put(rewriteEntry.getKey(), rewriteEntry.getValue());
-                }
-            } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
-                    fnName.equals(FunctionSet.FIRST_VALUE) ||
-                    fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN) ||
-                    fnName.equals(FunctionSet.GROUP_CONCAT)) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> rewriteEntry : rewriteCastFunction(input)
-                        .entrySet()) {
-                    newProjectMap.put(rewriteEntry.getKey(), rewriteEntry.getValue());
-                }
+            ScalarOperator newOperator = handleAggregationFunction(fnName, entry.getValue(), input);
+            if (newOperator != null) {
+                newProjectMap.put(entry.getKey(), newOperator);
             }
         }
 
@@ -135,41 +125,30 @@ public class EliminateAggRule extends TransformationRule {
         return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
     }
 
-    private Map<ColumnRefOperator, ScalarOperator> rewriteCountFunction(OptExpression input) {
-        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
-        LogicalAggregationOperator aggOp = input.getOp().cast();
-
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
-            IsNullPredicateOperator isNullPredicateOperator =
-                    new IsNullPredicateOperator(entry.getValue().getArguments().get(0));
-            ArrayList<ScalarOperator> ifArgs = Lists.newArrayList();
-            ScalarOperator thenExpr = ConstantOperator.createInt(0);
-            ScalarOperator elseExpr = ConstantOperator.createInt(1);
-            ifArgs.add(isNullPredicateOperator);
-            ifArgs.add(thenExpr);
-            ifArgs.add(elseExpr);
-
-            Type[] argumentTypes = ifArgs.stream().map(arg -> arg.getType()).toArray(Type[]::new);
-            Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argumentTypes,
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-            CallOperator callOperator =
-                    new CallOperator(FunctionSet.IF, ScalarType.createType(PrimitiveType.TINYINT), ifArgs, fn);
-            newProjectMap.put(entry.getKey(), callOperator);
+    private ScalarOperator handleAggregationFunction(String fnName, CallOperator callOperator, OptExpression input) {
+        if (fnName.equals(FunctionSet.COUNT)) {
+            return rewriteCountFunction(callOperator);
+        } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
+                fnName.equals(FunctionSet.FIRST_VALUE) || fnName.equals(FunctionSet.MAX) ||
+                fnName.equals(FunctionSet.MIN) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
+            return callOperator.getArguments().get(0);
         }
-
-        return newProjectMap;
+        return null;
     }
 
-    private Map<ColumnRefOperator, ScalarOperator> rewriteCastFunction(OptExpression input) {
-        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
-        LogicalAggregationOperator aggOp = input.getOp().cast();
+    private ScalarOperator rewriteCountFunction(CallOperator callOperator) {
+        IsNullPredicateOperator isNullPredicateOperator =
+                new IsNullPredicateOperator(callOperator.getArguments().get(0));
+        ArrayList<ScalarOperator> ifArgs = Lists.newArrayList();
+        ScalarOperator thenExpr = ConstantOperator.createInt(0);
+        ScalarOperator elseExpr = ConstantOperator.createInt(1);
+        ifArgs.add(isNullPredicateOperator);
+        ifArgs.add(thenExpr);
+        ifArgs.add(elseExpr);
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
-            newProjectMap.put(entry.getKey(), entry.getValue().getArguments().get(0));
-        }
-
-        return newProjectMap;
+        Type[] argumentTypes = ifArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+        Function fn =
+                Expr.getBuiltinFunction(FunctionSet.IF, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        return new CallOperator(FunctionSet.IF, ScalarType.createType(PrimitiveType.TINYINT), ifArgs, fn);
     }
-
 }
