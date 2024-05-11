@@ -168,6 +168,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_sched_min_clone_task_timeout_sec       | s    | 3 \* 60                | The minimum timeout duration for cloning a tablet, in seconds. |
 | tablet_sched_max_clone_task_timeout_sec       | s    | 2 \* 60 \* 60          | The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`. |
 | tablet_sched_max_not_being_scheduled_interval_ms | ms   | 15 \* 60 \* 100 | When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible. |
+| tablet_sched_be_down_tolerate_time_s | s   | 900 | The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes. |
 
 #### Other FE dynamic parameters
 
