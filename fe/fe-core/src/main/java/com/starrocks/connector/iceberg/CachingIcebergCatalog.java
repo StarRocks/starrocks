@@ -42,9 +42,11 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -410,5 +412,26 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             sb.append('}');
             return sb.toString();
         }
+    }
+
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(databases) +
+                SizeEstimator.estimate(tables) +
+                SizeEstimator.estimate(partitionNames) +
+                SizeEstimator.estimate(dataFileCache) +
+                SizeEstimator.estimate(deleteFileCache);
+
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        Map<String, Long> counter = new HashMap<>();
+        counter.put("Database", databases.size());
+        counter.put("Table", tables.size());
+        counter.put("PartitionNames", partitionNames.size());
+        counter.put("ManifestOfDataFile", dataFileCache.size());
+        counter.put("ManifestOfDeleteFile", deleteFileCache.size());
+        return counter;
     }
 }

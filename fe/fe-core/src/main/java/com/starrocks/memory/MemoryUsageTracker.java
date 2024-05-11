@@ -14,6 +14,7 @@
 
 package com.starrocks.memory;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
@@ -90,18 +91,22 @@ public class MemoryUsageTracker extends FrontendDaemon {
     }
 
     public static void trackMemory() {
-        long startTime;
-        long endTime;
-        for (Map.Entry<String, Map<String, MemoryTrackable>> entry : REFERENCE.entrySet()) {
+        trackMemory(REFERENCE);
+        trackMemory(ImmutableMap.of("Connector", GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
+    }
+
+    private static void trackMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
+        for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
+
             for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
                 String className = statEntry.getKey();
                 MemoryTrackable tracker = statEntry.getValue();
-                startTime = System.currentTimeMillis();
+                long startTime = System.currentTimeMillis();
                 long currentEstimateSize = tracker.estimateSize();
                 Map<String, Long> counterMap = tracker.estimateCount();
-                endTime = System.currentTimeMillis();
+                long endTime = System.currentTimeMillis();
 
                 StringBuilder sb  = new StringBuilder();
                 for (Map.Entry<String, Long> subEntry : counterMap.entrySet()) {

@@ -15,8 +15,9 @@
 package com.starrocks.connector;
 
 import com.starrocks.connector.config.ConnectorConfig;
+import com.starrocks.memory.MemoryTrackable;
 
-public interface Connector {
+public interface Connector extends MemoryTrackable {
     /**
      * Get the connector meta of connector
      *
@@ -38,5 +39,9 @@ public interface Connector {
      * check connector config
      */
     default void bindConfig(ConnectorConfig config) {
+    }
+
+    default boolean supportMemoryTrack() {
+        return false;
     }
 }

@@ -17,6 +17,8 @@ package com.starrocks.connector;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
 
+import java.util.Map;
+
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
@@ -46,5 +48,24 @@ public class CatalogConnector implements Connector {
 
     public void shutdown() {
         normalConnector.shutdown();
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return normalConnector.supportMemoryTrack();
+    }
+
+    @Override
+    public long estimateSize() {
+        return normalConnector.estimateSize();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return normalConnector.estimateCount();
+    }
+
+    public String normalConnectorClassName() {
+        return normalConnector.getClass().getSimpleName();
     }
 }

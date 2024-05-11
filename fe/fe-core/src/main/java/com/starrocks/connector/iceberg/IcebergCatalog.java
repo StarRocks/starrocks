@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.memory.MemoryTrackable;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -40,7 +41,7 @@ import java.util.concurrent.ExecutorService;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 
-public interface IcebergCatalog {
+public interface IcebergCatalog extends MemoryTrackable {
 
     IcebergCatalogType getIcebergCatalogType();
 
