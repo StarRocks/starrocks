@@ -15,11 +15,7 @@ Before contributing, please read this article carefully to quickly understand th
 
 ## Writing Process
 
-<<<<<<< HEAD
-1. **Writing phase**: Write the topic (in Markdown) according to the following template, and add the topic's index to the TOC file if the topic is newly added.
-=======
 1. **Writing phase**: Write the topic (in Markdown) according to templates, and add the topic's index to the `sidebars.json` file if the topic is newly added.
->>>>>>> 1b2ef7a3a1 ([Doc] update function/sql template and add config template (#45488))
 
     > - *Because the documentation is written in Markdown, we recommend that you use markdown-lint to check whether the documentation conforms to the Markdown syntax.*
     > - *When adding the topic index, please pay attention to* *its category* *in the TOC file.* *For* *example, the* ***Stream Load*** *topic* *belongs to the* ***Loading*** *chapter.*
