@@ -143,7 +143,6 @@ public class JoinReorderGreedy extends JoinOrder {
         }
 
         if (bestExpr == null) {
-            LOGGER.warn("cannot find best expr {}");
             for (GroupInfo groupInfo : groupInfos) {
                 LOGGER.warn(groupInfo);
             }
