@@ -257,22 +257,10 @@ public class CatalogMgr {
             readUnlock();
         }
 
-<<<<<<< HEAD
         Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
         if (null == connector) {
-            LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+            LOG.error("{} connector [{}] create failed.", type, catalogName);
             throw new DdlException("connector create failed");
-=======
-        try {
-            CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-            if (catalogConnector == null) {
-                LOG.error("{} connector [{}] create failed.", type, catalogName);
-                throw new DdlException("connector create failed");
-            }
-        } catch (StarRocksConnectorException e) {
-            LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
-            throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
->>>>>>> 7ea9dcf86b ([Enhancement] avoid load image failed when create connector with exception (#45494))
         }
 
         Map<String, String> properties = catalog.getConfig();
