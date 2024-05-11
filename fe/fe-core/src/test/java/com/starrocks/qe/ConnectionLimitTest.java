@@ -71,9 +71,11 @@ public class ConnectionLimitTest {
         Config.qe_max_connection = 1;
         ExecuteEnv.setup();
         Pair<Boolean, String> result =
-                ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
+                ExecuteEnv.getInstance().getScheduler()
+                        .registerConnection(createConnectContextForUser("test"));
         Assert.assertTrue(result.first);
-        result = ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
+        result = ExecuteEnv.getInstance().getScheduler()
+                .registerConnection(createConnectContextForUser("test"));
         Assert.assertFalse(result.first);
         Assert.assertTrue(result.second.contains("Reach cluster-wide connection limit"));
     }
@@ -84,13 +86,17 @@ public class ConnectionLimitTest {
         Config.qe_max_connection = 100;
         ExecuteEnv.setup();
         String sql = "set property for 'test' 'max_user_connections' = '1'";
-        SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        GlobalStateMgr.getCurrentState().getAuthenticationMgr().updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
+        SetUserPropertyStmt setUserPropertyStmt =
+                (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                .updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
 
         Pair<Boolean, String> result =
-                ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
+                ExecuteEnv.getInstance().getScheduler()
+                        .registerConnection(createConnectContextForUser("test"));
         Assert.assertTrue(result.first);
-        result = ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
+        result = ExecuteEnv.getInstance().getScheduler()
+                .registerConnection(createConnectContextForUser("test"));
         Assert.assertFalse(result.first);
         System.out.println(result.second);
         Assert.assertTrue(result.second.contains("Reach user-level"));
