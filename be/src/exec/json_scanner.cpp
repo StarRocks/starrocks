@@ -194,6 +194,12 @@ Status JsonScanner::_construct_json_types() {
             break;
         }
 
+        case TYPE_STRUCT:
+        case TYPE_MAP: {
+            _json_types[column_pos] = slot_desc->type();
+            break;
+        }
+
         // Treat other types as VARCHAR.
         default: {
             auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
@@ -306,8 +312,8 @@ Status JsonScanner::_open_next_reader() {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
         return st;
     }
-    _cur_file_reader =
-            std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors, range_desc);
+    _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors,
+                                                    _json_types, range_desc);
     RETURN_IF_ERROR(_cur_file_reader->open());
     _next_range++;
     return Status::OK();
@@ -334,17 +340,19 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
 
 JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter* counter, JsonScanner* scanner,
                        std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs,
-                       const TBrokerRangeDesc& range_desc)
+                       std::vector<TypeDescriptor> type_descs, const TBrokerRangeDesc& range_desc)
         : _state(state),
           _counter(counter),
           _scanner(scanner),
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
+          _type_descs(type_descs),
           _op_col_index(-1),
           _range_desc(range_desc) {
     int index = 0;
-    for (const auto& desc : _slot_descs) {
+    for (size_t i = 0; i < _slot_descs.size(); ++i) {
+        const auto& desc = _slot_descs[i];
         if (desc == nullptr) {
             continue;
         }
@@ -353,6 +361,7 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
         }
         index++;
         _slot_desc_dict.emplace(desc->col_name(), desc);
+        _type_desc_dict.emplace(desc->col_name(), _type_descs[i]);
     }
 }
 
@@ -565,15 +574,16 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 }
 
                 auto slot_desc = itr->second;
+                auto type_desc = _type_desc_dict[key];
 
                 // update the prev parsed position
                 column_index = chunk->get_index_by_slot_id(slot_desc->id());
                 if (_prev_parsed_position.size() <= key_index) {
-                    _prev_parsed_position.emplace_back(key, column_index, slot_desc->type());
+                    _prev_parsed_position.emplace_back(key, column_index, type_desc);
                 } else {
                     _prev_parsed_position[key_index].key = key;
                     _prev_parsed_position[key_index].column_index = column_index;
-                    _prev_parsed_position[key_index].type = slot_desc->type();
+                    _prev_parsed_position[key_index].type = type_desc;
                 }
             }
 
