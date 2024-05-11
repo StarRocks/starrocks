@@ -40,15 +40,7 @@ public class ShowProcesslistStmt extends ShowStmt {
     private final boolean isShowFull;
     private final String forUser;
 
-    public ShowProcesslistStmt(boolean isShowFull) {
-<<<<<<< HEAD
-=======
-        this(isShowFull, null, NodePosition.ZERO);
-    }
-
-    public ShowProcesslistStmt(boolean isShowFull, String forUser, NodePosition pos) {
-        super(pos);
->>>>>>> d686f55b34 ([Enhancement] Refine the error message when connection limit reached (#45405))
+    public ShowProcesslistStmt(boolean isShowFull, String forUser) {
         this.isShowFull = isShowFull;
         this.forUser = forUser;
     }
