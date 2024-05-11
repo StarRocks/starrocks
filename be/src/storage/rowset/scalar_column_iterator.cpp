@@ -407,10 +407,10 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
 
     for (const auto* pred : predicates) {
         // bloom filter index can only be either original bloom filter or ngram bloom filter
-        support_original_bloom_filter =
+        support_original_bloom_filter |=
                 pred->support_original_bloom_filter() && _reader->has_original_bloom_filter_index();
-        support_ngram_bloom_filter = pred->support_ngram_bloom_filter() && _reader->has_ngram_bloom_filter_index();
-        support = support | support_original_bloom_filter | support_ngram_bloom_filter;
+        support_ngram_bloom_filter |= pred->support_ngram_bloom_filter() && _reader->has_ngram_bloom_filter_index();
+        support |= support_original_bloom_filter | support_ngram_bloom_filter;
     }
     RETURN_IF(!support, Status::OK());
 
