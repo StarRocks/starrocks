@@ -1192,6 +1192,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String name = entry.getKey();
             String value = entry.getValue();
+
+            // It's invisible
+            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS)) {
+                continue;
+            }
             if (!first) {
                 sb.append(",\n");
             }

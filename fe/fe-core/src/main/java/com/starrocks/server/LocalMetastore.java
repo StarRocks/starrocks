@@ -3532,6 +3532,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             }
 
+            // ORDER BY() -> sortKeys
+            if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
+                materializedView.getTableProperty().putMvSortKeys();
+            }
+
             // lake storage info
             if (materializedView.isCloudNativeMaterializedView()) {
                 String volume = "";
