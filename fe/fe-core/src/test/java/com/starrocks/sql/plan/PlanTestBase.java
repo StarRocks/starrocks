@@ -907,6 +907,23 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS unique_key_demo (\n" +
+                "  `t0` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `t1` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `t2` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `t3` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `t4` varchar(100) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`t0`)\n" +
+                "DISTRIBUTED BY HASH(`t0`)\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
 

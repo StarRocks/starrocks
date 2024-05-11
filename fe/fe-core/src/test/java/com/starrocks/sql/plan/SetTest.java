@@ -661,4 +661,30 @@ public class SetTest extends PlanTestBase {
                 "         3 | 4\n" +
                 "         5 | 6\n");
     }
+
+    @Test
+    public void testEliminateAgg() throws Exception {
+        String sql = "select avg(t1), sum(t2) from unique_key_demo group by t0;";
+        String plan = getVerboseExplain(sql);
+        System.out.println(plan);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  6 <-> cast([2: t1, VARCHAR, true] as DOUBLE)\n" +
+                "  |  7 <-> cast([3: t2, VARCHAR, true] as DOUBLE)\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: unique_key_demo, rollup: unique_key_demo");
+
+        sql = "select count(t0), max(t1) from unique_key_demo group by t0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  6 <-> [1: t0, BIGINT, false]\n" +
+                "  |  7 <-> [2: t1, VARCHAR, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: unique_key_demo, rollup: unique_key_demo");
+    }
 }
