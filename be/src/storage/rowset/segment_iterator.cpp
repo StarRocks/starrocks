@@ -2018,8 +2018,10 @@ struct BloomFilterSupportChecker {
     bool operator()(const PredicateColumnNode& node) const {
         const auto* col_pred = node.col_pred();
         const auto cid = col_pred->column_id();
-        const bool support = column_iterators[cid]->has_bloom_filter_index() &&
-                             (col_pred->support_original_bloom_filter() || col_pred->support_ngram_bloom_filter());
+        const bool support =
+                (column_iterators[cid]->has_original_bloom_filter_index() &&
+                 col_pred->support_original_bloom_filter()) ||
+                (column_iterators[cid]->has_ngram_bloom_filter_index() && col_pred->support_ngram_bloom_filter());
         if (support) {
             used_nodes.emplace(&node);
         }
