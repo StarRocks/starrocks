@@ -207,7 +207,8 @@ private:
                             vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
 
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
-                                       Rowset* rowset, OlapReaderStatistics* stats, ChunkPtr* source_chunk);
+                                       Rowset* rowset, OlapReaderStatistics* stats, MemTracker* tracker,
+                                       ChunkPtr* source_chunk);
 
 private:
     int64_t _tablet_id = 0;

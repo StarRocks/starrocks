@@ -399,7 +399,8 @@ static void cut_rowids_in_order(const std::vector<RowidPairs>& rowid_pairs,
 // read from upt files and update rows in source chunk.
 Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                             const Schema& partial_schema, Rowset* rowset,
-                                                            OlapReaderStatistics* stats, ChunkPtr* source_chunk) {
+                                                            OlapReaderStatistics* stats, MemTracker* tracker,
+                                                            ChunkPtr* source_chunk) {
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
@@ -412,6 +413,9 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
             }
         });
         RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, upt_chunk));
+        const size_t upt_chunk_size = upt_chunk->memory_usage();
+        tracker->consume(upt_chunk_size);
+        DeferOp tracker_defer([&]() { tracker->release(upt_chunk_size); });
         // 2. update source chunk
         std::vector<std::vector<uint32_t>> inorder_source_rowids;
         std::vector<std::vector<uint32_t>> inorder_upt_rowids;
@@ -704,8 +708,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             DeferOp tracker_defer([&]() { tracker->release(source_chunk_size); });
             // 3.2 read from update segment
             int64_t t2 = MonotonicMillis();
-            RETURN_IF_ERROR(
-                    _update_source_chunk_by_upt(each.second, partial_schema, rowset, &stats, &source_chunk_ptr));
+            RETURN_IF_ERROR(_update_source_chunk_by_upt(each.second, partial_schema, rowset, &stats, tracker,
+                                                        &source_chunk_ptr));
             int64_t t3 = MonotonicMillis();
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
