@@ -38,8 +38,6 @@ DATETIME to_tera_timestamp(VARCHAR str, VARCHAR format)
 
 ## Examples
 
-The following example converts the VARCHAR value `1988/04/08 2:3:4` into a DATETIME value in `yyyy/mm/dd hh24:mi:ss` format.
-
 ```SQL
 select to_tera_timestamp("1988/04/08","yyyy/mm/dd");
 +-----------------------------------------------+
