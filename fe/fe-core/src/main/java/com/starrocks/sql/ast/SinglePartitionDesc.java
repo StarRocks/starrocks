@@ -49,6 +49,20 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
 
     protected boolean isAnalyzed;
 
+    public SinglePartitionDesc(boolean ifNotExists, String partName, Short replicationNum, DataProperty dataProperty,
+            TTabletType tabletType, Long versionInfo, boolean isInMemory, DataCacheInfo dataCacheInfo) {
+        this.partName = partName;
+        this.ifNotExists = ifNotExists;
+        this.replicationNum = replicationNum;
+        this.partitionDataProperty = dataProperty;
+        this.tabletType = tabletType;
+        this.versionInfo = versionInfo;
+        this.isInMemory = isInMemory;
+        this.dataCacheInfo = dataCacheInfo;
+        this.properties = Maps.newHashMap();
+        this.isAnalyzed = true;
+    }
+
     public SinglePartitionDesc(boolean ifNotExists, String partName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.partName = partName;
@@ -113,7 +127,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     }
 
     protected void analyzeProperties(Map<String, String> tableProperties,
-                                     PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
+            PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
         Map<String, String> partitionAndTableProperties = Maps.newHashMap();
         // The priority of the partition attribute is higher than that of the table
         if (tableProperties != null) {

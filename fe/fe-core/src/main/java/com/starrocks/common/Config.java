@@ -2938,6 +2938,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_legacy_compatibility_for_replication = false;
 
+    /*
+     * Failover Group config
+     */
+    @ConfField
+    public static int failover_group_interval_ms = 10;
+    @ConfField
+    public static int failover_group_job_threads = 4;
+    @ConfField(mutable = true)
+    public static int failover_group_trigger_new_image_interval_sec = 10;
+
+
     @ConfField(mutable = true)
     public static boolean jdbc_meta_default_cache_enable = false;
 

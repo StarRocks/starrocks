@@ -1,0 +1,115 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+
+package com.starrocks.epack.failover.job;
+
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.io.DeepCopy;
+import com.starrocks.epack.failover.FailoverGroup;
+import com.starrocks.epack.failover.ReplicatedObjectMeta;
+import com.starrocks.epack.failover.ReplicatedObjectMeta.TableMeta;
+import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import java.util.concurrent.ThreadPoolExecutor;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+
+public class CreateReplicatedPartitionJobTest {
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
+        starRocksAssert.withDatabase("test").useDatabase("test");
+
+        new MockUp<ThreadPoolExecutor>() {
+            @Mock
+            public void execute(FailoverGroupJob job) {
+                job.execute();
+            }
+        };
+    }
+
+    @Test
+    public void testCreateListPartition() throws Exception {
+        String sql = "create table testCreateListPartitionTable (key1 int not null, key2 varchar(10))\n" +
+                "partition by list(key1)(\n" +
+                "partition p1 values in (\"1\"))\n" +
+                "distributed by hash(key1) buckets 1\n" +
+                "properties('replication_num' = '1'); ";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                AnalyzeTestUtil.getConnectContext());
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt));
+
+        CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
+                "CREATE FAILOVER GROUP testCreateListPartitionTableGroup " +
+                        "TABLES = test.testCreateListPartitionTable " +
+                        "MEMBERS = " +
+                        "'az1:SELF'," +
+                        "'az2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
+        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+
+        TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
+        OlapTable table = DeepCopy.copyWithGson(tableMeta.getTable(), OlapTable.class);
+
+        DropReplicatedPartitionJob dropJob = new DropReplicatedPartitionJob(failoverGroup, objectMeta, null, null,
+                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), "p1", true);
+        dropJob.execute();
+
+        CreateReplicatedPartitionJob createJob = new CreateReplicatedPartitionJob(failoverGroup, objectMeta,
+                tableMeta.getDatabase(), table, table.getPartitions().iterator().next(), tableMeta.getDatabase(),
+                (OlapTable) tableMeta.getTable(), true);
+        createJob.execute();
+
+        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+    }
+
+    @Test
+    public void testCreateRangePartitionedTable() throws Exception {
+        String sql = "create table testCreateRangePartitionedTable (key1 int not null, key2 varchar(10))\n" +
+                "partition by range(key1)(\n" +
+                "partition p1 values [(\"1\"), (\"2\")))\n" +
+                "distributed by hash(key1) buckets 1\n" +
+                "properties('replication_num' = '1'); ";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                AnalyzeTestUtil.getConnectContext());
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt));
+
+        CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
+                "CREATE FAILOVER GROUP testCreateRangePartitionedTableGroup " +
+                        "TABLES = test.testCreateRangePartitionedTable " +
+                        "MEMBERS = " +
+                        "'az1:SELF'," +
+                        "'az2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
+        ReplicatedObjectMeta objectMeta = failoverGroup.getObjectMgr().toObjectMeta("test_token");
+
+        TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
+
+        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, objectMeta, null, null,
+                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
+        dropJob.execute();
+
+        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup, objectMeta,
+                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
+        createJob.execute();
+
+        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+    }
+}

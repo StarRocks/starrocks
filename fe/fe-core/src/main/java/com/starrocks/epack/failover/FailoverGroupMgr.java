@@ -5,6 +5,7 @@ package com.starrocks.epack.failover;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -45,11 +46,11 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
     private static final Logger LOG = LogManager.getLogger(FailoverGroupMgr.class);
 
     @SerializedName(value = "idToFailoverGroup")
-    private final Map<Long, FailoverGroup> idToFailoverGroup = Maps.newConcurrentMap();
-    private final Map<String, FailoverGroup> nameToFailoverGroup = Maps.newConcurrentMap();
+    private Map<Long, FailoverGroup> idToFailoverGroup = Maps.newConcurrentMap();
+    private Map<String, FailoverGroup> nameToFailoverGroup = Maps.newConcurrentMap();
 
     public FailoverGroupMgr() {
-        super("FailoverGroupMgr", 1000L);
+        super("FailoverGroupMgr", Config.failover_group_interval_ms);
     }
 
     @Override
@@ -249,6 +250,7 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
 
     @Override
     public void gsonPostProcess() throws IOException {
+        nameToFailoverGroup = Maps.newConcurrentMap();
         for (FailoverGroup failoverGroup : idToFailoverGroup.values()) {
             nameToFailoverGroup.put(failoverGroup.getName(), failoverGroup);
         }

@@ -46,4 +46,5 @@ struct TFailoverGroupRequestMetaRequest {
 struct TFailoverGroupRequestMetaResponse {
     1: optional Status.TStatus status
     2: optional string primary_token
+    3: optional i64 meta_version
 }

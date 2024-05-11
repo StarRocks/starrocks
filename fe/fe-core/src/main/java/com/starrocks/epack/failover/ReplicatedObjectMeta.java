@@ -3,7 +3,9 @@
 package com.starrocks.epack.failover;
 
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.system.SystemInfoService;
 
@@ -11,9 +13,9 @@ import java.util.Map;
 
 public class ReplicatedObjectMeta {
     public static class SystemMeta {
-        private String token;
+        private final String token;
 
-        private SystemInfoService systemInfoService;
+        private final SystemInfoService systemInfoService;
 
         public SystemMeta(String token, SystemInfoService systemInfoService) {
             this.token = token;
@@ -24,34 +26,28 @@ public class ReplicatedObjectMeta {
             return token;
         }
 
-        public void setToken(String token) {
-            this.token = token;
-        }
-
         public SystemInfoService getSystemInfoService() {
             return systemInfoService;
         }
     }
 
     public static class CatalogMeta {
-        private long catalogId;
+        // Null means default catalog
+        private final Catalog catalog;
 
-        private String catalogName;
+        private final Map<Long, Database> databases;
 
-        private Map<Long, Database> databases;
-
-        public CatalogMeta(long catalogId, String catalogName, Map<Long, Database> databases) {
-            this.catalogId = catalogId;
-            this.catalogName = catalogName;
+        public CatalogMeta(Catalog catalog, Map<Long, Database> databases) {
+            this.catalog = catalog;
             this.databases = databases;
         }
 
-        public long getCatalogId() {
-            return catalogId;
+        public boolean isInternalCatalog() {
+            return catalog == null;
         }
 
-        public String getCatalogName() {
-            return catalogName;
+        public Catalog getCatalog() {
+            return catalog;
         }
 
         public Map<Long, Database> getDatabases() {
@@ -60,24 +56,21 @@ public class ReplicatedObjectMeta {
     }
 
     public static class DatabaseMeta {
-        private long catalogId;
+        private final Catalog catalog;
 
-        private String catalogName;
+        private final Database database;
 
-        private Database database;
-
-        public DatabaseMeta(long catalogId, String catalogName, Database database) {
-            this.catalogId = catalogId;
-            this.catalogName = catalogName;
+        public DatabaseMeta(Catalog catalog, Database database) {
+            this.catalog = catalog;
             this.database = database;
         }
 
-        public long getCatalogId() {
-            return catalogId;
+        public boolean isInternalCatalog() {
+            return catalog == null;
         }
 
-        public String getCatalogName() {
-            return catalogName;
+        public Catalog getCatalog() {
+            return catalog;
         }
 
         public Database getDatabase() {
@@ -86,38 +79,28 @@ public class ReplicatedObjectMeta {
     }
 
     public static class TableMeta {
-        private long catalogId;
+        private final Catalog catalog;
 
-        private String catalogName;
+        private final Database database;
 
-        private long databaseId;
+        private final Table table;
 
-        private String databaseName;
-
-        private Table table;
-
-        public TableMeta(long catalogId, String catalogName, Database database, Table table) {
-            this.catalogId = catalogId;
-            this.catalogName = catalogName;
-            this.databaseId = database.getId();
-            this.databaseName = database.getFullName();
+        public TableMeta(Catalog catalog, Database database, Table table) {
+            this.catalog = catalog;
+            this.database = database;
             this.table = table;
         }
 
-        public long getCatalogId() {
-            return catalogId;
+        public boolean isInternalCatalog() {
+            return catalog == null;
         }
 
-        public String getCatalogName() {
-            return catalogName;
+        public Catalog getCatalog() {
+            return catalog;
         }
 
-        public long getDatabaseId() {
-            return databaseId;
-        }
-
-        public String getDatabaseName() {
-            return databaseName;
+        public Database getDatabase() {
+            return database;
         }
 
         public Table getTable() {
@@ -125,7 +108,7 @@ public class ReplicatedObjectMeta {
         }
     }
 
-    private SystemMeta systemMeta;
+    private final SystemMeta systemMeta;
 
     private final Map<Long, CatalogMeta> catalogMetas = Maps.newConcurrentMap();
 
@@ -133,7 +116,7 @@ public class ReplicatedObjectMeta {
 
     private final Map<Long, TableMeta> tableMetas = Maps.newConcurrentMap();
 
-    ReplicatedObjectMeta(SystemMeta systemMeta) {
+    public ReplicatedObjectMeta(SystemMeta systemMeta) {
         this.systemMeta = systemMeta;
     }
 
@@ -153,19 +136,22 @@ public class ReplicatedObjectMeta {
         return tableMetas;
     }
 
-    public boolean addCatalog(long catalogId, String catalogName, Map<Long, Database> databases) {
-        CatalogMeta catalogMeta = new CatalogMeta(catalogId, catalogName, databases);
+    public boolean addCatalog(Catalog catalog, Map<Long, Database> databases) {
+        CatalogMeta catalogMeta = new CatalogMeta(catalog, databases);
+        long catalogId = catalog != null ? catalog.getId() : InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
         CatalogMeta previous = catalogMetas.putIfAbsent(catalogId, catalogMeta);
         return previous == null;
     }
 
     public boolean addCatalog(CatalogMeta catalogMeta) {
-        CatalogMeta previous = catalogMetas.putIfAbsent(catalogMeta.getCatalogId(), catalogMeta);
+        Catalog catalog = catalogMeta.getCatalog();
+        long catalogId = catalog != null ? catalog.getId() : InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
+        CatalogMeta previous = catalogMetas.putIfAbsent(catalogId, catalogMeta);
         return previous == null;
     }
 
-    public boolean addDatabase(long catalogId, String catalogName, Database database) {
-        DatabaseMeta databaseMeta = new DatabaseMeta(catalogId, catalogName, database);
+    public boolean addDatabase(Catalog catalog, Database database) {
+        DatabaseMeta databaseMeta = new DatabaseMeta(catalog, database);
         DatabaseMeta previous = databaseMetas.putIfAbsent(database.getId(), databaseMeta);
         return previous == null;
     }
@@ -175,8 +161,8 @@ public class ReplicatedObjectMeta {
         return previous == null;
     }
 
-    public boolean addTable(long catalogId, String catalogName, Database database, Table table) {
-        TableMeta tableMeta = new TableMeta(catalogId, catalogName, database, table);
+    public boolean addTable(Catalog catalog, Database database, Table table) {
+        TableMeta tableMeta = new TableMeta(catalog, database, table);
         TableMeta previous = tableMetas.putIfAbsent(table.getId(), tableMeta);
         return previous == null;
     }

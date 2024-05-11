@@ -60,7 +60,9 @@ public class SecondaryHelper {
             if (response.getStatus().getStatus_code() == TStatusCode.OK) {
                 return response;
             }
-            LOG.warn("Send request meta to {} returns failed: {}", address, response.getStatus());
+            if (response.getStatus().getStatus_code() != TStatusCode.REMOTE_FILE_NOT_FOUND) {
+                LOG.warn("Send request meta to {} returns failed: {}", address, response.getStatus());
+            }
         } catch (Exception e) {
             LOG.warn("Send request meta to {} failed ", address, e);
         }

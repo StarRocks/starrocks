@@ -9,11 +9,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.InternalErrorCode;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.epack.failover.job.CheckReplicatedObjectMetaJob;
+import com.starrocks.epack.failover.job.FailoverGroupJob;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
@@ -24,7 +24,9 @@ import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
 import com.starrocks.persist.Storage;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.replication.ReplicationJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -46,7 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Main class of a failover group
  * One instance per failover group
  */
-public class FailoverGroup implements Writable {
+public class FailoverGroup implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(FailoverGroup.class);
 
     private static final String IMAGE_SUBDIR_PREFIX = "/failover/";
@@ -80,6 +82,8 @@ public class FailoverGroup implements Writable {
 
     @SerializedName(value = "objectMgr")
     private volatile ReplicatedObjectMgr objectMgr; // Managing replicated object, such as dbs or tables
+
+    private FailoverGroupJobExecutor jobExecutor; // Failover group job and replication job executor
 
     public long getId() {
         return id;
@@ -117,6 +121,10 @@ public class FailoverGroup implements Writable {
         return objectMgr;
     }
 
+    public FailoverGroupJobExecutor getJobExecutor() {
+        return jobExecutor;
+    }
+
     // For primary
     public FailoverGroup(long id, CreatePrimaryFailoverGroupStmt stmt) throws DdlException {
         this.id = id;
@@ -129,6 +137,7 @@ public class FailoverGroup implements Writable {
         this.properties = stmt.getProperties();
         this.schedule = new ReplicationSchedule(stmt.getSchedule());
         this.objectMgr = new ReplicatedObjectMgr(stmt);
+        this.jobExecutor = new FailoverGroupJobExecutor();
     }
 
     // For secondary
@@ -143,6 +152,7 @@ public class FailoverGroup implements Writable {
         this.properties = new HashMap<>();
         this.schedule = new ReplicationSchedule();
         this.objectMgr = new ReplicatedObjectMgr();
+        this.jobExecutor = new FailoverGroupJobExecutor();
     }
 
     // For primary
@@ -249,14 +259,16 @@ public class FailoverGroup implements Writable {
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
     }
 
-    // For secondary
+    // For primary and secondary
     public void refresh() throws DdlException {
-        if (!role.equals(FailoverGroupRole.SECONDARY)) {
+        if (role.equals(FailoverGroupRole.PRIMARY)) {
+            triggerNewHandshakes();
+        } else if (role.equals(FailoverGroupRole.SECONDARY)) {
+            schedule.forceSchedule();
+            GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FAILOVER_GROUP_ROLE, role);
         }
-
-        schedule.forceSchedule();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
     }
 
     /*
@@ -327,12 +339,79 @@ public class FailoverGroup implements Writable {
                 sendHandshakes();
             } else if (role.equals(FailoverGroupRole.SECONDARY)) {
                 sendRequestMeta();
+                checkJobsFinished();
             } else {
                 throw new RuntimeException("Failover group " + name + " role " + role);
             }
         } catch (Exception e) {
             LOG.warn("Failover group {} run failed ", name, e);
         }
+    }
+
+    public boolean addReplicatedCatalog(long catalogId) {
+        if (!objectMgr.addCatalog(catalogId)) {
+            return false;
+        }
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        return true;
+    }
+
+    public boolean removeReplicatedCatalog(long catalogId) {
+        if (!objectMgr.removeCatalog(catalogId)) {
+            return false;
+        }
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        return true;
+    }
+
+    public boolean addReplicatedDatabase(long catalogId, long databaseId) {
+        if (!objectMgr.addDatabase(catalogId, databaseId)) {
+            return false;
+        }
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        return true;
+    }
+
+    public boolean removeReplicatedDatabase(long databaseId) {
+        if (!objectMgr.removeDatabase(databaseId)) {
+            return false;
+        }
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        return true;
+    }
+
+    public boolean addReplicatedTable(long catalogId, long databaseId, long tableId) {
+        if (!objectMgr.addTable(catalogId, databaseId, tableId)) {
+            return false;
+        }
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        return true;
+    }
+
+    public boolean removeReplicatedTable(long tableId) {
+        if (!objectMgr.removeTable(tableId)) {
+            return false;
+        }
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        return true;
+    }
+
+    public boolean addFailoverGroupJob(FailoverGroupJob job) {
+        return jobExecutor.addFailoverGroupJob(job);
+    }
+
+    public boolean removeFailoverGroupJob(FailoverGroupJob job) {
+        return jobExecutor.removeFailoverGroupJob(job);
+    }
+
+    public boolean addReplicationJob(ReplicationJob job) {
+        return jobExecutor.addReplicationJob(job);
     }
 
     /*
@@ -346,13 +425,16 @@ public class FailoverGroup implements Writable {
         FailoverGroupMember remotePrimaryMember = FailoverGroupMember.fromThrift(request.getPrimary_member());
         FailoverGroupMember localPrimaryMember = findMember(remotePrimaryMember);
         if (localPrimaryMember == null) {
-            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
-                    "Primary member " + remotePrimaryMember + " not found in failover group " + name + " members "
-                            + members);
+            TFailoverGroupHandshakeResponse response = new TFailoverGroupHandshakeResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("Primary member " + remotePrimaryMember +
+                    " not found in failover group " + name +
+                    ", members: " + members);
+            response.setStatus(status);
+            return response;
         }
 
         if (!primary.equals(remotePrimaryMember)) {
-            objectMgr.clearObjectIndex();
             LOG.info("Failover group {} change primary from {} to {}", name, primary, remotePrimaryMember);
         }
 
@@ -376,25 +458,39 @@ public class FailoverGroup implements Writable {
     public TFailoverGroupRequestMetaResponse handleRequestMetaRequest(TFailoverGroupRequestMetaRequest request)
             throws UserException, IOException {
         if (!role.equals(FailoverGroupRole.PRIMARY)) {
-            throw new MetaNotFoundException(InternalErrorCode.IMPOSSIBLE_ERROR_ERR,
-                    "Failover group " + name + " is not primary, current role is " + role);
+            TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
+            TStatus status = new TStatus(TStatusCode.ILLEGAL_STATE);
+            status.addToError_msgs("Failover group " + name +
+                    " is not primary, current role is " + role +
+                    ", members: " + members);
+            response.setStatus(status);
+            return response;
         }
 
         if (!state.equals(FailoverGroupState.RUNNING)) {
-            throw new MetaNotFoundException(InternalErrorCode.IMPOSSIBLE_ERROR_ERR,
-                    "Failover group " + name + " is not running, current state is " + state);
+            TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
+            TStatus status = new TStatus(TStatusCode.ILLEGAL_STATE);
+            status.addToError_msgs("Failover group " + name +
+                    " is not running, current state is " + state +
+                    ", members: " + members);
+            response.setStatus(status);
+            return response;
         }
 
         FailoverGroupMember remoteSecondaryMember = FailoverGroupMember.fromThrift(request.getSecondary_member());
         FailoverGroupMember localSecondaryMember = findMember(remoteSecondaryMember);
-        if (localSecondaryMember == null || !localSecondaryMember.getRole().equals(FailoverGroupRole.SECONDARY)) {
-            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
-                    "Secondary member " + remoteSecondaryMember + " not found in failover group " + name + " members "
-                            + members);
+        if (localSecondaryMember == null) {
+            TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("Secondary member " + remoteSecondaryMember +
+                    " not found in failover group " + name +
+                    ", members " + members);
+            response.setStatus(status);
+            return response;
         }
 
         if (GlobalStateMgr.getServingState().isLeader()) {
-            remoteSecondaryMember.setName(localSecondaryMember.getName()); // May no name is remoteSecondaryMember
+            remoteSecondaryMember.setName(localSecondaryMember.getName()); // May no name in remoteSecondaryMember
             if (!remoteSecondaryMember.equals(localSecondaryMember)) { // Update secondary member
                 members.put(remoteSecondaryMember.getName(), remoteSecondaryMember);
                 triggerNewHandshakes();
@@ -402,12 +498,21 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        pushNewImage(remoteSecondaryMember.getLeader().getHost(), request.getSecondary_http_port(),
+        long imageVersion = pushNewImage(remoteSecondaryMember.getLeader().getHost(), request.getSecondary_http_port(),
                 getFailoverImageSubDir(), request.getLast_meta_version());
+        if (imageVersion <= request.getLast_meta_version()) {
+            TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
+            TStatus status = new TStatus(TStatusCode.REMOTE_FILE_NOT_FOUND);
+            status.addToError_msgs("Current image version " + imageVersion +
+                    " is not newer than last meta version " + request.getLast_meta_version());
+            response.setStatus(status);
+            return response;
+        }
 
         TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
         response.setStatus(new TStatus(TStatusCode.OK));
         response.setPrimary_token(GlobalStateMgr.getServingState().getToken());
+        response.setMeta_version(imageVersion);
         return response;
     }
 
@@ -415,14 +520,17 @@ public class FailoverGroup implements Writable {
      * For primary
      * Push new image to secondary when receive request meta rpc request
      */
-    private void pushNewImage(String httpHost, int httpPort, String imageSubDir, long lastMetaVersion)
+    private long pushNewImage(String httpHost, int httpPort, String imageSubDir, long lastMetaVersion)
             throws IOException, UserException {
         String imageDir = GlobalStateMgr.getServingState().getImageDir();
         Storage storage = new Storage(imageDir);
         long imageVersion = storage.getImageJournalId();
-        if (imageVersion <= lastMetaVersion) {
+        if (imageVersion > lastMetaVersion) {
+            PrimaryHelper.pushImageTo(httpHost, httpPort, imageVersion, imageSubDir);
+        } else {
             if (GlobalStateMgr.getServingState().isLeader()) {
-                if (schedule.needSchedule()) { // Avoid duplicate trigger new image
+                // Avoid duplicate trigger new image
+                if (schedule.canSchedule(Config.failover_group_trigger_new_image_interval_sec * 1000)) {
                     schedule.startSchedule();
                     GlobalStateMgr.getServingState().triggerNewImage();
                     schedule.finishSchedule(false);
@@ -430,12 +538,8 @@ public class FailoverGroup implements Writable {
                     GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
                 }
             }
-            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
-                    "Current image version " + imageVersion + " is not newer than last meta version "
-                            + lastMetaVersion);
         }
-
-        PrimaryHelper.pushImageTo(httpHost, httpPort, imageVersion, imageSubDir);
+        return imageVersion;
     }
 
     /*
@@ -473,6 +577,8 @@ public class FailoverGroup implements Writable {
         List<FailoverGroupMember> handshakedMembers = new ArrayList<>(secondaryMembers.size());
         for (FailoverGroupMember member : secondaryMembers) {
             if (PrimaryHelper.sendHandshakeTo(member.getLeader(), request) != null) {
+                LOG.info("Failover group {} succeeded to handshake to {}, members: {}",
+                        name, member.getLeader(), members);
                 handshakedMembers.add(member);
             }
         }
@@ -515,29 +621,27 @@ public class FailoverGroup implements Writable {
         TFailoverGroupRequestMetaRequest request = new TFailoverGroupRequestMetaRequest();
         request.setFailover_group_name(name);
         request.setSecondary_member(localMember.toThrift());
-        request.setLast_meta_version(new Storage(getFailoverImageDir(), true).getImageJournalId());
+        long lastMetaVersion = new Storage(getFailoverImageDir(), true).getImageJournalId();
+        request.setLast_meta_version(lastMetaVersion);
         request.setSecondary_http_port(Config.http_port);
 
         TFailoverGroupRequestMetaResponse response = SecondaryHelper.sendRequestMetaTo(address, request);
-        if (response == null) {
+        if (response == null || response.getMeta_version() <= lastMetaVersion) {
             return;
         }
 
-        try {
-            ReplicatedObjectMeta objectMeta;
-            try {
-                GlobalStateMgr.setFailoverGroupThread();
-                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-                globalStateMgr.loadImage(getFailoverImageDir());
-                objectMeta = globalStateMgr.getFailoverGroupMgr().getFailoverGroup(name).getObjectMgr()
-                        .saveToObjectMeta();
-                objectMeta.getSystemMeta().setToken(response.getPrimary_token()); // Token is not saved in image
-            } finally {
-                GlobalStateMgr.resetFailoverGroupThread();
-            }
+        LOG.info("Failover group {} succeeded to get image {} from {} in primary {}",
+                name, response.getMeta_version(), address, primary);
 
+        try {
+            GlobalStateMgr.setFailoverGroupThread();
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            globalStateMgr.loadImage(getFailoverImageDir());
+            ReplicatedObjectMeta objectMeta = globalStateMgr.getFailoverGroupMgr().getFailoverGroup(name)
+                    .getObjectMgr().toObjectMeta(response.getPrimary_token()); // Token is not saved in image
             handleObjectMeta(objectMeta);
         } finally {
+            GlobalStateMgr.resetFailoverGroupThread();
             GlobalStateMgr.destroyFailoverGroupState();
         }
     }
@@ -547,7 +651,35 @@ public class FailoverGroup implements Writable {
      * Handle object meta of primary
      */
     private void handleObjectMeta(ReplicatedObjectMeta objectMeta) {
-        // TODO
+        schedule.startSchedule();
+        LOG.info("Failover group {} start replication from primary {}", name, primary);
+
+        CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(this, objectMeta);
+        job.start();
+
+        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+    }
+
+    /*
+     * For secondary
+     * Check jobs
+     */
+    private void checkJobsFinished() {
+        if (schedule.isRoundPending()) {
+            if (jobExecutor.isAllJobsFinished()) {
+                if (jobExecutor.hasFailedJobs()) {
+                    schedule.finishSchedule(true);
+                    GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+                    LOG.info("Failover group {} finished replication from primary {}, but need retry failed jobs", name,
+                            primary);
+                } else {
+                    schedule.finishSchedule(false);
+                    jobExecutor.clear();
+                    GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+                    LOG.info("Failover group {} finished replication from primary {}", name, primary);
+                }
+            }
+        }
     }
 
     /*
@@ -563,7 +695,7 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        LOG.warn("Cannot find member: {} in members: {}", member, members);
+        LOG.warn("Failover group {} cannot find member: {} in members: {}", name, member, members);
         return null;
     }
 
@@ -635,5 +767,10 @@ public class FailoverGroup implements Writable {
 
     public static FailoverGroup read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), FailoverGroup.class);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        this.jobExecutor = new FailoverGroupJobExecutor();
     }
 }

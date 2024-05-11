@@ -25,7 +25,7 @@ import org.junit.Test;
 import static com.starrocks.epack.policy.TestUtils.assertThrows;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
-public class CreateFailoverGroupTest {
+public class FailoverGroupSQLTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass

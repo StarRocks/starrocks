@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
@@ -26,7 +27,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class ReplicatedObjectMgr {
@@ -246,6 +246,25 @@ public class ReplicatedObjectMgr {
         }
     }
 
+    private void initDatabaseInfos(List<DatabaseName> databaseNames) throws DdlException {
+        for (DatabaseName databaseName : databaseNames) {
+            if (CatalogMgr.isExternalCatalog(databaseName.getCatalog()) ||
+                    catalogInfos.containsKey(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, databaseName.getCatalog());
+            }
+
+            Database database = GlobalStateMgr.getServingState().getDb(databaseName.getDatabase());
+            if (database == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, databaseName.getDatabase());
+            }
+
+            boolean ret = addDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID, database.getId());
+            if (!ret) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, databaseName.getDatabase());
+            }
+        }
+    }
+
     private void initTableInfos(List<TableName> tableNames) throws DdlException {
         for (TableName tableName : tableNames) {
             if (CatalogMgr.isExternalCatalog(tableName.getCatalog()) ||
@@ -270,29 +289,14 @@ public class ReplicatedObjectMgr {
         }
     }
 
-    private void initDatabaseInfos(List<DatabaseName> databaseNames) throws DdlException {
-        for (DatabaseName databaseName : databaseNames) {
-            if (CatalogMgr.isExternalCatalog(databaseName.getCatalog()) ||
-                    catalogInfos.containsKey(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, databaseName.getCatalog());
-            }
-
-            Database database = GlobalStateMgr.getServingState().getDb(databaseName.getDatabase());
-            if (database == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, databaseName.getDatabase());
-            }
-
-            boolean ret = addDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID, database.getId());
-            if (!ret) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, databaseName.getDatabase());
-            }
-        }
-    }
-
     public boolean addCatalog(long catalogId) {
         CatalogInfo catalogInfo = new CatalogInfo(catalogId);
         CatalogInfo previous = catalogInfos.putIfAbsent(catalogInfo.getCatalogId(), catalogInfo);
         return previous == null;
+    }
+
+    public boolean removeCatalog(long catalogId) {
+        return catalogInfos.remove(catalogId) != null;
     }
 
     public boolean addDatabase(long catalogId, long databaseId) {
@@ -301,81 +305,54 @@ public class ReplicatedObjectMgr {
         return previous == null;
     }
 
+    public boolean removeDatabase(long databaseId) {
+        return databaseInfos.remove(databaseId) != null;
+    }
+
     public boolean addTable(long catalogId, long databaseId, long tableId) {
         TableInfo tableInfo = new TableInfo(catalogId, databaseId, tableId);
         TableInfo previous = tableInfos.putIfAbsent(tableInfo.getTableId(), tableInfo);
         return previous == null;
     }
 
-    public void clearObjectIndex() {
-        // TODO
+    public boolean removeTable(long tableId) {
+        return tableInfos.remove(tableId) != null;
     }
 
-    public List<String> getCatalogNames() {
-        List<String> catalogNames = Lists.newArrayList();
-        for (CatalogInfo catalogInfo : catalogInfos.values()) {
-            Preconditions.checkState(CatalogMgr.isInternalCatalog(catalogInfo.catalogId));
-            catalogNames.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        }
-        return catalogNames;
-    }
-
-    public List<String> getDatabaseNames() {
-        List<String> databaseNames = Lists.newArrayList();
-        for (DatabaseInfo databaseInfo : databaseInfos.values()) {
-            Preconditions.checkState(CatalogMgr.isInternalCatalog(databaseInfo.catalogId));
-            Database database = GlobalStateMgr.getServingState().getDb(databaseInfo.databaseId);
-            databaseNames.add(database.getFullName());
-        }
-        return databaseNames;
-    }
-
-    public List<String> getTableNames() {
-        List<String> tableNames = Lists.newArrayList();
-        for (TableInfo tableInfo : tableInfos.values()) {
-            Preconditions.checkState(CatalogMgr.isInternalCatalog(tableInfo.catalogId));
-            Database database = GlobalStateMgr.getServingState().getDb(tableInfo.databaseId);
-            Table table = database.getTable(tableInfo.tableId);
-            tableNames.add(database.getFullName() + "." + table.getName());
-        }
-        return tableNames;
-    }
-
-    public ReplicatedObjectMeta saveToObjectMeta() {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-
-        ReplicatedObjectMeta.SystemMeta systemMeta = new ReplicatedObjectMeta.SystemMeta(
-                globalStateMgr.getToken(), globalStateMgr.getNodeMgr().getClusterInfo());
-        ReplicatedObjectMeta objectMeta = new ReplicatedObjectMeta(systemMeta);
-
+    public Map<Catalog, Map<Long, Database>> getCatalogs() {
+        Map<Catalog, Map<Long, Database>> catalogs = Maps.newHashMapWithExpectedSize(catalogInfos.size());
         for (CatalogInfo catalogInfo : catalogInfos.values()) {
             Preconditions.checkState(CatalogMgr.isInternalCatalog(catalogInfo.getCatalogId()));
-            ConcurrentHashMap<Long, Database> databases = globalStateMgr.getLocalMetastore().getIdToDb();
             // Filter system database
-            Map<Long, Database> normalDbs = databases.entrySet().stream().filter(
-                    entry -> entry.getKey() > GlobalStateMgr.NEXT_ID_INIT_VALUE &&
-                            !entry.getValue().getFullName().equals(StatsConstants.STATISTICS_DB_NAME))
+            Map<Long, Database> normalDbs = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getIdToDb().entrySet().stream().filter(
+                            entry -> entry.getKey() > GlobalStateMgr.NEXT_ID_INIT_VALUE &&
+                                    !entry.getValue().getFullName().equals(StatsConstants.STATISTICS_DB_NAME))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            boolean ret = objectMeta.addCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, normalDbs);
-            Preconditions.checkState(ret);
+            catalogs.put(null, normalDbs);
         }
+        return catalogs;
+    }
 
+    public Map<Long, Database> getDatabases() {
+        Map<Long, Database> databases = Maps.newHashMapWithExpectedSize(databaseInfos.size());
         for (DatabaseInfo databaseInfo : databaseInfos.values()) {
             Preconditions.checkState(CatalogMgr.isInternalCatalog(databaseInfo.getCatalogId()));
-            Database database = globalStateMgr.getDb(databaseInfo.getDatabaseId());
+            Database database = GlobalStateMgr.getCurrentState().getDb(databaseInfo.getDatabaseId());
             if (database == null) {
                 LOG.warn("Database id = {} in failover group is not found", databaseInfo.getDatabaseId());
                 continue;
             }
-            boolean ret = objectMeta.addDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, database);
-            Preconditions.checkState(ret);
+            databases.put(database.getId(), database);
         }
+        return databases;
+    }
 
+    public Map<Database, Map<Long, Table>> getTables() {
+        Map<Database, Map<Long, Table>> tables = Maps.newHashMap();
         for (TableInfo tableInfo : tableInfos.values()) {
             Preconditions.checkState(CatalogMgr.isInternalCatalog(tableInfo.getCatalogId()));
-            Database database = globalStateMgr.getDb(tableInfo.getDatabaseId());
+            Database database = GlobalStateMgr.getCurrentState().getDb(tableInfo.getDatabaseId());
             if (database == null) {
                 LOG.warn("Database id = {} in failover group is not found", tableInfo.getDatabaseId());
                 continue;
@@ -385,9 +362,56 @@ public class ReplicatedObjectMgr {
                 LOG.warn("Table id = {} in failover group is not found", tableInfo.getTableId());
                 continue;
             }
-            boolean ret = objectMeta.addTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, database, table);
+            tables.computeIfAbsent(database, key -> Maps.newHashMap()).put(table.getId(), table);
+        }
+        return tables;
+    }
+
+    public List<String> getCatalogNames() {
+        List<String> catalogNames = Lists.newArrayListWithCapacity(catalogInfos.size());
+        for (CatalogInfo catalogInfo : catalogInfos.values()) {
+            Preconditions.checkState(CatalogMgr.isInternalCatalog(catalogInfo.catalogId));
+            catalogNames.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+        return catalogNames;
+    }
+
+    public List<String> getDatabaseNames() {
+        return getDatabases().values().stream().map(Database::getFullName).collect(Collectors.toList());
+    }
+
+    public List<String> getTableNames() {
+        List<String> tableNames = Lists.newArrayListWithCapacity(tableInfos.size());
+        for (Map.Entry<Database, Map<Long, Table>> entry : getTables().entrySet()) {
+            tableNames.addAll(entry.getValue().values().stream()
+                    .map(table -> entry.getKey().getFullName() + "." + table.getName())
+                    .collect(Collectors.toList()));
+        }
+        return tableNames;
+    }
+
+    public ReplicatedObjectMeta toObjectMeta(String token) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+
+        ReplicatedObjectMeta.SystemMeta systemMeta = new ReplicatedObjectMeta.SystemMeta(
+                token != null ? token : globalStateMgr.getToken(), globalStateMgr.getNodeMgr().getClusterInfo());
+        ReplicatedObjectMeta objectMeta = new ReplicatedObjectMeta(systemMeta);
+
+        for (Map.Entry<Catalog, Map<Long, Database>> entry : getCatalogs().entrySet()) {
+            boolean ret = objectMeta.addCatalog(entry.getKey(), entry.getValue());
             Preconditions.checkState(ret);
+        }
+
+        for (Database database : getDatabases().values()) {
+            boolean ret = objectMeta.addDatabase(null, database);
+            Preconditions.checkState(ret);
+        }
+
+        for (Map.Entry<Database, Map<Long, Table>> entry : getTables().entrySet()) {
+            for (Table table : entry.getValue().values()) {
+                boolean ret = objectMeta.addTable(null, entry.getKey(), table);
+                Preconditions.checkState(ret);
+            }
         }
 
         return objectMeta;

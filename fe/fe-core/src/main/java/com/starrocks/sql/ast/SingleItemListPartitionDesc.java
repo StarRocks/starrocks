@@ -15,12 +15,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TTabletType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +33,15 @@ import java.util.stream.Collectors;
 public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     private final List<String> values;
     private List<ColumnDef> columnDefList;
+
+    public SingleItemListPartitionDesc(boolean ifNotExists, String partName, Short replicationNum,
+            DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
+            DataCacheInfo dataCacheInfo, List<String> values, List<ColumnDef> columnDefList) {
+        super(ifNotExists, partName, replicationNum, dataProperty, tabletType, versionInfo, isInMemory, dataCacheInfo);
+        this.type = PartitionType.LIST;
+        this.values = values;
+        this.columnDefList = columnDefList;
+    }
 
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> properties) {

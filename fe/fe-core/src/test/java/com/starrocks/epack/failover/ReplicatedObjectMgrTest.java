@@ -3,7 +3,6 @@
 package com.starrocks.epack.failover;
 
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -25,18 +24,18 @@ public class ReplicatedObjectMgrTest {
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
 
-        String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
+        String sql = "create table ReplicatedObjectMgrTestTable (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
                 "properties('replication_num' = '1'); ";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt));
     }
 
     @Test
-    public void testDiff() throws Exception {
+    public void testCatalogs() throws Exception {
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
-                "CREATE FAILOVER GROUP test_group1 " +
+                "CREATE FAILOVER GROUP ReplicatedObjectMgrTestGroup " +
                         "CATALOGS = default_catalog " +
                         "MEMBERS = " +
                         "'az1:SELF'," +
@@ -44,12 +43,61 @@ public class ReplicatedObjectMgrTest {
                         "SCHEDULE = '1h'");
 
         ReplicatedObjectMgr objectMgr = new ReplicatedObjectMgr(stmt);
-        ReplicatedObjectMeta objectMeta = objectMgr.saveToObjectMeta();
 
-        for (ReplicatedObjectMeta.CatalogMeta catalogMeta : objectMeta.getCatalogMetas().values()) {
-            Assert.assertTrue(CatalogMgr.isInternalCatalog(catalogMeta.getCatalogId()));
-            Assert.assertTrue(CatalogMgr.isInternalCatalog(catalogMeta.getCatalogName()));
-            Assert.assertTrue(!catalogMeta.getDatabases().isEmpty());
-        }
+        Assert.assertEquals(1, objectMgr.getCatalogs().size());
+        Assert.assertEquals(0, objectMgr.getDatabases().size());
+        Assert.assertEquals(0, objectMgr.getTables().size());
+
+        ReplicatedObjectMeta objectMeta = objectMgr.toObjectMeta(null);
+
+        Assert.assertEquals(1, objectMeta.getCatalogMetas().size());
+        Assert.assertEquals(0, objectMeta.getDatabaseMetas().size());
+        Assert.assertEquals(0, objectMeta.getTableMetas().size());
+    }
+
+    @Test
+    public void testDatabases() throws Exception {
+        CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
+                "CREATE FAILOVER GROUP ReplicatedObjectMgrTestGroup " +
+                        "DATABASES = test " +
+                        "MEMBERS = " +
+                        "'az1:SELF'," +
+                        "'az2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        ReplicatedObjectMgr objectMgr = new ReplicatedObjectMgr(stmt);
+
+        Assert.assertEquals(0, objectMgr.getCatalogs().size());
+        Assert.assertEquals(1, objectMgr.getDatabases().size());
+        Assert.assertEquals(0, objectMgr.getTables().size());
+
+        ReplicatedObjectMeta objectMeta = objectMgr.toObjectMeta(null);
+
+        Assert.assertEquals(0, objectMeta.getCatalogMetas().size());
+        Assert.assertEquals(1, objectMeta.getDatabaseMetas().size());
+        Assert.assertEquals(0, objectMeta.getTableMetas().size());
+    }
+
+    @Test
+    public void testTables() throws Exception {
+        CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
+                "CREATE FAILOVER GROUP ReplicatedObjectMgrTestGroup " +
+                        "TABLES = test.ReplicatedObjectMgrTestTable " +
+                        "MEMBERS = " +
+                        "'az1:SELF'," +
+                        "'az2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        ReplicatedObjectMgr objectMgr = new ReplicatedObjectMgr(stmt);
+
+        Assert.assertEquals(0, objectMgr.getCatalogs().size());
+        Assert.assertEquals(0, objectMgr.getDatabases().size());
+        Assert.assertEquals(1, objectMgr.getTables().size());
+
+        ReplicatedObjectMeta objectMeta = objectMgr.toObjectMeta(null);
+
+        Assert.assertEquals(0, objectMeta.getCatalogMetas().size());
+        Assert.assertEquals(0, objectMeta.getDatabaseMetas().size());
+        Assert.assertEquals(1, objectMeta.getTableMetas().size());
     }
 }

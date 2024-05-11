@@ -132,9 +132,8 @@ public class PrimaryHelper {
             if (response.getStatus().getStatus_code() == TStatusCode.OK) {
                 return response;
             }
-            LOG.warn("Send handshake to {} returns failed: {}", address, response.getStatus());
         } catch (Exception e) {
-            LOG.warn("Send handshake to {} failed ", address, e);
+            // Ignore the error
         }
         return null;
     }
