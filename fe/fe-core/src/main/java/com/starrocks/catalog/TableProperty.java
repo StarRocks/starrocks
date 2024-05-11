@@ -60,6 +60,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -416,6 +417,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         String sortKeys = properties.get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS);
         this.mvSortKeys = analyzeMvSortKeys(sortKeys);
         return this;
+    }
+
+    public void putMvSortKeys() {
+        if (CollectionUtils.isNotEmpty(mvSortKeys)) {
+            String value = Joiner.on(",").join(mvSortKeys);
+            this.properties.put(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS, value);
+        }
     }
 
     public static List<String> analyzeMvSortKeys(String value) {
