@@ -38,8 +38,6 @@ DATE to_tera_date(VARCHAR str, VARCHAR format)
 
 ## Examples
 
-The following example converts the VARCHAR value `1988/04/08` in `yyyy/mm/dd` format:
-
 ```SQL
 select to_tera_date("1988/04/08","yyyy/mm/dd");
 +------------------------------------------+
