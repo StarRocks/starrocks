@@ -330,7 +330,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             if (computationFragmentSchedulingPolicy.equals(ComputationFragmentSchedulingPolicy.all_nodes.toString())) {
                 computeNodes.putAll(idToBackend);
             }
-        } else if (numUsedComputeNodes <= idToComputeNode.size()) {
+        } else if (numUsedComputeNodes < idToComputeNode.size()) {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
                     getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
@@ -340,7 +340,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 }
                 computeNodes.put(computeNode.getId(), computeNode);
             }
-        } else { //numUsedComputeNodes > idToComputeNode.size()
+        } else { //numUsedComputeNodes >= idToComputeNode.size()
             computeNodes.putAll(idToComputeNode);
             if (computationFragmentSchedulingPolicy.equals(ComputationFragmentSchedulingPolicy.all_nodes.toString())) {
                 for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
