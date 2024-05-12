@@ -29,9 +29,9 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.MockUp;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.wildfly.common.Assert;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
