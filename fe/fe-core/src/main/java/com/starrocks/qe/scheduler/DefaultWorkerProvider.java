@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -317,41 +318,44 @@ public class DefaultWorkerProvider implements WorkerProvider {
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
-        //add CN to Node Pool
+        //get CN and BE from systemInfoService
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
-        if (numUsedComputeNodes <= 0 || numUsedComputeNodes > idToComputeNode.size()) {
-            computeNodes = new HashMap<>(idToComputeNode);
-        } else {
+        ImmutableMap<Long, ComputeNode> idToBackend
+                = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+
+        //add CN and BE to Node Pool
+        if (numUsedComputeNodes <= 0) {
+            computeNodes.putAll(idToComputeNode);
+            if (computationFragmentSchedulingPolicy.equals(ComputationFragmentSchedulingPolicy.all_nodes.toString())) {
+                computeNodes.putAll(idToBackend);
+            }
+        } else if (numUsedComputeNodes <= idToComputeNode.size()) {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
-                        getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
+                    getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
                 Preconditions.checkNotNull(computeNode);
                 if (!isWorkerAvailable(computeNode)) {
                     continue;
                 }
-                computeNodes.put(computeNode.getId(), computeNode);
             }
-        }
-
-        //add BE to Node Pool
-        if (computationFragmentSchedulingPolicy.equals("all_nodes")) {
-            ImmutableMap<Long, ComputeNode> idToBackend
-                    = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
-            for (int i = 0; i < idToBackend.size(); i++) {
-                ComputeNode backend =
+        } else { //numUsedComputeNodes > idToComputeNode.size()
+            computeNodes.putAll(idToComputeNode);
+            if (computationFragmentSchedulingPolicy.equals(ComputationFragmentSchedulingPolicy.all_nodes.toString())) {
+                for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
+                    ComputeNode backend =
                         getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
-                Preconditions.checkNotNull(backend);
-                if (!isWorkerAvailable(backend)) {
-                    continue;
+                    Preconditions.checkNotNull(backend);
+                    if (!isWorkerAvailable(backend)) {
+                        continue;
+                    }
+                    computeNodes.put(backend.getId(), backend);
                 }
-                computeNodes.put(backend.getId(), backend);
             }
         }
 
         //return Node Pool
         return ImmutableMap.copyOf(computeNodes);
-
     }
 
     private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,
