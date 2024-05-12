@@ -29,19 +29,23 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
         simdjson::ondemand::object obj = value->get_object();
         simdjson::ondemand::parser parser;
         for (auto field : obj) {
-            // This is a tricky way to transform a std::string to simdjson:ondemand:value
-            std::string_view field_name_str = field.unescaped_key();
-            auto dummy_json = simdjson::padded_string(R"({"dummy_key": ")" + std::string(field_name_str) + R"("})");
-            simdjson::ondemand::document doc = parser.iterate(dummy_json);
-            simdjson::ondemand::object obj = doc.get_object();
-            simdjson::ondemand::value field_key = obj.find_field("dummy_key").value();
+            {
+                // This is a tricky way to transform a std::string to simdjson:ondemand:value
+                std::string_view field_name_str = field.unescaped_key();
+                auto dummy_json = simdjson::padded_string(R"({"dummy_key": ")" + std::string(field_name_str) + R"("})");
+                simdjson::ondemand::document doc = parser.iterate(dummy_json);
+                simdjson::ondemand::object obj = doc.get_object();
+                simdjson::ondemand::value field_key = obj.find_field("dummy_key").value();
 
-            RETURN_IF_ERROR(add_nullable_column(map_column->keys_column().get(), type_desc.children[0], name,
-                                                &field_key, true));
+                RETURN_IF_ERROR(add_nullable_column(map_column->keys_column().get(), type_desc.children[0], name,
+                                                    &field_key, true));
+            }
 
-            simdjson::ondemand::value field_value = field.value();
-            RETURN_IF_ERROR(add_nullable_column(map_column->values_column().get(), type_desc.children[1], name,
-                                                &field_value, true));
+            {
+                simdjson::ondemand::value field_value = field.value();
+                RETURN_IF_ERROR(add_nullable_column(map_column->values_column().get(), type_desc.children[1], name,
+                                                    &field_value, true));
+            }
             map_column->offsets_column()->append_datum(1);
         }
 

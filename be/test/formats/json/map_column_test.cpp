@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/json/struct_column.h"
+#include "formats/json/map_column.h"
 
 #include <gtest/gtest.h>
 
@@ -22,11 +22,12 @@
 
 namespace starrocks {
 
-class AddStructColumnTest : public ::testing::Test {};
+class AddMapColumnTest : public ::testing::Test {};
 
-TEST_F(AddStructColumnTest, test_struct) {
-    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+TEST_F(AddMapColumnTest, test_map) {
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
+                                                               TypeDescriptor::create_varchar_type(10));
+
     auto column = ColumnHelper::create_column(type_desc, false);
 
     simdjson::ondemand::parser parser;
@@ -34,7 +35,7 @@ TEST_F(AddStructColumnTest, test_struct) {
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.get_value();
 
-    EXPECT_OK(add_struct_column(column.get(), type_desc, "root_key", &val));
+    EXPECT_OK(add_map_column(column.get(), type_desc, "root_key", &val));
 
     EXPECT_EQ("{key1:'foo',key2:'bar'}", column->debug_string());
 }
