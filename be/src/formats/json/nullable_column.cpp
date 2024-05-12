@@ -254,7 +254,7 @@ static Status add_nullable_map_column(Column* column, const TypeDescriptor& type
 }
 
 static Status add_adaptive_nullable_struct_column(Column* column, const TypeDescriptor& type_desc,
-                                                   const std::string& name, simdjson::ondemand::value* value) {
+                                                  const std::string& name, simdjson::ondemand::value* value) {
     auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
 
     try {

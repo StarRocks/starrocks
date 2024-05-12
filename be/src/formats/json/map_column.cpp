@@ -14,21 +14,21 @@
 
 #include "column/map_column.h"
 
+#include "fmt/format.h"
 #include "formats/json/map_column.h"
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
-#include "fmt/format.h"
 
 namespace starrocks {
 
 Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                         simdjson::ondemand::value* value) {
+                      simdjson::ondemand::value* value) {
     auto map_column = down_cast<MapColumn*>(column);
 
     try {
         simdjson::ondemand::object obj = value->get_object();
         simdjson::ondemand::parser parser;
-        for(auto field : obj) {
+        for (auto field : obj) {
             // This is a tricky way to transform a std::string to simdjson:ondemand:value
             std::string_view field_name_str = field.unescaped_key();
             auto dummy_json = simdjson::padded_string(R"({"dummy_key": ")" + std::string(field_name_str) + R"("})");

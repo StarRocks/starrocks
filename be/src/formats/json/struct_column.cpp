@@ -27,7 +27,7 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
     try {
         simdjson::ondemand::object obj = value->get_object();
 
-        for (size_t i =0; i < type_desc.children.size(); i++) {
+        for (size_t i = 0; i < type_desc.children.size(); i++) {
             const auto& field_name = type_desc.field_names[i];
             const auto& field_type_desc = type_desc.children[i];
 
