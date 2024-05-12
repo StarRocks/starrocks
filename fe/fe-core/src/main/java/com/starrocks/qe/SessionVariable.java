@@ -101,6 +101,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The schedule policy of backend and compute nodes.
     // The optional values are "compute_nodes_only" and "all_nodes".
     public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
+    public enum ComputationFragmentSchedulingPolicy {
+        compute_nodes_only, //only select compute node in scheduler policy (default)
+        all_nodes //both select compute node and backend in scheduler policy
+    }
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
 
     /**
@@ -785,7 +789,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean preferComputeNode = false;
 
     @VariableMgr.VarAttr(name = COMPUTATION_FRAGMENT_SCHEDULING_POLICY)
-    private String computationFragmentSchedulingPolicy = "compute_nodes_only";
+    private String computationFragmentSchedulingPolicy = ComputationFragmentSchedulingPolicy.compute_nodes_only.toString();
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
@@ -2175,8 +2179,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
-        if (!"compute_nodes_only".equals(computationFragmentSchedulingPolicy)
-                && !"all_nodes".equals(computationFragmentSchedulingPolicy)) {
+        if (!ComputationFragmentSchedulingPolicy.compute_nodes_only.toString().equals(computationFragmentSchedulingPolicy)
+                && !ComputationFragmentSchedulingPolicy.all_nodes.toString().equals(computationFragmentSchedulingPolicy)) {
             throw new IllegalArgumentException("Invalid computationFragmentSchedulingPolicy: " 
                                                + computationFragmentSchedulingPolicy);
         }
