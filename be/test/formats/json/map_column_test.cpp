@@ -37,7 +37,7 @@ TEST_F(AddMapColumnTest, test_map) {
 
     EXPECT_OK(add_map_column(column.get(), type_desc, "root_key", &val));
 
-    EXPECT_EQ("{key1:'foo',key2:'bar'}", column->debug_string());
+    EXPECT_EQ("{'key1':'foo','key2':'bar','key3':'baz'}", column->debug_string());
 }
 
 } // namespace starrocks
