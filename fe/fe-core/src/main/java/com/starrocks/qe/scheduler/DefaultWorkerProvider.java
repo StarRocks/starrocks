@@ -338,6 +338,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 if (!isWorkerAvailable(computeNode)) {
                     continue;
                 }
+                computeNodes.put(computeNode.getId(), computeNode);
             }
         } else { //numUsedComputeNodes > idToComputeNode.size()
             computeNodes.putAll(idToComputeNode);
