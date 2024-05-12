@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.SessionVariable.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -31,6 +32,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -123,7 +125,8 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true,
-                            numUsedComputeNodes, "compute_nodes_only", WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            numUsedComputeNodes, ComputationFragmentSchedulingPolicy.compute_nodes_only.toString(), 
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -163,13 +166,14 @@ public class DefaultWorkerProviderTest {
 
         DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
         DefaultWorkerProvider workerProvider;
-        List<Integer> numUsedComputeNodesList = ImmutableList.of(-1, 0, 2, 4);
+        List<Integer> numUsedComputeNodesList = ImmutableList.of(-1, 0, 2, 3, 5, 8, 10);
 
         // test ComputeNode only
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, "compute_nodes_only", WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.compute_nodes_only.toString(), 
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             for (Long selectedWorkerId : selectedWorkerIdsList) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
@@ -180,7 +184,8 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            false, numUsedComputeNodes, "compute_nodes_only", WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.compute_nodes_only.toString(), 
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
             for (Long selectedWorkerId : selectedWorkerIdsList) {
@@ -192,17 +197,19 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, "all_nodes", WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.all_nodes.toString(), 
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
-            //test Backend
-            for (int i = 0; i < availableId2Backend.size(); i++) {
-                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
-                        availableId2Backend.containsKey(selectedWorkerIdsList.get(i)));
-            }
+            Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
             //test ComputeNode
-            for (int i = availableId2Backend.size(); i < selectedWorkerIdsList.size(); i++) {
+            for (int i = 0; i < availableId2ComputeNode.size() && i < selectedWorkerIdsList.size(); i++) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
                         availableId2ComputeNode.containsKey(selectedWorkerIdsList.get(i)));
+            }
+            //test Backend
+            for (int i = availableId2ComputeNode.size(); i < selectedWorkerIdsList.size(); i++) {
+                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
+                        availableId2Backend.containsKey(selectedWorkerIdsList.get(i)));
             }
         }
     }
