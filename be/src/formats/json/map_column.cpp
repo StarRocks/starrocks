@@ -28,6 +28,7 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
     try {
         simdjson::ondemand::object obj = value->get_object();
         simdjson::ondemand::parser parser;
+        size_t field_count = 0;
         for (auto field : obj) {
             {
                 // This is a tricky way to transform a std::string to simdjson:ondemand:value
@@ -46,8 +47,9 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
                 RETURN_IF_ERROR(add_nullable_column(map_column->values_column().get(), type_desc.children[1], name,
                                                     &field_value, true));
             }
-            map_column->offsets_column()->append_datum(1);
+            ++field_count;
         }
+        map_column->offsets_column()->append(field_count);
 
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
