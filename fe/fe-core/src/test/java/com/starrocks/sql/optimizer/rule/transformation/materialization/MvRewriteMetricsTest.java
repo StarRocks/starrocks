@@ -61,7 +61,7 @@ public class MvRewriteMetricsTest extends MvRewriteTestBase {
             Assert.assertTrue(mvMetric.counterRefreshJobSuccessTotal.getValue() == 1);
             Assert.assertTrue(mvMetric.counterRefreshJobFailedTotal.getValue() == 0);
             Assert.assertTrue(mvMetric.counterRefreshJobEmptyTotal.getValue() == 0);
-            Assert.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() == 0);
+            Assert.assertTrue(mvMetric.counterRefreshJobRetryCheckChangedTotal.getValue() > 0);
 
             Assert.assertTrue(mvMetric.counterRefreshPendingJobs.getValue() == 0);
             Assert.assertTrue(mvMetric.counterRefreshRunningJobs.getValue() >= 0);
