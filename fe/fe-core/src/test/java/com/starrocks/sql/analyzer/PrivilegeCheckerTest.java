@@ -2739,43 +2739,46 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCreateFunc() throws Exception {
-        try (MockedStatic<CreateFunctionAnalyzer> mockedStatic = Mockito.mockStatic(CreateFunctionAnalyzer.class)) {
-            mockedStatic
-                    .when(() -> CreateFunctionAnalyzer.analyze(Mockito.any(), Mockito.any()))
-                    .then(invocationOnMock -> null);
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
 
-            String createSql = "CREATE FUNCTION db1.MY_UDF_JSON_GET(string, string) RETURNS string " +
-                    "properties ( " +
-                    "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
-                    ")";
-            String expectError = "Access denied; you need (at least one of) the " +
-                    "CREATE FUNCTION privilege(s)";
-            verifyGrantRevoke(
-                    createSql,
-                    "grant CREATE FUNCTION on DATABASE db1 to test",
-                    "revoke CREATE FUNCTION on DATABASE db1 from test",
-                    expectError);
-        }
+            }
+        };
+
+        String createSql = "CREATE FUNCTION db1.MY_UDF_JSON_GET(string, string) RETURNS string " +
+                "properties ( " +
+                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                ")";
+        String expectError = "Access denied; you need (at least one of) the " +
+                "CREATE FUNCTION privilege(s)";
+        verifyGrantRevoke(
+                createSql,
+                "grant CREATE FUNCTION on DATABASE db1 to test",
+                "revoke CREATE FUNCTION on DATABASE db1 from test",
+                expectError);
     }
 
     @Test
     public void testCreateGlobalFunc() throws Exception {
-        try (MockedStatic<CreateFunctionAnalyzer> mockedStatic = Mockito.mockStatic(CreateFunctionAnalyzer.class)) {
-            mockedStatic
-                    .when(() -> CreateFunctionAnalyzer.analyze(Mockito.any(), Mockito.any()))
-                    .then(invocationOnMock -> null);
-            String createSql = "CREATE GLOBAL FUNCTION MY_UDF_JSON_GET(string, string) RETURNS string " +
-                    "properties ( " +
-                    "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
-                    ")";
-            String expectError = "Access denied; you need (at least one of) the CREATE GLOBAL FUNCTION privilege(s) " +
-                    "on SYSTEM for this operation";
-            verifyGrantRevoke(
-                    createSql,
-                    "grant CREATE GLOBAL FUNCTION on system to test",
-                    "revoke CREATE GLOBAL FUNCTION on system from test",
-                    expectError);
-        }
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
+            }
+        };
+
+        String createSql = "CREATE GLOBAL FUNCTION MY_UDF_JSON_GET(string, string) RETURNS string " +
+                "properties ( " +
+                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                ")";
+        String expectError = "Access denied; you need (at least one of) the CREATE GLOBAL FUNCTION privilege(s) " +
+                "on SYSTEM for this operation";
+        verifyGrantRevoke(
+                createSql,
+                "grant CREATE GLOBAL FUNCTION on system to test",
+                "revoke CREATE GLOBAL FUNCTION on system from test",
+                expectError);
     }
 
     @Test

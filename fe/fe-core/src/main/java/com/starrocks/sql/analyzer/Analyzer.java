@@ -490,7 +490,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
-            CreateFunctionAnalyzer.analyze(statement, context);
+            new CreateFunctionAnalyzer().analyze(statement, context);
             return null;
         }
 

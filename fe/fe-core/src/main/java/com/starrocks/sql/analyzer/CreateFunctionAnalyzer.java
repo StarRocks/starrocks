@@ -56,7 +56,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class CreateFunctionAnalyzer {
-    public static void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+    public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
         if (!Config.enable_udf) {
             throw new SemanticException(
                     "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf");
@@ -74,7 +74,7 @@ public class CreateFunctionAnalyzer {
         // build function
     }
 
-    private static void analyzeCommon(CreateFunctionStmt stmt, ConnectContext context) {
+    private void analyzeCommon(CreateFunctionStmt stmt, ConnectContext context) {
         FunctionName functionName = stmt.getFunctionName();
         functionName.analyze(context.getDatabase());
         FunctionArgsDef argsDef = stmt.getArgsDef();
@@ -88,7 +88,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private static String computeMd5(CreateFunctionStmt stmt) {
+    public String computeMd5(CreateFunctionStmt stmt) {
         String checksum = "";
         if (FeConstants.runningUnitTest) {
             // skip checking checksum when running ut
@@ -133,7 +133,7 @@ public class CreateFunctionAnalyzer {
         return checksum;
     }
 
-    private static void analyzeJavaUDFClass(CreateFunctionStmt stmt, String checksum) {
+    private void analyzeJavaUDFClass(CreateFunctionStmt stmt, String checksum) {
         Map<String, String> properties = stmt.getProperties();
         String className = properties.get(CreateFunctionStmt.SYMBOL_KEY);
         if (Strings.isNullOrEmpty(className)) {
@@ -180,7 +180,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private static void checkStarrocksJarUdfClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass) {
+    private void checkStarrocksJarUdfClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass) {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         // RETURN_TYPE evaluate(...)
@@ -194,7 +194,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private static void analyzeStarrocksJarUdf(CreateFunctionStmt stmt, String checksum,
+    private void analyzeStarrocksJarUdf(CreateFunctionStmt stmt, String checksum,
                                                JavaUDFInternalClass handleClass) {
         checkStarrocksJarUdfClass(stmt, handleClass);
 
@@ -211,7 +211,7 @@ public class CreateFunctionAnalyzer {
         function.setChecksum(checksum);
     }
 
-    private static void checkStarrocksJarUdafStateClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
+    private void checkStarrocksJarUdafStateClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
                                                         JavaUDFInternalClass udafStateClass) {
         // Check internal State class
         // should be public & static.
@@ -231,7 +231,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private static void checkStarrocksJarUdafClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
+    private void checkStarrocksJarUdafClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
                                                    JavaUDFInternalClass udafStateClass) {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
@@ -299,7 +299,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private static void analyzeStarrocksJarUdaf(CreateFunctionStmt stmt, String checksum,
+    private void analyzeStarrocksJarUdaf(CreateFunctionStmt stmt, String checksum,
                                                 JavaUDFInternalClass mainClass,
                                                 JavaUDFInternalClass udafStateClass) {
         FunctionName functionName = stmt.getFunctionName();
@@ -324,7 +324,7 @@ public class CreateFunctionAnalyzer {
         stmt.setFunction(function);
     }
 
-    private static void analyzeStarrocksJarUdtf(CreateFunctionStmt stmt, String checksum,
+    private void analyzeStarrocksJarUdtf(CreateFunctionStmt stmt, String checksum,
                                                 JavaUDFInternalClass mainClass) {
         FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
@@ -364,7 +364,7 @@ public class CreateFunctionAnalyzer {
                     .put(PrimitiveType.VARCHAR, String.class)
                     .build();
 
-    private static class UDFInternalClassLoader extends URLClassLoader {
+    public static class UDFInternalClassLoader extends URLClassLoader {
         public UDFInternalClassLoader(String udfPath) throws IOException {
             super(new URL[] {new URL("jar:" + udfPath + "!/")});
         }
@@ -404,7 +404,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private static class JavaUDFInternalClass {
+    public static class JavaUDFInternalClass {
         public Class<?> clazz = null;
         public Map<String, Method> methods = null;
 
