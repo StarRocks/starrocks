@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.starrocks.qe.SessionVariable.ComputationFragmentSchedulingPolicy;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 
@@ -41,7 +42,7 @@ public interface WorkerProvider {
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
-                                               String computationFragmentSchedulingPolicy,
+                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                                long warehouseId);
     }
 
