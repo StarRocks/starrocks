@@ -200,9 +200,6 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
-    if (UNLIKELY(_write_txn_log && _num_senders > 1)) {
-        return Status::NotSupported("This data loading task has multiple senders and does not support merge txn logs");
-    }
 
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
