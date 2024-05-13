@@ -3,6 +3,7 @@
 #include "runtime/mem_tracker.h"
 #include "formats/file_writer.h"
 #include "connector/connector_chunk_sink.h"
+#include "async_io_poller.h"
 
 namespace starrocks::connector {
 
@@ -12,9 +13,10 @@ class SinkOperatorMemoryManager {
 public:
     SinkOperatorMemoryManager() = default;
 
-    void init(std::unordered_map<std::string, WriterAndStream>* _writer_stream_pairs, CommitFunc commit_func) {
-        _candidates = _writer_stream_pairs;
+    void init(std::unordered_map<std::string, WriterAndStream>* writer_stream_pairs, IOStatusPoller* io_poller, CommitFunc commit_func) {
+        _candidates = writer_stream_pairs;
         _commit_func = commit_func;
+        _async_io_poller = io_poller;
     }
 
     bool kill_victim() {
@@ -33,17 +35,15 @@ public:
         }
         DCHECK(victim != nullptr); // silence warning
 
-        _commit_func(victim->first->commit());
+        auto result = victim->first->commit();
+        _commit_func(result);
+        LOG(INFO) << "kill victim: " << victim->second->filename() << " size: " << result.file_statistics.file_size;
         _candidates->erase(partition);
         return true;
     }
 
     int64_t update_releasable_memory() {
-        int64_t releasable_memory = 0;
-        for (auto& [_, writer_and_stream] : *_candidates) {
-            releasable_memory += writer_and_stream.second->releasable_memory();
-        }
-
+        int64_t releasable_memory = _async_io_poller->releasable_memory();
         _releasable_memory.store(releasable_memory);
         return releasable_memory;
     }
@@ -56,6 +56,7 @@ public:
 private:
     std::unordered_map<std::string, WriterAndStream>* _candidates = nullptr; // owned by sink operator
     CommitFunc _commit_func;
+    IOStatusPoller* _async_io_poller = nullptr;
     std::atomic_int64_t _releasable_memory{0};
 };
 
@@ -73,8 +74,10 @@ public:
     }
 
     SinkOperatorMemoryManager* create_child_manager() {
-        auto& child = _children.emplace_back();
-        return child.get();
+        _children.push_back(std::make_unique<SinkOperatorMemoryManager>());
+        auto* p = _children.back().get();
+        DCHECK(p != nullptr);
+        return p;
     }
 
     // thread-safe
@@ -87,14 +90,19 @@ public:
         }
 
         while (_mem_tracker->consumption() - _total_releasable_memory() > _mem_soft_bound) {
+            int64_t before = child_manager->releasable_memory();
             // should we set a lower bound to avoid kill writer of small size?
             bool found = child_manager->kill_victim();
             if (!found) {
                 break;
             }
-            child_manager->update_releasable_memory();
+            // child_manager->update_releasable_memory();
+            int64_t after = child_manager->update_releasable_memory();
+            LOG(INFO) << "before: " << before << " after: " << after;
         }
 
+        LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption() << " releasable_memory: " << _total_releasable_memory() << " bound: " << _mem_soft_bound;
+        LOG_EVERY_SECOND(INFO) << "stop accept chunk";
         return false;
     }
 

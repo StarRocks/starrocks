@@ -20,7 +20,7 @@ public:
 
     void enqueue(std::unique_ptr<Stream> stream) {
         auto async_status = stream->io_status();
-        _queue.push({
+        _queue.push_back({
             .stream = std::move(stream),
             .async_status = std::move(async_status),
         });
@@ -37,19 +37,28 @@ public:
                 break;
             }
             status.update(f.async_status.get());
-            _queue.pop();
+            _queue.pop_front();
         }
 
         return {status, _queue.empty()};
     }
 
+    int64_t releasable_memory() {
+        LOG_EVERY_SECOND(INFO) << "alive streams: " << _queue.size();
+        int64_t releasable_memory = 0;
+        for (auto& ss : _queue) {
+            releasable_memory += ss.stream->releasable_memory();
+        }
+        return releasable_memory;
+    }
+
 private:
     struct StreamWithStatus {
         std::unique_ptr<Stream> stream;
-        std::future<Status> async_status;
+        std::future<Status> async_status; // TODO: remove
     };
 
-    std::queue<StreamWithStatus> _queue;
+    std::deque<StreamWithStatus> _queue;
 };
 
 } // namespace starrocks::connector

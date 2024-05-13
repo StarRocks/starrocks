@@ -83,7 +83,7 @@ public:
         while (size > 0) {
             // append a new buffer if queue is empty or the last buffer is full
             if (_slice_chunk_queue.empty() || _slice_chunk_queue.back()->is_full()) {
-                _slice_chunk_queue.push(std::make_shared<SliceChunk>(SLICE_CHUNK_CAPACITY));
+                _slice_chunk_queue.push_back(std::make_shared<SliceChunk>(SLICE_CHUNK_CAPACITY));
             }
             SliceChunkPtr& last_chunk = _slice_chunk_queue.back();
             int64_t appended_bytes = last_chunk->append(data, size);
@@ -96,7 +96,7 @@ public:
         {
             while (!_slice_chunk_queue.empty() && _slice_chunk_queue.front()->is_full()) {
                 auto chunk = _slice_chunk_queue.front();
-                _slice_chunk_queue.pop();
+                _slice_chunk_queue.pop_front();
                 auto task = [&, chunk]() {
 #ifndef BE_TEST
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
@@ -122,7 +122,12 @@ public:
             }
         }
 
-        enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
+        auto n_tasks = to_enqueue_tasks.size();
+        if (n_tasks != 0) {
+            _releasable_chunk_counter.fetch_add(n_tasks);
+            LOG(INFO) << "n = " << _releasable_chunk_counter;
+            enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
+        }
         return Status::OK();
     }
 
@@ -146,7 +151,7 @@ public:
         std::vector<Task> to_enqueue_tasks;
         if (!_slice_chunk_queue.empty() || !_slice_chunk_queue.front()->is_empty()) {
             auto chunk = _slice_chunk_queue.front();
-            _slice_chunk_queue.pop();
+            _slice_chunk_queue.pop_front();
             auto task = [&, chunk]() {
 #ifndef BE_TEST
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
@@ -167,8 +172,11 @@ public:
                 }
                 _releasable_chunk_counter.fetch_sub(1);
             };
+            _releasable_chunk_counter.fetch_add(1);
+            LOG(INFO) << "n = " << _releasable_chunk_counter;
             to_enqueue_tasks.push_back(task);
         }
+        _slice_chunk_queue.clear();
 
         auto close_task = [&]() {
 #ifndef BE_TEST
@@ -186,7 +194,6 @@ public:
             }
         };
         to_enqueue_tasks.push_back(close_task);
-
         enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
         return Status::OK();
     }
@@ -199,7 +206,6 @@ public:
     void enqueue_tasks_and_maybe_submit_task(std::vector<Task> tasks) {
         std::scoped_lock lock(_mutex);
         std::for_each(tasks.begin(), tasks.end(), [&](auto& task) {
-            _releasable_chunk_counter.fetch_add(1);
             _task_queue.push(task);
         });
 
@@ -218,7 +224,7 @@ private:
     std::unique_ptr<WritableFile> _file;
     PriorityThreadPool* _io_executor = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    std::queue<SliceChunkPtr> _slice_chunk_queue;
+    std::deque<SliceChunkPtr> _slice_chunk_queue;
     std::atomic_int64_t _releasable_chunk_counter{0};
     std::mutex _mutex; // guards following
     bool _has_in_flight_io{false};
