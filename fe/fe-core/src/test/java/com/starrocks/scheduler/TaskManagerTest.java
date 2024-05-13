@@ -29,6 +29,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -140,8 +141,11 @@ public class TaskManagerTest {
         Constants.TaskRunState state = null;
 
         int retryCount = 0;
-        int maxRetry = 5;
+        int maxRetry = 30;
+        TGetTasksParams getTasksParams = new TGetTasksParams();
+        getTasksParams.setDb(realDbName);
         while (retryCount < maxRetry) {
+            taskRuns = taskManager.getMatchedTaskRunStatus(getTasksParams);
             if (taskRuns.size() > 0) {
                 state = taskRuns.get(0).getState();
             }

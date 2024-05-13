@@ -42,15 +42,12 @@ Status StarrocksGrantsToScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+
     TGetGrantsToRolesOrUserRequest grants_to_params;
     grants_to_params.__set_type(_type);
-    if (nullptr != _param->ip && 0 != _param->port) {
-        int32_t timeout = static_cast<int32_t>(std::min(state->query_options().query_timeout * 1000, INT_MAX));
-        RETURN_IF_ERROR(SchemaHelper::get_grants_to(*(_param->ip), _param->port, grants_to_params, &_grants_to_result,
-                                                    timeout));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_grants_to(_ss_state, grants_to_params, &_grants_to_result));
     return Status::OK();
 }
 

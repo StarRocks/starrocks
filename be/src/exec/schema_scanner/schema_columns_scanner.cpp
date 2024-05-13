@@ -52,8 +52,7 @@ SchemaScanner::ColumnDesc SchemaColumnsScanner::_s_col_columns[] = {
 };
 
 SchemaColumnsScanner::SchemaColumnsScanner()
-        : SchemaScanner(_s_col_columns, sizeof(_s_col_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _timeout_ms(config::thrift_rpc_timeout_ms) {}
+        : SchemaScanner(_s_col_columns, sizeof(_s_col_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaColumnsScanner::~SchemaColumnsScanner() = default;
 
@@ -61,6 +60,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("schema columns scanner not inited.");
     }
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     if (_param->without_db_table) {
         return Status::OK();
     }
@@ -84,17 +84,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
-    {
-        SCOPED_TIMER(_param->_rpc_timer);
-        _timeout_ms = state->query_options().query_timeout * 1000;
-        if (nullptr != _param->ip && 0 != _param->port) {
-            RETURN_IF_ERROR(
-                    SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result, _timeout_ms));
-        } else {
-            return Status::InternalError("IP or port doesn't exists");
-        }
-    }
-
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
     return Status::OK();
 }
 
@@ -546,12 +536,7 @@ Status SchemaColumnsScanner::get_new_desc() {
         desc_params.__set_limit(_param->limit);
     }
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::describe_table(*(_param->ip), _param->port, desc_params, &_desc_result, _timeout_ms));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::describe_table(_ss_state, desc_params, &_desc_result));
     _column_index = 0;
 
     return Status::OK();
@@ -580,12 +565,7 @@ Status SchemaColumnsScanner::get_new_table() {
         }
     }
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_table_names(*(_param->ip), _param->port, table_params, &_table_result, _timeout_ms));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_table_names(_ss_state, table_params, &_table_result));
     _table_index = 0;
     return Status::OK();
 }
@@ -598,7 +578,6 @@ Status SchemaColumnsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         return Status::InternalError("input parameter is nullptr.");
     }
     {
-        SCOPED_TIMER(_param->_rpc_timer);
         // if user query schema meta such as "select * from information_schema.columns limit 10;",
         // in this case, there is no predicate and limit clause is set,we can call the describe_table
         // interface only once, and no longer call get_db_names and get_table_names interface, which
