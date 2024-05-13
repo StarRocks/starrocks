@@ -121,7 +121,5 @@ class OptimisticVersionTest extends PlanTestBase {
         } finally {
             StatementPlanner.unLock(dbs);
         }
-
     }
-
 }

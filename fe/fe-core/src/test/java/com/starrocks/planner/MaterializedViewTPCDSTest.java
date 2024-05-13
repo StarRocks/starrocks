@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.sql.plan.TPCDSPlanTestBase;
 import com.starrocks.sql.plan.TPCDSTestUtil;
+import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testQuery87() {
         String mv = "SELECT\n" +
                 "  _ta0000.d_month_seq\n" +

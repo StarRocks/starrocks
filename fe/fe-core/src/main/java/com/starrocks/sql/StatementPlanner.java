@@ -15,6 +15,7 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -53,6 +54,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
@@ -322,6 +324,37 @@ public class StatementPlanner {
             return;
         }
         unlockDatabases(dbs.values());
+    }
+
+    public static boolean tryLock(Map<String, Database> dbs, long timeout, TimeUnit unit) {
+        if (dbs == null) {
+            return false;
+        }
+        List<Database> dbList = new ArrayList<>(dbs.values());
+        return tryLockDatabases(dbList, timeout, unit);
+    }
+
+    public static boolean tryLockDatabases(List<Database> dbs, long timeout, TimeUnit unit) {
+        if (dbs == null) {
+            return false;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        List<Database> lockedDbs = Lists.newArrayList();
+        boolean isLockSuccess = false;
+        try {
+            for (Database db : dbs) {
+                if (!db.tryReadLock(timeout, unit)) {
+                    return false;
+                }
+                lockedDbs.add(db);
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                lockedDbs.stream().forEach(t -> t.readUnlock());
+            }
+        }
+        return true;
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.
