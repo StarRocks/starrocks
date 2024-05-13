@@ -111,6 +111,17 @@ protected:
         }
     }
 
+    static void check_probe_output_slot_ids(const JoinHashTableItems& table_items,
+                                            const std::vector<SlotId>& check_slot_ids);
+    static void check_build_output_slot_ids(const JoinHashTableItems& table_items,
+                                            const std::vector<SlotId>& check_slot_ids);
+    static void check_lazy_probe_output_slot_ids(const JoinHashTableItems& table_items,
+                                                 const std::vector<SlotId>& check_slot_ids);
+    static void check_lazy_build_output_slot_ids(const JoinHashTableItems& table_items,
+                                                 const std::vector<SlotId>& check_slot_ids);
+    static void check_not_output_slot_ids(const JoinHashTableItems& table_items,
+                                          const std::vector<SlotId>& check_slot_ids);
+
     std::shared_ptr<ObjectPool> _object_pool = nullptr;
     std::shared_ptr<MemPool> _mem_pool = nullptr;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
@@ -119,6 +130,75 @@ protected:
     TypeDescriptor _tinyint_type;
     TypeDescriptor _varchar_type;
 };
+
+void JoinHashMapTest::check_probe_output_slot_ids(const JoinHashTableItems& table_items,
+                                                  const std::vector<SlotId>& check_slot_ids) {
+    ASSERT_EQ(table_items.output_probe_column_count, check_slot_ids.size());
+    std::vector<SlotId> slot_ids;
+    for (const auto& slot : table_items.probe_slots) {
+        if (slot.need_output) {
+            slot_ids.emplace_back(slot.slot->id());
+        }
+    }
+    std::sort(slot_ids.begin(), slot_ids.end());
+    ASSERT_EQ(slot_ids, check_slot_ids);
+}
+
+void JoinHashMapTest::check_build_output_slot_ids(const JoinHashTableItems& table_items,
+                                                  const std::vector<SlotId>& check_slot_ids) {
+    ASSERT_EQ(table_items.output_build_column_count, check_slot_ids.size());
+    std::vector<SlotId> slot_ids;
+    for (const auto& slot : table_items.build_slots) {
+        if (slot.need_output) {
+            slot_ids.emplace_back(slot.slot->id());
+        }
+    }
+    std::sort(slot_ids.begin(), slot_ids.end());
+    ASSERT_EQ(slot_ids, check_slot_ids);
+}
+
+void JoinHashMapTest::check_lazy_probe_output_slot_ids(const JoinHashTableItems& table_items,
+                                                       const std::vector<SlotId>& check_slot_ids) {
+    ASSERT_EQ(table_items.lazy_output_probe_column_count, check_slot_ids.size());
+    std::vector<SlotId> slot_ids;
+    for (const auto& slot : table_items.probe_slots) {
+        if (slot.need_lazy_materialize) {
+            slot_ids.emplace_back(slot.slot->id());
+        }
+    }
+    std::sort(slot_ids.begin(), slot_ids.end());
+    ASSERT_EQ(slot_ids, check_slot_ids);
+}
+
+void JoinHashMapTest::check_lazy_build_output_slot_ids(const JoinHashTableItems& table_items,
+                                                       const std::vector<SlotId>& check_slot_ids) {
+    ASSERT_EQ(table_items.lazy_output_build_column_count, check_slot_ids.size());
+    std::vector<SlotId> slot_ids;
+    for (const auto& slot : table_items.build_slots) {
+        if (slot.need_lazy_materialize) {
+            slot_ids.emplace_back(slot.slot->id());
+        }
+    }
+    std::sort(slot_ids.begin(), slot_ids.end());
+    ASSERT_EQ(slot_ids, check_slot_ids);
+}
+
+void JoinHashMapTest::check_not_output_slot_ids(const JoinHashTableItems& table_items,
+                                                const std::vector<SlotId>& check_slot_ids) {
+    std::vector<SlotId> slot_ids;
+    for (const auto& slot : table_items.probe_slots) {
+        if (!slot.need_output && !slot.need_lazy_materialize) {
+            slot_ids.emplace_back(slot.slot->id());
+        }
+    }
+    for (const auto& slot : table_items.build_slots) {
+        if (!slot.need_output && !slot.need_lazy_materialize) {
+            slot_ids.emplace_back(slot.slot->id());
+        }
+    }
+    std::sort(slot_ids.begin(), slot_ids.end());
+    ASSERT_EQ(slot_ids, check_slot_ids);
+}
 
 HashTableParam JoinHashMapTest::create_table_param(TJoinOp::type join_type, size_t output_col_cnt) {
     HashTableParam param;
@@ -668,12 +748,10 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
-    auto row_desc = create_row_desc(&row_desc_builder);
     auto probe_row_desc = create_probe_desc(&row_desc_builder);
     auto build_row_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(join_type, 6);
-    param.row_desc = row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.probe_row_desc = probe_row_desc.get();
@@ -1024,12 +1102,10 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
 
-    auto row_desc = create_row_desc(&row_desc_builder);
     auto probe_row_desc = create_probe_desc(&row_desc_builder);
     auto build_row_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 2);
-    param.row_desc = row_desc.get();
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_tinyint_type, false, nullptr});
@@ -1074,12 +1150,10 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
 
-    auto row_desc = create_row_desc(&row_desc_builder);
     auto probe_row_desc = create_probe_desc(&row_desc_builder);
     auto build_row_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 2);
-    param.row_desc = row_desc.get();
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_tinyint_type, false, nullptr});
@@ -1779,12 +1853,10 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
-    auto row_desc = create_row_desc(&row_desc_builder);
     auto probe_row_desc = create_probe_desc(&row_desc_builder);
     auto build_row_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
-    param.row_desc = row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -1832,12 +1904,10 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true);
 
-    auto row_desc = create_row_desc(&row_desc_builder);
     auto probe_row_desc = create_probe_desc(&row_desc_builder);
     auto build_row_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
-    param.row_desc = row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -1886,12 +1956,10 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
-    auto row_desc = create_row_desc(&row_desc_builder);
     auto probe_row_desc = create_probe_desc(&row_desc_builder);
     auto build_row_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
-    param.row_desc = row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.probe_row_desc = probe_row_desc.get();
@@ -1939,12 +2007,10 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
 
-    auto row_desc = create_row_desc(&row_desc_builder);
     auto probe_row_desc = create_probe_desc(&row_desc_builder);
     auto build_row_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
-    param.row_desc = row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
     param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
     param.probe_row_desc = probe_row_desc.get();
@@ -2247,6 +2313,183 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     ASSERT_EQ(probe_state.probe_match_index[0], build_row_count);
     // value in probe table not hit hash table match all null value rows in build table
     ASSERT_EQ(probe_state.probe_match_index[1], 1);
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, TestOutputSlotsEmpty) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    JoinHashTable ht;
+
+    HashTableParam param;
+    param.mor_reader_mode = false;
+    param.enable_lazy_materialize = false;
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+
+    ht.create(param);
+
+    ASSERT_EQ(ht.get_probe_column_count(), 3);
+    ASSERT_EQ(ht.get_build_column_count(), 3);
+    check_probe_output_slot_ids(*ht.table_items(), {0, 1, 2});
+    check_build_output_slot_ids(*ht.table_items(), {3, 4, 5});
+    check_lazy_probe_output_slot_ids(*ht.table_items(), {});
+    check_lazy_build_output_slot_ids(*ht.table_items(), {});
+    check_not_output_slot_ids(*ht.table_items(), {});
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, TestOutputSlotsNormal) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    JoinHashTable ht;
+
+    HashTableParam param;
+    param.mor_reader_mode = false;
+    param.enable_lazy_materialize = false;
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.probe_output_slots = {1};
+    param.build_output_slots = {4};
+    param.predicate_slots = {2, 5};
+
+    ht.create(param);
+
+    ASSERT_EQ(ht.get_probe_column_count(), 3);
+    ASSERT_EQ(ht.get_build_column_count(), 3);
+    check_probe_output_slot_ids(*ht.table_items(), {1, 2});
+    check_build_output_slot_ids(*ht.table_items(), {4, 5});
+    check_lazy_probe_output_slot_ids(*ht.table_items(), {});
+    check_lazy_build_output_slot_ids(*ht.table_items(), {});
+    check_not_output_slot_ids(*ht.table_items(), {0, 3});
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, TestLazyOutputSlotsEmpty) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    JoinHashTable ht;
+
+    HashTableParam param;
+    param.mor_reader_mode = false;
+    param.enable_lazy_materialize = true;
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+
+    ht.create(param);
+
+    ASSERT_EQ(ht.get_probe_column_count(), 3);
+    ASSERT_EQ(ht.get_build_column_count(), 3);
+    check_probe_output_slot_ids(*ht.table_items(), {0, 1, 2});
+    check_build_output_slot_ids(*ht.table_items(), {3, 4, 5});
+    check_lazy_probe_output_slot_ids(*ht.table_items(), {});
+    check_lazy_build_output_slot_ids(*ht.table_items(), {});
+    check_not_output_slot_ids(*ht.table_items(), {});
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, TestLazyPredicateSlotsEmpty) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    JoinHashTable ht;
+
+    HashTableParam param;
+    param.mor_reader_mode = false;
+    param.enable_lazy_materialize = true;
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.probe_output_slots = {1};
+    param.build_output_slots = {4};
+    param.predicate_slots = {};
+
+    ht.create(param);
+
+    ASSERT_EQ(ht.get_probe_column_count(), 3);
+    ASSERT_EQ(ht.get_build_column_count(), 3);
+    check_probe_output_slot_ids(*ht.table_items(), {0, 1, 2});
+    check_build_output_slot_ids(*ht.table_items(), {3, 4, 5});
+    check_lazy_probe_output_slot_ids(*ht.table_items(), {});
+    check_lazy_build_output_slot_ids(*ht.table_items(), {});
+    check_not_output_slot_ids(*ht.table_items(), {});
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    JoinHashTable ht;
+
+    HashTableParam param;
+    param.mor_reader_mode = false;
+    param.enable_lazy_materialize = true;
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.probe_output_slots = {1};
+    param.build_output_slots = {4};
+    param.predicate_slots = {2, 5};
+
+    ht.create(param);
+
+    ASSERT_EQ(ht.get_probe_column_count(), 3);
+    ASSERT_EQ(ht.get_build_column_count(), 3);
+    check_probe_output_slot_ids(*ht.table_items(), {2});
+    check_build_output_slot_ids(*ht.table_items(), {5});
+    check_lazy_probe_output_slot_ids(*ht.table_items(), {1});
+    check_lazy_build_output_slot_ids(*ht.table_items(), {4});
+    check_not_output_slot_ids(*ht.table_items(), {0, 3});
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, TestMorRead) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    JoinHashTable ht;
+
+    HashTableParam param;
+    param.mor_reader_mode = true;
+    param.enable_lazy_materialize = false;
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.probe_output_slots = {1};
+    param.build_output_slots = {4};
+    param.predicate_slots = {2, 5};
+
+    ht.create(param);
+
+    ASSERT_EQ(ht.get_probe_column_count(), 6);
+    ASSERT_EQ(ht.get_build_column_count(), 3);
+    check_lazy_probe_output_slot_ids(*ht.table_items(), {});
+    check_lazy_build_output_slot_ids(*ht.table_items(), {});
 }
 
 } // namespace starrocks
