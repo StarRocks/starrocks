@@ -120,8 +120,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             Type columnType = aggCall.getType();
 
             if (placeholderColumn == null) {
-                Column c = new Column();
-                c.setName(metaColumnName);
+                Column c = new Column(metaColumnName, Type.NULL);
                 c.setIsAllowNull(true);
                 placeholderColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
                 columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);

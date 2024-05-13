@@ -12,11 +12,11 @@ INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
 -- !result
 ALTER TABLE t0 ADD COLUMN k0 FLOAT;
 -- result:
-E: (1064, 'Repeatedly add same column with different definition: k0')
+E: (1064, 'Can not add column which already exists in column id: k0, you can remove `k0` bigint(20) NOT NULL COMMENT "" and try again.')
 -- !result
 ALTER TABLE t0 ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Repeatedly add same column with different definition: v0')
+E: (1064, 'Can not add column which already exists in column id: v0, you can remove `v0` int(11) NULL COMMENT "" and try again.')
 -- !result
 ALTER TABLE t0 DROP COLUMN k1;
 -- result:
@@ -73,7 +73,7 @@ v1	varchar(100)	YES	false	None
 -- !result
 ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Repeatedly add same column with different definition: v0')
+E: (1064, 'Can not add column which already exists in column id: v0, you can remove `v0` int(11) NULL COMMENT "" and try again.')
 -- !result
 ALTER TABLE t0 DROP COLUMN k0;
 -- result:

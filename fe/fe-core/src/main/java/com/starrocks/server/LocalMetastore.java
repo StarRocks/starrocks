@@ -4247,11 +4247,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private static void renameColumnInternal(OlapTable olapTable, String colName, String newColName) {
-        Column column = olapTable.getColumn(colName);
-        Map<String, Column> nameToColumn = olapTable.getNameToColumn();
-        nameToColumn.remove(colName);
-        column.renameColumn(newColName);
-        nameToColumn.put(newColName, column);
+        olapTable.renameColumn(colName, newColName);
 
         Set<String> bfColumns = olapTable.getBfColumns();
         if (bfColumns != null) {
@@ -4272,7 +4268,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
             for (Column distributionColumn : distributionColumns) {
                 if (distributionColumn.getName().equalsIgnoreCase(colName)) {
-                    distributionColumn.renameColumn(newColName);
+                    distributionColumn.setName(newColName);
                 }
             }
         }
@@ -4283,7 +4279,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             for (Column partitionColumn : partitionColumns) {
                 if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.renameColumn(newColName);
+                    partitionColumn.setName(newColName);
                 }
             }
             // for expression range partition will also modify the inner slotRef
@@ -4303,7 +4299,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             for (Column partitionColumn : partitionColumns) {
                 if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.renameColumn(newColName);
+                    partitionColumn.setName(newColName);
                 }
             }
         }

@@ -114,7 +114,8 @@ public class DictionaryCacheSink extends DataSink {
         List<String> columns = Lists.newArrayList();
         List<TColumn> columnsDesc = Lists.newArrayList();
         List<Integer> columnSortKeyUids = Lists.newArrayList();
-        columns.addAll(table.getBaseSchema().stream().map(Column::getPhysicalName).collect(Collectors.toList()));
+        columns.addAll(table.getBaseSchema().stream().map(column -> column.getColumnId().getId())
+                .collect(Collectors.toList()));
         for (Column column : table.getBaseSchema()) {
             TColumn tColumn = column.toThrift();
             tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
