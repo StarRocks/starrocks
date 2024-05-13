@@ -18,7 +18,7 @@
 
 ##############################################################
 # This script is used to compile StarRocks
-# Usage: 
+# Usage:
 #    sh build.sh --help
 # Eg:
 #    sh build.sh                                      build all
@@ -532,7 +532,7 @@ endTime=$(date +%s)
 totalTime=$((endTime - startTime))
 
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(gdate -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(gdate -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then
