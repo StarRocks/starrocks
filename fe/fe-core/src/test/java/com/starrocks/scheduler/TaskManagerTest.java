@@ -51,7 +51,7 @@ import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.PriorityBlockingQueue;
+import java.util.Queue;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class TaskManagerTest {
@@ -175,7 +175,7 @@ public class TaskManagerTest {
 
     @Test
     public void testTaskRunPriority() {
-        PriorityBlockingQueue<TaskRun> queue = Queues.newPriorityBlockingQueue();
+        Queue<TaskRun> queue = Queues.newPriorityBlockingQueue();
         long now = System.currentTimeMillis();
         Task task = new Task("test");
 
@@ -244,9 +244,9 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun2);
 
-        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
         Assert.assertEquals(10, taskRun.getStatus().getPriority());
 
@@ -282,9 +282,9 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun2);
         taskRunManager.arrangeTaskRun(taskRun1);
 
-        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
         Assert.assertEquals(10, taskRun.getStatus().getPriority());
 
@@ -321,12 +321,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun2);
 
-        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
-        Assert.assertEquals(now + 10, taskRun.getStatus().getCreateTime());
-
+        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
@@ -360,12 +359,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun2);
         taskRunManager.arrangeTaskRun(taskRun1);
 
-        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
-        PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+        Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
         TaskRun taskRun = taskRuns.poll();
-        Assert.assertEquals(now + 10, taskRun.getStatus().getCreateTime());
-
+        Assert.assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
@@ -408,7 +406,7 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1);
         taskRunManager.arrangeTaskRun(taskRun3);
 
-        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
     }
 
@@ -528,7 +526,7 @@ public class TaskManagerTest {
         result = taskRunManager.submitTaskRun(taskRun2, taskRun2.getExecuteOption());
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
-        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, Queue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(2, pendingTaskRunMap.get(taskId).size());
 
         // If it's a sync refresh, no merge redundant anyway
