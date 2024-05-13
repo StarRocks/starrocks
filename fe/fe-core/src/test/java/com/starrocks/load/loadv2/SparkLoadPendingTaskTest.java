@@ -68,6 +68,8 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlIndex;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartition;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
+import com.starrocks.mysql.privilege.MockedAuth;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -80,12 +82,19 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
 
 public class SparkLoadPendingTaskTest {
+    @Mocked
+    private ConnectContext ctx;
+    @Before
+    public void setUp() {
+        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
+    }
 
     @Test
     public void testExecuteTask(@Injectable SparkLoadJob sparkLoadJob,

@@ -572,8 +572,9 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         // load from table
-        String hiveDbTableName = "";
-        Map<String, String> hiveTableProperties = Maps.newHashMap();
+        String externalDbTableName = "";
+        EtlJobConfig.SourceType sourceType = null;
+        Map<String, String> externalTableProperties = Maps.newHashMap();
         if (fileGroup.isLoadFromTable()) {
             long srcTableId = fileGroup.getSrcTableId();
             Table currentTable = db.getTable(srcTableId);
@@ -582,13 +583,16 @@ public class SparkLoadPendingTask extends LoadTask {
             }
             if (currentTable instanceof HiveTable) {
                 HiveTable srcHiveTable = (HiveTable) currentTable;
-                hiveDbTableName = srcHiveTable.getHiveDbTable();
-                hiveTableProperties.putAll(srcHiveTable.getProperties());
-            }
-            if (currentTable instanceof HudiTable) {
+                externalDbTableName = srcHiveTable.getHiveDbTable();
+                externalTableProperties.putAll(srcHiveTable.getProperties());
+                sourceType = SourceType.HIVE;
+            } else if (currentTable instanceof HudiTable) {
                 HudiTable srcHudiTable = (HudiTable) currentTable;
-                hiveDbTableName = srcHudiTable.getDbName() + "." + srcHudiTable.getTableName();
-                hiveTableProperties.putAll(srcHudiTable.getProperties());
+                externalDbTableName = srcHudiTable.getHudiDbTable();
+                externalTableProperties.putAll(srcHudiTable.getHudiProperties());
+                sourceType = SourceType.HUDI;
+            } else {
+                throw new LoadException("can't support the source table type [" + currentTable.getType() + "]");
             }
         }
 
@@ -608,7 +612,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
         EtlFileGroup etlFileGroup = null;
         if (fileGroup.isLoadFromTable()) {
-            etlFileGroup = new EtlFileGroup(SourceType.HIVE, fileFieldNames, hiveDbTableName, hiveTableProperties,
+            etlFileGroup = new EtlFileGroup(sourceType, fileFieldNames, externalDbTableName, externalTableProperties,
                     fileGroup.isNegative(), columnMappings, where, partitionIds);
         } else {
             etlFileGroup = new EtlFileGroup(SourceType.FILE, fileGroup.getFilePaths(), fileFieldNames,
