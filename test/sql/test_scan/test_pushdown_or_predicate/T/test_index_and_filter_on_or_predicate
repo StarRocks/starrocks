@@ -6,10 +6,10 @@ set scan_or_to_union_limit = 1;
 set enable_profile = true;
 set enable_async_profile=false;
 
-function: update_be_config("enable_index_segment_level_zonemap_filter", "false")
-function: update_be_config("enable_index_page_level_zonemap_filter", "false")
-function: update_be_config("enable_index_bloom_filter", "false")
-function: update_be_config("enable_index_bitmap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
+update information_schema.be_configs set value="false" where name= "enable_index_page_level_zonemap_filter";
+update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
+update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
 
 
 -- Prepare tables and data.
@@ -151,7 +151,7 @@ select 1, 2, 3;
 
 -- 1. Test Segment Zonemap.
 
-function: update_be_config("enable_index_segment_level_zonemap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
 
 select count(1) from t1 where c_int_1_seq < 1;
   select * from __profile order by idx, k, v;
@@ -182,12 +182,12 @@ select count(1) from t1 where (c_int_1_seq < 1 and c_int_1_seq * 10 < 100)
 select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
   select * from __profile order by idx, k, v;
   
-function: update_be_config("enable_index_segment_level_zonemap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
 
 
 -- 2. Test Bloom Filter.
 
-function: update_be_config("enable_index_bloom_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_bloom_filter";
 
 -- Basic
 -- Support.
@@ -259,13 +259,13 @@ select count(1) from t1
   );
   select * from __profile order by idx, k, v;
   
-function: update_be_config("enable_index_bloom_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
 
 
 
 -- 3. Test bitmap.
 
-function: update_be_config("enable_index_bitmap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";
 
 -- Basic.
 select count(1) from t1 where c_int_1_seq = 1280001;
@@ -458,7 +458,7 @@ where
  select * from __profile order by idx, k, v;
 
 
-function: update_be_config("enable_index_bitmap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
 
 
 -- 4. Test late materialize.
@@ -510,7 +510,7 @@ where
 
 -- 6. Test Page Zonemap
 
-function: update_be_config("enable_index_page_level_zonemap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_page_level_zonemap_filter";
 
 select count(1) from t1 where c_int_1_seq < 1;
  select * from __profile order by idx, k, v;
@@ -584,12 +584,12 @@ select count(1) from t1 where c_int_2_seq = 1280000*2+20 or c_int_2_seq = 128000
 select count(1) from t1 where c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 = (1280000*2+1000)*2 or c_int_2_seq > 1280000*3-2000;
 
 
-function: update_be_config("enable_index_page_level_zonemap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_page_level_zonemap_filter";
 
 
 -- Reset configs.
 
-function: update_be_config("enable_index_segment_level_zonemap_filter", "true")
-function: update_be_config("enable_index_page_level_zonemap_filter", "true")
-function: update_be_config("enable_index_bloom_filter", "true")
-function: update_be_config("enable_index_bitmap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
+update information_schema.be_configs set value="true" where name= "enable_index_page_level_zonemap_filter";
+update information_schema.be_configs set value="true" where name= "enable_index_bloom_filter";
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";

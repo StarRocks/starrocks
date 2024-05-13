@@ -164,6 +164,16 @@ public:
         return Status::OK();
     }
 
+    virtual bool has_original_bloom_filter_index() const { return false; }
+    virtual bool has_ngram_bloom_filter_index() const { return false; }
+    /// Treat the relationship between |predicates| as `(s_pred_1 OR s_pred_2 OR ... OR s_pred_n) AND (ns_pred_1 AND ns_pred_2 AND ... AND ns_pred_n)`,
+    /// where s_pred_i denotes a predicate which supports bloom filter, and ns_pred_i denotes a predicate which does not support bloom filter.
+    /// That is,
+    /// - only keep the rows in |row_ranges| which satisfy any predicate that supports bloom filter in |predicates|.
+    /// - or keep all the rows in |row_ranges| if there is no predicate that supports bloom filter in |predicates|.
+    ///
+    /// prerequisite:
+    /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
     virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                   SparseRange<>* row_ranges) {
         return Status::OK();
