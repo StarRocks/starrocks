@@ -148,9 +148,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private static final int CREATE_PARTITION_BATCH_SIZE = 64;
 
-    private static final int MV_TRY_LOCK_TIMEOUT_MS = Config.mv_refresh_try_lock_timeout_ms;
-    private static final int MV_MAX_TRY_LOCK_FAILURE_RETRY_TIMES = Config.max_mv_refresh_try_lock_failure_retry_times;
-
     private Database database;
     private MaterializedView materializedView;
     private MvTaskRunContext mvContext;
@@ -230,7 +227,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private Set<String> checkMvToRefreshedPartitions(TaskRunContext context) throws AnalysisException {
-        if (!database.tryReadLock(MV_TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+        if (!database.tryReadLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock database: " + database.getFullName());
         }
         try {
@@ -299,7 +296,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         int lockFailedTimes = 0;
         int refreshFailedTimes = 0;
         while (refreshFailedTimes < maxRefreshMaterializedViewRetryNum &&
-                lockFailedTimes < MV_MAX_TRY_LOCK_FAILURE_RETRY_TIMES) {
+                lockFailedTimes < Config.max_mv_refresh_try_lock_failure_retry_times) {
             try {
                 return doRefreshMaterializedView(taskRunContext, mvEntity);
             } catch (LockTimeoutException e) {
@@ -403,8 +400,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // 4. Analyze and prepare partition
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(ctx, insertStmt);
         ExecPlan execPlan = null;
+        if (!StatementPlanner.tryLock(dbs, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            throw new LockTimeoutException("Failed to lock databases: " + Joiner.on(",").join(dbs.values().stream()
+                    .map(Database::getFullName).collect(Collectors.toList())));
+        }
         try {
-            StatementPlanner.tryLock(dbs, MV_TRY_LOCK_TIMEOUT_MS, TimeUnit.MICROSECONDS);
             insertStmt =
                     analyzeInsertStmt(insertStmt, mvToRefreshedPartitions, refTablePartitionNames, materializedView,
                             ctx);
@@ -861,7 +861,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
         Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
-        if (!database.tryReadLock(MV_TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+        if (!database.tryReadLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock database: " + database.getFullName());
         }
 
@@ -1422,7 +1422,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private boolean checkBaseTablePartitionChange(MaterializedView mv) {
         List<Database> dbs = collectDatabases(mv);
         // check snapshotBaseTables and current tables in catalog
-        if (!StatementPlanner.tryLockDatabases(dbs, MV_TRY_LOCK_TIMEOUT_MS, TimeUnit.MICROSECONDS)) {
+        if (!StatementPlanner.tryLockDatabases(dbs, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock databases: " + Joiner.on(",").join(dbs.stream()
                     .map(Database::getFullName).collect(Collectors.toList())));
         }
@@ -1474,7 +1474,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
 
         List<Database> dbs = collectDatabases(materializedView);
-        if (!StatementPlanner.tryLockDatabases(dbs, MV_TRY_LOCK_TIMEOUT_MS, TimeUnit.MICROSECONDS)) {
+        if (!StatementPlanner.tryLockDatabases(dbs, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock databases: " + Joiner.on(",").join(dbs.stream()
                     .map(Database::getFullName).collect(Collectors.toList())));
         }
