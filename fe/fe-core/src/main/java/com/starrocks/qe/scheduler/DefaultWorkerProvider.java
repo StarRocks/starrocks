@@ -91,10 +91,9 @@ public class DefaultWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-                                                             boolean preferComputeNode,
-                                                             int numUsedComputeNodes,
-                                                             String computationFragmentSchedulingPolicy,
-                                                             long warehouseId) {
+                                     boolean preferComputeNode,int numUsedComputeNodes,
+                                     ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                                     long warehouseId) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
@@ -312,9 +311,9 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
-                                                                        int numUsedComputeNodes,
-                                                                        String computationFragmentSchedulingPolicy,
-                                                                        long warehouseId) {
+                                  int numUsedComputeNodes,
+                                  ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                                  long warehouseId) {
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
@@ -327,13 +326,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
         //add CN and BE to Node Pool
         if (numUsedComputeNodes <= 0) {
             computeNodes.putAll(idToComputeNode);
-            if (computationFragmentSchedulingPolicy.equals(ComputationFragmentSchedulingPolicy.all_nodes.toString())) {
+            if (computationFragmentSchedulingPolicy == ComputationFragmentSchedulingPolicy.ALL_NODES) {
                 computeNodes.putAll(idToBackend);
             }
         } else if (numUsedComputeNodes < idToComputeNode.size()) {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
-                    getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
+                        getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
                 Preconditions.checkNotNull(computeNode);
                 if (!isWorkerAvailable(computeNode)) {
                     continue;
@@ -342,10 +341,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
             }
         } else { //numUsedComputeNodes >= idToComputeNode.size()
             computeNodes.putAll(idToComputeNode);
-            if (computationFragmentSchedulingPolicy.equals(ComputationFragmentSchedulingPolicy.all_nodes.toString())) {
+            if (computationFragmentSchedulingPolicy == ComputationFragmentSchedulingPolicy.ALL_NODES) {
                 for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                     ComputeNode backend =
-                        getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
+                            getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
                     Preconditions.checkNotNull(backend);
                     if (!isWorkerAvailable(backend)) {
                         continue;
