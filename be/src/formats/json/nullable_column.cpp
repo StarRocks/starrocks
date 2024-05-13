@@ -212,21 +212,15 @@ static Status add_nullable_struct_column(Column* column, const TypeDescriptor& t
     auto& null_column = nullable_column->null_column();
     auto& data_column = nullable_column->data_column();
 
-    try {
-        if (value->is_null()) {
-            nullable_column->append_nulls(1);
-            return Status::OK();
-        }
-
-        RETURN_IF_ERROR(add_struct_column(data_column.get(), type_desc, name, value));
-
-        null_column->append(0);
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
         return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as json type, column=$0, error=$1", name,
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
     }
+
+    RETURN_IF_ERROR(add_struct_column(data_column.get(), type_desc, name, value));
+
+    null_column->append(0);
+    return Status::OK();
 }
 
 static Status add_nullable_map_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
@@ -236,69 +230,51 @@ static Status add_nullable_map_column(Column* column, const TypeDescriptor& type
     auto& null_column = nullable_column->null_column();
     auto& data_column = nullable_column->data_column();
 
-    try {
-        if (value->is_null()) {
-            nullable_column->append_nulls(1);
-            return Status::OK();
-        }
-
-        RETURN_IF_ERROR(add_map_column(data_column.get(), type_desc, name, value));
-
-        null_column->append(0);
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
         return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as json type, column=$0, error=$1", name,
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
     }
+
+    RETURN_IF_ERROR(add_map_column(data_column.get(), type_desc, name, value));
+
+    null_column->append(0);
+    return Status::OK();
 }
 
 static Status add_adaptive_nullable_struct_column(Column* column, const TypeDescriptor& type_desc,
                                                   const std::string& name, simdjson::ondemand::value* value) {
     auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
 
-    try {
-        if (value->is_null()) {
-            nullable_column->append_nulls(1);
-            return Status::OK();
-        }
-
-        auto& data_column = nullable_column->begin_append_not_default_value();
-
-        RETURN_IF_ERROR(add_struct_column(data_column.get(), type_desc, name, value));
-
-        nullable_column->finish_append_one_not_default_value();
-
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
         return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as json type, column=$0, error=$1", name,
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
     }
+
+    auto& data_column = nullable_column->begin_append_not_default_value();
+
+    RETURN_IF_ERROR(add_struct_column(data_column.get(), type_desc, name, value));
+
+    nullable_column->finish_append_one_not_default_value();
+
+    return Status::OK();
 }
 
 static Status add_adaptive_nullable_map_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                                simdjson::ondemand::value* value) {
     auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
 
-    try {
-        if (value->is_null()) {
-            nullable_column->append_nulls(1);
-            return Status::OK();
-        }
-
-        auto& data_column = nullable_column->begin_append_not_default_value();
-
-        RETURN_IF_ERROR(add_map_column(data_column.get(), type_desc, name, value));
-
-        nullable_column->finish_append_one_not_default_value();
-
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
         return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse value as json type, column=$0, error=$1", name,
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
     }
+
+    auto& data_column = nullable_column->begin_append_not_default_value();
+
+    RETURN_IF_ERROR(add_map_column(data_column.get(), type_desc, name, value));
+
+    nullable_column->finish_append_one_not_default_value();
+
+    return Status::OK();
 }
 
 static Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
