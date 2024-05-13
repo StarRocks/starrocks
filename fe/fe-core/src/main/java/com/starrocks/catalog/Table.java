@@ -34,7 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -166,16 +165,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     protected TableType type;
     @SerializedName(value = "createTime")
     protected long createTime;
-    /*
-     *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
-     *  e.g. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
-     *      to query but visible to load process.
-     *  If you want to get all visible columns, you should call getBaseSchema() method, which is override in
-     *  subclasses.
-     *
-     *  NOTICE: the order of this fullSchema is meaningless to OlapTable
-     */
+
     /**
+     * For OlapTable:
      * The fullSchema of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
      * The properties of base columns in fullSchema are same as properties in baseIndex.
      * For example:
@@ -183,19 +175,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * Schema change (c3 to bigint)
      * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PREFIX_c3 bigint)
      * The fullSchema of OlapTable is mainly used by Scanner of Load job.
-     * <p>
+     * NOTICE: The columns of baseIndex is placed before the SHADOW_NAME_PREFIX columns
+     *
+     * If you want to get all visible columns, you should call getBaseSchema() method, which is override in
+     * subclasses.
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
+     *
+     * If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent
+     * read-write operations between these tasks with a relatively low probability.
+     * Therefore, we choose to use a CopyOnWriteArrayList.
      */
-    // If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent 
-    // read-write operations between these tasks with a relatively low probability. 
-    // Therefore, we choose to use a CopyOnWriteArrayList.
     @SerializedName(value = "fullSchema")
     protected List<Column> fullSchema = new CopyOnWriteArrayList<>();
-    // tree map for case-insensitive lookup.
+
     /**
-     * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
+     * nameToColumn and idToColumn are both indexes of fullSchema.
+     * nameToColumn is the index of column name, idToColumn is the index of column id,
+     * column names can change, but the column ID of a specific column will never change.
+     * Use case-insensitive tree map, because the column name is case-insensitive in the system.
      */
     protected Map<String, Column> nameToColumn;
+    protected Map<ColumnId, Column> idToColumn;
 
     // DO NOT persist this variable.
     protected boolean isTypeRead = false;
@@ -218,7 +218,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
-        this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        updateSchemaIndex();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
@@ -230,16 +230,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         if (fullSchema != null) {
             this.fullSchema = Lists.newArrayList(fullSchema);
         }
-        this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        if (this.fullSchema != null) {
-            for (Column col : this.fullSchema) {
-                nameToColumn.put(col.getName(), col);
-            }
-        } else {
-            // Only view in with-clause have null base
-            Preconditions.checkArgument(type == TableType.VIEW || type == TableType.HIVE_VIEW,
-                    "Table has no columns");
-        }
+        updateSchemaIndex();
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
@@ -424,14 +415,26 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public void setNewFullSchema(List<Column> newSchema) {
         this.fullSchema = newSchema;
-        this.nameToColumn.clear();
-        for (Column col : fullSchema) {
-            nameToColumn.put(col.getName(), col);
+        updateSchemaIndex();
+    }
+
+    protected void updateSchemaIndex() {
+        Map<String, Column> newNameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<ColumnId, Column> newIdToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : this.fullSchema) {
+            newNameToColumn.put(column.getName(), column);
+            newIdToColumn.put(column.getColumnId(), column);
         }
+        this.nameToColumn = newNameToColumn;
+        this.idToColumn = newIdToColumn;
     }
 
     public Column getColumn(String name) {
         return nameToColumn.get(name);
+    }
+
+    public Column getColumn(ColumnId columnId) {
+        return nameToColumn.get(columnId.getId());
     }
 
     public boolean containColumn(String columnName) {
@@ -444,10 +447,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public long getCreateTime() {
         return createTime;
-    }
-
-    public Map<String, Column> getNameToColumn() {
-        return nameToColumn;
     }
 
     public String getTableLocation() {
@@ -558,9 +557,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     @Override
     public void gsonPostProcess() throws IOException {
-        for (Column column : fullSchema) {
-            this.nameToColumn.put(column.getName(), column);
-        }
+        updateSchemaIndex();
         relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 

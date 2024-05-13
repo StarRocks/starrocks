@@ -589,7 +589,7 @@ function: wait_alter_table_finish()
 -- !result
 ALTER TABLE tab1 ADD COLUMN v5 tinyint;
 -- result:
-E: (1064, 'Repeatedly add same column with different definition: v5')
+E: (1064, 'Can not add column which already exists in column id: v5, you can remove `v5` varchar(50) NULL COMMENT "" and try again.')
 -- !result
 function: wait_alter_table_finish()
 -- result:

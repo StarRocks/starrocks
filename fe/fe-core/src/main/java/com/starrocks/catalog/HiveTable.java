@@ -39,7 +39,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -286,7 +285,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
         ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
-        ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
         ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
@@ -297,7 +295,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         });
 
         fullSchemaTemp.addAll(updatedTable.fullSchema);
-        nameToColumnTemp.putAll(updatedTable.nameToColumn);
         dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -312,7 +309,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             this.dataColumnNames.clear();
 
             this.fullSchema.addAll(fullSchemaTemp.build());
-            this.nameToColumn.putAll(nameToColumnTemp.build());
+            updateSchemaIndex();
             this.dataColumnNames.addAll(dataColumnNamesTemp.build());
 
             if (GlobalStateMgr.getCurrentState().isLeader()) {
