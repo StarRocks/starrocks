@@ -157,6 +157,10 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+        return Lists.newArrayList();
+    }
+
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }

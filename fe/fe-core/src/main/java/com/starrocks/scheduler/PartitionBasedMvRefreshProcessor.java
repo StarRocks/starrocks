@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -65,6 +66,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
@@ -252,6 +255,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     return RefreshJobStatus.EMPTY;
                 }
 
+                LOG.info("mvToRefreshedPartitions: {}", mvToRefreshedPartitions);
                 // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
                 filterPartitionByRefreshNumber(mvToRefreshedPartitions, materializedView);
                 LOG.debug("materialized view partitions to refresh:{}", mvToRefreshedPartitions);
@@ -261,6 +265,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
                 refTablePartitionNames = refTableRefreshPartitions.entrySet().stream()
                         .collect(Collectors.toMap(x -> x.getKey().getName(), Map.Entry::getValue));
+                LOG.info("refTablePartitionNames: {}", refTablePartitionNames);
                 LOG.debug("materialized view:{} source partitions :{}",
                         materializedView.getName(), refTableRefreshPartitions);
 
@@ -278,14 +283,59 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
 
-        // refresh materialized view
-        doRefreshMaterializedViewWithRetry(mvToRefreshedPartitions, refTablePartitionNames);
+        boolean enableListSrcFiles = false;
+        // list file
+        if (context.getCtx().getSessionVariable().isEnableListMvSrcFiles()) {
+            enableListSrcFiles = true;
+            LOG.info("enableListSrcFiles is true");
+        }
+        LOG.info("enableListSrcFiles is: {}", enableListSrcFiles);
+        if (enableListSrcFiles && mvContext.getRefBaseTable().isHiveTable()) {
+            // list all files under partitions: refTablePartitionNames
+            // two cases:
+            // one without file caches
+            // one with file caches
+            // control it by enable_remote_file_cache
+            HiveTable hiveTable = (HiveTable) mvContext.getRefBaseTable();
+            Column partitionColumn = mvContext.getRefBaseTablePartitionColumn();
+            Set<String> partitionNameSet = refTablePartitionNames.get(hiveTable.getName());
+            if (partitionNameSet == null) {
+                LOG.info("can not get partitions for hive table: {}", hiveTable.getTableName());
+                return RefreshJobStatus.FAILED;
+            }
+            LOG.info("partition name size: {}, partition column name: {}", partitionNameSet.size(), partitionColumn.getName());
+            List<PartitionKey> partitionKeys = Lists.newArrayList();
+            for (String partitionName : partitionNameSet) {
+                partitionKeys.add(mvContext.getRefBaseTableRangePartitionMap().get(partitionName).lowerEndpoint());
+            }
+            Stopwatch sw = Stopwatch.createStarted();
+            List<RemoteFileInfo> remoteFileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getRemoteFileInfos(hiveTable.getCatalogName(), hiveTable, partitionKeys);
+            int fileInfoCount = 0;
+            int fileCount = 0;
+            List<Long> modifiedTimes = Lists.newArrayList();
+            for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
+                fileInfoCount++;
+                long maxModifiedTime = 0;
+                fileCount += remoteFileInfo.getFiles().size();
+                for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
+                    maxModifiedTime = Math.max(maxModifiedTime, fileDesc.getModificationTime());
+                }
+                modifiedTimes.add(maxModifiedTime);
+            }
+            sw.stop();
+            LOG.info("partition size: {}, fileInfoCount: {}, fileCount: {}, timecost: {}, modifiedTimes: {}",
+                    partitionNameSet.size(), fileInfoCount, fileCount, sw.elapsed(TimeUnit.MILLISECONDS), modifiedTimes);
+        } else {
+            // refresh materialized view
+            doRefreshMaterializedViewWithRetry(mvToRefreshedPartitions, refTablePartitionNames);
 
-        // insert execute successfully, update the meta of materialized view according to ExecPlan
-        updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
-        // do not generate next task run if the current task run is killed
-        if (mvContext.hasNextBatchPartition() && !mvContext.getTaskRun().isKilled()) {
-            generateNextTaskRun();
+            // insert execute successfully, update the meta of materialized view according to ExecPlan
+            updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
+            // do not generate next task run if the current task run is killed
+            if (mvContext.hasNextBatchPartition() && !mvContext.getTaskRun().isKilled()) {
+                generateNextTaskRun();
+            }
         }
 
         {

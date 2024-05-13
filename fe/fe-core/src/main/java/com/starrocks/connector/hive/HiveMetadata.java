@@ -241,6 +241,18 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
+        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
+        partitions.addAll(existingPartitions.values());
+        boolean useRemoteFileCache = true;
+        if (table instanceof HiveTable) {
+            useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
+        }
+        return fileOps.getRemoteFiles(partitions.build(), useRemoteFileCache);
+    }
+
+    @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         if (hmsTbl.isUnPartitioned()) {
