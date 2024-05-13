@@ -189,13 +189,12 @@ class CompactionScheduler {
 
         int task_queue_size();
 
-        int task_queue_safe_size();
-
         void set_target_size(int32_t target_size);
 
         int32_t target_size();
 
-        void put(int idx, std::unique_ptr<CompactionTaskContext>& context);
+        void put_by_txn_id(int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts);
+        void put_by_txn_id(int64_t txn_id, std::unique_ptr<CompactionTaskContext>& context);
 
         bool try_get(int idx, std::unique_ptr<CompactionTaskContext>* context);
 
@@ -208,6 +207,9 @@ class CompactionScheduler {
         void resize_if_needed(Limiter& limiter);
 
     private:
+        // mutex must be held
+        int _task_queue_safe_index(int64_t txn_id);
+
         std::mutex _task_queues_mutex;
         std::vector<std::shared_ptr<TaskQueue>> _internal_task_queues;
         int16_t _target_size;
@@ -245,8 +247,6 @@ private:
     void thread_task(int id);
 
     Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
-
-    int choose_task_queue_by_txn_id(int64_t txn_id) { return txn_id % _task_queues.task_queue_safe_size(); }
 
     bool reschedule_task_if_needed(int id);
 
@@ -302,7 +302,7 @@ inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_v
         auto diff = new_val - _total;
         _free += diff;
         _total += diff;
-    } else {
+    } else if (new_val < _total) {
         if (_reserved != 0) {
             double percentage = static_cast<double>(_total) / new_val;
             _reserved = static_cast<int16_t>(static_cast<double>(_reserved) * percentage);
@@ -312,6 +312,9 @@ inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_v
             _total = new_val;
             _free = _total;
         }
+    } else {
+        // nothing change
+        return;
     }
     LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to " << _free
               << ", and _reserved value to " << _reserved;
@@ -322,15 +325,15 @@ inline int CompactionScheduler::WrapTaskQueues::task_queue_size() {
     return _internal_task_queues.size();
 }
 
-inline int CompactionScheduler::WrapTaskQueues::task_queue_safe_size() {
-    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+// mutex must be held
+inline int CompactionScheduler::WrapTaskQueues::_task_queue_safe_index(int64_t txn_id) {
     if (_target_size < _internal_task_queues.size()) {
         // Shrinking, It can prevent tasks from being placed on queues with IDs greater than it.
-        return _target_size;
+        return txn_id % _target_size;
     } else {
         // Expanding or normal state, if _internal_task_queues is expanding, it can prevent tasks
         // from being placed to the areas that have not expanded yet.
-        return _internal_task_queues.size();
+        return txn_id % _internal_task_queues.size();
     }
 }
 
@@ -344,13 +347,27 @@ inline int32_t CompactionScheduler::WrapTaskQueues::target_size() {
     return _target_size;
 }
 
-inline void CompactionScheduler::WrapTaskQueues::put(int idx, std::unique_ptr<CompactionTaskContext>& context) {
+inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
+                                                               std::unique_ptr<CompactionTaskContext>& context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    int idx = _task_queue_safe_index(txn_id);
     _internal_task_queues[idx]->put(std::move(context));
+}
+
+inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
+        int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    int idx = _task_queue_safe_index(txn_id);
+    for (auto& context : contexts) {
+        _internal_task_queues[idx]->put(std::move(context));
+    }
 }
 
 inline bool CompactionScheduler::WrapTaskQueues::try_get(int idx, std::unique_ptr<CompactionTaskContext>* context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    if (idx >= _internal_task_queues.size()) { // idx might be invalid
+        return false;
+    }
     return _internal_task_queues[idx]->try_get(context);
 }
 
