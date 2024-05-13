@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.util.DebugUtil;
@@ -306,6 +307,62 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
         String plan = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan, "hive_partitioned_mv", "UNION");
+        dropMv("test", "hive_partitioned_mv");
+    }
+
+    @Test
+    public void testPartitionedHiveMVWithLooseMode_MultiColumn() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_partitioned_mv`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (str2date(`l_shipdate`, '%Y-%m-%d'))\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"query_rewrite_consistency\" = \"loose\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+
+        String mvName = "hive_partitioned_mv";
+        refreshMaterializedViewWithPartition("test", mvName, "1998-01-02", "1998-01-04");
+
+        MaterializedView mv1 = getMv("test", mvName);
+        Set<String> toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
+        Assert.assertEquals(3, toRefreshPartitions.size());
+        Assert.assertEquals(
+                ImmutableSet.of("p19980101_19980102", "p19980104_19980105", "p19980105_19980106"), toRefreshPartitions);
+
+        String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, mvName, "UNION");
+
+        starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
+                "WHERE l_shipdate='1998-01-02'\n" +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainContains(mvName);
+        starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
+                "WHERE l_shipdate='1998-01-03'\n" +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainContains(mvName);
+        starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
+                "WHERE l_shipdate='1998-01-01'\n" +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainWithout(mvName);
+        starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
+                "WHERE l_shipdate='1998-01-05'\n" +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainWithout(mvName);
+
         dropMv("test", "hive_partitioned_mv");
     }
 
