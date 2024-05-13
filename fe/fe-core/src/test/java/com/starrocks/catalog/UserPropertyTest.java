@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.UserProperty;
@@ -65,8 +66,9 @@ public class UserPropertyTest {
             }
         }
 
-        properties.get(0).second = "1025";
-        Assert.assertThrows("max_user_connections is not valid, must less than qe_max_connection 1024",
+        properties.get(0).second = "4097";
+        Assert.assertThrows(
+                "max_user_connections is not valid, must less than qe_max_connection " + Config.qe_max_connection,
                 DdlException.class, () -> userProperty.update(properties, false));
     }
 }
