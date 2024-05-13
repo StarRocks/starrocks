@@ -67,7 +67,7 @@ public class MaterializedViewMetricsRegistry {
         MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
         for (Map.Entry<MvId, MaterializedViewMetricsEntity> e : instance.idToMVMetrics.entrySet()) {
             IMaterializedViewMetricsEntity mvEntity = e.getValue();
-            if (mvEntity == null || mvEntity instanceof  MaterializedViewMetricsBlackHoleEntity) {
+            if (mvEntity == null || mvEntity instanceof MaterializedViewMetricsBlackHoleEntity) {
                 continue;
             }
             MvId mvId = e.getKey();
