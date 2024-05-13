@@ -586,10 +586,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
-    JniScanner::CreateOptions jni_scanner_create_options = {.fs_options = &fsOptions,
-                                                            .hive_table = _hive_table,
-                                                            .scan_range = &scan_range,
-                                                            .scan_node = &hdfs_scan_node};
+    JniScanner::CreateOptions jni_scanner_create_options = {
+            .fs_options = &fsOptions, .hive_table = _hive_table, .scan_range = &scan_range};
+
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
         scanner = new HdfsPartitionScanner();
