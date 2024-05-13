@@ -18,7 +18,6 @@ package com.starrocks.common.lock;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.sql.StatementPlanner;
 import mockit.Mock;
 import mockit.MockUp;
@@ -46,13 +45,8 @@ public class TestLockInterface {
         {
             new MockUp<Database>() {
                 @Mock
-                public boolean tryReadLock(Database database, long timeout, TimeUnit unit) {
-                    if (database.getFullName().equalsIgnoreCase("db5")) {
-                        return false;
-                    }
-                    QueryableReentrantReadWriteLock rwLock = database.getLock();
-                    rwLock.exclusiveLock();
-                    return true;
+                public boolean tryReadLock(long timeout, TimeUnit unit) {
+                    return false;
                 }
             };
             Assert.assertFalse(StatementPlanner.tryLockDatabases(dbs, 10, TimeUnit.MILLISECONDS));
