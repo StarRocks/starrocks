@@ -95,7 +95,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testGetWarehouseIdByBackend() {
+    public void testGetWarehouseIdByNodeId() {
         SystemInfoService systemInfo = new SystemInfoService();
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
