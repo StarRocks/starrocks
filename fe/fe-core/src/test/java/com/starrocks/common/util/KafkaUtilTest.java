@@ -16,6 +16,8 @@ package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
@@ -247,5 +249,20 @@ public class KafkaUtilTest {
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
         Assert.assertTrue(e.getMessage().contains("be process failed"));
+    }
+
+    @Test
+    public void testWarehouseNotExist() throws UserException {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", 1L));
+                return null;
+            }
+        };
+
+        KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
+        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assert.assertEquals("Failed to send get kafka partition info request. err: Warehouse id: 1 not exist.", e.getMessage());
     }
 }
