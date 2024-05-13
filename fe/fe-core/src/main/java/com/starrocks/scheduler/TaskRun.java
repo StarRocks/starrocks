@@ -175,6 +175,11 @@ public class TaskRun implements Comparable<TaskRun> {
             MaterializedView materializedView = (MaterializedView) table;
             Preconditions.checkState(materializedView != null);
             newProperties = materializedView.getProperties();
+
+            // handle warehouse change
+            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                    String.valueOf(materializedView.getWarehouseId()));
+
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }

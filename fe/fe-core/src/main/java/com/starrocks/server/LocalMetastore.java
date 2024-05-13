@@ -3799,6 +3799,13 @@ public class LocalMetastore implements ConnectorMetadata {
             if (optHints != null) {
                 Map<String, String> taskProperties = task.getProperties();
                 taskProperties.putAll(optHints);
+                if (materializedView.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                    taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                            String.valueOf(materializedView.getWarehouseId()));
+
+                    LOG.debug("set warehouse {} in createTaskForMaterializedView",
+                            materializedView.getWarehouseId());
+                }
             }
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
