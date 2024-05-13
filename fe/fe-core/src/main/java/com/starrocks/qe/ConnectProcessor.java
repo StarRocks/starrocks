@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.google.gson.Gson;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -111,9 +110,6 @@ public class ConnectProcessor {
 
     protected StmtExecutor executor = null;
 
-    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
-
-    private static final Gson GSON = new Gson();
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -319,11 +315,6 @@ public class ConnectProcessor {
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
         queryDetail.setCatalog(ctx.getCurrentCatalog());
-
-        if (Config.enable_profile_log) {
-            String jsonString = GSON.toJson(queryDetail);
-            PROFILE_LOG.info(jsonString);
-        }
 
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
