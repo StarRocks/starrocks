@@ -103,7 +103,7 @@ public class ConnectionLimitTest {
     }
 
     @Test
-    public void testShowProcessListForUser() {
+    public void testShowProcessListForUser() throws Exception {
         String sql = "show processlist for 'test'";
         ExecuteEnv.setup();
         ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
