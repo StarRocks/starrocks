@@ -48,11 +48,11 @@ public class QueryDetail implements Serializable {
 
     // When query received, FE will construct a QueryDetail
     // object. This object will set queryId, startTime, sql
-    // fields. As well state is be set as RUNNING. 
+    // fields. As well state is be set as RUNNING.
     // After query finished, endTime and latency will
     // be set and state will be updated to be FINISHED/FAILED/CANCELLED
     // according to the query execution results.
-    // So, one query will be inserted into as a item and 
+    // So, one query will be inserted into as a item and
     // be udpated upon finished. To indicate the two event,
     // a extra field named eventTime is added.
     private long eventTime;
@@ -81,13 +81,14 @@ public class QueryDetail implements Serializable {
     private long spillBytes = -1;
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     private String digest;
+    private String catalog;
 
     public QueryDetail() {
     }
 
     public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
                        long startTime, long endTime, long latency, QueryMemState state,
-                       String database, String sql, String user, String resourceGroupName) {
+                       String database, String sql, String user, String resourceGroupName, String catalog) {
         this.queryId = queryId;
         this.isQuery = isQuery;
         this.connId = connId;
@@ -108,14 +109,15 @@ public class QueryDetail implements Serializable {
         }
         this.sql = sql;
         this.user = user;
+        this.catalog = catalog;
     }
 
     public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
                         long startTime, long endTime, long latency, QueryMemState state,
                         String database, String sql, String user, String resourceGroupName,
-                        String warehouse) {
+                        String warehouse, String catalog) {
         this(queryId, isQuery, connId, remoteIP, startTime, endTime, latency,
-                state, database, sql, user, resourceGroupName);
+                state, database, sql, user, resourceGroupName, catalog);
         this.warehouse = warehouse;
     }
 
@@ -144,6 +146,8 @@ public class QueryDetail implements Serializable {
         queryDetail.spillBytes = this.spillBytes;
         queryDetail.warehouse = this.warehouse;
         queryDetail.digest = this.digest;
+        queryDetail.resourceGroupName = this.resourceGroupName;
+        queryDetail.catalog = this.catalog;
         return queryDetail;
     }
 
@@ -325,5 +329,13 @@ public class QueryDetail implements Serializable {
 
     public void setDigest(String digest) {
         this.digest = digest;
+    }
+
+    public String getCatalog() {
+        return catalog;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
     }
 }

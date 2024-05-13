@@ -321,6 +321,7 @@ public class ConnectProcessor {
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
 
         if (Config.enable_profile_log) {
             String jsonString = GSON.toJson(queryDetail);
@@ -354,7 +355,8 @@ public class ConnectProcessor {
                 sql,
                 ctx.getQualifiedUser(),
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
-                ctx.getCurrentWarehouseName());
+                ctx.getCurrentWarehouseName(),
+                ctx.getCurrentCatalog());
         ctx.setQueryDetail(queryDetail);
         // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -552,7 +554,7 @@ public class ConnectProcessor {
         packetBuf.get(nullBitmap);
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            
+
             // new_params_bind_flag
             if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
                 // parse params types
