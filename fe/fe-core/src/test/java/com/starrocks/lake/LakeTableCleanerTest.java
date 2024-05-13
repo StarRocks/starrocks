@@ -47,8 +47,13 @@ public class LakeTableCleanerTest {
     @Mocked
     private StarOSAgent starOSAgent;
 
+    @Mocked
+    private WarehouseManager warehouseManager;
+
     public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
+        warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
     }
 
     @Before
