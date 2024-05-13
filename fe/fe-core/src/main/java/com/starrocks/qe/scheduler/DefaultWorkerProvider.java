@@ -91,7 +91,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-                                     boolean preferComputeNode,int numUsedComputeNodes,
+                                     boolean preferComputeNode, int numUsedComputeNodes,
                                      ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                      long warehouseId) {
 
