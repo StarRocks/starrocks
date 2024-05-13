@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -75,9 +76,13 @@ public class PlannerMetaLocker {
         Locker locker = new Locker();
         List<Database> lockedDbs = Lists.newArrayList();
         boolean isLockSuccess = false;
+        long milliTimeout = timeout;
+        if (!unit.equals(TimeUnit.MILLISECONDS)) {
+            milliTimeout = TimeUnit.MILLISECONDS.convert(Duration.of(timeout, unit.toChronoUnit()));
+        }
         try {
             for (Map.Entry<Long, Database> e : dbs.entrySet()) {
-                if (!locker.tryLockDatabase(e.getValue(), LockType.READ, timeout, unit)) {
+                if (!locker.tryLockDatabase(e.getValue(), LockType.READ, milliTimeout)) {
                     return false;
                 }
                 lockedDbs.add(e.getValue());
