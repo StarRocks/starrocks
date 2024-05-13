@@ -414,6 +414,9 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
+    _stats.write_count += 1;
+    _stats.row_count += size;
+    SCOPED_RAW_TIMER(&_stats.write_time_ns);
 
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
@@ -454,6 +457,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     } else if (full) {
         st = flush_memtable_async();
         _reset_mem_table();
+        _stats.memtable_full_count += 1;
     }
     if (!st.ok()) {
         _set_state(kAborted, st);
@@ -498,6 +502,7 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
 
 Status DeltaWriter::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_RAW_TIMER(&_stats.close_time_ns);
     auto state = get_state();
     switch (state) {
     case kUninitialized:
@@ -609,7 +614,10 @@ Status DeltaWriter::_flush_memtable() {
     MonotonicStopWatch watch;
     watch.start();
     Status st = _flush_token->wait();
-    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(watch.elapsed_time() / 1000);
+    auto elapsed_time = watch.elapsed_time();
+    _stats.reach_memory_limit_count += 1;
+    _stats.write_wait_flush_tims_ns += elapsed_time;
+    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(elapsed_time / 1000);
     return st;
 }
 
@@ -703,6 +711,7 @@ Status DeltaWriter::commit() {
         _set_state(kAborted, res.status());
         return res.status();
     }
+    auto rowset_build_ts = watch.elapsed_time();
 
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
@@ -724,6 +733,7 @@ Status DeltaWriter::commit() {
 
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
+    auto commit_txn_ts = watch.elapsed_time();
 
     if (!res.ok()) {
         _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
@@ -743,6 +753,13 @@ Status DeltaWriter::commit() {
         }
     }
     VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+
+    _stats.commit_time_ns += watch.elapsed_time();
+    _stats.commit_wait_flush_time_ns += flush_ts;
+    _stats.commit_rowset_build_time_ns += rowset_build_ts - flush_ts;
+    _stats.commit_finish_pk_time_ns += pk_finish_ts - rowset_build_ts;
+    _stats.commit_wait_replica_time_ns += replica_ts - pk_finish_ts;
+    _stats.commit_txn_commit_time_ns += commit_txn_ts - replica_ts;
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
     StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_finish_ts) / 1000);
     return Status::OK();
