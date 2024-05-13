@@ -90,22 +90,30 @@ public class DataCacheSelectMetricsTest {
         dataCacheSelectMetrics.updateLoadDataCacheMetrics(cn1Id, cn1Metrics);
 
         List<List<String>> rows = dataCacheSelectMetrics.getShowResultSet(false).getResultRows();
-        Assert.assertEquals("SUCCESS,6MB,6GB,20s,50.00%", String.join(",", rows.get(0)));
+        Assert.assertEquals("6MB,6GB,20s,50.00%", String.join(",", rows.get(0)));
         rows = dataCacheSelectMetrics.getShowResultSet(true).getResultRows();
         for (List<String> row : rows) {
             if (row.get(0).equals("127.0.0.2")) {
-                Assert.assertEquals("127.0.0.2,SUCCESS,1MB,1s,1GB,10s,50.00%", String.join(",", row));
+                Assert.assertEquals("127.0.0.2,1MB,1s,1GB,10s,50.00%", String.join(",", row));
             }
             if (row.get(0).equals("127.0.0.3")) {
-                Assert.assertEquals("127.0.0.3,SUCCESS,2MB,2s,2GB,35s,50.00%", String.join(",", row));
+                Assert.assertEquals("127.0.0.3,2MB,2s,2GB,35s,50.00%", String.join(",", row));
             }
             if (row.get(0).equals("127.0.0.4")) {
-                Assert.assertEquals("127.0.0.4,SUCCESS,3MB,3s,3GB,15s,50.00%", String.join(",", row));
+                Assert.assertEquals("127.0.0.4,3MB,3s,3GB,15s,50.00%", String.join(",", row));
             }
         }
 
         Assert.assertEquals(
-                "AlreadyCachedSize: 6MB, AvgReadCacheTime: 2s, WriteCacheSize: 6GB, AvgWriteCacheTime: 20s, " +
-                        "TotalCacheUsage: 50.00%", dataCacheSelectMetrics.toString());
+                "ReadCacheSize: 6MB, AvgReadCacheTime: 2s, WriteCacheSize: 6GB, AvgWriteCacheTime: 20s, " +
+                        "TotalCacheUsage: 50.00%", dataCacheSelectMetrics.debugString(false));
+
+        Assert.assertEquals(
+                "[IP: 127.0.0.3, ReadCacheSize: 2MB, AvgReadCacheTime: 2s, WriteCacheSize: 2GB, " +
+                        "AvgWriteCacheTime: 35s, TotalCacheUsage: 50.00%], [IP: 127.0.0.2, ReadCacheSize: 1MB, " +
+                        "AvgReadCacheTime: 1s, WriteCacheSize: 1GB, AvgWriteCacheTime: 10s, TotalCacheUsage: 50.00%], " +
+                        "[IP: 127.0.0.4, ReadCacheSize: 3MB, AvgReadCacheTime: 3s, WriteCacheSize: 3GB, " +
+                        "AvgWriteCacheTime: 15s, TotalCacheUsage: 50.00%]",
+                dataCacheSelectMetrics.debugString(true));
     }
 }
