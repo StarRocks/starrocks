@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
@@ -202,7 +203,13 @@ public class KafkaUtil {
                     warehouseId = req.kafkaInfo.warehouseId;
                 }
 
-                List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                List<Long> computeNodeIds = null;
+                try {
+                    computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                } catch (ErrorReportException e) {
+                    throw new LoadException(
+                            String.format("Failed to send get kafka partition info request. err: %s", e.getMessage()));
+                }
                 for (long nodeId : computeNodeIds) {
                     ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
                             .getClusterInfo().getBackendOrComputeNode(nodeId);
