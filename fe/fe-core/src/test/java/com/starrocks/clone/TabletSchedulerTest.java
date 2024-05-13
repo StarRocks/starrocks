@@ -33,6 +33,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
@@ -84,6 +85,7 @@ public class TabletSchedulerTest {
     TabletInvertedIndex tabletInvertedIndex;
     TabletSchedulerStat tabletSchedulerStat;
     FakeEditLog fakeEditLog;
+    LockManager lockManager;
 
     @Before
     public void setup() throws Exception {
@@ -91,6 +93,7 @@ public class TabletSchedulerTest {
         tabletInvertedIndex = new TabletInvertedIndex();
         tabletSchedulerStat = new TabletSchedulerStat();
         fakeEditLog = new FakeEditLog();
+        lockManager = new LockManager();
 
         new Expectations() {
             {
@@ -117,6 +120,10 @@ public class TabletSchedulerTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
             }
         };
 
@@ -189,7 +196,7 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
         Partition goodPartition = new Partition(6, "bueno", null, null);
-        Locker locker = new Locker();
+
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
@@ -207,6 +214,7 @@ public class TabletSchedulerTest {
 
         new Thread(() -> {
             for (int i = 0; i < 10; i++) {
+                Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
                     locker.lockDatabase(goodDB, LockType.READ);
