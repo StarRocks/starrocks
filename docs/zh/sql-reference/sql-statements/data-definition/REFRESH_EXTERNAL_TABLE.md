@@ -90,6 +90,13 @@ USE hive_catalog.hive_db;
 REFRESH EXTERNAL TABLE hive_table;
 ```
 
+或
+
+```SQL
+USE hive_catalog.hive_db;
+REFRESH EXTERNAL TABLE hive_table PARTITION ('p1=${date}/p2=${hour}');
+```
+
 示例二：更新缓存的 Hudi 表 `hudi_table` 分区 `p1` 和 `p2` 的元数据。
 
 ```SQL
