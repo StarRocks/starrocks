@@ -603,7 +603,7 @@ Execute the following statement to load the data of `file1.csv` stored in the `i
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_401
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -650,7 +650,7 @@ Execute the following statement to load the data of all data files (`file1.csv` 
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_402
 (
-    DATA INFILE("obs://bucket_minio/input/*")
+    DATA INFILE("s3://bucket_minio/input/*")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -701,12 +701,12 @@ Execute the following statement to load the data of all data files (`file1.csv` 
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_403
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("obs://bucket_minio/input/file2.csv")
+    DATA INFILE("s3://bucket_minio/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
