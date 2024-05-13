@@ -118,13 +118,13 @@ TEST_F(AddNullableColumnTest, test_add_struct) {
     auto column = ColumnHelper::create_column(type_desc, true);
 
     simdjson::ondemand::parser parser;
-    auto json = R"(  { "key1": "foo", "key2": "bar", "key3": "baz" }  )"_padded;
+    auto json = R"(  { "key0": {"key1": "foo", "key2": "bar", "key3": "baz" }}  )"_padded;
     auto doc = parser.iterate(json);
-    simdjson::ondemand::value val = doc.get_value();
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
 
     ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
 
-    ASSERT_EQ("{key1:'foo',key2:'bar'}", column->debug_string());
+    ASSERT_EQ("[{key1:'foo',key2:'bar'}]", column->debug_string());
 }
 
 TEST_F(AddNullableColumnTest, test_add_map) {
@@ -134,12 +134,12 @@ TEST_F(AddNullableColumnTest, test_add_map) {
     auto column = ColumnHelper::create_column(type_desc, true);
 
     simdjson::ondemand::parser parser;
-    auto json = R"(  { "key1": "foo", "key2": "bar", "key3": "baz" }  )"_padded;
+    auto json = R"(  { "key0": {"key1": "foo", "key2": "bar", "key3": "baz" }}  )"_padded;
     auto doc = parser.iterate(json);
-    simdjson::ondemand::value val = doc.get_value();
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
 
     ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
 
-    ASSERT_EQ("{'key1':'foo','key2':'bar','key3':'baz'}", column->debug_string());
+    ASSERT_EQ("[{'key1':'foo','key2':'bar','key3':'baz'}]", column->debug_string());
 }
 } // namespace starrocks

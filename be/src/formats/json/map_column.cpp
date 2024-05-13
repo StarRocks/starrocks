@@ -36,7 +36,7 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
                 auto dummy_json = simdjson::padded_string(R"({"dummy_key": ")" + std::string(field_name_str) + R"("})");
                 simdjson::ondemand::document doc = parser.iterate(dummy_json);
                 simdjson::ondemand::object obj = doc.get_object();
-                simdjson::ondemand::value field_key = obj.find_field("dummy_key").value();
+                simdjson::ondemand::value field_key = obj.find_field("dummy_key");
 
                 RETURN_IF_ERROR(add_nullable_column(map_column->keys_column().get(), type_desc.children[0], name,
                                                     &field_key, true));
