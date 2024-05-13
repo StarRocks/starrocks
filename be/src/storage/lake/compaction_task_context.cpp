@@ -27,7 +27,7 @@ static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
 void CompactionTaskStats::accumulate(const OlapReaderStatistics& reader_stats) {
     io_ns += reader_stats.io_ns;
     io_ns_remote += reader_stats.io_ns_remote;
-    io_ns_local_disk += reader_stats.io_ns_local_disk;
+    io_ns_local_disk += reader_stats.io_ns_read_local_disk;
     segment_init_ns += reader_stats.segment_init_ns;
     column_iterator_init_ns += reader_stats.column_iterator_init_ns;
     io_count_local_disk += reader_stats.io_count_local_disk;

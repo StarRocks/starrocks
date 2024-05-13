@@ -329,34 +329,7 @@ public:
         _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
     }
 
-    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
-        if (!_query_options.__isset.catalog) {
-            return;
-        }
-
-        TLoadDataCacheMetrics metrics{};
-        metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
-        metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
-        metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
-        metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
-        metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
-
-        if (_query_options.catalog == "default_catalog") {
-#ifdef USE_STAROS
-            if (config::starlet_use_star_cache) {
-                // support this later
-            }
-#endif
-        } else {
-            if (config::datacache_enable) {
-                const BlockCache* cache = BlockCache::instance();
-                TDataCacheMetrics t_metrics{};
-                DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
-                metrics.__set_metrics(t_metrics);
-                load_params->__set_load_datacache_metrics(metrics);
-            }
-        }
-    }
+    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const;
 
     std::atomic_int64_t* mutable_total_spill_bytes();
 

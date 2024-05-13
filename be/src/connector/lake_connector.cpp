@@ -583,13 +583,23 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_io_count_total_counter, _reader->stats().io_count);
     COUNTER_UPDATE(_io_count_request_counter, _reader->stats().io_count_request);
 
-    COUNTER_UPDATE(_io_ns_local_disk_timer, _reader->stats().io_ns_local_disk);
+    COUNTER_UPDATE(_io_ns_local_disk_timer, _reader->stats().io_ns_read_local_disk);
     COUNTER_UPDATE(_io_ns_remote_timer, _reader->stats().io_ns_remote);
     COUNTER_UPDATE(_io_ns_total_timer, _reader->stats().io_ns);
 
     COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, _reader->stats().prefetch_pending_ns);
+
+    // update cache related info for CACHE SELECT
+    if (_runtime_state->query_options().__isset.query_type &&
+        _runtime_state->query_options().query_type == TQueryType::LOAD) {
+        _runtime_state->update_num_datacache_read_bytes(_reader->stats().compressed_bytes_read_local_disk);
+        _runtime_state->update_num_datacache_read_time_ns(_reader->stats().io_ns_read_local_disk);
+        _runtime_state->update_num_datacache_write_bytes(_reader->stats().compressed_bytes_write_local_disk);
+        _runtime_state->update_num_datacache_write_time_ns(_reader->stats().io_ns_write_local_disk);
+        _runtime_state->update_num_datacache_count(1);
+    }
 }
 
 // ================================

@@ -63,7 +63,7 @@ TEST_F(CompactionTaskContextTest, test_accumulate) {
     OlapReaderStatistics reader_stats;
     reader_stats.io_ns = 100;
     reader_stats.io_ns_remote = 200;
-    reader_stats.io_ns_local_disk = 300;
+    reader_stats.io_ns_read_local_disk = 300;
     reader_stats.segment_init_ns = 400;
     reader_stats.column_iterator_init_ns = 500;
     reader_stats.io_count_local_disk = 600;
