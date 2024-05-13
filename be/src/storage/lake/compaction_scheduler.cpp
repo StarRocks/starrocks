@@ -115,16 +115,30 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
-    auto idx = choose_task_queue_by_txn_id(request->txn_id());
     auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
+<<<<<<< HEAD
+=======
+    bool is_checker = true; // make the first tablet as checker
+    int idx = 0;
+    std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
+>>>>>>> 0b9bef328d ([BugFix] fix cloud table compaction task concurrency issue (#45289))
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
         {
             std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
         }
+<<<<<<< HEAD
         _task_queues.put(idx, context);
+=======
+        contexts_vec.push_back(std::move(context));
+        // DO NOT touch `context` from here!
+        is_checker = false;
+        idx++;
+>>>>>>> 0b9bef328d ([BugFix] fix cloud table compaction task concurrency issue (#45289))
     }
+    _task_queues.put_by_txn_id(request->txn_id(), contexts_vec);
+    // DO NOT touch `contexts_vec` from here!
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
 }
 
@@ -254,9 +268,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
                      << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
-        auto idx = choose_task_queue_by_txn_id(context->txn_id);
         // re-schedule the compaction task
-        _task_queues.put(idx, context);
+        _task_queues.put_by_txn_id(context->txn_id, context);
     } else {
         VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
                                 << " cost=" << cost << "s";
@@ -312,8 +325,7 @@ bool CompactionScheduler::reschedule_task_if_needed(int id) {
     if (id >= _task_queues.target_size()) {
         CompactionContextPtr context;
         while (_task_queues.try_get(id, &context)) {
-            auto idx = choose_task_queue_by_txn_id(context->txn_id);
-            _task_queues.put(idx, context);
+            _task_queues.put_by_txn_id(context->txn_id, context);
         }
 
         _task_queues.resize_if_needed(_limiter);
