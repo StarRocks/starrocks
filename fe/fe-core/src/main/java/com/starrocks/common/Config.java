@@ -2484,9 +2484,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
-    @ConfField(mutable = true)
-    public static String lake_compaction_warehouse = "default_warehouse";
-
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
