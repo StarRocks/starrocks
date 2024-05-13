@@ -15,9 +15,11 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
@@ -95,12 +97,16 @@ public class TaskRunSchedulerTest {
         }
         Assert.assertTrue(scheduler.getPendingTaskRuns().size() == N);
 
-        Queue<TaskRun> queue = scheduler.getPendingTaskRuns();
+        List<TaskRun> queue = Lists.newArrayList(scheduler.getPendingTaskRuns());
         Assert.assertEquals(N, queue.size());
 
+        List<TaskRun> pendingTaskRuns = Lists.newArrayList(scheduler.getPendingTaskRuns());
         for (int i = 0; i < N; i++) {
-            TaskRun taskRun = queue.poll();
-            Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - i)));
+            int j = i;
+            scheduler.scheduledPendingTaskRun(taskRun -> {
+                Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - j)));
+                Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(j)));
+            });
         }
     }
 
@@ -163,7 +169,7 @@ public class TaskRunSchedulerTest {
         for (int i = 0; i < 10; i++) {
             TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false, 1), i);
             taskRuns.add(taskRun);
-            scheduler.addPendingTaskRun(taskRun);
+            Assert.assertTrue(scheduler.addPendingTaskRun(taskRun));
         }
 
         Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, 1));
@@ -178,29 +184,53 @@ public class TaskRunSchedulerTest {
         for (int i = 0; i < 1; i++) {
             Assert.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
         }
+        List<TaskRun> pendingTaskRuns = Lists.newArrayList(scheduler.getPendingTaskRuns());
         for (int i = 1; i < 10; i++) {
-            Assert.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
+            int j = i;
+            scheduler.scheduledPendingTaskRun(taskRun -> {
+                Assert.assertTrue(taskRun.equals(taskRuns.get(j)));
+                Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(j - 1)));
+            });
         }
     }
 
     @Test
     public void testScheduledToString() {
-        Task task = new Task("test");
-        task.setDefinition("select 1");
-        List<TaskRun> taskRuns = Lists.newArrayList();
-        TaskRunScheduler scheduler = new TaskRunScheduler();
-        for (int i = 0; i < 10; i++) {
-            TaskRun taskRun = makeTaskRun(i, task, makeExecuteOption(true, false, 1), i);
-            taskRuns.add(taskRun);
-            scheduler.addPendingTaskRun(taskRun);
+        String str = null;
+        {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            List<TaskRun> taskRuns = Lists.newArrayList();
+            TaskRunScheduler scheduler = new TaskRunScheduler();
+            for (int i = 0; i < 10; i++) {
+                TaskRun taskRun = makeTaskRun(i, task, makeExecuteOption(true, false, 1), i);
+                taskRuns.add(taskRun);
+                scheduler.addPendingTaskRun(taskRun);
+            }
+            Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, Config.task_runs_concurrency));
+            scheduler.scheduledPendingTaskRun(taskRun -> {
+                Assert.assertTrue(runningTaskRuns.contains(taskRun));
+            });
+            str = scheduler.toString();
         }
-        Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, Config.task_runs_concurrency));
-        scheduler.scheduledPendingTaskRun(taskRun -> {
-            Assert.assertTrue(runningTaskRuns.contains(taskRun));
-        });
-        System.out.println(scheduler);
-        Assert.assertTrue(scheduler.toString().equals("{\"running\":\"{\\\"0\\\":{},\\\"1\\\":{},\\\"2\\\":{},\\\"3\\\":{}}\"," +
-                "\"pending_map\":\"{\\\"4\\\":[{}],\\\"5\\\":[{}],\\\"6\\\":[{}],\\\"7\\\":[{}],\\\"8\\\":[{}]," +
-                "\\\"9\\\":[{}]}\",\"pending_queue\":\"[{},{},{},{},{},{}]\"}"));
+
+        // test json result
+        {
+            TaskRunScheduler scheduler = GsonUtils.GSON.fromJson(str, TaskRunScheduler.class);
+            Assert.assertTrue(scheduler.getRunningTaskRunMap().size() == Config.task_runs_concurrency);
+            Assert.assertTrue(scheduler.getPendingQueueCount() == 6);
+
+            Set<Long> expPendingTaskIds = ImmutableSet.of(4L, 5L, 6L, 7L, 8L, 9L);
+            for (TaskRun taskRun : scheduler.getPendingTaskRuns()) {
+                Assert.assertTrue(taskRun != null);
+                Assert.assertTrue(expPendingTaskIds.contains(taskRun.getTaskId()));
+            }
+
+            Set<Long> expRunningTaskIds = ImmutableSet.of(0L, 1L, 2L, 3L);
+            for (TaskRun taskRun : scheduler.getRunningTaskRunMap().values()) {
+                Assert.assertTrue(taskRun != null);
+                Assert.assertTrue(expRunningTaskIds.contains(taskRun.getTaskId()));
+            }
+        }
     }
 }

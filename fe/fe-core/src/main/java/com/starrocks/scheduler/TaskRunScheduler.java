@@ -15,7 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
-import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
@@ -38,12 +38,15 @@ public class TaskRunScheduler {
     // TODO: Refactor this to find a better way to store the task runs.
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
+    @SerializedName("pendingTaskRunMap")
     private final Map<Long, Queue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
     // pending TaskRun Queue, compared by priority and created time
+    @SerializedName("pendingTaskRunQueue")
     private final PriorityBlockingQueue<TaskRun> pendingTaskRunQueue = new PriorityBlockingQueue<>();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
+    @SerializedName("runningTaskRunMap")
     private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
 
     /**
@@ -192,10 +195,6 @@ public class TaskRunScheduler {
 
     @Override
     public String toString() {
-        JsonObject res = new JsonObject();
-        res.addProperty("running", GsonUtils.GSON.toJson(runningTaskRunMap));
-        res.addProperty("pending_map", GsonUtils.GSON.toJson(pendingTaskRunMap));
-        res.addProperty("pending_queue", GsonUtils.GSON.toJson(pendingTaskRunQueue));
-        return res.toString();
+        return GsonUtils.GSON.toJson(this);
     }
 }
