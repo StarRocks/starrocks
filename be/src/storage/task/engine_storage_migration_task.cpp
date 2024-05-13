@@ -57,6 +57,12 @@ Status EngineStorageMigrationTask::execute() {
         return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
     }
 
+    if (tablet->tablet_state() == TABLET_NOTREADY) {
+        LOG(WARNING) << "storage migrate failed, tablet is in schemachange process. tablet_id=" << _tablet_id;
+        return Status::InternalError(
+                fmt::format("storage migrate failed, tablet is in schemachange process. tablet_id: {}", _tablet_id));
+    }
+
     // check tablet data dir
     if (tablet->data_dir() == _dest_store) {
         LOG(INFO) << "Already existed path. tablet_id=" << _tablet_id << ", dest_store=" << _dest_store->path();
