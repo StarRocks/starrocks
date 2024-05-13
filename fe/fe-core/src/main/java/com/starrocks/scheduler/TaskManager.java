@@ -592,8 +592,6 @@ public class TaskManager implements MemoryTrackable {
             taskRunManager.getTaskRunHistory().forceGC();
             data.runStatus = showTaskRunStatus(null);
             String s = GsonUtils.GSON.toJson(data);
-            LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
             Text.writeString(dos, s);
         } else {
             String s = GsonUtils.GSON.toJson(data);
@@ -605,6 +603,7 @@ public class TaskManager implements MemoryTrackable {
     public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         taskRunManager.getTaskRunHistory().forceGC();
         List<TaskRunStatus> runStatusList = showTaskRunStatus(null);
+        LOG.info("saveTasksV2, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
                 2 + nameToTaskMap.size() + runStatusList.size());
         writer.writeJson(nameToTaskMap.size());
@@ -899,6 +898,9 @@ public class TaskManager implements MemoryTrackable {
                     iterator.remove();
                 }
             }
+
+            // trigger to force gc to avoid too many history task runs.
+            taskRunManager.getTaskRunHistory().forceGC();
         } finally {
             taskRunManager.taskRunUnlock();
         }
