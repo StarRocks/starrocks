@@ -1745,7 +1745,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             return null;
         }
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
-        //OptExpression mvScanOptExpression = buildMVScanOptExpression(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
         // return directly if it is not transparent rewrite
         boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
         OptExpression mvScanOptExpression = isTransparentRewrite ?
