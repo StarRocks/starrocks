@@ -42,8 +42,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
-import org.apache.commons.lang3.StringUtils;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -52,8 +52,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class KeysDesc implements ParseNode, Writable {
     private KeysType type;
@@ -79,6 +77,10 @@ public class KeysDesc implements ParseNode, Writable {
 
     public KeysType getKeysType() {
         return type;
+    }
+
+    public List<String> getKeysColumnNames() {
+        return keysColumnNames;
     }
 
     public int keysColumnSize() {
