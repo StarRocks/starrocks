@@ -11,7 +11,7 @@ properties
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
-set materialized_view_union_rewrite_mode = 3;
+set enable_materialized_view_transparent_union_rewrite = true;
 -- result:
 -- !result
 set catalog mv_hive_${uuid0};

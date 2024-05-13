@@ -545,11 +545,15 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " where a.id_date>='1991-03-30' " +
                     " group by a.t1a,a.id_date;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "     TABLE: table_with_day_partition\n" +
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=4/4\n" +
-                    "     rollup: table_with_day_partition\n" +
-                    "     tabletRatio=12/12");
+                    "     PREDICATES: 23: id_date >= '1991-03-30'\n" +
+                    "     partitions=1/1");
+            PlanTestBase.assertContains(plan, "4:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 27: id_date >= '1991-03-30'\n" +
+                    "     partitions=3/4");
         }
 
         {
@@ -559,10 +563,16 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
                     " group by a.t1a,a.id_date;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
-                    "     TABLE: table_with_day_partition\n" +
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=4/4");
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1\n" +
+                    "     tabletRatio=4/4");
+            PlanTestBase.assertContains(plan, "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=3/4\n" +
+                    "     rollup: table_with_day_partition\n" +
+                    "     tabletRatio=9/9");
         }
     }
 
@@ -654,6 +664,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testMVPartitionWithCompensate() {
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
         List<PartitionCompensateParam> params = ImmutableList.of(
                 // partition: date_trunc expr
                 new PartitionCompensateParam("date_trunc('day', id_date)",
@@ -700,6 +711,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             System.out.println("start to execute: " + param);
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
     }
 
     @Test
