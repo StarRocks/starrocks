@@ -94,6 +94,7 @@ struct JoinKeyDesc {
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
     bool need_output;
+    bool need_lazy_materialize = false;
 };
 
 struct JoinHashTableItems {
@@ -117,8 +118,10 @@ struct JoinHashTableItems {
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
     size_t output_build_column_count = 0;
+    size_t lazy_output_build_column_count = 0;
     size_t probe_column_count = 0;
     size_t output_probe_column_count = 0;
+    size_t lazy_output_probe_column_count = 0;
     bool with_other_conjunct = false;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
@@ -127,6 +130,7 @@ struct JoinHashTableItems {
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
     bool mor_reader_mode = false;
+    bool enable_lazy_materialize = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -260,8 +264,8 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
+    bool enable_lazy_materialize = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
-    const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
     std::set<SlotId> build_output_slots;
@@ -766,10 +770,16 @@ public:
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     float get_keys_per_bucket() const;
     void remove_duplicate_index(Filter* filter);
+    JoinHashTableItems* table_items() const { return _table_items.get(); }
 
     int64_t mem_usage() const;
 
 private:
+    void _init_probe_column(const HashTableParam& param);
+    void _init_build_column(const HashTableParam& param);
+    void _init_mor_reader();
+    void _init_join_keys();
+
     JoinHashMapType _choose_join_hash_map();
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
 
