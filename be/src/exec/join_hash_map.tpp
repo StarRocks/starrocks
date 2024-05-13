@@ -467,7 +467,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
                 return;
             }
 
-            if (_table_items->with_other_conjunct) {
+            if (!_table_items->with_other_conjunct) {
+                // When the project doesn't require any cols from join, FE will select the first col in the build table
+                // of join as the output col for simple, wo we also need output build column here
+                _build_default_output(chunk, _probe_state->count);
+            } else {
                 _build_output(chunk);
             }
         }
@@ -549,6 +553,19 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
             } else {
                 _copy_build_nullable_column(column, chunk, slot);
             }
+        }
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_default_output(ChunkPtr* chunk, size_t count) {
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        auto hash_tablet_slot = _table_items->build_slots[i];
+        SlotDescriptor* slot = hash_tablet_slot.slot;
+        if (hash_tablet_slot.need_output) {
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            column->append_nulls(count);
+            (*chunk)->append_column(std::move(column), slot->id());
         }
     }
 }
@@ -673,11 +690,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
             _probe_state->has_remain = false;
             return;
         }
-        _probe_state->cur_probe_index = 0;
+        _probe_state->cur_build_index = 0;
     }
 
     size_t match_count = 0;
-    size_t i = _probe_state->cur_probe_index;
+    size_t i = _probe_state->cur_build_index;
     for (; i < _probe_state->build_match_index.size(); i++) {
         if (_probe_state->build_match_index[i] == 0) {
             _probe_state->build_index[match_count] = i;
@@ -686,7 +703,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
 
             if (match_count >= state->chunk_size()) {
                 i++;
-                _probe_state->cur_probe_index = i;
+                _probe_state->cur_build_index = i;
                 _probe_state->has_remain = i < _probe_state->build_match_index.size();
                 _probe_state->count = match_count;
                 return;
@@ -694,7 +711,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
         }
     }
 
-    _probe_state->cur_probe_index = i;
+    _probe_state->cur_build_index = i;
     _probe_state->has_remain = false;
     _probe_state->count = match_count;
 }
@@ -871,6 +888,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
 #define PROBE_OVER()                   \
     _probe_state->has_remain = false;  \
     _probe_state->cur_probe_index = 0; \
+    _probe_state->cur_build_index = 0; \
     _probe_state->count = match_count; \
     _probe_state->cur_row_match_count = 0;
 
