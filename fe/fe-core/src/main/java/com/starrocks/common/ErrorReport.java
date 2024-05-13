@@ -116,6 +116,11 @@ public class ErrorReport {
         throw new BeginTransactionException(reportCommon(null, errorCode, objs));
     }
 
+    public static void reportUserException(ErrorCode errorCode, Object... objs)
+            throws UserException {
+        throw new UserException(reportCommon(null, errorCode, objs));
+    }
+
     public interface DdlExecutor {
         void apply() throws UserException;
     }
