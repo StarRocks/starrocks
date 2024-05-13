@@ -230,7 +230,7 @@ public class TestLockInterface {
         {
             new MockUp<Locker>() {
                 @Mock
-                public boolean tryLockDatabase(Database database, LockType lockType, long timeout, TimeUnit unit) {
+                public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
                     if (database.getFullName().equalsIgnoreCase("db5")) {
                         return false;
                     }
