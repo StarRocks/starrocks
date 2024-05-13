@@ -66,7 +66,6 @@ public class UserPropertyTest {
             }
         }
 
-        properties.get(0).second = "1025";
         properties.get(0).second = "4097";
         Assert.assertThrows(
                 "max_user_connections is not valid, must less than qe_max_connection " + Config.qe_max_connection,
