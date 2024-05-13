@@ -77,6 +77,8 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
+import org.apache.iceberg.relocated.com.google.common.primitives.Ints;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -151,6 +153,7 @@ public class IcebergScanNode extends ScanNode {
         super.init(analyzer);
         getAliveBackends();
     }
+
 
     private void getAliveBackends() throws UserException {
         ImmutableCollection<ComputeNode> computeNodes =
@@ -385,6 +388,11 @@ public class IcebergScanNode extends ScanNode {
 
             result.add(scanRangeLocations);
         }
+
+        if (!currentEqualityIds.isEmpty()) {
+            icebergTable.setIdentifierIds(ImmutableSet.copyOf(currentEqualityIds));
+        }
+
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
     }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -21,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -62,6 +62,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -95,6 +96,7 @@ public class IcebergTable extends Table {
 
     private Optional<Snapshot> snapshot = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
+    private Set<Integer> identifierIds = Sets.newHashSet();
 
     // used for recording the last snapshot time when refresh mv based on mv.
     private long refreshSnapshotTime = -1L;
@@ -144,6 +146,18 @@ public class IcebergTable extends Table {
             snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
             return snapshot;
         }
+    }
+
+    public long getRefreshSnapshotTime() {
+        return refreshSnapshotTime;
+    }
+
+    public void setRefreshSnapshotTime(long refreshSnapshotTime) {
+        this.refreshSnapshotTime = refreshSnapshotTime;
+    }
+
+    public Set<Integer> getIdentifierIds() {
+        return identifierIds;
     }
 
     public long getCachedSnapshotId() {
@@ -197,6 +211,10 @@ public class IcebergTable extends Table {
     public List<Integer> partitionColumnIndexes() {
         List<Column> partitionCols = getPartitionColumns();
         return partitionCols.stream().map(col -> fullSchema.indexOf(col)).collect(Collectors.toList());
+    }
+
+    public void setIdentifierIds(Set<Integer> identifierIds) {
+        this.identifierIds = identifierIds;
     }
 
     public List<Integer> getSortKeyIndexes() {
@@ -254,13 +272,7 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
-    public long getRefreshSnapshotTime() {
-        return refreshSnapshotTime;
-    }
 
-    public void setRefreshSnapshotTime(long refreshSnapshotTime) {
-        this.refreshSnapshotTime = refreshSnapshotTime;
-    }
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
@@ -277,12 +289,18 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
-        if (nativeTable.schema().identifierFieldIds().size() > 0) {
-            tIcebergTable.setIceberg_equal_delete_schema(IcebergApiConverter.getTIcebergSchema(
-                    new Schema(nativeTable.schema().identifierFieldIds().stream()
-                            .map(id -> nativeTable.schema().findField(id)).collect(Collectors.toList()))));
+        Set<Integer> toBeIdentifierIds;
+        if (!getIdentifierIds().isEmpty()) {
+            toBeIdentifierIds = getIdentifierIds();
+        } else {
+            toBeIdentifierIds = nativeTable.schema().identifierFieldIds();
         }
 
+        if (!toBeIdentifierIds.isEmpty()) {
+            tIcebergTable.setIceberg_equal_delete_schema(IcebergApiConverter.getTIcebergSchema(
+                    new Schema(toBeIdentifierIds.stream()
+                            .map(id -> nativeTable.schema().findField(id)).collect(Collectors.toList()))));
+        }
 
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();
