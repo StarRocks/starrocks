@@ -142,6 +142,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+        config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
         return new HikariDataSource(config);
     }
 
