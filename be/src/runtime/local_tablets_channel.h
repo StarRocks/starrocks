@@ -181,6 +181,10 @@ private:
 
     void _flush_stale_memtables();
 
+    void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
@@ -226,12 +230,6 @@ private:
     std::set<int64_t> _immutable_partition_ids;
 
     // Profile counters
-    // replicated_storage=false, the number of tablets
-    // replicated_storage=true, the number of primary tablets
-    RuntimeProfile::Counter* _primary_tablets_num = nullptr;
-    // Only available for replicated_storage=true, the number of
-    // secondary tablets
-    RuntimeProfile::Counter* _secondary_tablets_num = nullptr;
     // Number of times that open() is called
     RuntimeProfile::Counter* _open_counter = nullptr;
     // Accumulated time of open()
@@ -250,6 +248,9 @@ private:
     RuntimeProfile::Counter* _wait_replica_timer = nullptr;
     // Accumulated time to wait for txn persist in add_chunk()
     RuntimeProfile::Counter* _wait_txn_persist_timer = nullptr;
+
+    std::atomic<bool> _is_updating_profile{false};
+    std::unique_ptr<RuntimeProfile> _tablets_profile;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

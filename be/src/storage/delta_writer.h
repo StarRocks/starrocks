@@ -83,7 +83,7 @@ struct DeltaWriterStat {
     int32_t task_count = 0;
     int64_t pending_time_ns = 0;
 
-    // ====== statistics for write operation
+    // ====== statistics for write()
 
     // The number of write()
     int32_t write_count = 0;
@@ -95,16 +95,26 @@ struct DeltaWriterStat {
     int32_t memtable_full_count = 0;
     // The number that reach memory limit, and each will
     // trigger memtable flush, and wait for it to finish
-    int32_t reach_memory_limit_count = 0;
+    int32_t memory_excedd_count = 0;
     // Accumulated time to wait for flush because of reaching memory limit
     int64_t write_wait_flush_tims_ns = 0;
 
-    // ====== statistics for commit operation
+    // ====== statistics for add_segment()
+
+    // The number of add_segment()
+    int32_t add_segment_count = 0;
+    // Accumulated time for add_segment()
+    int32_t add_segment_time_ns = 0;
+    // Accumulated io time for add_segment()
+    int64_t add_segment_io_time_ns = 0;
+    int64_t add_segment_data_size = 0;
+
+    // ====== statistics for close()
 
     // Time for close()
     int64_t close_time_ns = 0;
 
-    // ====== statistics for commit operation
+    // ====== statistics for commit()
 
     // Time for commit()
     int64_t commit_time_ns = 0;

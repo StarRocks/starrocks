@@ -490,13 +490,20 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
         RETURN_IF_ERROR(_rowset_writer->flush_segment(segment_pb, data));
     }
     auto io_stat = scope.current_scoped_tls_io();
+    auto io_time_ns = io_stat.write_time_ns + io_stat.sync_time_ns;
+
+    _stats.add_segment_count += 1;
+    _stats.row_count += segment_pb.num_rows();
+    _stats.add_segment_data_size += segment_pb.data_size();
+    _stats.add_segment_time_ns += duration_ns;
+    _stats.add_segment_io_time_ns += io_time_ns;
+
     StarRocksMetrics::instance()->segment_flush_total.increment(1);
     StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
-    auto io_time_us = (io_stat.write_time_ns + io_stat.sync_time_ns) / 1000;
-    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_us);
+    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_ns / 1000);
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
     VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
-            << ", duration: " << duration_ns / 1000 << "us, io_time: " << io_time_us << "us";
+            << ", duration: " << duration_ns / 1000 << "us, io_time: " << (io_time_us / 1000) << "us";
     return Status::OK();
 }
 
@@ -615,7 +622,7 @@ Status DeltaWriter::_flush_memtable() {
     watch.start();
     Status st = _flush_token->wait();
     auto elapsed_time = watch.elapsed_time();
-    _stats.reach_memory_limit_count += 1;
+    _stats.memory_excedd_count += 1;
     _stats.write_wait_flush_tims_ns += elapsed_time;
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(elapsed_time / 1000);
     return st;
