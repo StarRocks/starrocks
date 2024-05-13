@@ -575,7 +575,6 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
     ASSERT_TRUE(tablet != nullptr);
     ASSERT_EQ(tablet->tablet_id(), empty_tablet_id);
     DataDir* source_path = tablet->data_dir();
-    tablet.reset();
     DataDir* dest_path = nullptr;
     DataDir* data_dir_1 = starrocks::StorageEngine::instance()->get_stores()[0];
     DataDir* data_dir_2 = starrocks::StorageEngine::instance()->get_stores()[1];
@@ -584,6 +583,11 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
     } else {
         dest_path = data_dir_1;
     }
+    tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+    EngineStorageMigrationTask migration_task_not_ready(empty_tablet_id, empty_schema_hash, dest_path);
+    ASSERT_ERROR(migration_task_not_ready.execute());
+    tablet->set_tablet_state(TabletState::TABLET_RUNNING);
+    tablet.reset();
     EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path);
     ASSERT_OK(migration_task.execute());
 }
