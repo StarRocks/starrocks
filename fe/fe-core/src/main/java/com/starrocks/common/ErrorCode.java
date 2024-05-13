@@ -304,6 +304,7 @@ public enum ErrorCode {
     ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
             "Inserted target column count: %d doesn't match select/value column count: %d"),
 
+    ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     /**
      * 10000 - 10099: warehouse
      */
