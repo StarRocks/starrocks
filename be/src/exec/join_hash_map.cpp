@@ -323,6 +323,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->mor_reader_mode = param.mor_reader_mode;
+    _table_items->enable_lazy_materialize = param.enable_lazy_materialize;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN) {
@@ -338,41 +339,123 @@ void JoinHashTable::create(const HashTableParam& param) {
     }
     _table_items->join_keys = param.join_keys;
 
+    _init_probe_column(param);
+    _init_build_column(param);
+
+    if (param.mor_reader_mode) {
+        _init_mor_reader();
+    }
+
+    _init_join_keys();
+}
+
+void JoinHashTable::_init_probe_column(const HashTableParam& param) {
     const auto& probe_desc = *param.probe_row_desc;
     for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (param.probe_output_slots.empty() ||
-                std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
-                        param.probe_output_slots.end() ||
-                std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
-                        param.predicate_slots.end()) {
-                hash_table_slot.need_output = true;
-                _table_items->output_probe_column_count++;
+
+            if (param.enable_lazy_materialize) {
+                if (param.probe_output_slots.empty()) {
+                    // Empty means need output all
+                    hash_table_slot.need_output = true;
+                    hash_table_slot.need_lazy_materialize = false;
+                    _table_items->output_probe_column_count++;
+                } else if (std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
+                           param.probe_output_slots.end()) {
+                    if (param.predicate_slots.empty() ||
+                        // Empty means no other predicate, so need output all
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_probe_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = true;
+                        _table_items->lazy_output_probe_column_count++;
+                    }
+                } else {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_probe_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = false;
+                    }
+                }
             } else {
-                hash_table_slot.need_output = false;
+                if (param.probe_output_slots.empty() ||
+                    std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
+                            param.probe_output_slots.end() ||
+                    std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                            param.predicate_slots.end()) {
+                    hash_table_slot.need_output = true;
+                    _table_items->output_probe_column_count++;
+                } else {
+                    hash_table_slot.need_output = false;
+                }
             }
 
             _table_items->probe_slots.emplace_back(hash_table_slot);
             _table_items->probe_column_count++;
         }
     }
+}
 
+void JoinHashTable::_init_build_column(const HashTableParam& param) {
     const auto& build_desc = *param.build_row_desc;
     for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (!param.mor_reader_mode && (param.build_output_slots.empty() ||
-                                           std::find(param.build_output_slots.begin(), param.build_output_slots.end(),
-                                                     slot->id()) != param.build_output_slots.end() ||
-                                           std::find(param.predicate_slots.begin(), param.predicate_slots.end(),
-                                                     slot->id()) != param.predicate_slots.end())) {
-                hash_table_slot.need_output = true;
-                _table_items->output_build_column_count++;
+
+            if (!param.mor_reader_mode && param.enable_lazy_materialize) {
+                if (param.build_output_slots.empty()) {
+                    hash_table_slot.need_output = true;
+                    hash_table_slot.need_lazy_materialize = false;
+                    _table_items->output_build_column_count++;
+                } else if (std::find(param.build_output_slots.begin(), param.build_output_slots.end(), slot->id()) !=
+                           param.build_output_slots.end()) {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_build_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = true;
+                        _table_items->lazy_output_build_column_count++;
+                    }
+                } else {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_build_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = false;
+                    }
+                }
             } else {
-                hash_table_slot.need_output = false;
+                if (!param.mor_reader_mode &&
+                    (param.build_output_slots.empty() ||
+                     std::find(param.build_output_slots.begin(), param.build_output_slots.end(), slot->id()) !=
+                             param.build_output_slots.end() ||
+                     std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                             param.predicate_slots.end())) {
+                    hash_table_slot.need_output = true;
+                    _table_items->output_build_column_count++;
+                } else {
+                    hash_table_slot.need_output = false;
+                }
             }
 
             _table_items->build_slots.emplace_back(hash_table_slot);
@@ -387,28 +470,30 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->build_column_count++;
         }
     }
+}
 
-    if (param.mor_reader_mode) {
-        for (const auto& build_slot : _table_items->build_slots) {
-            bool found_build_slot = false;
-            for (auto probe_slot : _table_items->probe_slots) {
-                if (probe_slot.slot->id() == build_slot.slot->id()) {
-                    found_build_slot = true;
-                    break;
-                }
-            }
-
-            if (!found_build_slot) {
-                HashTableSlotDescriptor hash_table_slot;
-                hash_table_slot.slot = build_slot.slot;
-                hash_table_slot.need_output = true;
-
-                _table_items->probe_slots.emplace_back(hash_table_slot);
-                _table_items->probe_column_count++;
+void JoinHashTable::_init_mor_reader() {
+    for (const auto& build_slot : _table_items->build_slots) {
+        bool found_build_slot = false;
+        for (auto probe_slot : _table_items->probe_slots) {
+            if (probe_slot.slot->id() == build_slot.slot->id()) {
+                found_build_slot = true;
+                break;
             }
         }
-    }
 
+        if (!found_build_slot) {
+            HashTableSlotDescriptor hash_table_slot;
+            hash_table_slot.slot = build_slot.slot;
+            hash_table_slot.need_output = true;
+
+            _table_items->probe_slots.emplace_back(hash_table_slot);
+            _table_items->probe_column_count++;
+        }
+    }
+}
+
+void JoinHashTable::_init_join_keys() {
     for (const auto& key_desc : _table_items->join_keys) {
         if (key_desc.col_ref) {
             _table_items->key_columns.emplace_back(nullptr);
