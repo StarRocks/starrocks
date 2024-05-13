@@ -217,11 +217,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // collect partition infos of ref base tables
         int retryNum = 0;
         boolean checked = false;
-
-        Map<Table, Set<String>> refTableRefreshPartitions = null;
-        Set<String> mvToRefreshedPartitions = null;
-        Map<String, Set<String>> refTablePartitionNames = null;
-        long startRefreshTs = System.currentTimeMillis();
         while (!checked && retryNum++ < Config.max_mv_check_base_table_change_retry_times) {
             // refresh external table meta cache before sync partitions
             refreshExternalTable(context);
@@ -233,7 +228,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         materializedView.getName(), retryNum);
                 continue;
             }
+            checked = true;
             mvEntity.increaseRefreshRetryMetaCount((long) retryNum);
+            break;
         }
         LOG.info("materialized view {} after checking partitions change {} times: {}", materializedView.getName(),
                 retryNum, checked);
