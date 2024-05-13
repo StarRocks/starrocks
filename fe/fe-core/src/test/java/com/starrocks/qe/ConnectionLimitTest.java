@@ -15,9 +15,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
