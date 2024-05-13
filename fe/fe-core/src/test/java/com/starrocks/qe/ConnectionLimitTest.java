@@ -15,7 +15,9 @@
 package com.starrocks.qe;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
@@ -103,7 +105,7 @@ public class ConnectionLimitTest {
     }
 
     @Test
-    public void testShowProcessListForUser() {
+    public void testShowProcessListForUser() throws Exception {
         String sql = "show processlist for 'test'";
         ExecuteEnv.setup();
         ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
@@ -112,12 +114,13 @@ public class ConnectionLimitTest {
                 starRocksAssert.getCtx().getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
         starRocksAssert.getCtx().setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
+        ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
+        ShowResultSet resultSet = showExecutor.execute();
         System.out.println(resultSet.getResultRows());
         Assert.assertEquals(1, resultSet.getResultRows().size());
         Assert.assertTrue(resultSet.getResultRows().get(0).contains("test"));
 
-        ShowProcesslistStmt showProcesslistStmt = new ShowProcesslistStmt(true);
+        ShowProcesslistStmt showProcesslistStmt = new ShowProcesslistStmt(true, null);
         Assert.assertNull(showProcesslistStmt.getForUser());
     }
 }
