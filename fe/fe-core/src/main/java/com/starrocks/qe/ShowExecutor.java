@@ -671,7 +671,7 @@ public class ShowExecutor {
         List<List<String>> rowSet = Lists.newArrayList();
 
         List<ConnectContext.ThreadInfo> threadInfos = connectContext.getConnectScheduler()
-                .listConnection(connectContext.getQualifiedUser());
+                .listConnection(connectContext.getQualifiedUser(), showStmt.getForUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
             List<String> row = info.toRow(nowMs, showStmt.showFull());

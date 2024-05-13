@@ -90,7 +90,7 @@ public class ShowDbStmtTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
             {
-                scheduler.listConnection("testCluster:testUser");
+                scheduler.listConnection("testCluster:testUser", null);
                 minTimes = 0;
                 result = Lists.newArrayList(ctx.toThreadInfo());
             }
