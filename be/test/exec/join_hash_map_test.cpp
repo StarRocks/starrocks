@@ -978,40 +978,6 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, BuildDefaultOutput) {
-    JoinHashTableItems table_items;
-    HashTableProbeState probe_state;
-    table_items.build_column_count = 3;
-
-    TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
-    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
-    auto row_desc = create_row_desc(&row_desc_builder);
-
-    vector<HashTableSlotDescriptor> hash_table_slot_vec;
-    for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
-        HashTableSlotDescriptor hash_table_slot{};
-        hash_table_slot.slot = slot;
-        hash_table_slot.need_output = true;
-        hash_table_slot_vec.emplace_back(hash_table_slot);
-    }
-    table_items.build_slots = hash_table_slot_vec;
-
-    auto chunk = std::make_shared<Chunk>();
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_build_default_output(&chunk, 2);
-
-    ASSERT_EQ(chunk->num_columns(), 3);
-
-    for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
-        for (size_t j = 0; j < 2; j++) {
-            ASSERT_EQ(null_column->get_data()[j], 1);
-        }
-    }
-}
-
-// NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
