@@ -26,6 +26,7 @@ import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -48,6 +49,8 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.HashSet;
 
@@ -245,53 +248,53 @@ public class RBACExecutorTest {
 
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
-        new MockUp<CreateFunctionStmt>() {
-            @Mock
-            public void analyze(ConnectContext context) throws AnalysisException {
-            }
-        };
+        try (MockedStatic<CreateFunctionAnalyzer> mockedStatic = Mockito.mockStatic(CreateFunctionAnalyzer.class)) {
+            mockedStatic
+                    .when(() -> CreateFunctionAnalyzer.analyze(Mockito.any(), Mockito.any()))
+                    .then(invocationOnMock -> null);
+            new MockUp<PrivilegeStmtAnalyzer>() {
+                @Mock
+                public void analyze(ConnectContext context) throws AnalysisException {
+                }
+            };
 
-        new MockUp<PrivilegeStmtAnalyzer>() {
-            @Mock
-            public void analyze(ConnectContext context) throws AnalysisException {
-            }
-        };
+            String createSql = "CREATE FUNCTION db.MY_UDF_JSON_GET(string, string) RETURNS string " +
+                    "properties ( " +
+                    "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                    ")";
 
-        String createSql = "CREATE FUNCTION db.MY_UDF_JSON_GET(string, string) RETURNS string " +
-                "properties ( " +
-                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
-                ")";
+            CreateFunctionStmt statement = (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
 
-        CreateFunctionStmt statement = (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+            Type[] arg = new Type[1];
+            arg[0] = Type.INT;
+            Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, Type.INT,
+                    false, TFunctionBinaryType.SRJAR,
+                    "objectFile", "mainClass.getCanonicalName()", "", "");
+            function.setChecksum("checksum");
 
-        Type[] arg = new Type[1];
-        arg[0] = Type.INT;
-        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, Type.INT,
-                false, TFunctionBinaryType.SRJAR,
-                "objectFile", "mainClass.getCanonicalName()", "", "");
-        function.setChecksum("checksum");
+            statement.setFunction(function);
+            DDLStmtExecutor.execute(statement, ctx);
 
-        statement.setFunction(function);
-        DDLStmtExecutor.execute(statement, ctx);
+            ShowFunctionsStmt stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
 
-        ShowFunctionsStmt stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+            ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+            Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
 
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
+            ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+            stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+            resultSet = ShowExecutor.execute(stmt, ctx);
+            Assert.assertEquals("[]", resultSet.getResultRows().toString());
 
-        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
-        stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
-        resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertEquals("[]", resultSet.getResultRows().toString());
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "grant usage on function db.my_udf_json_get(int) to u1", ctx), ctx);
+            stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
+            resultSet = ShowExecutor.execute(stmt, ctx);
+            Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
 
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant usage on function db.my_udf_json_get(int) to u1", ctx), ctx);
-        stmt = new ShowFunctionsStmt("db", false, false, false, null, null);
-        resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertEquals("[[my_udf_json_get]]", resultSet.getResultRows().toString());
+            stmt = new ShowFunctionsStmt("db", true, false, false, null, null);
+            resultSet = ShowExecutor.execute(stmt, ctx);
+            Assert.assertTrue(resultSet.getResultRows().size() > 0);
 
-        stmt = new ShowFunctionsStmt("db", true, false, false, null, null);
-        resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertTrue(resultSet.getResultRows().size() > 0);
+        }
     }
 }
