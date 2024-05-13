@@ -132,7 +132,7 @@ public class DefaultSharedDataWorkerProviderTest {
     private WorkerProvider newWorkerProvider() {
         return factory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
-                -1, ComputationFragmentSchedulingPolicy.compute_nodes_only.toString(), 
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
