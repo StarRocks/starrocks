@@ -196,14 +196,13 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 MaterializedView mv = (MaterializedView) table;
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                db.readLock();
                 try {
                     return mv.getRowCount();
                 } catch (Exception e) {
                     return 0L;
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    db.readUnlock();
                 }
             }
         };
@@ -270,14 +269,13 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
 
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                db.readLock();
                 try {
                     return mv.getPartitions().size();
                 } catch (Exception e) {
                     return 0;
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    db.readUnlock();
                 }
             }
         };
