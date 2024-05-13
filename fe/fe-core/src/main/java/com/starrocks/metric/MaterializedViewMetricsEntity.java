@@ -85,10 +85,16 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     // record the materialized view's refresh job duration only if it's refreshed successfully.
     public Histogram histRefreshJobDuration;
 
+    public final String dbName;
+    public final String mvName;
     public MaterializedViewMetricsEntity(MetricRegistry metricRegistry, MvId mvId) {
         this.metricRegistry = metricRegistry;
         this.mvId = mvId;
-
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getDb(mvId.getDbId());
+        dbName = db != null ? db.getFullName() : "";
+        Table table = db != null ? db.getTable(mvId.getId()) : null;
+        mvName = table != null ? table.getName() : "";
         initMaterializedViewMetrics();
     }
 
@@ -200,8 +206,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 db.readLock();
+                MaterializedView mv = (MaterializedView) table;
                 try {
-                    MaterializedView mv = (MaterializedView) table;
                     return mv.getRowCount();
                 } catch (Exception e) {
                     return 0L;
@@ -226,8 +232,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 db.readLock();
+                MaterializedView mv = (MaterializedView) table;
                 try {
-                    MaterializedView mv = (MaterializedView) table;
                     return mv.getDataSize();
                 } catch (Exception e) {
                     return 0L;
@@ -250,14 +256,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 if (!table.isMaterializedView()) {
                     return 0;
                 }
-                db.readLock();
+                MaterializedView mv = (MaterializedView) table;
                 try {
-                    MaterializedView mv = (MaterializedView) table;
                     return mv.isActive() ? 0 : 1;
                 } catch (Exception e) {
                     return 0;
-                } finally {
-                    db.readUnlock();
                 }
             }
         };
@@ -276,12 +279,12 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
                 MaterializedView mv = (MaterializedView) table;
+                if (!mv.isPartitionedTable()) {
+                    return 0;
+                }
 
                 db.readLock();
                 try {
-                    if (!mv.getPartitionInfo().isPartitioned()) {
-                        return 0;
-                    }
                     return mv.getPartitions().size();
                 } catch (Exception e) {
                     return 0;
