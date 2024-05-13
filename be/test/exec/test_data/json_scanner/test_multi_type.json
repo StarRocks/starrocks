@@ -16,5 +16,13 @@
    ],
    "f_decimal": "1234565789012345678901234567.123456789",
    "f_char": "starrocks",
-   "f_time": "10:00:00"
+   "f_time": "10:00:00",
+   "f_struct": {
+      "f_int": 1,
+      "f_string": "a"
+   },
+   "f_map": {
+      "f_double1": 3.14,
+      "f_double2": 3.141
+   }
 }
