@@ -117,7 +117,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
             throw new IllegalArgumentException("Invalid computationFragmentSchedulingPolicy: " + policy);
         }
-    };
+    }
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
 
     /**
