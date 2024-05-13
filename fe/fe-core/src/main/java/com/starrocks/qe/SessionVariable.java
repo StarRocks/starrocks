@@ -522,6 +522,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // their ordinal position in the Hive table definition.
     public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
 
+    public static final String ENABLE_EXECUTION_ONLY = "enable_execution_only";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1025,6 +1027,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
 
+    // execute sql don't return result, for performance test
+    @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
+    private boolean enableExecutionOnly = false;
+
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
      * This limitation is to avoid the negative overhead caused by scheduling on super multi-core scenarios.
@@ -1428,6 +1434,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    public boolean isEnableExecutionOnly() {
+        return enableExecutionOnly;
+    }
 
     public boolean isCboPruneJsonSubfield() {
         return cboPruneJsonSubfield;
