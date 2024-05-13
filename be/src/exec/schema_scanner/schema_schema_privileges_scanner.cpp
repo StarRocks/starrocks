@@ -42,11 +42,10 @@ Status SchemaSchemaPrivilegesScanner::start(RuntimeState* state) {
     TGetDBPrivsParams db_privs_params;
     db_privs_params.__set_current_user_ident(*(_param->current_user_ident));
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_db_privs(*(_param->ip), _param->port, db_privs_params, &_db_privs_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_privs(_ss_state, db_privs_params, &_db_privs_result));
+
     return Status::OK();
 }
 

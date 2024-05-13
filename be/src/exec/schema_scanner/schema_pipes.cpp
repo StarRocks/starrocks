@@ -41,6 +41,8 @@ SchemaTablePipes::SchemaTablePipes()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaTablePipes::start(RuntimeState* state) {
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     return SchemaScanner::start(state);
 }
 
@@ -51,7 +53,7 @@ Status SchemaTablePipes::_list_pipes() {
     if (_param->current_user_ident) {
         params.__set_user_ident(*_param->current_user_ident);
     }
-    return SchemaHelper::list_pipes(*(_param->ip), _param->port, params, &_pipes_result);
+    return SchemaHelper::list_pipes(_ss_state, params, &_pipes_result);
 }
 
 Status SchemaTablePipes::get_next(ChunkPtr* chunk, bool* eos) {

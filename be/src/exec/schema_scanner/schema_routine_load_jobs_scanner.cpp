@@ -62,13 +62,9 @@ Status SchemaRoutineLoadJobsScanner::start(RuntimeState* state) {
         load_params.__set_job_id(_param->job_id);
     }
 
-    int32_t timeout = static_cast<int32_t>(std::min(state->query_options().query_timeout * 1000 / 2, INT_MAX));
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_routine_load_jobs(*(_param->ip), _param->port, load_params, &_result, timeout));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_routine_load_jobs(_ss_state, load_params, &_result));
 
     _cur_idx = 0;
     return Status::OK();
