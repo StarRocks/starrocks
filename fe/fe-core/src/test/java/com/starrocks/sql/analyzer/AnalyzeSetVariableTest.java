@@ -281,5 +281,8 @@ public class AnalyzeSetVariableTest {
 
         sql = "SET computation_fragment_scheduling_policy = all_nodes";
         analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = compute_nodes";
+        analyzeFail(sql);
     }
 }
