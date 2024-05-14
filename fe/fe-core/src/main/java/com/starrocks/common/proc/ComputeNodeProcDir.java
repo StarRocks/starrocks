@@ -171,7 +171,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
 
             if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(computeNodeId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
                 Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
                 computeNodeInfo.add(wh.getName());

@@ -34,6 +34,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -144,8 +145,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         for (Tablet tablet : tablets) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            ComputeNode node = warehouseManager
-                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, (LakeTablet) tablet);
+            Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+            ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
 
             if (node == null) {
                 return;

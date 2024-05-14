@@ -780,7 +780,7 @@ public class ShowExecutorTest {
                 minTimes = 1;
                 result = tabletNum;
 
-                starosAgent.getWorkerIdByBackendId(anyLong);
+                starosAgent.getWorkerIdByNodeId(anyLong);
                 minTimes = 1;
                 result = workerId;
             }

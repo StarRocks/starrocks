@@ -168,7 +168,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                     computeNodeInfo.add(String.valueOf(cluster.getId()));
                     computeNodeInfo.add(String.valueOf(cluster.getWorkerGroupId()));
                     long nodeId = node.getId();
-                    long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(nodeId);
+                    long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(nodeId);
                     computeNodeInfo.add(String.valueOf(nodeId));
                     computeNodeInfo.add(String.valueOf(workerId));
 

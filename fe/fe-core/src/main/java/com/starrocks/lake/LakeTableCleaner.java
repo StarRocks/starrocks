@@ -18,6 +18,9 @@ import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,7 +44,9 @@ class LakeTableCleaner {
         Set<String> removedPaths = new HashSet<>();
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
             try {
-                ShardInfo shardInfo = LakeTableHelper.getAssociatedShardInfo(partition).orElse(null);
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getBackgroundWarehouse();
+                ShardInfo shardInfo = LakeTableHelper.getAssociatedShardInfo(partition, warehouse.getId()).orElse(null);
                 if (shardInfo == null || removedPaths.contains(shardInfo.getFilePath().getFullPath())) {
                     continue;
                 }

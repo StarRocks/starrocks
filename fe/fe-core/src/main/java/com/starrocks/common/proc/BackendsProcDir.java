@@ -239,7 +239,7 @@ public class BackendsProcDir implements ProcDirInterface {
 
             if (RunMode.isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(backendId);
                 backendInfo.add(String.valueOf(workerId));
                 Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(backend.getWarehouseId());
                 backendInfo.add(wh.getName());

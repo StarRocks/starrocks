@@ -6,6 +6,7 @@ import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -112,7 +113,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             Long nodeId;
             Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllBackendIdsByShard(shardInfo, true);
+                    .getAllNodeIdsByShard(shardInfo, true);
             if (!ids.isEmpty()) {
                 nodeId = ids.iterator().next();
                 return nodeId;
@@ -134,7 +135,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             Long nodeId;
             Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllBackendIdsByShard(shardInfo, true);
+                    .getAllNodeIdsByShard(shardInfo, true);
             if (!ids.isEmpty()) {
                 nodeId = ids.iterator().next();
                 return nodeId;
@@ -155,7 +156,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
 
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllBackendIdsByShard(shardInfo, true);
+                    .getAllNodeIdsByShard(shardInfo, true);
         } catch (StarClientException e) {
             return null;
         }
@@ -329,6 +330,16 @@ public class WarehouseManagerEPack extends WarehouseManager {
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);
         }
+    }
+
+    @Override
+    public Warehouse getCompactionWarehouse() {
+        return getWarehouse(Config.lake_compaction_warehouse);
+    }
+
+    @Override
+    public Warehouse getBackgroundWarehouse() {
+        return getWarehouse(Config.lake_background_warehouse);
     }
 }
 

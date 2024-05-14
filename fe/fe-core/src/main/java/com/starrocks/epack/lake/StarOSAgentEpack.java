@@ -23,7 +23,7 @@ public class StarOSAgentEpack extends StarOSAgent {
     // remove previous worker with same backend id
     private void tryRemovePreviousWorkerGroup(long workerGroupId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Iterator<Map.Entry<Long, Long>> iterator = workerToBackend.entrySet().iterator();
+            Iterator<Map.Entry<Long, Long>> iterator = workerToNode.entrySet().iterator();
             while (iterator.hasNext()) {
                 Map.Entry<Long, Long> entry = iterator.next();
                 long nodeId = entry.getValue();

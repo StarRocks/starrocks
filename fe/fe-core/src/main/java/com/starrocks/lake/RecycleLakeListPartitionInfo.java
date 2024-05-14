@@ -19,6 +19,8 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
 
 public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
     public RecycleLakeListPartitionInfo(long dbId, long tableId, Partition partition,
@@ -34,7 +36,9 @@ public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
             GlobalStateMgr.getCurrentState().getEditLog().logDisablePartitionRecovery(partition.getId());
         }
         try {
-            if (LakeTableHelper.removePartitionDirectory(partition)) {
+            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = manager.getBackgroundWarehouse();
+            if (LakeTableHelper.removePartitionDirectory(partition, warehouse.getId())) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 return true;
             } else {
