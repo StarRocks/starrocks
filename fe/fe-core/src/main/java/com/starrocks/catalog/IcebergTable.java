@@ -175,6 +175,17 @@ public class IcebergTable extends Table {
         return allPartitionColumns;
     }
 
+    public boolean isAllPartitionColumnsAlwaysIdentity() {
+        // now we are sure we have never applied transformation,
+        // we check if all partition columns are identity.
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public PartitionField getPartitionField(String partitionColumnName) {
         List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
         Schema schema = this.getNativeTable().schema();
