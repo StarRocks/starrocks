@@ -544,13 +544,15 @@ public class PrivilegeCheckerTest {
     public void testExternalDBAndTablePEntryObject() throws Exception {
         starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
                 "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
-        DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
+        DbPEntryObject dbPEntryObject =
+                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
                 List.of("test_iceberg", "*", "*"));
         Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
 
-        dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
+        dbPEntryObject =
+                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
         Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
@@ -768,7 +770,8 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
-            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx,
+                    nativeAnalyzeJob.getId());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
@@ -794,7 +797,8 @@ public class PrivilegeCheckerTest {
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         try {
-            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx,
+                    nativeAnalyzeJob.getId());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
@@ -816,7 +820,8 @@ public class PrivilegeCheckerTest {
         nativeAnalyzeJob.setId(4);
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         try {
-            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx,
+                    nativeAnalyzeJob.getId());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
@@ -1517,7 +1522,8 @@ public class PrivilegeCheckerTest {
     public void testBlackListStmts() throws Exception {
         String grantSql = "grant blacklist on system to test";
         String revokeSql = "revoke blacklist on system from test";
-        String err = "Access denied; you need (at least one of) the BLACKLIST privilege(s) on SYSTEM for this operation";
+        String err =
+                "Access denied; you need (at least one of) the BLACKLIST privilege(s) on SYSTEM for this operation";
 
         String sql = "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
@@ -1848,7 +1854,8 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("revoke SELECT on TABLE db1.tbl1 from test");
 
         // test show single tablet no priv
-        List<Replica> replicas = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        List<Replica> replicas =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Table table = db.getTable("tbl1");
         ReplicasProcNode replicasProcNode = new ReplicasProcNode(db, (OlapTable) table, tabletId, replicas);
@@ -2067,7 +2074,8 @@ public class PrivilegeCheckerTest {
     @Test
     public void testSetStmt() throws Exception {
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
-        String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
+        String expectError =
+                "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
         verifyNODEAndGRANT(sql, expectError);
 
         ctxToTestUser();
@@ -2308,8 +2316,9 @@ public class PrivilegeCheckerTest {
                 "('username' = 'test_name','password' = 'pwd') " +
                 "PROPERTIES ('timeout' = '3600');";
         ctxToRoot();
-        String createTblStmtStr = "create table db1.tbl_not_exist(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
-                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr =
+                "create table db1.tbl_not_exist(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                        "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
         starRocksAssert.withLoad(createSql);
         starRocksAssert.dropTable("db1.tbl_not_exist");
@@ -2379,7 +2388,8 @@ public class PrivilegeCheckerTest {
         String createExportSql = "EXPORT TABLE db1.tbl1 " +
                 "TO 'hdfs://hdfs_host:port/a/b/c/' " +
                 "WITH BROKER 'broker0'";
-        String expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
+        String expectError =
+                "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
         verifyGrantRevoke(
                 createExportSql,
                 "grant export on db1.tbl1 to test",
@@ -2390,7 +2400,8 @@ public class PrivilegeCheckerTest {
     @Test
     public void testRepositoryStmt() throws Exception {
         mockBroker();
-        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+        String expectError =
+                "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
 
         String createRepoSql = "CREATE REPOSITORY `oss_repo` WITH BROKER `broker0` " +
                 "ON LOCATION 'oss://starRocks_backup' PROPERTIES ( " +
@@ -2424,7 +2435,8 @@ public class PrivilegeCheckerTest {
     @Test
     public void testBackupStmt() throws Exception {
         mockRepository();
-        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+        String expectError =
+                "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
         String createBackupSql = "BACKUP SNAPSHOT db1.backup_name1 " +
                 "TO example_repo " +
                 "ON (tbl1) " +
@@ -2446,7 +2458,8 @@ public class PrivilegeCheckerTest {
         grantOrRevoke("grant repository on system to test");
         // check EXPORT privilege
         ctxToTestUser();
-        expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
+        expectError =
+                "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
@@ -2524,7 +2537,8 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(restoreSql, starRocksAssert.getCtx());
 
         ctxToTestUser();
-        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+        String expectError =
+                "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
@@ -2725,10 +2739,10 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCreateFunc() throws Exception {
-
-        new MockUp<CreateFunctionStmt>() {
+        new MockUp<CreateFunctionAnalyzer>() {
             @Mock
-            public void analyze(ConnectContext context) throws AnalysisException {
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
             }
         };
 
@@ -2747,10 +2761,10 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCreateGlobalFunc() throws Exception {
-
-        new MockUp<CreateFunctionStmt>() {
+        new MockUp<CreateFunctionAnalyzer>() {
             @Mock
-            public void analyze(ConnectContext context) throws AnalysisException {
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
             }
         };
 
@@ -2946,8 +2960,9 @@ public class PrivilegeCheckerTest {
             Assert.fail();
         } catch (ErrorReportException e) {
             System.out.println(e.getMessage() + ", sql: " + selectSQL);
-            Assert.assertTrue(e.getMessage().contains("Access denied; you need (at least one of) the USAGE privilege(s) " +
-                    "on GLOBAL FUNCTION my_udf_json_get(VARCHAR,VARCHAR) for this operation"));
+            Assert.assertTrue(
+                    e.getMessage().contains("Access denied; you need (at least one of) the USAGE privilege(s) " +
+                            "on GLOBAL FUNCTION my_udf_json_get(VARCHAR,VARCHAR) for this operation"));
         }
 
         // grant usage on global function
@@ -2987,7 +3002,8 @@ public class PrivilegeCheckerTest {
 
         // grant usage on global function
         ctxToRoot();
-        grantOrRevoke("grant usage on global function my_udf_json_get(string,string), my_udf_json_get2(string,string) to test");
+        grantOrRevoke(
+                "grant usage on global function my_udf_json_get(string,string), my_udf_json_get2(string,string) to test");
         ctxToTestUser();
 
         try {
@@ -3020,7 +3036,8 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
+    public void testShowAuthentication()
+            throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
@@ -3199,7 +3216,8 @@ public class PrivilegeCheckerTest {
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant SELECT on TABLE db1.tbl1, db1.tbl2 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+                        "grant SELECT on TABLE db1.tbl1, db1.tbl2 to test", starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
 
         verifyGrantRevoke(
                 "select * from db1.tbl1, db1.tbl2, db2.tbl1",
@@ -3512,7 +3530,8 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql2, ctx), ctx);
 
         // test show pipes
-        ShowResultSet res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+        ShowResultSet res =
+                ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
         Assert.assertEquals(0, res.getResultRows().size());
         starRocksAssert.ddl("grant USAGE on PIPE db1.p1 to test");
         res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
@@ -3789,7 +3808,8 @@ public class PrivilegeCheckerTest {
             Analyzer.analyze(stmt, context);
 
             QueryStatement queryStatement = (QueryStatement) stmt;
-            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+            Assert.assertTrue(
+                    ((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
             SubqueryRelation subqueryRelation = (SubqueryRelation) ((SelectRelation) queryStatement.getQueryRelation())
                     .getRelation();
             SelectRelation selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();
@@ -3813,7 +3833,8 @@ public class PrivilegeCheckerTest {
             }.visit(stmt);
             Analyzer.analyze(stmt, context);
             queryStatement = (QueryStatement) stmt;
-            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+            Assert.assertTrue(
+                    ((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
             subqueryRelation = (SubqueryRelation) ((SelectRelation) queryStatement.getQueryRelation())
                     .getRelation();
             selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();
