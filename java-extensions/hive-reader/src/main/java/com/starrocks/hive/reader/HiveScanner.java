@@ -92,16 +92,9 @@ public class HiveScanner extends ConnectorScanner {
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
-<<<<<<< HEAD
         this.hiveColumnTypes = ScannerHelper.splitAndOmitEmptyStrings(params.get("hive_column_types"), "#");
         this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
         this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
-=======
-        this.hiveColumnTypes = params.get("hive_column_types").split("#");
-        this.requiredFields =
-                Splitter.on(',').omitEmptyStrings().splitToList(params.get("required_fields")).toArray(new String[0]);
-        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
->>>>>>> b6ca919bf7 ([Feature] Optimize `count(1)` in hdfs scanner by rewriting plan to `sum` (#43616))
         this.dataFilePath = params.get("data_file_path");
         this.blockOffset = Long.parseLong(params.get("block_offset"));
         this.blockLength = Long.parseLong(params.get("block_length"));
