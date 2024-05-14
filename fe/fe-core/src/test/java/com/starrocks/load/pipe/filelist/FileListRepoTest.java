@@ -366,7 +366,7 @@ public class FileListRepoTest {
 
         RepoExecutor executor = RepoExecutor.getInstance();
 
-        Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
+        Assert.assertThrows(SemanticException.class, () -> executor.executeDQL("select now()"));
 
         Assert.assertThrows(SemanticException.class, () -> executor.executeDML("insert into a.b values (1) "));
 
