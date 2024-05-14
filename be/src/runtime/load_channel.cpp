@@ -83,6 +83,8 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
     ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
     _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
+    _deserialize_chunk_count = ADD_COUNTER(_profile, "DeserializeChunkCount", TUnit::UNIT);
+    _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
     _profile_report_count = ADD_COUNTER(_profile, "ProfileReportCount", TUnit::UNIT);
     _profile_report_timer = ADD_TIMER(_profile, "ProfileReportTime");
     _profile_serialized_size = ADD_COUNTER(_profile, "ProfileSerializedSize", TUnit::BYTES);
@@ -303,6 +305,8 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 }
 
 Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer) {
+    COUNTER_UPDATE(_deserialize_chunk_count, 1);
+    SCOPED_TIMER(_deserialize_chunk_timer);
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta);

@@ -970,7 +970,7 @@ void LocalTabletsChannel::update_profile() {
 
     std::vector<AsyncDeltaWriter*> async_writers;
     {
-        std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+        std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
         async_writers.reserve(_delta_writers.size());
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
             async_writers.push_back(delta_writer.get());

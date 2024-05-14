@@ -167,6 +167,8 @@ private:
 
     RuntimeProfile::Counter* _index_num = nullptr;
     RuntimeProfile::Counter* _peak_memory_usage = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_count = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* _profile_report_count = nullptr;
     RuntimeProfile::Counter* _profile_report_timer = nullptr;
     RuntimeProfile::Counter* _profile_serialized_size = nullptr;
