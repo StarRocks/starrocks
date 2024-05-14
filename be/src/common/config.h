@@ -1172,4 +1172,6 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
+
+CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 } // namespace starrocks::config
