@@ -1156,7 +1156,14 @@ TEST_F(AggregateTest, test_dict_merge) {
     ASSERT_EQ(res->size(), 1);
     auto slice = res->get_slice(0);
     std::map<int, std::string> datas;
-    auto dict = from_json_string<TGlobalDict>(std::string(slice.data, slice.size));
+    TGlobalDict dict;
+    thrift_from_json_string(&dict, std::string(slice.data, slice.size));
+    {
+        std::string back = thrift_to_json_string(&dict);
+        TGlobalDict dict2;
+        thrift_from_json_string(&dict2, back);
+        ASSERT_EQ(dict, dict2);
+    }
     int sz = dict.ids.size();
     for (int i = 0; i < sz; ++i) {
         datas.emplace(dict.ids[i], dict.strings[i]);
