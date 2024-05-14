@@ -55,7 +55,7 @@ SHOW COMPUTE NODES
 
 ## 示例
 
-查看当前集群中的所有 BE 节点的相关信息。
+查看当前集群中的所有 CN 节点的相关信息。
 
 ```Plain
 MySQL > SHOW COMPUTE NODES\G
