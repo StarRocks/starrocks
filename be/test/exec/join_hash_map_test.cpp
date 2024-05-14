@@ -644,7 +644,7 @@ void JoinHashMapTest::check_int32_column(const Column& column, uint32_t row_coun
 }
 
 void JoinHashMapTest::check_probe_index_column(const Column& column, const std::vector<uint32_t>& idxs) {
-    const auto& uint_32_column = reinterpret_cast<const UInt32Column &>(column);
+    const auto& uint_32_column = reinterpret_cast<const UInt32Column&>(column);
     ASSERT_EQ(column.size(), idxs.size());
     for (size_t i = 0; i < idxs.size(); i++) {
         ASSERT_EQ(uint_32_column.get(i).get_uint32(), idxs[i]);
