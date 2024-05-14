@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
@@ -161,7 +162,8 @@ public class HiveMetaClient {
             return (T) method.invoke(client.hiveClient, args);
         } catch (Throwable e) {
             LOG.error(messageIfError, e);
-            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
+            String message = LogUtil.getUnwoundExceptionMessage(e);
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + message, e);
             throw connectionException;
         } finally {
             if (client == null && connectionException != null) {

@@ -27,6 +27,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 
 import java.lang.management.ThreadInfo;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -196,5 +198,42 @@ public class LogUtil {
         } else if (sb.length() > 0 && sb.charAt(sb.length() - 1) != ' ') {
             sb.append(" ");
         }
+    }
+
+    public static List<Throwable> unwindException(Throwable e, int maxDepth) {
+        List<Throwable> result = new ArrayList<>();
+        for (int i = 0; i < maxDepth; i++) {
+            if (e == null) {
+                break;
+            }
+            boolean skip = true;
+            Throwable parent = null;
+            if (e instanceof InvocationTargetException) {
+                parent = ((InvocationTargetException) e).getTargetException();
+            } else {
+                skip = false;
+                parent = e.getCause();
+            }
+            if (!skip) {
+                result.add(e);
+            }
+            if (parent == e) {
+                break;
+            }
+            e = parent;
+        }
+        return result;
+    }
+
+    public static String getUnwoundExceptionMessage(Throwable e) {
+        final int maxDepth = 20;
+        List<Throwable> result = unwindException(e, maxDepth);
+        StringBuilder sb = new StringBuilder();
+        for (Throwable t : result) {
+            sb.append(t.getMessage());
+            sb.append("\n");
+        }
+        sb.deleteCharAt(sb.length() - 1);
+        return sb.toString();
     }
 }
