@@ -191,7 +191,7 @@ public class AnalyzerUtils {
     }
 
     public static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
-                                            Type[] argTypes) {
+                                            Type[] argTypes, Object[] argValues) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = context.getDatabase();
@@ -206,7 +206,7 @@ public class AnalyzerUtils {
         try {
             locker.lockDatabase(db, LockType.READ);
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
-            Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Function fn = db.getFunction(search, argValues, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn != null) {
                 try {
@@ -226,10 +226,11 @@ public class AnalyzerUtils {
         }
     }
 
-    private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
+    private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes,
+                                                 Object[] argValues) {
         Function search = new Function(fnName, argTypes, Type.INVALID, false);
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
-                .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                .getFunction(search, argValues, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
             try {
                 Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -245,10 +246,10 @@ public class AnalyzerUtils {
         return fn;
     }
 
-    public static Function getUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
-        Function fn = getDBUdfFunction(context, fnName, argTypes);
+    public static Function getUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes, Object[] argValues) {
+        Function fn = getDBUdfFunction(context, fnName, argTypes, argValues);
         if (fn == null && context.getGlobalStateMgr() != null) {
-            fn = getGlobalUdfFunction(context, fnName, argTypes);
+            fn = getGlobalUdfFunction(context, fnName, argTypes, argValues);
         }
         if (fn != null) {
             if (!Config.enable_udf) {

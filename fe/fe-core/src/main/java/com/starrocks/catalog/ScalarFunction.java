@@ -147,8 +147,14 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType) {
-        ScalarFunction fn = new ScalarFunction(name, args, returnType, isVariadic);
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType,
+            boolean hasDynamicReturnType) {
+        ScalarFunction fn;
+        if (hasDynamicReturnType) {
+            fn = new DynamicScalarFunction(name, args, returnType, isVariadic);
+        } else {
+            fn = new ScalarFunction(name, args, returnType, isVariadic);
+        }
         fn.setBinaryType(binaryType);
         fn.setUserVisible(true);
         fn.symbolName = symbol;
@@ -165,7 +171,7 @@ public class ScalarFunction extends Function {
             TFunctionBinaryType binaryType,
             String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
         return createUdf(name, args, returnType, isVariadic, binaryType, objectFile,
-                symbol, prepareFnSymbol, closeFnSymbol, true);
+                symbol, prepareFnSymbol, closeFnSymbol, true, false);
     }
 
     public void setSymbolName(String s) {

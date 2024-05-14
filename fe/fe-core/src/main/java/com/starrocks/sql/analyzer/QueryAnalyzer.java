@@ -1057,7 +1057,7 @@ public class QueryAnalyzer {
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {
-                fn = AnalyzerUtils.getUdfFunction(session, node.getFunctionName(), argTypes);
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFunctionName(), argTypes, null);
             }
 
             if (fn == null) {

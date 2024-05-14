@@ -1191,7 +1191,9 @@ public class ExpressionAnalyzer {
             }
 
             if (fn == null) {
-                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
+                Object[] argValues = node.getChildren().stream().map(
+                        e -> e instanceof LiteralExpr ? ((LiteralExpr) e).getRealObjectValue() : null).toArray(Object []::new);
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes, argValues);
             }
             if (fn == null) {
                 fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);

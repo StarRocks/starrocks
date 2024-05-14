@@ -766,12 +766,12 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    public synchronized Function getFunction(Function desc, Function.CompareMode mode) {
+    public synchronized Function getFunction(Function desc, Object [] argValues, Function.CompareMode mode) {
         List<Function> fns = name2Function.get(desc.getFunctionName().getFunction());
         if (fns == null) {
             return null;
         }
-        return Function.getFunction(fns, desc, mode);
+        return Function.getFunction(fns, desc, argValues, mode);
     }
 
     public synchronized List<Function> getFunctions() {

@@ -5169,7 +5169,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         String functionName = qualifiedName.toString();
 
-        TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
+        TypeDef returnTypeDef = null;
+        if (context.returnType != null) {
+            returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
+        }
         TypeDef intermediateType = null;
         if (context.intermediateType != null) {
             intermediateType = new TypeDef(getType(context.intermediateType), createPos(context.intermediateType));

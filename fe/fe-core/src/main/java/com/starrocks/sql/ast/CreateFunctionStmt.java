@@ -34,6 +34,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
@@ -54,6 +55,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 // create a user define function
 public class CreateFunctionStmt extends DdlStmt {
     public static final String FILE_KEY = "file";
@@ -63,6 +66,8 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String ISOLATION_KEY = "isolation";
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
     public static final String EVAL_METHOD_NAME = "evaluate";
+
+    public static final String INITIAL_METHOD_NAME = "initialize";
     public static final String CREATE_METHOD_NAME = "create";
     public static final String DESTROY_METHOD_NAME = "destroy";
     public static final String SERIALIZE_METHOD_NAME = "serialize";
@@ -189,6 +194,10 @@ public class CreateFunctionStmt extends DdlStmt {
             checkUdfType(method, expType, method.getReturnType(), RETURN_FIELD_NAME);
         }
 
+        private boolean checkDynamicReturnUdfType(Method method) {
+            return method.getReturnType() == Object.class;
+        }
+
         private void checkUdfType(Method method, Type expType, Class ptype, String pname)
                 throws AnalysisException {
             if (!(expType instanceof ScalarType)) {
@@ -268,6 +277,9 @@ public class CreateFunctionStmt extends DdlStmt {
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
         this.isTable = functionType.equalsIgnoreCase("TABLE");
         this.argsDef = argsDef;
+        if ((isAggregate || isTable) && returnType == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.missingFunctionReturnType(functionName.toString()));
+        }
         this.returnType = returnType;
         this.intermediateType = intermediateType;
         if (properties == null) {
@@ -321,7 +333,9 @@ public class CreateFunctionStmt extends DdlStmt {
 
         // check argument
         argsDef.analyze();
-        returnType.analyze();
+        if (returnType != null) {
+            returnType.analyze();
+        }
 
         intermediateType = TypeDef.createVarchar(ScalarType.getOlapMaxVarcharLength());
 
@@ -406,26 +420,41 @@ public class CreateFunctionStmt extends DdlStmt {
         checksum = Hex.encodeHexString(digest.digest());
     }
 
-    private void checkStarrocksJarUdfClass() throws AnalysisException {
+    private boolean checkInitializeMethod() throws AnalysisException {
+        Method method = mainClass.getMethod(INITIAL_METHOD_NAME, false);
+        return method != null;
+    }
+
+    private boolean checkStarrocksJarUdfClass() throws AnalysisException {
         {
             // RETURN_TYPE evaluate(...)
             Method method = mainClass.getMethod(EVAL_METHOD_NAME, true);
             mainClass.checkMethodNonStaticAndPublic(method);
             mainClass.checkArgumentCount(method, argsDef.getArgTypes().length);
-            mainClass.checkReturnUdfType(method, returnType.getType());
+            boolean hasDynamicReturnType = checkInitializeMethod() && mainClass.checkDynamicReturnUdfType(method);
+            if (!hasDynamicReturnType) {
+                if (returnType == null) {
+                    throw new AnalysisException(
+                            String.format("UDF '%s' should have return type", mainClass.getCanonicalName()));
+                }
+                mainClass.checkReturnUdfType(method, returnType.getType());
+            }
+
             for (int i = 0; i < method.getParameters().length; i++) {
                 Parameter p = method.getParameters()[i];
                 mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
             }
+            return hasDynamicReturnType;
         }
     }
 
     private void analyzeStarrocksJarUdf() throws AnalysisException {
-        checkStarrocksJarUdfClass();
+        boolean hasDynamicReturnType = checkStarrocksJarUdfClass();
         function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
-                returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, mainClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
+                returnType != null ? returnType.getType() : Type.UNKNOWN_TYPE, argsDef.isVariadic(),
+                TFunctionBinaryType.SRJAR, objectFile, mainClass.getCanonicalName(), "", "",
+                !"shared".equalsIgnoreCase(isolation), true);
         function.setChecksum(checksum);
     }
 

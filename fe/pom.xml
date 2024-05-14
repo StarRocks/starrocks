@@ -172,7 +172,7 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-common</artifactId>
-                <version>1.0.0</version>
+                <version>1.0.1</version>
             </dependency>
 
             <dependency>
