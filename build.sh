@@ -123,6 +123,11 @@ OPTS=$(getopt \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
+<<<<<<< HEAD
+=======
+  -l 'without-starcache' \
+  -l 'with-brpc-keepalive' \
+>>>>>>> a6632ef38e ([BugFix] add option for with-brpc-keepalive to build.sh (#45566))
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
