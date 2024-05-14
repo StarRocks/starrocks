@@ -68,16 +68,18 @@ public class MVCompensation {
         return externalCompensatePartitionKeys;
     }
 
+    private boolean useTransparentRewrite() {
+        return sessionVariable.isEnableMaterializedViewTransparentUnionRewrite();
+    }
+
     public boolean isTransparentRewrite() {
-        if (!unionRewriteMode.isTransparentRewrite()) {
+        if (!useTransparentRewrite()) {
             return false;
         }
-
         // No compensate once if mv's freshness is satisfied.
         if (state.isCompensate()) {
             return true;
         }
-
         return false;
     }
 
@@ -89,7 +91,7 @@ public class MVCompensation {
         if (state.isNoCompensate()) {
             return false;
         } else if (state.isCompensate()) {
-            return !unionRewriteMode.isTransparentRewrite();
+            return !useTransparentRewrite();
         } else {
             return true;
         }

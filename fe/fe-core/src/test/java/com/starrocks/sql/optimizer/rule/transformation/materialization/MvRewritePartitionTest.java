@@ -223,7 +223,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     "and v1 = 1 group by v2 having sum (v1) > 100";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 8: sum_v1 > 100, 5: k1 = '2020-01-01', 6: v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "     PREDICATES: 5: k1 = '2020-01-01', 6: v1 = 1, 8: sum_v1 > 100\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
@@ -234,7 +234,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     "and v1 = 1 group by v2 having sum (v1) > 100";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 8: sum_v1 > 100, 5: k1 = '2020-03-31', 6: v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "     PREDICATES: 5: k1 = '2020-03-31', 6: v1 = 1, 8: sum_v1 > 100\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
@@ -289,8 +289,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " where a.k1='2020-01-01' and a.v1=1 and b.v1=1 group by a.v2 having sum(a.v1) > 100;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 12: sum_v1 > 100, 8: k1 = '2020-01-01', " +
-                    "9: v1 = 1, 11: b_v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', 9: v1 = 1, " +
+                    "11: b_v1 = 1, 12: sum_v1 > 100\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -301,7 +301,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     ".k1=b.k1 where a.k1 = '2020-01-01' group by a.v1, a.v2, b.v1 having sum(a.v1) > 100;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 12: sum_v1 > 100, 8: k1 = '2020-01-01'\n" +
+            PlanTestBase.assertContains(plan, "     PREDICATES: 8: k1 = '2020-01-01', 12: sum_v1 > 100\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -354,8 +354,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
                     " and a.v1=1 and b.v1=1 group by a.v2 having sum(a.v1) > 100;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "PREDICATES: 12: sum_v1 > 100, 8: k1 = '2020-01-01', " +
-                    "9: v1 = 1, 11: b_v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', " +
+                    "9: v1 = 1, 11: b_v1 = 1, 12: sum_v1 > 100\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -417,8 +417,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
                     " and a.v1=1 and b.v1=1 group by a.v2 having sum(a.v1) > 100;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "PREDICATES: 12: sum_v1 > 100, 8: k1 = '2020-01-01', " +
-                    "9: v1 = 1, 11: b_v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', 9: v1 = 1, " +
+                    "11: b_v1 = 1, 12: sum_v1 > 100\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -483,8 +483,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " and a.v1=1 and b.v1=1 group by a.v2 having sum(a.v1) > 100;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 13: sum_v1 > 100, 8: k1 = '2020-01-01', " +
-                    "10: v1 = 1, 12: b_v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', 10: v1 = 1, " +
+                    "12: b_v1 = 1, 13: sum_v1 > 100\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -545,11 +545,15 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " where a.id_date>='1991-03-30' " +
                     " group by a.t1a,a.id_date;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "     TABLE: table_with_day_partition\n" +
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=4/4\n" +
-                    "     rollup: table_with_day_partition\n" +
-                    "     tabletRatio=12/12");
+                    "     PREDICATES: 23: id_date >= '1991-03-30'\n" +
+                    "     partitions=1/1");
+            PlanTestBase.assertContains(plan, "4:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 27: id_date >= '1991-03-30'\n" +
+                    "     partitions=3/4");
         }
 
         {
@@ -559,10 +563,16 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
                     " group by a.t1a,a.id_date;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
-                    "     TABLE: table_with_day_partition\n" +
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=4/4");
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1\n" +
+                    "     tabletRatio=4/4");
+            PlanTestBase.assertContains(plan, "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=3/4\n" +
+                    "     rollup: table_with_day_partition\n" +
+                    "     tabletRatio=9/9");
         }
     }
 
@@ -654,6 +664,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testMVPartitionWithCompensate() {
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
         List<PartitionCompensateParam> params = ImmutableList.of(
                 // partition: date_trunc expr
                 new PartitionCompensateParam("date_trunc('day', id_date)",
@@ -700,6 +711,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             System.out.println("start to execute: " + param);
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
     }
 
     @Test

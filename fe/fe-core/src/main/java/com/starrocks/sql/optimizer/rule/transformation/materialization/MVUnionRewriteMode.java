@@ -100,8 +100,7 @@ import java.util.Map;
 public enum MVUnionRewriteMode {
     DEFAULT(0),
     PULL_PREDICATE_V1(1),
-    PULL_PREDICATE_V2(2),
-    TRANSPARENT(3);
+    PULL_PREDICATE_V2(2);
 
     private final int ordinal;
 
@@ -115,10 +114,6 @@ public enum MVUnionRewriteMode {
 
     public boolean isPullPredicateRewrite() {
         return this == PULL_PREDICATE_V1 || this == PULL_PREDICATE_V2;
-    }
-
-    public boolean isTransparentRewrite() {
-        return this == TRANSPARENT;
     }
 
     public boolean isPullPredicateRewriteV2() {

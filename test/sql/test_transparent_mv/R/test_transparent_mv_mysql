@@ -24,7 +24,7 @@ shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_
 0
 
 -- !result
-set materialized_view_union_rewrite_mode = 3;
+set enable_materialized_view_transparent_union_rewrite = true;
 -- result:
 -- !result
 set catalog default_catalog;

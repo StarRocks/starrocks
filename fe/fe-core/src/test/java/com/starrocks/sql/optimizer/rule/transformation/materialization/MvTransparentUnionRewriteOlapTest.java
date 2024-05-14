@@ -64,7 +64,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                         "PARTITION `p3` VALUES LESS THAN ('9')"
                 )
         );
-        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(MVUnionRewriteMode.TRANSPARENT.getOrdinal());
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
     }
 
     @Before

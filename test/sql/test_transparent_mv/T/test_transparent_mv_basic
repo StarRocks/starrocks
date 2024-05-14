@@ -3,8 +3,7 @@
 -- create mv
 create database db_${uuid0};
 use db_${uuid0};
-set materialized_view_union_rewrite_mode = 3;
-
+set enable_materialized_view_transparent_union_rewrite = true;
 -- test mv with range partition 
 -- base table with date partition column
 CREATE TABLE t1 (

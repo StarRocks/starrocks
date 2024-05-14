@@ -42,6 +42,7 @@ set catalog default_catalog;
 create database db_${uuid0};
 use db_${uuid0};
 
+set enable_materialized_view_transparent_union_rewrite=false;
 -- Test partition compensate without partition expression
 set new_planner_optimize_timeout=10000;
 CREATE MATERIALIZED VIEW test_mv1 

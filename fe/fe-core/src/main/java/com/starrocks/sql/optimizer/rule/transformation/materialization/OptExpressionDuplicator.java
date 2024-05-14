@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -37,6 +38,7 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -114,6 +116,13 @@ public class OptExpressionDuplicator {
         return newColumnRefs;
     }
 
+    /**
+     * Rewrite input scalar input into new scalar operator by new column mapping.
+     */
+    public ScalarOperator rewriteAfterDuplicate(ScalarOperator input) {
+        return rewriter.rewrite(input);
+    }
+
     class OptExpressionDuplicatorVisitor extends OptExpressionVisitor<OptExpression, Void> {
         private final OptimizerContext optimizerContext;
         private final Map<Integer, Integer> cteIdMapping = Maps.newHashMap();
@@ -139,9 +148,9 @@ public class OptExpressionDuplicator {
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             Operator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
-            opBuilder.withOperator(optExpression.getOp());
-            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
-                    ((LogicalScanOperator) optExpression.getOp()).getColRefToColumnMetaMap();
+            LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
+            opBuilder.withOperator(scanOperator);
+            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();
             Map<Integer, Integer> relationIdMapping = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, Column> entry : columnRefOperatorColumnMap.entrySet()) {
@@ -157,8 +166,7 @@ public class OptExpressionDuplicator {
             }
             LogicalScanOperator.Builder scanBuilder = (LogicalScanOperator.Builder) opBuilder;
 
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap =
-                    ((LogicalScanOperator) optExpression.getOp()).getColumnMetaToColRefMap();
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
             ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = new ImmutableMap.Builder<>();
             for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
                 ColumnRefOperator key = entry.getValue();
@@ -175,14 +183,30 @@ public class OptExpressionDuplicator {
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
             // process HashDistributionSpec
-            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
-                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
+                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
                             columnRefFactory, columnMapping);
-                    LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                }
+                List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
+                if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                    List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
+                    for (ScalarOperator predicate : prunedPartitionPredicates) {
+                        ScalarOperator newPredicate = rewriter.rewrite(predicate);
+                        newPrunedPartitionPredicates.add(newPredicate);
+                    }
+                    olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
+                }
+            } else {
+                try {
+                    ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
+                    scanOperatorPredicates.duplicate(rewriter);
+                } catch (AnalysisException e) {
+                    // ignore exception
                 }
             }
 
