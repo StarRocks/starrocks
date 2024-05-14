@@ -56,15 +56,12 @@ create database db_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
-<<<<<<< HEAD
-=======
 set enable_materialized_view_transparent_union_rewrite=false;
 -- result:
 -- !result
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
->>>>>>> 38aad60d86 ([Enhancement] Enable transparent union rewrite by default (#44764))
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY str2date(dt, '%Y-%m-%d')
 REFRESH DEFERRED MANUAL AS 
