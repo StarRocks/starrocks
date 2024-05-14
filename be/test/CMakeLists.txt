@@ -232,6 +232,7 @@ set(EXEC_FILES
         ./storage/lake/starlet_location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
         ./storage/lake/tablet_test.cpp
+        ./storage/lake/lake_data_source_test.cpp
         ./storage/lake/lake_scan_node_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/alter_tablet_meta_test.cpp
