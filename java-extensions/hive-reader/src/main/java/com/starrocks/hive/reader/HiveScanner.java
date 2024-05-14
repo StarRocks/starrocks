@@ -91,15 +91,9 @@ public class HiveScanner extends ConnectorScanner {
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
-<<<<<<< HEAD
-        this.hiveColumnTypes = params.get("hive_column_types").split("#");
-        this.requiredFields = params.get("required_fields").split(",");
-        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
-=======
         this.hiveColumnTypes = ScannerHelper.splitAndOmitEmptyStrings(params.get("hive_column_types"), "#");
         this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
         this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
->>>>>>> 1569f589dc ([BugFix] fix empty required fields in jni scanner (#45568))
         this.dataFilePath = params.get("data_file_path");
         this.blockOffset = Long.parseLong(params.get("block_offset"));
         this.blockLength = Long.parseLong(params.get("block_length"));
