@@ -39,7 +39,6 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -55,6 +54,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TColumn;
 
@@ -172,7 +172,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-            ColumnDef.DefaultValueDef defaultValueDef, String comment) {
+                  ColumnDef.DefaultValueDef defaultValueDef, String comment) {
         this(name, type, isKey, aggregateType, isAllowNull, defaultValueDef, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
@@ -519,6 +519,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public Expr getGeneratedColumnExpr() {
         return generatedColumnExpr;
     }
+
     public void setGeneratedColumnExpr(Expr expr) {
         generatedColumnExpr = expr;
     }
@@ -613,7 +614,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 }
             }
         }
-        
+
         if (defaultValue != null) {
             return defaultValue;
         }
