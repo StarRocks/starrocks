@@ -83,6 +83,9 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
     ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
     _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
+    _profile_report_count = ADD_COUNTER(_profile, "ProfileReportCount", TUnit::UNIT);
+    _profile_report_timer = ADD_TIMER(_profile, "ProfileReportTime");
+    _profile_serialized_size = ADD_COUNTER(_profile, "ProfileSerializedSize", TUnit::BYTES);
 }
 
 LoadChannel::~LoadChannel() {
@@ -353,7 +356,13 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
         }
     }
 
-    int64_t last_report_tims_ns = _last_report_time_ns.load();
+    bool expect = false;
+    if (!_is_reporting_profile.compare_exchange_strong(expect, true)) {
+        // skip concurrent report
+        return;
+    }
+    DeferOp defer([this]() { _is_reporting_profile.store(false); });
+
     int64_t now = MonotonicNanos();
     bool should_report;
     if (_closed) {
@@ -361,13 +370,16 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
         bool old = false;
         should_report = _final_report.compare_exchange_strong(old, true);
     } else {
-        // runtime profile report
-        bool time_to_report = now - last_report_tims_ns >= _runtime_profile_report_interval_ns;
-        should_report = time_to_report && _last_report_time_ns.compare_exchange_strong(last_report_tims_ns, now);
+        // runtime profile report periodically
+        should_report = now - _last_report_time_ns >= _runtime_profile_report_interval_ns;
     }
     if (!should_report) {
         return;
     }
+
+    _last_report_time_ns.store(now);
+    COUNTER_UPDATE(_profile_report_count, 1);
+    SCOPED_TIMER(_profile_report_timer);
 
     COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
     auto index_ids = _get_index_ids();
@@ -396,6 +408,7 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
                    << ", status: " << st;
         return;
     }
+    COUNTER_UPDATE(_profile_serialized_size, len);
     result->set_load_channel_profile((char*)buf, len);
 }
 } // namespace starrocks

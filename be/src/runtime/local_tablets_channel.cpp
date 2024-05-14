@@ -68,6 +68,8 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
     });
 
     _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
+    _profile_update_counter = ADD_COUNTER(_profile, "ProfileUpdateCount", TUnit::UNIT);
+    _profile_update_timer = ADD_TIMER(_profile, "ProfileUpdateTime");
     _open_counter = ADD_COUNTER(_profile, "OpenRpcCount", TUnit::UNIT);
     _open_timer = ADD_TIMER(_profile, "OpenRpcTime");
     _add_chunk_counter = ADD_COUNTER(_profile, "AddChunkRpcCount", TUnit::UNIT);
@@ -957,19 +959,14 @@ void LocalTabletsChannel::update_profile() {
         return;
     }
 
-    // skip concurrent update
     bool expect = false;
     if (!_is_updating_profile.compare_exchange_strong(expect, true)) {
+        // skip concurrent update
         return;
     }
-
-    int64_t update_profile_timer = 0;
-    DeferOp defer([this, &update_profile_timer]() {
-        auto* process_timer = ADD_TIMER(_profile, "ProfileUpdateTime");
-        COUNTER_SET(process_timer, update_profile_timer);
-        _is_updating_profile.store(false);
-    });
-    SCOPED_RAW_TIMER(&update_profile_timer);
+    DeferOp defer([this]() { _is_updating_profile.store(false); });
+    COUNTER_UPDATE(_profile_update_counter, 1);
+    SCOPED_TIMER(_profile_update_timer);
 
     std::vector<AsyncDeltaWriter*> async_writers;
     {

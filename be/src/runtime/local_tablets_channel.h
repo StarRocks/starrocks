@@ -230,6 +230,10 @@ private:
     std::set<int64_t> _immutable_partition_ids;
 
     // Profile counters
+    // Number of times that update_profile() is called
+    RuntimeProfile::Counter* _profile_update_counter = nullptr;
+    // Accumulated time for update_profile()
+    RuntimeProfile::Counter* _profile_update_timer = nullptr;
     // Number of times that open() is called
     RuntimeProfile::Counter* _open_counter = nullptr;
     // Accumulated time of open()
