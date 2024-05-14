@@ -2371,12 +2371,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
-<<<<<<< HEAD
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
-=======
-
-            state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
->>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
         } catch (Exception e) {
             LOG.warn(e);
             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2394,18 +2389,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
-<<<<<<< HEAD
-        TransactionState txnState =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
-        if (txnState == null) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
-            result.setStatus(errorStatus);
-            return result;
-        }
-
-=======
->>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
         if (txnState.getTransactionStatus().isFinalStatus()) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error: txn %d is %s", request.getTxn_id(),

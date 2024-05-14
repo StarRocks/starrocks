@@ -25,12 +25,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.ListPartitionDesc;
->>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;

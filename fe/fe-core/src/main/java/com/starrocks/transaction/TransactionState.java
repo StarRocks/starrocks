@@ -82,12 +82,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
->>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -1145,9 +1141,6 @@ public class TransactionState implements Writable {
         tabletIdToTTabletLocation.clear();
     }
 
-<<<<<<< HEAD
-}
-=======
     public void lockCreatePartition(String partitionName) {
         Lock locker = null;
         synchronized (createPartitionLocks) {
@@ -1175,4 +1168,3 @@ public class TransactionState implements Writable {
 
     }
 }
->>>>>>> 11a543ffc9 ([Enhancement] Optimize automatic partition concurrent create partition (#45033))
