@@ -289,7 +289,9 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public SubmitResult executeTask(String taskName) {
-        return executeTask(taskName, new ExecuteOption());
+        ExecuteOption option = new ExecuteOption();
+        option.setManual(true);
+        return executeTask(taskName, option);
     }
 
     public SubmitResult executeTask(String taskName, ExecuteOption option) {
