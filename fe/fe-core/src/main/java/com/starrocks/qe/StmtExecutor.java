@@ -1093,7 +1093,7 @@ public class StmtExecutor {
                     context.updateReturnRows(batch.getBatch().getRows().size());
                 }
             } while (!batch.isEos());
-            if (!isSendFields && !isOutfileQuery && needSendResult) {
+            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze) {
                 sendFields(colNames, outputExprs);
             }
         }
