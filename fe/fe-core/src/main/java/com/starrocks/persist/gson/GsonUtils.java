@@ -666,7 +666,7 @@ public class GsonUtils {
         @Override
         public ColumnId deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
                 throws JsonParseException {
-            return new ColumnId(json.getAsJsonPrimitive().getAsString());
+            return ColumnId.create(json.getAsJsonPrimitive().getAsString());
         }
 
         @Override

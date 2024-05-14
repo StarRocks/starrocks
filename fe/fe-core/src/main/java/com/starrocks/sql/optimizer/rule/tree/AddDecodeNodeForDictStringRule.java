@@ -955,9 +955,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 // Condition 3: the varchar column has collected global dict
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+                Column columnObj = table.getColumn(column.getName());
+                if (columnObj != null
+                        && IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                     Optional<ColumnDict> dict =
-                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                            IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
                     if (!dict.isPresent()) {

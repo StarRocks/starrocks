@@ -924,8 +924,8 @@ public class LeaderImpl {
             tableMeta.setDb_name(dbName);
             tableMeta.setState(olapTable.getState().name());
             tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
-            if (olapTable.getCopiedBfColumns() != null) {
-                for (String bfColumn : olapTable.getCopiedBfColumns()) {
+            if (olapTable.getBfColumnNames() != null) {
+                for (String bfColumn : olapTable.getBfColumnNames()) {
                     tableMeta.addToBloomfilter_columns(bfColumn);
                 }
             }
@@ -1018,7 +1018,7 @@ public class LeaderImpl {
                 indexInfo.setIndex_name(index.getIndexName());
                 indexInfo.setIndex_type(index.getIndexType().name());
                 indexInfo.setComment(index.getComment());
-                for (String column : index.getColumns()) {
+                for (String column : MetaUtils.getColumnNamesByColumnIds(olapTable, index.getColumns())) {
                     indexInfo.addToColumns(column);
                 }
                 tableMeta.addToIndex_infos(indexInfo);

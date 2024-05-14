@@ -34,6 +34,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -574,12 +575,14 @@ public class MaterializedViewAnalyzer {
 
                 for (IndexDef indexDef : indexDefs) {
                     indexDef.analyze();
+                    List<ColumnId> columnIds = new ArrayList<>(indexDef.getColumns().size());
                     for (String indexColName : indexDef.getColumns()) {
                         boolean found = false;
                         for (Column column : columns) {
                             if (column.getName().equalsIgnoreCase(indexColName)) {
                                 indexDef.checkColumn(column, statement.getKeysType());
                                 found = true;
+                                columnIds.add(column.getColumnId());
                                 break;
                             }
                         }
@@ -588,7 +591,7 @@ public class MaterializedViewAnalyzer {
                                     indexDef.getPos());
                         }
                     }
-                    indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
+                    indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
                             indexDef.getComment()));
                     indexMultiMap.put(indexDef.getIndexName().toLowerCase(), 1);
                     colMultiMap.put(String.join(",", indexDef.getColumns()), 1);
