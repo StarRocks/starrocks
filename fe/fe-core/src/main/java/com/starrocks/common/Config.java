@@ -2739,6 +2739,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max retry times for materialized view refresh retry times when failed")
     public static int max_mv_refresh_failure_retry_times = 1;
 
+    @ConfField(mutable = true, comment = "The max retry times when materialized view refresh try lock " +
+            "timeout failed")
+    public static int max_mv_refresh_try_lock_failure_retry_times = 3;
+
+    @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
+    public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
