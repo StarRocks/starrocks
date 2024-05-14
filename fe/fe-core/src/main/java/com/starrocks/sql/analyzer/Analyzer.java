@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -491,11 +490,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
-            try {
-                statement.analyze(context);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            new CreateFunctionAnalyzer().analyze(statement, context);
             return null;
         }
 

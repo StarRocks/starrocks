@@ -18,6 +18,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -57,7 +58,7 @@ public class CreateFunctionStmtTest {
                     + ");";
             CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                     createFunctionSql, 32).get(0);
-            stmt.analyze(ctx);
+            new CreateFunctionAnalyzer().analyze(stmt, ctx);
         } finally {
             Config.enable_udf = val;
         }
