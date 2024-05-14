@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
@@ -101,10 +102,11 @@ public class TaskRunManager implements MemoryTrackable {
         }
         try {
             long taskId = taskRun.getTaskId();
-            List<TaskRun> taskRuns = taskRunScheduler.getCopiedPendingTaskRunsByTaskId(taskId);
+            Set<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
+            List<TaskRun> mergedTaskRuns = Lists.newArrayList();
             if (taskRuns != null && executeOption.isMergeRedundant()) {
                 for (TaskRun oldTaskRun : taskRuns) {
                     if (oldTaskRun == null) {
@@ -138,16 +140,17 @@ public class TaskRunManager implements MemoryTrackable {
                     }
                     LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",
                             oldTaskRun, taskRun);
-
-                    // Update follower's state to SUCCESS, otherwise the merged task run will always be PENDING.
-                    // TODO: 1. add a MERGED state later. 2. support batch update to reduce the number of edit logs.
-                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
-                            oldTaskRun.getStatus().getState(), Constants.TaskRunState.SUCCESS);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
-
-                    taskRunScheduler.removePendingTaskRun(oldTaskRun);
+                    mergedTaskRuns.add(oldTaskRun);
                 }
+            }
+            for (TaskRun oldTaskRun : mergedTaskRuns) {
+                // Update follower's state to SUCCESS, otherwise the merged task run will always be PENDING.
+                // TODO: 1. add a MERGED state later. 2. support batch update to reduce the number of edit logs.
+                oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
+                TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
+                        oldTaskRun.getStatus().getState(), Constants.TaskRunState.SUCCESS);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                taskRunScheduler.removePendingTaskRun(oldTaskRun);
             }
             if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
                 LOG.warn("failed to offer task: {}", taskRun);

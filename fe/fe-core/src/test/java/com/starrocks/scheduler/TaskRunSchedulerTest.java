@@ -85,8 +85,10 @@ public class TaskRunSchedulerTest {
                 .setExecuteOption(executeOption)
                 .build();
         taskRun.setTaskId(taskId);
+        // submitTaskRun needs task run status is empty
         if (createTime >= 0) {
             taskRun.initStatus("1", createTime);
+            taskRun.getStatus().setPriority(executeOption.getPriority());
         }
         return taskRun;
     }
