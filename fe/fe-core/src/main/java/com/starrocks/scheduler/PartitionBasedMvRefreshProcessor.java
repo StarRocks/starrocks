@@ -375,6 +375,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // add a message into information_schema
         logMvToRefreshInfoIntoTaskRun(mvToRefreshedPartitions, refTablePartitionNames);
 
+        ///// 2. execute the ExecPlan of insert stmt
+        InsertStmt insertStmt = prepareRefreshPlan(mvToRefreshedPartitions, refTablePartitionNames);
+        refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
+
         // insert execute successfully, update the meta of materialized view according to ExecPlan
         updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
 
