@@ -124,6 +124,7 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'use-staros' \
+  -l 'with-brpc-keepalive' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
   -o 'j:' \
