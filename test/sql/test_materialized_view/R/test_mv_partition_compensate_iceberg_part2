@@ -56,6 +56,9 @@ create database db_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
+set enable_materialized_view_transparent_union_rewrite=false;
+-- result:
+-- !result
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result

@@ -9,7 +9,7 @@ properties
 
 
 set new_planner_optimize_timeout=10000;
-set materialized_view_union_rewrite_mode = 3;
+set enable_materialized_view_transparent_union_rewrite = true;
 -- create hive table
 set catalog mv_hive_${uuid0};
 create database mv_hive_db_${uuid0};
