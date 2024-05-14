@@ -16,6 +16,7 @@ package com.starrocks.kudu.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
@@ -48,7 +49,7 @@ public class KuduSplitScanner extends ConnectorScanner {
 
     public KuduSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
-        this.requiredFields = params.get("required_fields").split(",");
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
         this.encodedToken = params.get("kudu_scan_token");
         this.master = params.get("kudu_master");
         this.classLoader = this.getClass().getClassLoader();
@@ -136,13 +137,13 @@ public class KuduSplitScanner extends ConnectorScanner {
 
     public String toString() {
         return "scanner: "
-            + scanner
-            + "\n"
-            + "requiredFields: "
-            + Arrays.toString(requiredFields)
-            + "\n"
-            + "fetchSize: "
-            + fetchSize
-            + "\n";
+                + scanner
+                + "\n"
+                + "requiredFields: "
+                + Arrays.toString(requiredFields)
+                + "\n"
+                + "fetchSize: "
+                + fetchSize
+                + "\n";
     }
 }

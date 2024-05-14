@@ -32,6 +32,7 @@ import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
 import com.aliyun.odps.utils.StringUtils;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -73,7 +74,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
         this.fetchSize = fetchSize;
         this.projectName = params.get("project_name");
         this.tableName = params.get("table_name");
-        this.requiredFields = params.get("required_fields").split(",");
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
         String splitPolicy = params.get("split_policy");
         String sessionId = params.get("session_id");
         switch (splitPolicy) {
