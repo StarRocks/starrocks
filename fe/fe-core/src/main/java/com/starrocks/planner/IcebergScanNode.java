@@ -16,9 +16,13 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
+=======
+import com.google.common.collect.ImmutableSet;
+>>>>>>> a9d8611c4f ([UT] get identifier field ids from equality delete file for adaptation (#45570))
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.google.common.collect.BiMap;
@@ -384,6 +388,10 @@ public class IcebergScanNode extends ScanNode {
             scanRangeLocations.addToLocations(scanRangeLocation);
 
             result.add(scanRangeLocations);
+        }
+
+        if (!currentEqualityIds.isEmpty()) {
+            icebergTable.setIdentifierFieldIds(ImmutableSet.copyOf(currentEqualityIds));
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
