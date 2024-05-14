@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.DecommissionType;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -155,6 +156,8 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.Backend;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -166,6 +169,7 @@ import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAuthenticateParams;
+import com.starrocks.thrift.TBackendResult;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
@@ -209,6 +213,8 @@ import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetRoutineLoadJobsResult;
+import com.starrocks.thrift.TGetServersParams;
+import com.starrocks.thrift.TGetServersResult;
 import com.starrocks.thrift.TGetStreamLoadsResult;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
@@ -281,6 +287,7 @@ import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
+import com.starrocks.thrift.TServerType;
 import com.starrocks.thrift.TSessionInfo;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -2769,6 +2776,60 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } catch (Exception e) {
             LOG.warn("Failed to getStreamLoads", e);
         }
+        return result;
+    }
+
+    @Override
+    public TGetServersResult getServers(TGetServersParams request) throws TException {
+        LOG.debug("Receive getServers: {}", request);
+
+        TGetServersResult result = new TGetServersResult();
+        if (!request.getType().equals(TServerType.BACKEND)) {
+            throw new TException("Only support backends");
+        }
+
+        var clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> backendIds = clusterInfoService.getBackendIds(false);
+        if (backendIds == null) {
+            return result;
+        }
+
+        List<TBackendResult> backends = Lists.newArrayList();
+        for (long backendId : backendIds) {
+            Backend backend = clusterInfoService.getBackend(backendId);
+            if (backend == null) {
+                continue;
+            }
+
+            String decommissioned = "running";
+	    if (backend.isDecommissioned()) {
+                if (DecommissionType.ClusterDecommission.equals(backend.getDecommissionType())) {
+                    decommissioned = "cluster";
+                } else if (DecommissionType.SystemDecommission.equals(backend.getDecommissionType())) {
+                    decommissioned = "system";
+                } else {
+                    decommissioned = "invalid";
+                }
+            }
+
+            var info = new TBackendResult();
+            info.setId(backendId);
+            info.setVersion(backend.getVersion());
+            info.setIp(backend.getIP());
+            info.setHeartbeat_port(backend.getHeartbeatPort());
+            info.setBe_port(backend.getBePort());
+            info.setHttp_port(backend.getHttpPort());
+            info.setBrpc_port(backend.getBrpcPort());
+            info.setAlive(backend.isAlive());
+            info.setDecommissioned(decommissioned);
+            info.setData_used_capacity(backend.getDataUsedCapacityB());
+            info.setAvail_capacity(backend.getAvailableCapacityB());
+            info.setTotal_capacity(backend.getTotalCapacityB());
+            info.setData_total_capacity(backend.getDataTotalCapacityB());
+            info.setCpu_cores(BackendCoreStat.getCoresOfBe(backendId));
+            backends.add(info);
+        }
+        result.setBackends(backends);
         return result;
     }
 

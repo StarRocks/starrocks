@@ -92,6 +92,9 @@ public:
     static Status get_stream_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                    TGetStreamLoadsResult* var_result);
 
+    static Status get_servers(const SchemaScannerState& state, const TGetServersParams& var_params,
+                                   TGetServersResult* var_result);
+
     static Status get_task_runs(const SchemaScannerState& state, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
 

@@ -631,7 +631,38 @@ struct TStreamLoadInfo {
     23: string channel_state,
     24: string type
     25: string tracking_sql,
+}
 
+enum TServerType {
+  FRONTEND,
+  BACKEND,
+  BROCKER,
+  COMPUTE_NODE
+}
+
+struct TGetServersParams {
+    1: required TServerType type
+}
+
+struct TGetServersResult {
+    1: optional list<TBackendResult> backends
+}
+
+struct TBackendResult {
+    1: optional i64 id
+    2: optional string version
+    3: optional string ip
+    4: optional i32 heartbeat_port
+    5: optional i32 be_port
+    6: optional i32 http_port
+    7: optional i32 brpc_port
+    8: optional bool alive
+    9: optional string decommissioned
+    10: optional i64 data_used_capacity
+    11: optional i64 avail_capacity
+    12: optional i64 total_capacity
+    13: optional i64 data_total_capacity
+    14: optional i32 cpu_cores
 }
 
 // getTableNames returns a list of unqualified table names
@@ -1796,6 +1827,8 @@ service FrontendService {
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
     TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)
     TGetRoutineLoadJobsResult getRoutineLoadJobs(1:TGetLoadsParams params)
+    TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)
+
     TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)
 
     TGetProfileResponse getQueryProfile(1:TGetProfileRequest request)

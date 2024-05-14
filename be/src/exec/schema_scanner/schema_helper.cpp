@@ -184,6 +184,13 @@ Status SchemaHelper::get_stream_loads(const SchemaScannerState& state, const TGe
     });
 }
 
+Status SchemaHelper::get_servers(const SchemaScannerState& state, const TGetServersParams& var_params,
+                                          TGetServersResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getServers(*var_result, var_params);
+    });
+}
+
 Status SchemaHelper::get_tablet_schedules(const SchemaScannerState& state, const TGetTabletScheduleRequest& request,
                                           TGetTabletScheduleResponse* response) {
     return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
