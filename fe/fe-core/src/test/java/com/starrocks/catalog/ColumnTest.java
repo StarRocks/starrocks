@@ -358,9 +358,7 @@ public class ColumnTest {
     @Test
     public void testColumnDeserialization() {
         String str = "{\"name\": \"test\"}";
-
         Column column = GsonUtils.GSON.fromJson(str, Column.class);
-
-        System.out.println("column id is" +  column.getColumnId());
+        Assert.assertEquals("test", column.getColumnId().getId());
     }
 }
