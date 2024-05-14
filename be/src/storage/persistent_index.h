@@ -666,6 +666,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
+    size_t usage() const { return _usage; }
     virtual size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
@@ -779,6 +780,16 @@ public:
         }
         for (int i = 0; i < _l2_vec.size(); i++) {
             res += _l2_vec[i]->total_size();
+        }
+        return res;
+    }
+
+    // not thread safe, just for unit test
+    std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
+        std::pair<int64_t, int64_t> res;
+        for (auto [_, stat] : _usage_and_size_by_key_length) {
+            res.first += stat.first;
+            res.second += stat.second;
         }
         return res;
     }
