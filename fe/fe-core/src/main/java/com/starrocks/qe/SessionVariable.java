@@ -85,6 +85,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
+import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -101,23 +102,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The schedule policy of backend and compute nodes.
     // The optional values are "compute_nodes_only" and "all_nodes".
     public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
-    public enum ComputationFragmentSchedulingPolicy {
-        COMPUTE_NODES_ONLY("compute_nodes_only"), //only select compute node in scheduler policy (default)
-        ALL_NODES("all_nodes"); //both select compute node and backend in scheduler policy
-
-        private String policy;
-
-        private ComputationFragmentSchedulingPolicy(String policy) {
-            this.policy = policy;
-        }
-
-        public static ComputationFragmentSchedulingPolicy getPolicy(String policy) {
-            if (EnumUtils.isValidEnumIgnoreCase(ComputationFragmentSchedulingPolicy.class, policy)) {
-                return EnumUtils.getEnumIgnoreCase(ComputationFragmentSchedulingPolicy.class, policy);
-            }
-            throw new IllegalArgumentException("Invalid computationFragmentSchedulingPolicy: " + policy);
-        }
-    }
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
 
     /**
@@ -802,8 +786,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean preferComputeNode = false;
 
     @VariableMgr.VarAttr(name = COMPUTATION_FRAGMENT_SCHEDULING_POLICY)
-    private ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy = 
-                                    ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
+    private String computationFragmentSchedulingPolicy = COMPUTE_NODES_ONLY.name();
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
@@ -2193,12 +2176,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
-        this.computationFragmentSchedulingPolicy = 
-                    ComputationFragmentSchedulingPolicy.getPolicy(computationFragmentSchedulingPolicy);
+        SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
+                Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+            throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
+        }
+        this.computationFragmentSchedulingPolicy = StringUtils.upperCase(computationFragmentSchedulingPolicy);
     }
 
-    public ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
-        return computationFragmentSchedulingPolicy;
+    public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
+        return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
     public boolean enableHiveColumnStats() {
