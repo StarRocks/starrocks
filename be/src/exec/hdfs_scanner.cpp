@@ -330,7 +330,7 @@ Status HdfsScanner::reinterpret_status(const Status& st) {
     Status ret = st;
     // After catching the AWS 404 file not found error and returning it to the FE,
     // the FE will refresh the file information of table and re-execute the SQL operation.
-    if (st.is_io_error() && st.message().find("404") != std::string_view::npos) {
+    if (st.is_io_error() && st.message().starts_with("code=404")) {
         ret = Status::RemoteFileNotFound(st.message());
     }
 

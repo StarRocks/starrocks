@@ -450,24 +450,6 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     }
 }
 
-void HiveDataSource::_init_rf_counters() {
-    auto* root = _runtime_profile;
-    if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
-        static const char* prefix = "DynamicPruneScanRange";
-        ADD_COUNTER(root, prefix, TUnit::NONE);
-        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
-                ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
-                ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =
-                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterInputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_output_counter =
-                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterOutputScanRanges", TUnit::UNIT, prefix);
-        runtime_bloom_filter_eval_context.join_runtime_filter_eval_counter =
-                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterEvaluate", TUnit::UNIT, prefix);
-    }
-}
-
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_profile.open_file_timer);
 
