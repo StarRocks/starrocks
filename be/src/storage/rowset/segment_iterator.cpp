@@ -2014,18 +2014,109 @@ Status SegmentIterator::_apply_inverted_index() {
     return Status::OK();
 }
 
+struct BloomFilterSupportChecker {
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* col_pred = node.col_pred();
+        const auto cid = col_pred->column_id();
+        const bool support =
+                (column_iterators[cid]->has_original_bloom_filter_index() &&
+                 col_pred->support_original_bloom_filter()) ||
+                (column_iterators[cid]->has_ngram_bloom_filter_index() && col_pred->support_ngram_bloom_filter());
+        if (support) {
+            used_nodes.emplace(&node);
+        }
+        return support;
+    }
+
+    bool operator()(const PredicateAndNode& node) {
+        bool support = false;
+        for (const auto& child : node.children()) {
+            // Use | not || to add all the used nodes to `used_nodes`.
+            support |= child.visit(*this);
+        }
+        if (support) {
+            used_nodes.emplace(&node);
+        }
+        return support;
+    }
+
+    bool operator()(const PredicateOrNode& node) {
+        const bool support = std::all_of(node.children().begin(), node.children().end(),
+                                         [&](const auto& child) { return child.visit(*this); });
+        if (support) {
+            used_nodes.emplace(&node);
+        }
+        return support;
+    }
+
+    std::vector<std::unique_ptr<ColumnIterator>>& column_iterators;
+    std::unordered_set<const PredicateBaseNode*>& used_nodes;
+};
+
+struct BloomFilterEvaluator {
+    Status operator()(const PredicateAndNode& node, SparseRange<>& dest_ranges) {
+        if (!used_nodes.contains(&node)) {
+            return Status::OK();
+        }
+
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &dest_ranges));
+        }
+
+        for (const auto& child : node.compound_children()) {
+            RETURN_IF_ERROR(child.visit(*this, dest_ranges));
+        }
+        return Status::OK();
+    }
+
+    Status operator()(const PredicateOrNode& node, SparseRange<>& dest_ranges) {
+        if (node.empty() || !used_nodes.contains(&node)) {
+            return Status::OK();
+        }
+
+        SparseRange<> cur_dest_ranges;
+        const auto& ctx = pred_tree.compound_node_context(node.id());
+        const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            auto child_ranges = dest_ranges;
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &child_ranges));
+            cur_dest_ranges |= child_ranges;
+        }
+
+        for (const auto& child : node.compound_children()) {
+            auto child_ranges = dest_ranges;
+            RETURN_IF_ERROR(child.visit(*this, child_ranges));
+            cur_dest_ranges |= child_ranges;
+        }
+
+        dest_ranges &= cur_dest_ranges;
+
+        return Status::OK();
+    }
+
+    const PredicateTree& pred_tree;
+    std::vector<std::unique_ptr<ColumnIterator>>& column_iterators;
+    std::unordered_set<const PredicateBaseNode*>& used_nodes;
+};
+
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
     RETURN_IF(!config::enable_index_bloom_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
-    RETURN_IF(_cid_to_predicates.empty(), Status::OK());
+    RETURN_IF(_opts.pred_tree.empty(), Status::OK());
 
     SCOPED_RAW_TIMER(&_opts.stats->bf_filter_ns);
-    size_t prev_size = _scan_range.span_size();
-    for (const auto& [cid, preds] : _cid_to_predicates) {
-        ColumnIterator* column_iter = _column_iterators[cid].get();
-        RETURN_IF_ERROR(column_iter->get_row_ranges_by_bloom_filter(preds, &_scan_range));
-    }
+
+    std::unordered_set<const PredicateBaseNode*> used_nodes;
+    const bool support = _opts.pred_tree.visit(BloomFilterSupportChecker{_column_iterators, used_nodes});
+    RETURN_IF(!support, Status::OK());
+
+    const size_t prev_size = _scan_range.span_size();
+    RETURN_IF_ERROR(
+            _opts.pred_tree.visit(BloomFilterEvaluator{_opts.pred_tree, _column_iterators, used_nodes}, _scan_range));
     _opts.stats->rows_bf_filtered += prev_size - _scan_range.span_size();
+
     return Status::OK();
 }
 
@@ -2090,6 +2181,8 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
         if (name == kBytesReadLocalDisk) {
             _opts.stats->compressed_bytes_read_local_disk += value;
             _opts.stats->compressed_bytes_read += value;
+        } else if (name == kBytesWriteLocalDisk) {
+            _opts.stats->compressed_bytes_write_local_disk += value;
         } else if (name == kBytesReadRemote) {
             _opts.stats->compressed_bytes_read_remote += value;
             _opts.stats->compressed_bytes_read += value;
@@ -2099,8 +2192,10 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
         } else if (name == kIOCountRemote) {
             _opts.stats->io_count_remote += value;
             _opts.stats->io_count += value;
-        } else if (name == kIONsLocalDisk) {
-            _opts.stats->io_ns_local_disk += value;
+        } else if (name == kIONsReadLocalDisk) {
+            _opts.stats->io_ns_read_local_disk += value;
+        } else if (name == kIONsWriteLocalDisk) {
+            _opts.stats->io_ns_write_local_disk += value;
         } else if (name == kIONsRemote) {
             _opts.stats->io_ns_remote += value;
         } else if (name == kPrefetchHitCount) {

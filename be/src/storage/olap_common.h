@@ -280,6 +280,7 @@ struct OlapReaderStatistics {
     int64_t pages_from_local_disk = 0;
 
     int64_t compressed_bytes_read_local_disk = 0;
+    int64_t compressed_bytes_write_local_disk = 0;
     int64_t compressed_bytes_read_remote = 0;
     // bytes read requested from be, same as compressed_bytes_read for local tablet
     int64_t compressed_bytes_read_request = 0;
@@ -289,7 +290,8 @@ struct OlapReaderStatistics {
     int64_t io_count_remote = 0;
     int64_t io_count_request = 0;
 
-    int64_t io_ns_local_disk = 0;
+    int64_t io_ns_read_local_disk = 0;
+    int64_t io_ns_write_local_disk = 0;
     int64_t io_ns_remote = 0;
 
     int64_t prefetch_hit_count = 0;
@@ -310,10 +312,12 @@ struct OlapWriterStatistics {
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
+const char* const kBytesWriteLocalDisk = "bytes_write_local_disk";
 const char* const kBytesReadRemote = "bytes_read_remote";
 const char* const kIOCountLocalDisk = "io_count_local_disk";
 const char* const kIOCountRemote = "io_count_remote";
-const char* const kIONsLocalDisk = "io_ns_local_disk";
+const char* const kIONsReadLocalDisk = "io_ns_read_local_disk";
+const char* const kIONsWriteLocalDisk = "io_ns_write_local_disk";
 const char* const kIONsRemote = "io_ns_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";

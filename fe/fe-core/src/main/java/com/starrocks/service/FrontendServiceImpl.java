@@ -2412,7 +2412,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             // use default warehouse nodes
                             long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeId(
-                                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, cloudNativeTablet);
+                                    txnState.getWarehouseId(), cloudNativeTablet);
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
                                     Collections.singletonList(computeNodeId));
                             tablets.add(tabletLocation);
@@ -2456,7 +2456,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(txnState.getWarehouseId());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;

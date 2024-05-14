@@ -163,6 +163,9 @@ public class TaskBuilder {
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
+        // alter mv set warehouse
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                String.valueOf(materializedView.getWarehouseId()));
 
         task.setProperties(taskProperties);
         task.setDefinition(materializedView.getTaskDefinition());
