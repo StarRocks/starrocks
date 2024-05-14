@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.qe.SessionVariable.ComputationFragmentSchedulingPolicy;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 
