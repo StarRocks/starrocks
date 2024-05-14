@@ -34,7 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
@@ -44,6 +43,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.thrift.TColumn;
 import org.junit.Assert;
 import org.junit.Before;

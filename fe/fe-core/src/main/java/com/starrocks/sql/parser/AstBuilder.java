@@ -48,12 +48,10 @@ import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
@@ -263,11 +261,13 @@ import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LambdaArgument;
@@ -478,7 +478,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.IndexDef.IndexType.getIndexType;
+import static com.starrocks.sql.ast.IndexDef.IndexType.getIndexType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -1148,8 +1148,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException("invalid session id format");
         }
     }
-
-
 
     @Override
     public ParseNode visitRecoverTableStatement(StarRocksParser.RecoverTableStatementContext context) {

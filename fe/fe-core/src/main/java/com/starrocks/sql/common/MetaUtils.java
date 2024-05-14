@@ -27,7 +27,6 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DebugUtil;
@@ -56,12 +55,12 @@ public class MetaUtils {
 
     private static final Logger LOG = LogManager.getLogger(MVUtils.class);
 
-    public static void checkCatalogExistAndReport(String catalogName) throws AnalysisException {
+    public static void checkCatalogExistAndReport(String catalogName) {
         if (catalogName == null) {
-            ErrorReport.reportAnalysisException("Catalog is null");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, "");
         }
         if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
     }
 

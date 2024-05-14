@@ -14,19 +14,9 @@
 
 package com.starrocks.analysis;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
-
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
@@ -38,6 +28,7 @@ import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
@@ -46,6 +37,15 @@ import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
 public class GINIndexTest extends PlanTestBase {
 
@@ -169,17 +169,17 @@ public class GINIndexTest extends PlanTestBase {
                 Collections.singletonMap(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name()),
                 olapIndex.getCommon_properties());
 
-        Assertions.assertEquals(new HashMap<String, String>(){{
+        Assertions.assertEquals(new HashMap<String, String>() {{
             put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
             put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 
-        Assertions.assertEquals(new HashMap<String, String>(){{
+        Assertions.assertEquals(new HashMap<String, String>() {{
             put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
             put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 
-        Assertions.assertEquals(new HashMap<String, String>(){{
+        Assertions.assertEquals(new HashMap<String, String>() {{
             put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
             put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
