@@ -7,7 +7,12 @@ properties
     "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
 );
 
+<<<<<<< HEAD
 set materialized_view_union_rewrite_mode = 3;
+=======
+set new_planner_optimize_timeout=10000;
+set enable_materialized_view_transparent_union_rewrite = true;
+>>>>>>> 38aad60d86 ([Enhancement] Enable transparent union rewrite by default (#44764))
 
 -- create iceberg table
 set catalog mv_iceberg_${uuid0};
