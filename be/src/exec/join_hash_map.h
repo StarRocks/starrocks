@@ -237,6 +237,7 @@ struct HashTableProbeState {
               probe_slice(rhs.probe_slice),
               null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
+              key_columns(rhs.key_columns),
               build_index_column(rhs.build_index_column == nullptr ? nullptr : rhs.build_index_column->clone()),
               probe_index_column(rhs.probe_index_column == nullptr ? nullptr : rhs.probe_index_column->clone()),
               build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
