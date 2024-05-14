@@ -437,7 +437,7 @@ public class BinaryPredicateStatisticCalculator {
         for (Map.Entry<String, Long> entry : mostCommonValues.entrySet()) {
             Optional<Double> optionalKey = StatisticUtils.convertStatisticsToDouble(constant.get().getType(), entry.getKey());
             if (!optionalKey.isPresent()) {
-               return Optional.empty();
+                return Optional.empty();
             } else if (optionalKey.get() < constantDouble || (optionalKey.get() == constantDouble && containUpper)) {
                 estimatedMCV.put(entry.getKey(), entry.getValue());
             }
@@ -516,7 +516,7 @@ public class BinaryPredicateStatisticCalculator {
             Optional<Double> optionalKey = StatisticUtils.convertStatisticsToDouble(constant.get().getType(), entry.getKey());
             if (!optionalKey.isPresent()) {
                 return Optional.empty();
-            } else if ( optionalKey.get() > constantDouble || (optionalKey.get() == constantDouble && containUpper)) {
+            } else if (optionalKey.get() > constantDouble || (optionalKey.get() == constantDouble && containUpper)) {
                 estimatedMCV.put(entry.getKey(), entry.getValue());
             }
         }

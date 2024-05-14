@@ -51,10 +51,9 @@ public class Histogram {
         int printMcvSize = 5;
         StringBuilder sb = new StringBuilder();
         sb.append("MCV: [");
-        mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(
-                Comparator.reverseOrder())).limit(printMcvSize).forEach(entry ->
-                    sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]")
-                );
+        mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .limit(printMcvSize)
+                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
         sb.append("]");
         return sb.toString();
     }
