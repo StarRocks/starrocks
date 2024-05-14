@@ -342,7 +342,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     return Status::OK();
 }
 
-StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
+StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
 
     long num_rows = next_chunk_meta_as_long();
@@ -392,7 +392,7 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 StatusOr<size_t> JniScanner::fill_empty_chunk(ChunkPtr* chunk) {
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     long chunk_meta;
-    RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
+    RETURN_IF_ERROR(_get_next_chunk(env, &chunk_meta));
     reset_chunk_meta(chunk_meta);
     auto status = _fill_chunk(env, chunk);
     RETURN_IF_ERROR(_release_off_heap_table(env));
