@@ -22,7 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable.ComputationFragmentSchedulingPolicy;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -329,7 +329,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             if (computationFragmentSchedulingPolicy == ComputationFragmentSchedulingPolicy.ALL_NODES) {
                 computeNodes.putAll(idToBackend);
             }
-        } else if (numUsedComputeNodes < idToComputeNode.size()) {
+        } else {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
                         getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
@@ -339,8 +339,6 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 }
                 computeNodes.put(computeNode.getId(), computeNode);
             }
-        } else { //numUsedComputeNodes >= idToComputeNode.size()
-            computeNodes.putAll(idToComputeNode);
             if (computationFragmentSchedulingPolicy == ComputationFragmentSchedulingPolicy.ALL_NODES) {
                 for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                     ComputeNode backend =
@@ -351,6 +349,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                     }
                     computeNodes.put(backend.getId(), backend);
                 }
+
             }
         }
 
