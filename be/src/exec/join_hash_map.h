@@ -187,6 +187,7 @@ struct HashTableProbeState {
     // When one-to-many, one probe may not be able to probe all the data,
     // cur_probe_index records the position of the last probe
     uint32_t cur_probe_index = 0;
+    uint32_t cur_build_index = 0;
     uint32_t cur_row_match_count = 0;
 
     std::unique_ptr<MemPool> probe_pool = nullptr;
@@ -241,6 +242,7 @@ struct HashTableProbeState {
               match_flag(rhs.match_flag),
               has_remain(rhs.has_remain),
               cur_probe_index(rhs.cur_probe_index),
+              cur_build_index(rhs.cur_build_index),
               cur_row_match_count(rhs.cur_row_match_count),
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
@@ -511,9 +513,9 @@ public:
     explicit JoinHashMapForEmpty(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
 
-    void build_prepare(RuntimeState* state) { return; }
-    void probe_prepare(RuntimeState* state) { return; }
-    void build(RuntimeState* state) { return; }
+    void build_prepare(RuntimeState* state) {}
+    void probe_prepare(RuntimeState* state) {}
+    void build(RuntimeState* state) {}
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain) {
         DCHECK_EQ(0, _table_items->row_count);
