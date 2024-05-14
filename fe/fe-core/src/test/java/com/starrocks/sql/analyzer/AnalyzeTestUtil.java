@@ -354,7 +354,7 @@ public class AnalyzeTestUtil {
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
-        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
+        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException | IllegalArgumentException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
