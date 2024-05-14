@@ -70,6 +70,9 @@ public class TaskBuilder {
         } else if (submitTaskStmt.getCreateTableAsSelectStmt() != null) {
             taskNamePrefix = "ctas-";
             taskSource = Constants.TaskSource.CTAS;
+        } else if (submitTaskStmt.getDataCacheSelectStmt() != null) {
+            taskNamePrefix = "DataCacheSelect-";
+            taskSource = Constants.TaskSource.DATACACHE_SELECT;
         } else {
             throw new SemanticException("Submit task statement is not supported");
         }
@@ -79,6 +82,7 @@ public class TaskBuilder {
         Task task = new Task(taskName);
         task.setSource(taskSource);
         task.setCreateTime(System.currentTimeMillis());
+        task.setCatalogName(submitTaskStmt.getCatalogName());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
         task.setProperties(submitTaskStmt.getProperties());
@@ -159,6 +163,9 @@ public class TaskBuilder {
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
+        // alter mv set warehouse
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                String.valueOf(materializedView.getWarehouseId()));
 
         task.setProperties(taskProperties);
         task.setDefinition(materializedView.getTaskDefinition());

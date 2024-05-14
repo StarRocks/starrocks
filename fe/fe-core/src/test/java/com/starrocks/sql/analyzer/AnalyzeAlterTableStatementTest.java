@@ -24,8 +24,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CompactionClause;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -107,7 +109,8 @@ public class AnalyzeAlterTableStatementTest {
                 "PROPERTIES('replication_num' = '1');");
         // create bitmap index on v1
         sql = "CREATE INDEX index1 ON `test`.`bitmapTable` (`v1`) USING BITMAP COMMENT 'balabala'";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, sql);
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
         connectContext.getState().getErrorMessage()
@@ -162,7 +165,9 @@ public class AnalyzeAlterTableStatementTest {
                 "PROPERTIES('replication_num' = '1') \n" +
                 "as select k1, k2 from table_to_create_mv;");
         String renamePartition = "alter table mv1_partition_by_column rename partition p00000101_20200201 pbase;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, renamePartition);
+        StatementBase statement = SqlParser.parseSingleStatement(renamePartition,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
         connectContext.getState().getErrorMessage()

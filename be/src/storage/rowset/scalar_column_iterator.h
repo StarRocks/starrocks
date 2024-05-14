@@ -63,10 +63,14 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* range) override;
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
 
+    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
+                                                    const ColumnPredicate* del_predicate, SparseRange<>* range,
+                                                    CompoundNodeType pred_relationn) override;
+
+    bool has_original_bloom_filter_index() const override;
+    bool has_ngram_bloom_filter_index() const override;
     [[nodiscard]] Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                         SparseRange<>* range) override;
 
@@ -87,6 +91,8 @@ public:
     [[nodiscard]] Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     ParsedPage* get_current_page() { return _page.get(); }
+
+    ColumnReader* get_column_reader() override { return _reader; }
 
     bool is_nullable();
 
@@ -149,7 +155,7 @@ private:
     ordinal_t _current_ordinal = 0;
 
     // page indexes those are DEL_PARTIAL_SATISFIED
-    std::unordered_set<uint32_t> _delete_partial_satisfied_pages;
+    std::optional<std::unordered_set<uint32_t>> _delete_partial_satisfied_pages;
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;

@@ -18,6 +18,7 @@
 package com.starrocks.common;
 
 import com.google.common.collect.Sets;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -29,7 +30,6 @@ import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -50,7 +50,7 @@ public class ThriftServer {
 
     private void createThreadPoolServer() throws TTransportException {
         TServerSocket.ServerSocketTransportArgs socketTransportArgs = new TServerSocket.ServerSocketTransportArgs()
-                .bindAddr(new InetSocketAddress(port))
+                .bindAddr(NetUtils.getSockAddrBasedOnCurrIpVersion(port))
                 .clientTimeout(Config.thrift_client_timeout_ms)
                 .backlog(Config.thrift_backlog_num);
 

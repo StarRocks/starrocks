@@ -28,7 +28,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -65,13 +67,24 @@ import static java.util.Objects.requireNonNull;
 public class CatalogConnectorMetadata implements ConnectorMetadata {
     private final ConnectorMetadata normal;
     private final ConnectorMetadata informationSchema;
+    private final ConnectorMetadata tableMetadata;
 
-    public CatalogConnectorMetadata(ConnectorMetadata normal, ConnectorMetadata informationSchema) {
+    public CatalogConnectorMetadata(ConnectorMetadata normal,
+                                    ConnectorMetadata informationSchema,
+                                    ConnectorMetadata tableMetadata) {
         requireNonNull(normal, "metadata is null");
         requireNonNull(informationSchema, "infoSchemaDb is null");
         checkArgument(informationSchema instanceof InformationSchemaMetadata);
         this.normal = normal;
         this.informationSchema = informationSchema;
+        this.tableMetadata = tableMetadata;
+    }
+
+    private ConnectorMetadata metadataOfTable(String tableName) {
+        if (TableMetaMetadata.isMetadataTable(tableName)) {
+            return tableMetadata;
+        }
+        return null;
     }
 
     private ConnectorMetadata metadataOfDb(String dBName) {
@@ -101,8 +114,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
-        return normal.listPartitionNames(databaseName, tableName);
+    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+        return normal.listPartitionNames(databaseName, tableName, snapshotId);
     }
 
     @Override
@@ -113,7 +126,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfDb(dbName);
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
         return metadata.getTable(dbName, tblName);
     }
 
@@ -135,8 +152,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
-        return normal.prepareMetadata(item, tracers);
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
+        return normal.prepareMetadata(item, tracers, connectContext);
+    }
+
+    @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                    long snapshotId, String serializedPredicate) {
+        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
     }
 
     @Override
@@ -228,8 +251,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
-        normal.truncateTable(truncateTableStmt);
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
+        normal.truncateTable(truncateTableStmt, context);
     }
 
     @Override
@@ -239,7 +262,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
         normal.addPartitions(db, tableName, addPartitionClause);
     }
 
@@ -298,10 +321,5 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return normal.getCloudConfiguration();
-    }
-
-    @Override
-    public List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
-        return normal.getChangedPartitionInfo(table, mvSnapShotID);
     }
 }

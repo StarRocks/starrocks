@@ -21,23 +21,56 @@ import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.assertj.core.util.Lists;
+import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
+import java.util.concurrent.CompletableFuture;
 
 public class LakeTableCleanerTest {
     private final ShardInfo shardInfo;
 
+    @Mocked
+    private StarOSAgent starOSAgent;
+
+    @Mocked
+    private WarehouseManager warehouseManager;
+
     public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
+        warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+    }
+
+    @Before
+    public void setup() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
     }
 
     @Test
@@ -62,13 +95,24 @@ public class LakeTableCleanerTest {
             }
         };
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
-
 
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
@@ -80,27 +124,22 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                tablet.getShardInfo();
-                result = shardInfo;
-                minTimes = 1;
-                maxTimes = 1;
-
                 lakeService.dropTable((DropTableRequest) any);
-                result = null; // unused
+                result = CompletableFuture.completedFuture(new DropTableResponse());
                 minTimes = 1;
                 maxTimes = 1;
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertTrue(cleaner.cleanTable());
     }
 
     @Test
     public void testNoTablet(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
-                     @Mocked MaterializedIndex index,
-                     @Mocked LakeTablet tablet,
-                     @Mocked LakeService lakeService) {
+                             @Mocked PhysicalPartition partition,
+                             @Mocked MaterializedIndex index,
+                             @Mocked LakeTablet tablet,
+                             @Mocked LakeService lakeService) {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new Expectations() {
@@ -109,7 +148,6 @@ public class LakeTableCleanerTest {
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
-
 
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
@@ -123,15 +161,15 @@ public class LakeTableCleanerTest {
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertTrue(cleaner.cleanTable());
     }
 
     @Test
     public void testNoAliveNode(@Mocked LakeTable table,
-                               @Mocked PhysicalPartition partition,
-                               @Mocked MaterializedIndex index,
-                               @Mocked LakeTablet tablet,
-                               @Mocked LakeService lakeService) throws StarClientException {
+                                @Mocked PhysicalPartition partition,
+                                @Mocked MaterializedIndex index,
+                                @Mocked LakeTablet tablet,
+                                @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
@@ -141,13 +179,24 @@ public class LakeTableCleanerTest {
             }
         };
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
-
 
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
@@ -158,24 +207,31 @@ public class LakeTableCleanerTest {
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
                 maxTimes = 1;
-
-                tablet.getShardInfo();
-                result = shardInfo;
-                minTimes = 1;
-                maxTimes = 1;
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertFalse(cleaner.cleanTable());
     }
 
     @Test
     public void testGetShardInfoFailed(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
-                     @Mocked MaterializedIndex index,
-                     @Mocked LakeTablet tablet,
-                     @Mocked LakeService lakeService) throws StarClientException {
+                                       @Mocked PhysicalPartition partition,
+                                       @Mocked MaterializedIndex index,
+                                       @Mocked LakeTablet tablet,
+                                       @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
 
         new Expectations() {
             {
@@ -183,7 +239,6 @@ public class LakeTableCleanerTest {
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
-
 
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
@@ -194,23 +249,18 @@ public class LakeTableCleanerTest {
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
                 maxTimes = 1;
-
-                tablet.getShardInfo();
-                result = new StarClientException(StatusCode.IO, "injected error");
-                minTimes = 1;
-                maxTimes = 1;
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertFalse(cleaner.cleanTable());
     }
 
     @Test
     public void testRPCFailed(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
-                     @Mocked MaterializedIndex index,
-                     @Mocked LakeTablet tablet,
-                     @Mocked LakeService lakeService) throws StarClientException {
+                              @Mocked PhysicalPartition partition,
+                              @Mocked MaterializedIndex index,
+                              @Mocked LakeTablet tablet,
+                              @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
@@ -227,13 +277,24 @@ public class LakeTableCleanerTest {
             }
         };
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
                 maxTimes = 1;
-
 
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
@@ -245,11 +306,6 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                tablet.getShardInfo();
-                result = shardInfo;
-                minTimes = 1;
-                maxTimes = 1;
-
                 lakeService.dropTable((DropTableRequest) any);
                 result = new RuntimeException("Injected RPC error");
                 minTimes = 1;
@@ -257,6 +313,55 @@ public class LakeTableCleanerTest {
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertFalse(cleaner.cleanTable());
+    }
+
+    @Test
+    public void testShardNotFound(@Mocked LakeTable table,
+                                  @Mocked PhysicalPartition partition,
+                                  @Mocked MaterializedIndex index,
+                                  @Mocked LakeTablet tablet,
+                                  @Mocked LakeService lakeService) throws StarClientException {
+        LakeTableCleaner cleaner = new LakeTableCleaner(table);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        new Expectations() {
+            {
+                table.getAllPhysicalPartitions();
+                result = Lists.newArrayList(partition);
+                minTimes = 1;
+                maxTimes = 1;
+
+                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                result = Lists.newArrayList(index);
+                minTimes = 1;
+                maxTimes = 1;
+
+                index.getTablets();
+                result = Lists.newArrayList(tablet);
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                throw new StarClientException(StatusCode.NOT_EXIST, "injected error");
+            }
+        };
+
+        Assert.assertTrue(cleaner.cleanTable());
     }
 }

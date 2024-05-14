@@ -256,7 +256,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
   
     - To perform load-based loading, make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
   
-    - To perform load-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
+    - To perform load-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE or CN node.
   
   - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
 
@@ -593,7 +593,7 @@ The following parameters are supported:
 
 - `load_mem_limit`
 
-  Specifies the maximum amount of memory that can be provided to the load job. Unit: bytes: The default memory limit is 2 GB.
+  Specifies the maximum amount of memory that can be provided to the load job. The value of this parameter cannot exceed the upper memory limit supported by each BE or CN node. Unit: bytes: The default memory limit is 2 GB.
 
 - `strict_mode`
 
@@ -690,6 +690,20 @@ The [FE configuration item](../../../administration/management/FE_configuration.
 In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs will be queued and scheduled based on their submission time.
 
 Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter described above. You can use [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
+
+## Job splitting and concurrent running
+
+A Broker Load job can be split into one or more tasks that concurrently run. The tasks within a load job are run within a single transaction. They must all succeed or fail. StarRocks splits each load job based on how you declare `data_desc` in the `LOAD` statement:
+
+- If you declare multiple `data_desc` parameters, each of which specifies a distinct table, a task is generated to load the data of each table.
+
+- If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
+
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs or CNs of your StarRocks cluster. StarRocks splits each task based on the FE parameter [`min_bytes_per_broker_scanner`](../../../administration/management/FE_configuration.md) and the number of BE or CN nodes. You can use the following formula to calculate the number of instances in an individual task:
+
+**Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`, Number of BE/CN nodes)**
+
+In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BE or CN nodes.
 
 ## Examples
 

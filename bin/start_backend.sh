@@ -182,6 +182,9 @@ fi
 
 chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
 
+if [ $(ulimit -n) != "unlimited" ] && [ $(ulimit -n) -lt 60000 ]; then
+    ulimit -n 65535
+fi
 
 START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/starrocks_be"
 LOG_FILE=$LOG_DIR/be.out
@@ -203,7 +206,7 @@ else
     exec &>> ${LOG_FILE}
 fi
 
-echo "start time: "$(date)
+echo "start time: $(date), server uptime: $(uptime)"
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${START_BE_CMD} "$@" </dev/null &
 else

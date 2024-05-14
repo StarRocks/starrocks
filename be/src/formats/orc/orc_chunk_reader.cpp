@@ -1181,7 +1181,7 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
     if (orc_predicates->rf_collector != nullptr) {
         for (auto& it : orc_predicates->rf_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
-            const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+            const JoinRuntimeFilter* filter = rf_desc->runtime_filter(-1);
             SlotId probe_slot_id;
             if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
             auto it2 = slot_id_to_pos_in_src_slot_descriptors.find(probe_slot_id);
@@ -1217,6 +1217,14 @@ ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted
     }
 
     return filter_column;
+}
+
+size_t OrcChunkReader::get_row_delete_number(const std::set<int64_t>& deleted_pos) {
+    int64_t start_pos = _row_reader->getRowNumber();
+    auto num_rows = _batch->numElements;
+    auto iter = deleted_pos.lower_bound(start_pos);
+    auto end = deleted_pos.upper_bound(start_pos + num_rows - 1);
+    return std::distance(iter, end);
 }
 
 Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,

@@ -54,7 +54,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -200,9 +199,10 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), id,
+                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), this,
                             taskSchedIntervalS * 1000, timeToExecuteMs, partitions,
                             initialPositions, getTaskTimeoutSecond() * 1000);
+                    pulsarTaskInfo.setWarehouseId(warehouseId);
                     LOG.debug("pulsar routine load task created: " + pulsarTaskInfo);
                     routineLoadTaskInfoList.add(pulsarTaskInfo);
                     result.add(pulsarTaskInfo);
@@ -227,9 +227,9 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             aliveNodeNum = 0;
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long nodeId : computeNodeIds) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;
@@ -259,13 +259,14 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
             return true;
         }
 
-        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        // For compatible reason, the default behavior of empty load is still returning
+        // "No partitions have data available for loading" and abort transaction.
         // In this situation, we also need update commit info.
         if (txnStatusChangeReason != null &&
                 txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
-            // If no data is imported, the error "all partitions have no load data" may only be returned.
+            // If no data is imported, the error "No partitions have data available for loading" may only be returned.
             // In this case, the status of the transaction is ABORTED,
             // but we still need to update the position to skip these error lines.
             Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
@@ -306,6 +307,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // add new task
         PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(timeToExecuteMs, oldPulsarTaskInfo,
                 ((PulsarProgress) progress).getPartitionToInitialPosition(oldPulsarTaskInfo.getPartitions()));
+        pulsarTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -405,7 +407,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // Get custom properties like tokens
         convertCustomProperties(false);
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, ImmutableMap.copyOf(convertedCustomProperties));
+                subscription, ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
     }
 
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {

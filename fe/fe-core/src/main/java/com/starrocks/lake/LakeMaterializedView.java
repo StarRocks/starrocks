@@ -184,4 +184,12 @@ public class LakeMaterializedView extends MaterializedView {
         }
         return TableType.MATERIALIZED_VIEW.name();
     }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        if (getMaxColUniqueId() <= 0) {
+            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
+        }
+    }
 }

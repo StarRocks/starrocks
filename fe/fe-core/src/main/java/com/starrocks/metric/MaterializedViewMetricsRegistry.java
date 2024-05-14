@@ -17,13 +17,10 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.server.GlobalStateMgr;
 
-import java.util.List;
 import java.util.Map;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -40,14 +37,18 @@ public class MaterializedViewMetricsRegistry {
         idToMVMetrics = Maps.newHashMap();
         // clear all metrics everyday
         timer = ThreadPoolManager.newDaemonScheduledThreadPool(1, "MaterializedView-Metrics-Cleaner", true);
-        timer.scheduleAtFixedRate(new MaterializedViewMetricsRegistry.MetricsCleaner(), 0, 1L, TimeUnit.DAYS);
+        // add initial delay to avoid all metrics are cleared at the same time
+        timer.scheduleAtFixedRate(new MaterializedViewMetricsRegistry.MetricsCleaner(), 1L, 1L, TimeUnit.DAYS);
     }
 
     public static MaterializedViewMetricsRegistry getInstance() {
         return INSTANCE;
     }
 
-    public synchronized MaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
+    public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
+        if (!Config.enable_materialized_view_metrics_collect) {
+            return new MaterializedViewMetricsBlackHoleEntity();
+        }
         return idToMVMetrics.computeIfAbsent(mvId, k -> new MaterializedViewMetricsEntity(metricRegistry, mvId));
     }
 
@@ -62,44 +63,42 @@ public class MaterializedViewMetricsRegistry {
 
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
-        for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-            if (null == db) {
+        MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
+        for (Map.Entry<MvId, MaterializedViewMetricsEntity> e : instance.idToMVMetrics.entrySet()) {
+            IMaterializedViewMetricsEntity mvEntity = e.getValue();
+            if (mvEntity == null || mvEntity instanceof  MaterializedViewMetricsBlackHoleEntity) {
                 continue;
             }
-            for (MaterializedView mv : db.getMaterializedViews()) {
-                MaterializedViewMetricsEntity mvEntity =
-                        MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-
-                for (Metric m : mvEntity.getMetrics()) {
-                    // minify metrics if needed
-                    if (minifyMetrics) {
-                        if (null == m.getValue()) {
-                            continue;
-                        }
-                        if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
-                            continue;
-                        }
+            MvId mvId = e.getKey();
+            MaterializedViewMetricsEntity entity = (MaterializedViewMetricsEntity) mvEntity;
+            for (Metric m : entity.getMetrics()) {
+                // minify metrics if needed
+                if (minifyMetrics) {
+                    if (null == m.getValue()) {
+                        continue;
                     }
-                    m.addLabel(new MetricLabel("db_name", dbName))
-                            .addLabel(new MetricLabel("mv_name", mv.getName()))
-                            .addLabel(new MetricLabel("mv_id", String.valueOf(mv.getId())));
-                    visitor.visit(m);
+                    // ignore gauge metrics since it will try db lock and visit more metadata
+                    if (Metric.MetricType.GAUGE == m.type) {
+                        continue;
+                    }
+                    // ignore counter metrics with 0 value
+                    if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
+                        continue;
+                    }
                 }
+                m.addLabel(new MetricLabel("db_name", entity.dbName))
+                        .addLabel(new MetricLabel("mv_name", entity.mvName))
+                        .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
+                visitor.visit(m);
             }
         }
 
         // Histogram metrics should only output once
-        for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
-                .metricRegistry.getHistograms().entrySet()) {
-            if (minifyMetrics) {
-                if (e.getValue().getCount() == 0) {
-                    continue;
-                }
+        if (!minifyMetrics) {
+            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
+                    .metricRegistry.getHistograms().entrySet()) {
+                visitor.visitHistogram(e.getKey(), e.getValue());
             }
-            visitor.visitHistogram(e.getKey(), e.getValue());
         }
     }
 }

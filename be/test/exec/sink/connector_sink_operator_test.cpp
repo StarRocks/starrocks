@@ -21,8 +21,8 @@
 #include <future>
 #include <thread>
 
-#include "connector_sink/connector_chunk_sink.h"
-#include "connector_sink/hive_chunk_sink.h"
+#include "connector/connector_chunk_sink.h"
+#include "connector/hive_chunk_sink.h"
 #include "formats/utils.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
@@ -189,6 +189,7 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
                 ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET;
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context;

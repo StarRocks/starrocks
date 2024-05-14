@@ -15,20 +15,42 @@
 package com.starrocks.http;
 
 import com.starrocks.http.rest.RestBaseResult;
-import org.junit.Assert;
+import com.starrocks.http.rest.v2.RestBaseResultV2;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
+
 public class RestBaseResultTest {
+
     @Test
     public void testToJson() {
-        RestBaseResult result = new RestBaseResult();
-        Assert.assertEquals(result.toJson(),
-                "{\"status\":\"OK\",\"code\":\"0\",\"msg\":\"Success\",\"message\":\"OK\"}");
-        Assert.assertEquals(result.toJsonString(), "{\"code\":\"0\",\"message\":\"OK\"}");
+        {
+            RestBaseResult resultV1 = new RestBaseResult();
+            assertEquals(
+                    "{\"status\":\"OK\",\"code\":\"0\",\"msg\":\"Success\",\"message\":\"OK\"}",
+                    resultV1.toJson()
+            );
 
-        RestBaseResult failedResult = new RestBaseResult("NPE");
-        Assert.assertEquals(failedResult.toJson(),
-                "{\"status\":\"FAILED\",\"code\":\"1\",\"msg\":\"NPE\",\"message\":\"NPE\"}");
-        Assert.assertEquals(failedResult.toJsonString(), "{\"code\":\"1\",\"message\":\"NPE\"}");
+            RestBaseResultV2<Object> resultV2 = new RestBaseResultV2<>();
+            assertEquals(
+                    "{\"code\":\"0\",\"message\":\"OK\"}",
+                    resultV2.toJson()
+            );
+        }
+
+        {
+            RestBaseResult resultV1 = new RestBaseResult("NPE");
+            assertEquals(
+                    "{\"status\":\"FAILED\",\"code\":\"1\",\"msg\":\"NPE\",\"message\":\"NPE\"}",
+                    resultV1.toJson()
+            );
+
+            RestBaseResultV2<Object> resultV2 = new RestBaseResultV2<>("NPE");
+            assertEquals(
+                    "{\"code\":\"1\",\"message\":\"NPE\"}",
+                    resultV2.toJson()
+            );
+        }
     }
+
 }

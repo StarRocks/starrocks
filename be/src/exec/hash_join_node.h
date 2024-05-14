@@ -48,6 +48,10 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     void close(RuntimeState* state) override;
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    bool can_generate_global_runtime_filter() const;
+    TJoinDistributionMode::type distribution_mode() const;
+    const std::list<RuntimeFilterBuildDescriptor*>& build_runtime_filters() const;
+    void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
 
 private:
     template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
@@ -111,6 +115,7 @@ private:
     std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
+    bool _enable_lazy_materialize = false;
 
     JoinHashTable _ht;
 
@@ -119,8 +124,8 @@ private:
     ChunkPtr _probing_chunk = nullptr;
 
     Columns _key_columns;
-    size_t _probe_column_count = 0;
-    size_t _build_column_count = 0;
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
     size_t _probe_chunk_count = 0;
     size_t _output_chunk_count = 0;
 

@@ -228,6 +228,11 @@ Status StorageEngine::_open(const EngineOptions& options) {
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
     REGISTER_THREAD_POOL_METRICS(memtable_flush, _memtable_flush_executor->get_thread_pool());
 
+    _lake_memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_lake_memtable_flush_executor->init_for_lake_table(dirs),
+                              "init lake MemTableFlushExecutor failed");
+    REGISTER_THREAD_POOL_METRICS(lake_memtable_flush, _lake_memtable_flush_executor->get_thread_pool());
+
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
     REGISTER_THREAD_POOL_METRICS(segment_flush, _segment_flush_executor->get_thread_pool());
@@ -527,6 +532,18 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
         }
     }
     return nullptr;
+}
+
+bool StorageEngine::enable_light_pk_compaction_publish() {
+    if (!config::enable_light_pk_compaction_publish) {
+        return false;
+    }
+    // Skip light pk compaction if there is no local disk to store temp rows mapper files.
+    auto stores = get_stores<false>();
+    if (stores.empty()) {
+        return false;
+    }
+    return true;
 }
 
 // maybe nullptr if as cn

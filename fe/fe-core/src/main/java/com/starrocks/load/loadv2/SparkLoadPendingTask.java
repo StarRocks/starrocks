@@ -73,6 +73,8 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.Load;
+import com.starrocks.load.PartitionUtils;
+import com.starrocks.load.PartitionUtils.RangePartitionBoundary;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlColumn;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlColumnMapping;
@@ -87,8 +89,6 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -417,7 +417,7 @@ public class SparkLoadPendingTask extends LoadTask {
         for (LiteralExpr literalExpr : list) {
             Object keyValue;
             if (literalExpr instanceof DateLiteral) {
-                keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+                keyValue = PartitionUtils.convertDateLiteralToNumber((DateLiteral) literalExpr);
             } else {
                 keyValue = literalExpr.getRealObjectValue();
             }
@@ -450,49 +450,14 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
 
-            // is min|max partition
-            Range<PartitionKey> range = entry.getValue();
-            boolean isMaxPartition = range.upperEndpoint().isMaxValue();
-            boolean isMinPartition = range.lowerEndpoint().isMinValue();
-
-            // start keys
-            List<LiteralExpr> rangeKeyExprs = null;
-            List<Object> startKeys = Lists.newArrayList();
-            if (!isMinPartition) {
-                rangeKeyExprs = range.lowerEndpoint().getKeys();
-                for (int i = 0; i < rangeKeyExprs.size(); ++i) {
-                    LiteralExpr literalExpr = rangeKeyExprs.get(i);
-
-                    Object keyValue;
-                    if (literalExpr instanceof DateLiteral) {
-                        keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
-                    } else {
-                        keyValue = literalExpr.getRealObjectValue();
-                    }
-
-                    startKeys.add(keyValue);
-                }
-            }
-
-            // end keys
-            // is empty list when max partition
-            List<Object> endKeys = Lists.newArrayList();
-            if (!isMaxPartition) {
-                rangeKeyExprs = range.upperEndpoint().getKeys();
-                for (int i = 0; i < rangeKeyExprs.size(); ++i) {
-                    LiteralExpr literalExpr = rangeKeyExprs.get(i);
-
-                    Object keyValue;
-                    if (literalExpr instanceof DateLiteral) {
-                        keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
-                    } else {
-                        keyValue = literalExpr.getRealObjectValue();
-                    }
-                    endKeys.add(keyValue);
-                }
-            }
-
-            etlPartitions.add(new EtlPartition(partitionId, startKeys, endKeys, isMinPartition, isMaxPartition, bucketNum));
+            RangePartitionBoundary boundary = PartitionUtils.calRangePartitionBoundary(entry.getValue());
+            etlPartitions.add(new EtlPartition(
+                    partitionId,
+                    boundary.getStartKeys(),
+                    boundary.getEndKeys(),
+                    boundary.isMinPartition(),
+                    boundary.isMaxPartition(),
+                    bucketNum));
         }
         return etlPartitions;
     }
@@ -689,19 +654,4 @@ public class SparkLoadPendingTask extends LoadTask {
         }
     }
 
-    // This is to be compatible with Spark Load Job formats for Date type.
-    // Because the historical version is serialized and deserialized with a special hash number for DateLiteral,
-    // special processing is also done here for DateLiteral to keep the historical version compatible.
-    // The deserialized code is in "SparkDpp.createPartitionRangeKeys"
-    public static Object convertDateLiteralToNumber(DateLiteral dateLiteral) {
-        if (dateLiteral.getType().isDate()) {
-            return (dateLiteral.getYear() * 16 * 32L
-                    + dateLiteral.getMonth() * 32
-                    + dateLiteral.getDay());
-        } else if (dateLiteral.getType().isDatetime()) {
-            return dateLiteral.getLongValue();
-        } else {
-            throw new StarRocksPlannerException("Invalid date type: " + dateLiteral.getType(), ErrorType.INTERNAL_ERROR);
-        }
-    }
 }

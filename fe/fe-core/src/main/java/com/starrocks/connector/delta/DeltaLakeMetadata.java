@@ -15,11 +15,10 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.hive.HiveMetastoreOperations;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.credential.CloudConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,13 +28,17 @@ import java.util.List;
 public class DeltaLakeMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetadata.class);
     private final String catalogName;
-    private final HiveMetastoreOperations hmsOps;
+    private final DeltaMetastoreOperations deltaOps;
     private final HdfsEnvironment hdfsEnvironment;
 
-    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, HiveMetastoreOperations hmsOps) {
+    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps) {
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
-        this.hmsOps = hmsOps;
+        this.deltaOps = deltaOps;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     @Override
@@ -45,49 +48,45 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        return hmsOps.getAllDatabaseNames();
+        return deltaOps.getAllDatabaseNames();
     }
 
     @Override
     public List<String> listTableNames(String dbName) {
-        return hmsOps.getAllTableNames(dbName);
+        return deltaOps.getAllTableNames(dbName);
     }
 
     @Override
     public Database getDb(String dbName) {
-        return hmsOps.getDb(dbName);
+        return deltaOps.getDb(dbName);
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
-        return hmsOps.getPartitionKeys(databaseName, tableName);
+    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+        return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
         try {
-            Table table = hmsOps.getTable(dbName, tblName);
-            if (table == null) {
-                return null;
-            }
-            HiveTable hiveTable = (HiveTable) table;
-            String path = hiveTable.getTableLocation();
-            long createTime = table.getCreateTime();
-            return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path, hdfsEnvironment.getConfiguration(),
-                    createTime);
+            return deltaOps.getTable(dbName, tblName);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
+            LOG.error("Failed to get table {}.{}", dbName, tblName, e);
             return null;
         }
     }
 
     @Override
     public boolean tableExists(String dbName, String tblName) {
-        return hmsOps.tableExists(dbName, tblName);
+        return deltaOps.tableExists(dbName, tblName);
     }
 
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return hdfsEnvironment.getCloudConfiguration();
+    }
+
+    public MetastoreType getMetastoreType() {
+        return deltaOps.getMetastoreType();
     }
 }

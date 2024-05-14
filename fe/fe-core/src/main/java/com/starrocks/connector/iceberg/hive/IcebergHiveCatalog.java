@@ -23,11 +23,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -52,9 +52,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_TIMEOUT;
-import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_TIMEOUT;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.METASTOREWAREHOUSE;
 
@@ -88,7 +88,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         // The property is false by default, in such case, when we execute SHOW TABLES FROM CATALOG.DB,
         // it will request all Table Objects from Hive Metastore, when there are lots of tables under the
         // database, timeout may happen.
-        copiedProperties.put(HiveCatalog.LIST_ALL_TABLES, "true");
+        copiedProperties.putIfAbsent(HiveCatalog.LIST_ALL_TABLES, "true");
 
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
     }

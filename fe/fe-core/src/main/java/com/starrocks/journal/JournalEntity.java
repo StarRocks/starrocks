@@ -103,6 +103,7 @@ import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
+import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -127,7 +128,6 @@ import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
-import com.starrocks.persist.SecurityIntegrationInfo;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
@@ -333,6 +333,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_PARTITION: {
                 data = DropPartitionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_PARTITIONS: {
+                data = DropPartitionsInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -1071,11 +1076,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                data = SecurityIntegrationInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
                 data = UserPrivilegeCollectionInfo.read(in);
                 isRead = true;
@@ -1087,75 +1087,92 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_AUTH_UPGRADE_V2:
+            case OperationType.OP_AUTH_UPGRADE_V2: {
                 // for compatibility reason, just ignore the auth upgrade log
                 isRead = true;
                 break;
-            case OperationType.OP_MV_JOB_STATE:
+            }
+            case OperationType.OP_MV_JOB_STATE: {
                 data = MVMaintenanceJob.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_MV_EPOCH_UPDATE:
+            }
+            case OperationType.OP_MV_EPOCH_UPDATE: {
                 data = MVEpoch.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS:
+            }
+            case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
                 data = TableAddOrDropColumnsInfo.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME:
+            }
+            case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
                 data = SetDefaultStorageVolumeLog.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_DROP_STORAGE_VOLUME:
+            }
+            case OperationType.OP_DROP_STORAGE_VOLUME: {
                 data = DropStorageVolumeLog.read(in);
                 isRead = true;
                 break;
+            }
             case OperationType.OP_CREATE_STORAGE_VOLUME:
-            case OperationType.OP_UPDATE_STORAGE_VOLUME:
+            case OperationType.OP_UPDATE_STORAGE_VOLUME: {
                 data = StorageVolume.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_PIPE:
+            }
+            case OperationType.OP_PIPE: {
                 data = PipeOpEntry.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_CREATE_DICTIONARY:
+            }
+            case OperationType.OP_CREATE_DICTIONARY: {
                 data = Dictionary.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_DROP_DICTIONARY:
+            }
+            case OperationType.OP_DROP_DICTIONARY: {
                 data = DropDictionaryInfo.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_MODIFY_DICTIONARY_MGR:
+            }
+            case OperationType.OP_MODIFY_DICTIONARY_MGR: {
                 data = DictionaryMgrInfo.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_DECOMMISSION_DISK:
+            }
+            case OperationType.OP_DECOMMISSION_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DecommissionDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_CANCEL_DECOMMISSION_DISK:
+            }
+            case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDecommissionDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_DISABLE_DISK:
+            }
+            case OperationType.OP_DISABLE_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_CANCEL_DISABLE_DISK:
+            }
+            case OperationType.OP_CANCEL_DISABLE_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_REPLICATION_JOB:
+            }
+            case OperationType.OP_REPLICATION_JOB: {
                 data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_RECOVER_PARTITION_VERSION:
+            }
+            case OperationType.OP_RECOVER_PARTITION_VERSION: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
                 isRead = true;
                 break;
+            }
             default: {
                 if (Config.ignore_unknown_log_id) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

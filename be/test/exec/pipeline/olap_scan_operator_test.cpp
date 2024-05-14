@@ -48,7 +48,6 @@ void OlapScanOperatorTest::SetUp() {
     _thrift_tbl.tupleDescriptors.emplace_back(t_tuple_desc);
 
     _tnode.row_tuples.emplace_back(1);
-    _tnode.nullable_tuples.emplace_back(false);
 
     Status st = DescriptorTbl::create(&_runtime_state, &_object_pool, _thrift_tbl, &_tbl, _chunk_size);
     ASSERT_TRUE(st.ok());
@@ -62,8 +61,10 @@ void OlapScanOperatorTest::SetUp() {
 
 TEST_F(OlapScanOperatorTest, test_finish_sequence) {
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("OlapScanPrepareOperator::prepare", [](void* arg) {});
-    SyncPoint::GetInstance()->SetCallBack("ScanOperatorFactory::prepare", [](void* arg) {});
+    SyncPoint::GetInstance()->SetCallBack("OlapScanPrepareOperator::prepare",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    SyncPoint::GetInstance()->SetCallBack("ScanOperatorFactory::prepare",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("OlapScanContext::parse_conjuncts",
                                           [](void* arg) { *(Status*)arg = Status::EndOfFile(""); });
 

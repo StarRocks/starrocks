@@ -1389,48 +1389,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testRepeatNodeWithUnionAllRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
-        String sql = "select v1, v2, SUM(v3) from t0 group by rollup(v1, v2)";
-        String plan = getFragmentPlan(sql).replaceAll(" ", "");
-        assertContains(plan, "1:UNION\n" +
-                "|\n" +
-                "|----15:EXCHANGE\n" +
-                "|\n" +
-                "|----21:EXCHANGE\n" +
-                "|\n" +
-                "8:EXCHANGE\n");
-
-        sql = "select v1, SUM(v3) from t0 group by rollup(v1)";
-        plan = getFragmentPlan(sql).replaceAll(" ", "");
-        assertContains(plan, "1:UNION\n" +
-                "|\n" +
-                "|----14:EXCHANGE\n" +
-                "|\n" +
-                "8:EXCHANGE\n");
-
-        sql = "select SUM(v3) from t0 group by grouping sets(())";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:EXCHANGE\n" +
-                "\n" +
-                "PLAN FRAGMENT 2\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 03\n" +
-                "    HASH_PARTITIONED: 5: GROUPING_ID\n" +
-                "\n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(3: v3)\n" +
-                "  |  group by: 5: GROUPING_ID\n" +
-                "  |  \n" +
-                "  1:REPEAT_NODE");
-        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
-    }
-
-    @Test
     public void testLimitSemiJoin() throws Exception {
         String sql = "select * from t0 " +
                 "        left semi join t2 on t0.v1 = t2.v7 " +
@@ -2105,6 +2063,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+                    "  |  analytic partition by: 2: v2, 4: max\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
@@ -2132,6 +2091,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+                    "  |  analytic partition by: 2: v2, 4: max\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
@@ -2162,6 +2122,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  6:SORT\n" +
                     "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 4: max\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
@@ -2184,6 +2145,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  6:SORT\n" +
                     "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 4: max\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
@@ -2210,6 +2172,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
@@ -2236,6 +2199,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
@@ -2263,6 +2227,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  analytic partition by: 2: v2, 3: v3\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
@@ -2290,6 +2255,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  analytic partition by: 2: v2, 3: v3\n" +
                     "  |  offset: 0");
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +

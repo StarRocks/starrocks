@@ -48,7 +48,7 @@ PipelineDriver::~PipelineDriver() noexcept {
     check_operator_close_states("deleting pipeline drivers");
 }
 
-void PipelineDriver::check_operator_close_states(std::string func_name) {
+void PipelineDriver::check_operator_close_states(const std::string& func_name) {
     if (_driver_id == -1) { // in test cases
         return;
     }
@@ -156,8 +156,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (!all_local_rf_set.empty()) {
         _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
     }
-    _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
-
+    size_t subscribe_filter_sequence = source_op->get_driver_sequence();
+    _local_rf_holders =
+            fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
     if (use_cache) {
         ssize_t cache_op_idx = -1;
         query_cache::CacheOperatorPtr cache_op = nullptr;
@@ -507,11 +508,12 @@ void PipelineDriver::mark_precondition_not_ready() {
     }
 }
 
-void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
+void PipelineDriver::mark_precondition_ready() {
     for (auto& op : _operators) {
-        op->set_precondition_ready(runtime_state);
+        op->set_precondition_ready(_runtime_state);
         submit_operators();
     }
+    _precondition_prepared = true;
 }
 
 void PipelineDriver::start_timers() {
@@ -847,8 +849,11 @@ void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks
     // Update cpu cost of this query
     int64_t runtime_ns = driver_acct().get_last_time_spent();
     int64_t source_operator_last_cpu_time_ns = source_operator()->get_last_growth_cpu_time_ns();
+    DCHECK(source_operator_last_cpu_time_ns >= 0);
     int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
+    DCHECK(sink_operator_last_cpu_time_ns >= 0);
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
+    DCHECK(accounted_cpu_cost >= 0);
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
     if (_workgroup != nullptr) {
         _workgroup->incr_cpu_runtime_ns(accounted_cpu_cost);

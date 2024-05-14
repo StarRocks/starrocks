@@ -61,7 +61,7 @@ public class UpdateAnalyzer {
         TableName tableName = updateStmt.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
         MetaUtils.getDatabase(session, tableName);
-        Table table = MetaUtils.getTable(session, tableName);
+        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof MaterializedView) {
             throw new SemanticException("The data of '%s' cannot be modified because '%s' is a materialized view,"

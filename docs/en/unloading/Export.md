@@ -52,9 +52,9 @@ The general workflow consists of the following three steps:
 
 1. The user submits an export job to the leader FE.
 
-2. The leader FE issues `snapshot` instructions to all BEs in the StarRocks cluster, so the BEs can take snapshots of the involved tablets to ensure the consistency of the data to be exported. The leader FE also generates multiple export tasks. Each export task is a query plan, and each query plan is used to process a portion of the involved tablets.
+2. The leader FE issues `snapshot` instructions to all BEs or CNs in the StarRocks cluster, so the BEs or CNs can take snapshots of the involved tablets to ensure the consistency of the data to be exported. The leader FE also generates multiple export tasks. Each export task is a query plan, and each query plan is used to process a portion of the involved tablets.
 
-3. The leader FE distributes the export tasks to the BEs.
+3. The leader FE distributes the export tasks to the BEs or CNs.
 
 ## Principles
 
@@ -72,7 +72,7 @@ This section describes some export-related parameters that you can configure in 
 
 - `export_task_default_timeout_second`: the timeout period for export jobs. The default timeout period is 2 hours. You can reconfigure this parameter when export jobs are running.
 
-- `export_max_bytes_per_be_per_task`: the maximum amount of data as compressed that can be exported per export task from each BE. This parameter provides a policy based on which StarRocks splits export jobs into export tasks that can be concurrently run. The default maximum amount is 256 MB.
+- `export_max_bytes_per_be_per_task`: the maximum amount of data as compressed that can be exported per export task from each BE or CN. This parameter provides a policy based on which StarRocks splits export jobs into export tasks that can be concurrently run. The default maximum amount is 256 MB.
 
 - `export_task_pool_size`: the maximum number of export tasks that can be concurrently run by the thread pool. The default maximum number is 5.
 
@@ -155,8 +155,8 @@ For detailed syntax and parameter descriptions, see [CANCEL EXPORT](../sql-refer
 
 ### Query plan splitting
 
-The number of query plans into which an export job is split varies depending on the number of tablets involved in the export job and on the maximum amount of data that can be processed per query plan. Export jobs are retried as query plans. If the amount of data processed by a query plan exceeds the maximum amount allowed, the query plan encounters errors such as jitters in remote storage. As a result, the cost of retrying the query plan increases. The maximum amount of data that can be processed per query plan by each BE is specified by the `export_max_bytes_per_be_per_task` parameter, which defaults to 256 MB. In a query plan, each BE is allocated at least one tablet and can export a data amount that does not exceed the limit specified by the `export_max_bytes_per_be_per_task` parameter.
+The number of query plans into which an export job is split varies depending on the number of tablets involved in the export job and on the maximum amount of data that can be processed per query plan. Export jobs are retried as query plans. If the amount of data processed by a query plan exceeds the maximum amount allowed, the query plan encounters errors such as jitters in remote storage. As a result, the cost of retrying the query plan increases. The maximum amount of data that can be processed per query plan by each BE or CN is specified by the `export_max_bytes_per_be_per_task` parameter, which defaults to 256 MB. In a query plan, each BE or CN is allocated at least one tablet and can export a data amount that does not exceed the limit specified by the `export_max_bytes_per_be_per_task` parameter.
 
 The multiple query plans of an export job are concurrently executed. You can use the FE parameter `export_task_pool_size` to specify the maximum number of export tasks that are allowed to concurrently run by the thread pool. This parameter defaults to `5`.
 
-In normal cases, each query plan of an export job consists of only two parts: scanning and exporting. The logic for performing computations required by query plans does not consume much memory. Therefore, the default memory limit of 2 GB can meet most of your business requirements. However, in certain circumstances, such as when a query plan requires scanning many tablets on a BE or a tablet has many versions, the 2-GB memory capacity may be insufficient. In these circumstances, you need to use the `load_mem_limit` parameter to specify a higher memory capacity limit, such as 4 GB or 8 GB.
+In normal cases, each query plan of an export job consists of only two parts: scanning and exporting. The logic for performing computations required by query plans does not consume much memory. Therefore, the default memory limit of 2 GB can meet most of your business requirements. However, in certain circumstances, such as when a query plan requires scanning many tablets on a BE or CN or a tablet has many versions, the 2-GB memory capacity may be insufficient. In these circumstances, you need to use the `load_mem_limit` parameter to specify a higher memory capacity limit, such as 4 GB or 8 GB.

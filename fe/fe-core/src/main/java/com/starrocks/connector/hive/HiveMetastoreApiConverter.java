@@ -25,6 +25,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
@@ -115,12 +116,23 @@ public class HiveMetastoreApiConverter {
         return inputFormat != null && HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
     }
 
+    public static boolean isKuduTable(String inputFormat) {
+        return inputFormat != null && KuduTable.isKuduInputFormat(inputFormat);
+    }
+
     public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
         Optional<Map<String, String>> tableParamsOptional = Optional.ofNullable(tableParams);
         if (isDeltaLakeTable(tableParamsOptional.orElse(ImmutableMap.of()))) {
             return sd.getSerdeInfo().getParameters().get("path");
         }
         return sd.getLocation();
+    }
+
+    public static String toComment(Map<String, String> tableParams) {
+        if (tableParams != null && tableParams.containsKey("comment")) {
+            return tableParams.getOrDefault("comment", "");
+        }
+        return "";
     }
 
     public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
@@ -158,6 +170,7 @@ public class HiveMetastoreApiConverter {
                         .map(FieldSchema::getName)
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
+                .setComment(toComment(table.getParameters()))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setProperties(toHiveProperties(table,
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
@@ -182,6 +195,14 @@ public class HiveMetastoreApiConverter {
                 .collect(Collectors.toList()));
         apiTable.setSd(makeStorageDescriptorFromHiveTable(table));
         return apiTable;
+    }
+
+    public static KuduTable toKuduTable(Table table, String catalogName) {
+        List<Column> fullSchema = toFullSchemasForHiveTable(table);
+        List<String> partColNames = table.getPartitionKeys().stream()
+                .map(FieldSchema::getName)
+                .collect(Collectors.toList());
+        return KuduTable.fromMetastoreTable(table, catalogName, fullSchema, partColNames);
     }
 
     private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
@@ -304,11 +325,13 @@ public class HiveMetastoreApiConverter {
                 .setResourceName(toResourceName(catalogName, "hudi"))
                 .setHiveDbName(table.getDbName())
                 .setHiveTableName(table.getTableName())
-                .setFullSchema(toFullSchemasForHudiTable(hudiSchema))
+                .setFullSchema(toFullSchemasForHudiTable(table, hudiSchema))
+                .setComment(toComment(table.getParameters()))
                 .setPartitionColNames(partitionColumnNames)
                 .setDataColNames(toDataColumnNamesForHudiTable(hudiSchema, partitionColumnNames))
                 .setHudiProperties(toHudiProperties(table, metaClient, hudiSchema))
-                .setCreateTime(table.getCreateTime());
+                .setCreateTime(table.getCreateTime())
+                .setTableType(HudiTable.fromInputFormat(table.getSd().getInputFormat()));
 
         return tableBuilder.build();
     }
@@ -428,10 +451,12 @@ public class HiveMetastoreApiConverter {
         return fullSchema;
     }
 
-    public static List<Column> toFullSchemasForHudiTable(Schema hudiSchema) {
+    public static List<Column> toFullSchemasForHudiTable(Table table, Schema hudiSchema) {
         List<Schema.Field> allHudiColumns = hudiSchema.getFields();
+        List<FieldSchema> allFieldSchemas = getAllFieldSchemas(table);
         List<Column> fullSchema = Lists.newArrayList();
-        for (Schema.Field fieldSchema : allHudiColumns) {
+        for (int i = 0; i < allHudiColumns.size(); i++) {
+            Schema.Field fieldSchema = allHudiColumns.get(i);
             Type type;
             try {
                 type = fromHudiType(fieldSchema.schema());
@@ -439,7 +464,7 @@ public class HiveMetastoreApiConverter {
                 LOG.error("Failed to convert hudi type {}", fieldSchema.schema().getType().getName(), e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(fieldSchema.name(), type, true);
+            Column column = new Column(fieldSchema.name(), type, true, allFieldSchemas.get(i).getComment());
             fullSchema.add(column);
         }
         return fullSchema;

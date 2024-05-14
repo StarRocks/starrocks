@@ -32,6 +32,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -78,6 +79,7 @@ public class PlanTestNoneDBBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.show_execution_groups = false;
         // disable checking tablets
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;
@@ -87,6 +89,7 @@ public class PlanTestNoneDBBase {
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;

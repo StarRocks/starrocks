@@ -65,7 +65,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
@@ -100,13 +100,14 @@ public class IcebergTable extends Table {
     }
 
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
-                        String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
-                        Map<String, String> icebergProperties) {
+                        String remoteTableName, String comment, List<Column> schema,
+                        org.apache.iceberg.Table nativeTable, Map<String, String> icebergProperties) {
         super(id, srTableName, TableType.ICEBERG, schema);
         this.catalogName = catalogName;
         this.resourceName = resourceName;
         this.remoteDbName = remoteDbName;
         this.remoteTableName = remoteTableName;
+        this.comment =  comment;
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
     }
@@ -168,6 +169,17 @@ public class IcebergTable extends Table {
             allPartitionColumns.add(partitionCol);
         }
         return allPartitionColumns;
+    }
+
+    public boolean isAllPartitionColumnsAlwaysIdentity() {
+        // now we are sure we have never applied transformation,
+        // we check if all partition columns are identity.
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public PartitionField getPartitionField(String partitionColumnName) {
@@ -439,6 +451,8 @@ public class IcebergTable extends Table {
         private String resourceName;
         private String remoteDbName;
         private String remoteTableName;
+
+        private String comment;
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
@@ -458,6 +472,12 @@ public class IcebergTable extends Table {
 
         public Builder setCatalogName(String catalogName) {
             this.catalogName = catalogName;
+            return this;
+        }
+
+
+        public Builder setComment(String comment) {
+            this.comment = comment;
             return this;
         }
 
@@ -493,7 +513,7 @@ public class IcebergTable extends Table {
 
         public IcebergTable build() {
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
-                    fullSchema, nativeTable, icebergProperties);
+                    comment, fullSchema, nativeTable, icebergProperties);
         }
     }
 }

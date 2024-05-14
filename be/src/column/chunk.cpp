@@ -182,7 +182,25 @@ void Chunk::remove_column_by_index(size_t idx) {
     }
 }
 
-[[maybe_unused]] void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
+void Chunk::remove_column_by_slot_id(SlotId slot_id) {
+    auto iter = _slot_id_to_index.find(slot_id);
+    if (iter != _slot_id_to_index.end()) {
+        auto idx = iter->second;
+        _columns.erase(_columns.begin() + idx);
+        if (_schema != nullptr) {
+            _schema->remove(idx);
+            rebuild_cid_index();
+        }
+        _slot_id_to_index.erase(iter);
+        for (auto& tmp_iter : _slot_id_to_index) {
+            if (tmp_iter.second > idx) {
+                tmp_iter.second--;
+            }
+        }
+    }
+}
+
+void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
     DCHECK(std::is_sorted(indexes.begin(), indexes.end()));
     for (size_t i = indexes.size(); i > 0; i--) {
         _columns.erase(_columns.begin() + indexes[i - 1]);
@@ -444,6 +462,17 @@ bool Chunk::has_const_column() const {
         }
     }
     return false;
+}
+
+void Chunk::unpack_and_duplicate_const_columns() {
+    size_t num_rows = this->num_rows();
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto column = _columns[i];
+        if (column->is_constant()) {
+            auto unpack_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, column);
+            update_column_by_index(std::move(unpack_column), i);
+        }
+    }
 }
 
 } // namespace starrocks

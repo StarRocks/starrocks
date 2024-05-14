@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "English"
-toc_max_heading_level: 3
+toc_max_heading_level: 5
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -28,12 +28,12 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 ## Usage notes
 
-- The file formats of Iceberg that StarRocks supports are Parquet and ORC:
+Take note of the following points when you use StarRocks to query data from Iceberg:
 
-  - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
-  - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
-
-- Iceberg catalogs support v1 tables. Additionally, Iceberg catalogs support ORC-formatted v2 tables from StarRocks v3.0 onwards and support Parquet-formatted v2 tables from StarRocks v3.1 onwards.
+| **File format** | **Compression format**                                   | **Iceberg table version**                                           |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet         | SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION      | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.1 onwards in which queries on these v2 tables support position deletes. In v3.1.10, v3.2.5, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
+| ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.0 onwards in which queries on these v2 tables support position deletes. In v3.1.8, v3.2.3, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
 
 ## Integration preparation
 
@@ -66,11 +66,11 @@ For more information, see [Preparation for authentication in AWS IAM](../../inte
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
-- When you query Iceberg data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE or CN processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE or the **cn/conf/hadoop_env.sh** file of each CN. After you set the username in these files, restart each FE and each BE or CN to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- When you query Iceberg data, the FEs and BEs or CNs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
 
-  - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
-  - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
+  - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
+  - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
 
 :::tip
 
@@ -84,8 +84,8 @@ If an error indicating an unknown host is returned when you send a query, you mu
 
 If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
 
-- Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
-- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
+- Run the `kinit -kt keytab_path principal` command on each FE and each BE or CN to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
+- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE or the **$CN_HOME/conf/cn.conf** file of each CN. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
 
 </TabItem>
 
@@ -104,7 +104,8 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
-    StorageCredentialParams
+    StorageCredentialParams,
+    MetadataUpdateParams
 )
 ```
 
@@ -205,17 +206,17 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 ###### aws.glue.use_instance_profile
 
 Required: Yes
-Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
+Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
 
 ###### aws.glue.iam_role_arn
 
 Required: No
-Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. 
+Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter.
 
 ###### aws.glue.region
 
 Required: Yes
-Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. 
+Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`.
 
 ###### aws.glue.access_key
 
@@ -337,12 +338,12 @@ Description:  Specifies whether to enable the instance profile-based authenticat
 ###### aws.s3.iam_role_arn
 
 Required: No
-Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. 
+Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter.
 
 ###### aws.s3.region
 
 Required: Yes
-Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`. 
+Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`.
 
 ###### aws.s3.access_key
 
@@ -585,6 +586,15 @@ Description: The service account that you want to impersonate.
 </Tabs>
 
 ---
+
+#### MetadataUpdateParams
+
+A set of parameters about how StarRocks caches the metadata of Hive. This parameter set is optional.
+
+Currently, this parameter set contains only one parameter, `enable_iceberg_metadata_cache`, which specifies whether to cache pointers and partition names for Iceberg tables. This parameter is supported from v3.2.1 onwards:
+
+- From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used.
+- In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 
 ### Examples
 
@@ -1142,7 +1152,7 @@ Description: The file format of the Iceberg table. Only the Parquet format is su
 
 ###### compression_codec
 
-Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`.
+Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec).
 
 ---
 
@@ -1355,9 +1365,3 @@ Description: The amount of time after which a cache entry on disk expires counti
 Unit: Bytes
 Default value: `8388608`, equivalent to 8 MB
 Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
-
-### Configure Iceberg table pointer and partition name caching
-
-You can use the session variable [`enable_iceberg_metadata_cache`](../../reference/System_variable.md#enable_iceberg_metadata_cache-321-and-later) to specify whether to cache pointers and partition names for Iceberg tables. This variable is supported from v3.2.1 onwards.
-
-From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.

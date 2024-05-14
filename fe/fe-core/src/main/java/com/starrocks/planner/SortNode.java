@@ -288,6 +288,25 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             output.append(isAsc.next() ? "ASC" : "DESC");
         }
         output.append("\n");
+
+        if (!analyticPartitionExprs.isEmpty()) {
+            output.append(detailPrefix).append("analytic partition by: ");
+            start = true;
+            for (Expr expr : analyticPartitionExprs) {
+                if (start) {
+                    start = false;
+                } else {
+                    output.append(", ");
+                }
+                if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                    output.append(expr.toSql());
+                } else {
+                    output.append(expr.explain());
+                }
+            }
+            output.append("\n");
+        }
+
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (!buildRuntimeFilters.isEmpty()) {
                 output.append(detailPrefix).append("build runtime filters:\n");

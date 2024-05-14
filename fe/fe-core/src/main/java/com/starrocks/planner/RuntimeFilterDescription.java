@@ -153,6 +153,7 @@ public class RuntimeFilterDescription {
         if (!canAcceptFilter(node, rfPushCtx)) {
             return false;
         }
+
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
             ((OlapScanNode) node).setOrderHint(isAscFilter());
         }
@@ -538,6 +539,8 @@ public class RuntimeFilterDescription {
                 }
             }
         }
+
+        t.setBuild_from_group_execution(isBuildFromColocateGroup);
 
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);

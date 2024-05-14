@@ -422,7 +422,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
 
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
         std::unique_lock l(_shutdown_tablets_lock);
-        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
+        _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
     } else if (flag == kMoveFilesToTrash) {
         {
             // See comments above
@@ -432,7 +432,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         }
 
         std::unique_lock l(_shutdown_tablets_lock);
-        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
+        _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
     } else {
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
@@ -469,10 +469,16 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     }
 
     for (const auto& dropped_tablet : dropped_tablets) {
-        // make sure dropped tablet state is TABLET_SHUTDOWN
-        std::unique_lock l(dropped_tablet->get_header_lock());
-        (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
-        dropped_tablet->save_meta();
+        {
+            // make sure dropped tablet state is TABLET_SHUTDOWN
+            std::unique_lock l(dropped_tablet->get_header_lock());
+            (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            dropped_tablet->save_meta();
+        }
+
+        DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = kMoveFilesToTrash};
+        std::unique_lock l(_shutdown_tablets_lock);
+        _add_shutdown_tablet_unlocked(dropped_tablet->tablet_id(), std::move(drop_info));
     }
 
     return Status::OK();
@@ -874,7 +880,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         }
         std::unique_lock shutdown_tablets_wlock(_shutdown_tablets_lock);
         DroppedTabletInfo info{.tablet = tablet, .flag = kMoveFilesToTrash};
-        _shutdown_tablets.emplace(tablet->tablet_id(), std::move(info));
+        _add_shutdown_tablet_unlocked(tablet->tablet_id(), std::move(info));
         return Status::NotFound("tablet state is shutdown");
     }
     if (!init_st.ok()) {
@@ -1490,7 +1496,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
 
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
         std::unique_lock l(_shutdown_tablets_lock);
-        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
+        _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
     } else if (flag == kMoveFilesToTrash) {
         {
             // See comments above
@@ -1500,7 +1506,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         }
 
         std::unique_lock l(_shutdown_tablets_lock);
-        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
+        _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
     } else {
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
@@ -1762,6 +1768,20 @@ std::unordered_map<TTabletId, vector<pair<uint32_t, uint32_t>>> TabletManager::g
         }
     }
     return ret;
+}
+
+void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info) {
+    auto iter = _shutdown_tablets.find(tablet_id);
+    if (iter != _shutdown_tablets.end()) {
+        if ((iter->second).tablet != nullptr) {
+            auto st = _remove_tablet_meta((iter->second).tablet);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
+            }
+        }
+        _shutdown_tablets.erase(iter);
+    }
+    _shutdown_tablets.emplace(tablet_id, drop_info);
 }
 
 } // end namespace starrocks

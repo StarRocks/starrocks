@@ -321,6 +321,7 @@ struct TPartitionVersionInfo {
     2: required Types.TVersion version
     3: required Types.TVersionHash version_hash // Deprecated
     4: optional TBinlogConfig binlog_config
+    5: optional i64 gtid
 }
 
 struct TMoveDirReq {
@@ -348,6 +349,7 @@ struct TPublishVersionRequest {
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
     7: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    8: optional i64 gtid
 }
 
 struct TClearAlterTaskRequest {
@@ -385,12 +387,6 @@ struct TRemoteSnapshotRequest {
      14: optional i32 timeout_sec
  }
 
- struct TRemoteSnapshotInfo {
-     1: optional Types.TBackend backend
-     2: optional string snapshot_path
-     3: optional bool incremental_snapshot
- }
-
  struct TReplicateSnapshotRequest {
      1: optional Types.TTransactionId transaction_id
      2: optional Types.TTableId table_id
@@ -404,7 +400,7 @@ struct TRemoteSnapshotRequest {
      10: optional TTabletType src_tablet_type
      11: optional Types.TSchemaHash src_schema_hash
      12: optional Types.TVersion src_visible_version
-     13: optional list<TRemoteSnapshotInfo> src_snapshot_infos
+     13: optional list<Types.TSnapshotInfo> src_snapshot_infos
  }
 
 enum TTabletMetaType {
@@ -429,6 +425,9 @@ struct TTabletMetaInfo {
     6: optional bool enable_persistent_index
     7: optional TBinlogConfig binlog_config
     8: optional i32 primary_index_cache_expire_sec
+    9: optional TTabletSchema tablet_schema;
+    // |create_schema_file| only used when |tablet_schema| exists
+    10: optional bool create_schema_file;
 }
 
 struct TUpdateTabletMetaInfoReq {

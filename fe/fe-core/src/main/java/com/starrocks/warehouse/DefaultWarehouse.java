@@ -14,19 +14,25 @@
 
 package com.starrocks.warehouse;
 
-import com.google.gson.annotations.SerializedName;
+import com.google.common.collect.ImmutableList;
+import com.starrocks.lake.StarOSAgent;
+
+import java.util.List;
 
 public class DefaultWarehouse extends Warehouse {
-    @SerializedName(value = "cluster")
-    Cluster cluster;
 
-    public DefaultWarehouse(long id, String name, long clusterId) {
+    private static final List<Long> WORKER_GROUP_ID_LIST;
+
+    public DefaultWarehouse(long id, String name) {
         super(id, name, "An internal warehouse init after FE is ready");
-        cluster = new Cluster(clusterId);
+    }
+
+    static {
+        WORKER_GROUP_ID_LIST = ImmutableList.of(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
     }
 
     @Override
-    public Cluster getAnyAvailableCluster() {
-        return cluster;
+    public List<Long> getWorkerGroupIds() {
+        return WORKER_GROUP_ID_LIST;
     }
 }

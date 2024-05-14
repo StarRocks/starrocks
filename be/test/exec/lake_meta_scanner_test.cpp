@@ -59,7 +59,7 @@ public:
 
         {
             // create the tablet with its schema prepared
-            lake::TabletMetadata metadata;
+            TabletMetadata metadata;
             metadata.set_id(_tablet_id);
             metadata.set_version(2);
 
@@ -84,12 +84,10 @@ public:
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};
-        std::vector<bool> nullable_tuples{true};
         _tnode = std::make_unique<TPlanNode>();
         _tnode->__set_node_id(1);
         _tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
         _tnode->__set_row_tuples(tuple_ids);
-        _tnode->__set_nullable_tuples(nullable_tuples);
         _tnode->__set_limit(-1);
 
         TDescriptorTableBuilder table_desc_builder;

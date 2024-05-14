@@ -43,6 +43,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -60,6 +61,7 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -75,7 +77,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
@@ -110,7 +111,7 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
 
-    private final ReadWriteLock txnNodeMapAccessLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock txnNodeMapAccessLock = new FairReentrantReadWriteLock();
     private final Map<String, Long> txnNodeMap = new LinkedHashMap<>(512, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
@@ -308,6 +309,11 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         String tableName = request.getRequest().headers().get(TABLE_KEY);
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
+
         String label = request.getRequest().headers().get(LABEL_KEY);
         if (StringUtils.isBlank(label)) {
             throw new UserException("Empty label.");
@@ -367,6 +373,7 @@ public class TransactionLoadAction extends RestBaseAction {
         return new TransactionOperationParams(
                 dbName,
                 tableName,
+                warehouseName,
                 label,
                 txnOperation,
                 timeoutMillis,

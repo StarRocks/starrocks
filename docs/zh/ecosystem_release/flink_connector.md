@@ -8,8 +8,8 @@ displayed_sidebar: "Chinese"
 
 **使用文档：**
 
-- [使用 Flink connector 导入数据至 StarRocks](../loading/Flink-connector-starrocks.md)
-- [使用 Flink connector 从 StarRocks 读取数据](../unloading/Flink_connector.md)
+- [使用 Flink connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)
+- [使用 Flink connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Flink_connector/)
 
 **源码下载地址：**[starrocks-connector-for-apache-flink](https://github.com/StarRocks/starrocks-connector-for-apache-flink)
 
@@ -23,8 +23,8 @@ displayed_sidebar: "Chinese"
 您可以通过以下方式获取 Flink connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
-- 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../loading/Flink-connector-starrocks.md)。
-- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../loading/Flink-connector-starrocks.md)。
+- 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
 
 **版本要求：**
 
@@ -44,7 +44,7 @@ displayed_sidebar: "Chinese"
 
 #### 1.2.9
 
-本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](../loading/Flink-connector-starrocks.md#flink-cdc-同步支持-schema-change)。
+本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/#使用-flink-cdc-30-同步数据支持-schema-change)。
 
 **新增特性**
 
@@ -62,7 +62,7 @@ displayed_sidebar: "Chinese"
 本版本发布包含如下功能优化和问题修复。其中重点优化如下：
 
 - 支持 Flink 1.16 和 1.17。
-- Sink 语义配置为 exactly-once 时建议设置 `sink.label-prefix`。使用说明，参考 [Exactly Once](../loading/Flink-connector-starrocks.md#exactly-once)。
+- Sink 语义配置为 exactly-once 时建议设置 `sink.label-prefix`。使用说明，参考 [Exactly Once](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/#exactly-once)。
 
 **功能优化**
 

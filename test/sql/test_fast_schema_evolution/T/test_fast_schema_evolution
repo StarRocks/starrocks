@@ -351,6 +351,7 @@ alter table tab1 add rollup r1 (k2,v2,v1);
 function: wait_alter_table_finish("ROLLUP", 8)
 
 alter table tab1 add column v6 bigint default "1";
+function: wait_alter_table_finish()
 select * from tab1;
 
 alter table tab1 drop column v2;

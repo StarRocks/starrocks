@@ -40,7 +40,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
@@ -63,6 +62,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
@@ -90,6 +90,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class NodeMgr {
     private static final Logger LOG = LogManager.getLogger(NodeMgr.class);
@@ -176,6 +177,15 @@ public class NodeMgr {
 
     public List<Frontend> getAllFrontends() {
         return Lists.newArrayList(frontends.values());
+    }
+
+    // All frontends except self
+    public List<Frontend> getOtherFrontends() {
+        return frontends
+                .values()
+                .stream()
+                .filter(frontend -> !frontend.getNodeName().equals(nodeName))
+                .collect(Collectors.toList());
     }
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -563,7 +573,7 @@ public class NodeMgr {
         }
     }
 
-    private void getHelperNodes(String[] args) throws AnalysisException {
+    private void getHelperNodes(String[] args) {
         String helpers = null;
         for (int i = 0; i < args.length; i++) {
             if (args[i].equalsIgnoreCase("-helper")) {
@@ -595,7 +605,7 @@ public class NodeMgr {
                      * In this case, some errors have caused users to be troubled.
                      * So here directly exit the program and inform the user to avoid unnecessary trouble.
                      */
-                    throw new AnalysisException(
+                    throw new SemanticException(
                             "Do not specify the helper node to FE itself. "
                                     + "Please specify it to the existing running Leader or Follower FE");
                 }
@@ -799,7 +809,7 @@ public class NodeMgr {
         try {
             fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
-                throw new DdlException("frontend does not exist[" + 
+                throw new DdlException("frontend does not exist[" +
                         NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
             if (fe.getRole() != role) {

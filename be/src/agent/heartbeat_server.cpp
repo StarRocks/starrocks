@@ -143,6 +143,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {
     static const char* LOCALHOST = "127.0.0.1";
+    static const char* LOCALHOST_IPV6 = "::1";
 
     // reject master's heartbeat when exit
     if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
@@ -166,8 +167,10 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         return Status::InternalError("Unmatched cluster id");
     }
 
-    if ((master_info.network_address.hostname == LOCALHOST) && (master_info.backend_ip != LOCALHOST)) {
-        return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
+    if ((master_info.network_address.hostname == LOCALHOST)) {
+        if (!(master_info.backend_ip == LOCALHOST || master_info.backend_ip == LOCALHOST_IPV6)) {
+            return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
+        }
     }
 
 #ifndef USE_STAROS
@@ -179,37 +182,47 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 #endif
 
     if (master_info.__isset.backend_ip) {
+        //master_info.backend_ip may be an IP or domain name, and it should be renamed 'backend_host', as it requires compatibility with historical versions, the name is still 'backend_ ip'
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
             LOG(WARNING) << master_info.backend_ip << " not equal to to backend localhost "
                          << BackendOptions::get_localhost();
+            // step1: check master_info.backend_ip is IP or FQDN
             bool fe_saved_is_valid_ip = is_valid_ip(master_info.backend_ip);
             if (fe_saved_is_valid_ip && is_valid_ip(BackendOptions::get_localhost())) {
+                // if master_info.backend_ip is IP,and not equal with BackendOptions::get_localhost(),return error
                 return Status::InternalError("FE saved address not match backend address");
             }
 
+            //step2: resolve FQDN to IP
             std::string ip;
             if (fe_saved_is_valid_ip) {
                 ip = master_info.backend_ip;
             } else {
-                ip = hostname_to_ip(master_info.backend_ip);
-                if (ip.empty()) {
-                    std::stringstream err_msg;
-                    err_msg << "Can not get ip from fqdn, fqdn is: " << master_info.backend_ip;
-                    LOG(WARNING) << err_msg.str();
-                    return Status::InternalError(err_msg.str());
+                Status status = hostname_to_ip(master_info.backend_ip, ip, BackendOptions::is_bind_ipv6());
+                if (!status.ok()) {
+                    LOG(WARNING) << "Can not get ip from fqdn, fqdn is: " << master_info.backend_ip
+                                 << ", binding ipv6: " << BackendOptions::is_bind_ipv6()
+                                 << ", status: " << status.to_string();
+                    return status;
                 }
+                LOG(INFO) << "resolved from fqdn: " << master_info.backend_ip << " to ip: " << ip;
             }
 
+            //step3: get all ips of the interfaces on this machine
             std::vector<InetAddress> hosts;
-            RETURN_IF_ERROR(get_hosts_v4(&hosts));
+            RETURN_IF_ERROR(get_hosts(&hosts));
             if (hosts.empty()) {
-                return Status::InternalError("get_hosts_v4 is empty");
+                std::stringstream err_msg;
+                err_msg << "the status was not ok when get_hosts.";
+                LOG(WARNING) << err_msg.str();
+                return Status::InternalError(err_msg.str());
             }
 
+            //step4: check if the IP of FQDN belongs to the current machine and update BackendOptions._s_localhost
             bool set_new_localhost = false;
 
             for (auto& host : hosts) {
-                if (host.is_address_v4() && host.get_host_address_v4() == ip) {
+                if (host.get_host_address() == ip) {
                     BackendOptions::set_localhost(master_info.backend_ip);
                     set_new_localhost = true;
                     break;

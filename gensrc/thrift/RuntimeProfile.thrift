@@ -80,6 +80,9 @@ struct TRuntimeProfileNode {
   
   // map from parent counter name to child counter name
   8: required map<string, set<string>> child_counters_map
+
+  // The version of this profile
+  9: optional i64 version
 }
 
 // A flattened tree of runtime profiles, obtained by an

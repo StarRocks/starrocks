@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "storage/tablet.h"
 
@@ -86,15 +87,22 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
     for (int i = 0; i < olap_scan_ranges.size(); ++i) {
         auto* scan_range = olap_scan_ranges[i];
 
-        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
         ASSIGN_OR_RETURN(TabletSharedPtr tablet, OlapScanNode::get_tablet(scan_range));
 
-        // Capture row sets of this version tablet.
-        {
+        if (scan_range->__isset.gtid) {
+            std::shared_lock l(tablet->get_header_lock());
+            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(scan_range->gtid, &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
+        } else {
+            int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
+            // Capture row sets of this version tablet.
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
             Rowset::acquire_readers(_tablet_rowsets[i]);
         }
+
+        VLOG(1) << "capture tablet rowsets: " << tablet->full_name() << ", rowsets: " << _tablet_rowsets[i].size()
+                << ", version: " << scan_range->version << ", gtid: " << scan_range->gtid;
 
         _tablets[i] = std::move(tablet);
     }
@@ -103,9 +111,8 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
 }
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
-                                        RuntimeFilterProbeCollector* runtime_bloom_filters) {
+                                        RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence) {
     TEST_ERROR_POINT("OlapScanContext::parse_conjuncts");
-
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
 
@@ -121,14 +128,6 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     }
 
     // Init _conjuncts_manager.
-    OlapScanConjunctsManager& cm = _conjuncts_manager;
-    cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
-    cm.tuple_desc = tuple_desc;
-    cm.obj_pool = &_obj_pool;
-    cm.key_column_names = &thrift_olap_scan_node.sort_key_column_names;
-    cm.runtime_filters = runtime_bloom_filters;
-    cm.runtime_state = state;
-
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
@@ -141,12 +140,28 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
         enable_column_expr_predicate = thrift_olap_scan_node.enable_column_expr_predicate;
     }
 
+    OlapScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = &_obj_pool;
+    opts.key_column_names = &thrift_olap_scan_node.sort_key_column_names;
+    opts.runtime_filters = runtime_bloom_filters;
+    opts.runtime_state = state;
+    opts.driver_sequence = driver_sequence;
+    opts.scan_keys_unlimited = true;
+    opts.max_scan_key_num = max_scan_key_num;
+    opts.enable_column_expr_predicate = enable_column_expr_predicate;
+    opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
+
+    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
+    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+
     // Parse conjuncts via _conjuncts_manager.
-    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, enable_column_expr_predicate));
+    RETURN_IF_ERROR(cm.parse_conjuncts());
 
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
-    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
-    _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
+    RETURN_IF_ERROR(cm.get_key_ranges(&_key_ranges));
+    cm.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
 
     // rewrite after push down scan predicate, scan predicate should rewrite by local-dict
     RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));

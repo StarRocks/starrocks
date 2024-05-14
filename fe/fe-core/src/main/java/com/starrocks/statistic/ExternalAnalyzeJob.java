@@ -16,6 +16,7 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -49,6 +50,9 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
     @SerializedName("columns")
     private List<String> columns;
 
+    @SerializedName("columnTypes")
+    private List<Type> columnTypes;
+
     @SerializedName("type")
     private AnalyzeType type;
 
@@ -67,14 +71,16 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
     @SerializedName("reason")
     private String reason;
 
-    public ExternalAnalyzeJob(String catalogName, String dbName, String tableName, List<String> columns, AnalyzeType type,
+    public ExternalAnalyzeJob(String catalogName, String dbName, String tableName, List<String> columnNames,
+                              List<Type> columnTypes, AnalyzeType type,
                               ScheduleType scheduleType, Map<String, String> properties, ScheduleStatus status,
                               LocalDateTime workTime) {
         this.id = -1;
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
-        this.columns = columns;
+        this.columns = columnNames;
+        this.columnTypes = columnTypes;
         this.type = type;
         this.scheduleType = scheduleType;
         this.properties = properties;
@@ -115,6 +121,11 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
     @Override
     public List<String> getColumns() {
         return columns;
+    }
+
+    @Override
+    public List<Type> getColumnTypes() {
+        return columnTypes;
     }
 
     @Override
@@ -183,7 +194,7 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
             AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getCatalogName(), statsJob.getDb().getFullName(), statsJob.getTable().getName(),
-                    statsJob.getTable().getUUID(), statsJob.getColumns(), statsJob.getType(), statsJob.getScheduleType(),
+                    statsJob.getTable().getUUID(), statsJob.getColumnNames(), statsJob.getType(), statsJob.getScheduleType(),
                     statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);

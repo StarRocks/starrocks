@@ -109,7 +109,10 @@ void FlushToken::shutdown() {
 }
 
 void FlushToken::cancel(const Status& st) {
-    if (st.ok()) return;
+    if (st.ok()) {
+        return;
+    }
+
     std::lock_guard l(_status_lock);
     if (_status.ok()) {
         _status = st;
@@ -124,7 +127,9 @@ Status FlushToken::wait() {
 
 void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
     // If previous flush has failed, return directly
-    if (!status().ok()) return;
+    if (!status().ok()) {
+        return;
+    }
 
     MonotonicStopWatch timer;
     timer.start();
@@ -142,6 +147,35 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_flush_pool);
+}
+
+// Used in shared-data mode
+Status MemTableFlushExecutor::init_for_lake_table(const std::vector<DataDir*>& data_dirs) {
+    int max_threads = calc_max_threads_for_lake_table(data_dirs);
+    return ThreadPoolBuilder("lake_memtable_flush") // mem table flush
+            .set_min_threads(0)
+            .set_max_threads(max_threads)
+            .build(&_flush_pool);
+}
+
+// Calculate max thread number for lake table
+// If lake_flush_thread_num_per_store > 0, return lake_flush_thread_num_per_store * data_dirs.size()
+// If lake_flush_thread_num_per_store == 0, return 2 * cpu_cores * data_dirs.size()
+// If lake_flush_thread_num_per_store < 0, return |lake_flush_thread_num_per_store| * cpu_cores * data_dirs.size()
+// data_dirs.size() is limited in [1, 8]
+int MemTableFlushExecutor::calc_max_threads_for_lake_table(const std::vector<DataDir*>& data_dirs) {
+    int threads = config::lake_flush_thread_num_per_store;
+    if (threads == 0) {
+        threads = -2;
+    }
+    if (threads <= 0) {
+        threads = -threads;
+        threads *= CpuInfo::num_cores();
+    }
+    int data_dir_num = static_cast<int>(data_dirs.size());
+    data_dir_num = std::max(1, data_dir_num);
+    data_dir_num = std::min(8, data_dir_num);
+    return data_dir_num * threads;
 }
 
 Status MemTableFlushExecutor::update_max_threads(int max_threads) {

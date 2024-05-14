@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.ast.UserVariable;
+import org.junit.Assert;
 import org.junit.Test;
 
 public class SelectHintTest extends PlanTestBase {
@@ -51,5 +53,21 @@ public class SelectHintTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON");
+    }
+
+    @Test
+    public void testRemoveEscapeCharacter() {
+
+        String str = "[\"{\\\"week\\\":{\\\"day\\\":true,\\\"shift\\\":{\\\"begin\\\":0}},\\\"id\\\":\\\"ID1\\\"}\"]";
+        String actual = UserVariable.removeEscapeCharacter(str);
+        Assert.assertEquals("[\"{\"week\":{\"day\":true,\"shift\":{\"begin\":0}},\"id\":\"ID1\"}\"]", actual);
+
+        str = "[\"{\\\"week\\\":{\\\"d\\\"ay\\\":true,\\\"shift\\\":{\\\"begin\\\":0}},\\\"id\\\":\\\"ID1\\\"}\"]";
+        actual = UserVariable.removeEscapeCharacter(str);
+        Assert.assertEquals("[\"{\"week\":{\"d\"ay\":true,\"shift\":{\"begin\":0}},\"id\":\"ID1\"}\"]", actual);
+
+        str = "abc\\\\abc";
+        actual = UserVariable.removeEscapeCharacter(str);
+        Assert.assertEquals("abc\\abc", actual);
     }
 }

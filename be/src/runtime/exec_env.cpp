@@ -198,6 +198,8 @@ Status GlobalEnv::_init_mem_tracker() {
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+    int64_t query_pool_spill_limit = query_pool_mem_limit * config::query_pool_spill_mem_limit_threshold;
+    _query_pool_mem_tracker->set_reserve_limit(query_pool_spill_limit);
     _connector_scan_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit * config::connector_scan_use_query_mem_ratio,
                            "query_pool/connector_scan", nullptr);
@@ -399,6 +401,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [] {
+        auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
+        return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
+    });
 
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
@@ -443,6 +449,26 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         _load_path_mgr = new LoadPathMgr(this);
     }
 
+    std::unique_ptr<ThreadPool> load_rowset_pool;
+    std::unique_ptr<ThreadPool> load_segment_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_rowset_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_rowset_pool));
+    _load_rowset_thread_pool = load_rowset_pool.release();
+
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_segment_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_segment_pool));
+    _load_segment_thread_pool = load_segment_pool.release();
+
     _broker_mgr = new BrokerMgr(this);
 #ifndef BE_TEST
     _bfd_parser = BfdParser::create();
@@ -462,6 +488,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(this);
+    auto runtime_filter_event_func = [] {
+        auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
+        return (pool == nullptr) ? 0U : pool->queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -667,6 +698,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_streaming_load_thread_pool);
+    SAFE_DELETE(_load_segment_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
@@ -690,6 +722,8 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+    _dictionary_cache_pool.reset();
+    _automatic_partition_pool.reset();
     _metrics = nullptr;
 }
 

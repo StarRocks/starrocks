@@ -39,7 +39,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -160,7 +159,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
-                     String hiveDbName, String hiveTableName, String tableLocation, long createTime,
+                     String hiveDbName, String hiveTableName, String tableLocation, String comment, long createTime,
                      List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties,
                      Map<String, String> serdeProperties, HiveStorageFormat storageFormat, HiveTableType hiveTableType) {
         super(id, name, TableType.HIVE, fullSchema);
@@ -169,6 +168,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         this.hiveDbName = hiveDbName;
         this.hiveTableName = hiveTableName;
         this.tableLocation = tableLocation;
+        this.comment = comment;
         this.createTime = createTime;
         this.partColumnNames = partColumnNames;
         this.dataColumnNames = dataColumnNames;
@@ -275,13 +275,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveProperties == null ? new HashMap<>() : hiveProperties;
     }
 
+    public Map<String, String> getSerdeProperties() {
+        return serdeProperties;
+    }
+
     public boolean hasBooleanTypePartitionColumn() {
         return getPartitionColumns().stream().anyMatch(column -> column.getType().isBoolean());
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
         ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
-        ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
         ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
@@ -292,7 +295,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         });
 
         fullSchemaTemp.addAll(updatedTable.fullSchema);
-        nameToColumnTemp.putAll(updatedTable.nameToColumn);
         dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -307,7 +309,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             this.dataColumnNames.clear();
 
             this.fullSchema.addAll(fullSchemaTemp.build());
-            this.nameToColumn.putAll(nameToColumnTemp.build());
+            updateSchemaIndex();
             this.dataColumnNames.addAll(dataColumnNamesTemp.build());
 
             if (GlobalStateMgr.getCurrentState().isLeader()) {
@@ -572,6 +574,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         private String hiveTableName;
         private String resourceName;
         private String tableLocation;
+        private String comment;
         private long createTime;
         private List<Column> fullSchema;
         private List<String> partitionColNames = Lists.newArrayList();
@@ -619,6 +622,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setComment(String comment) {
+            this.comment = comment;
+            return this;
+        }
+
         public Builder setCreateTime(long createTime) {
             this.createTime = createTime;
             return this;
@@ -661,7 +669,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         public HiveTable build() {
             return new HiveTable(id, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
-                    tableLocation, createTime, partitionColNames, dataColNames, properties, serdeProperties,
+                    tableLocation, comment, createTime, partitionColNames, dataColNames, properties, serdeProperties,
                     storageFormat, hiveTableType);
         }
     }

@@ -1,0 +1,37 @@
+-- name: test_exception_function_call @sequential
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+admin enable failpoint 'expr_prepare_failed';
+-- result:
+-- !result
+[UC]select max(regexp_replace(c1, '1', '2')) from t0;
+-- result:
+-- !result
+admin disable failpoint 'expr_prepare_failed';
+-- result:
+-- !result
+admin enable failpoint 'expr_prepare_fragment_local_call_failed';
+-- result:
+-- !result
+[UC]select max(regexp_replace(c1, '1', '2')) from t0;
+-- result:
+-- !result
+admin disable failpoint 'expr_prepare_fragment_local_call_failed';
+-- result:
+-- !result
+admin enable failpoint 'expr_prepare_fragment_thread_local_call_failed';
+-- result:
+-- !result
+[UC]select max(regexp_replace(c1, '1', '2')) from t0;
+-- result:
+-- !result
+admin disable failpoint 'expr_prepare_fragment_thread_local_call_failed';
+-- result:
+-- !result

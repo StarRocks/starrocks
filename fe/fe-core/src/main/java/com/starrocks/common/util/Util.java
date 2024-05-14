@@ -50,7 +50,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.management.ThreadInfo;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
@@ -310,28 +309,6 @@ public class Util {
 
     public static int generateSchemaHash() {
         return Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
-    }
-
-    public static String dumpThread(Thread t, int lineNum) {
-        return dumpThread(t.getName(), t.getId(), t.getStackTrace(), lineNum);
-    }
-
-    public static String dumpThread(ThreadInfo t, int lineNum) {
-        return dumpThread(t.getThreadName(), t.getThreadId(), t.getStackTrace(), lineNum);
-    }
-
-    public static String dumpThread(String name, long id, StackTraceElement[] elements, int lineNum) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("dump thread: ").append(name).append(", id: ").append(id).append("\n");
-        int count = lineNum;
-        for (StackTraceElement element : elements) {
-            if (count == 0) {
-                break;
-            }
-            sb.append("    ").append(element.toString()).append("\n");
-            --count;
-        }
-        return sb.toString();
     }
 
     // get response body as a string from the given url.

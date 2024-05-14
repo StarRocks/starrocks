@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.CloseableLock;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -32,6 +33,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -76,8 +78,8 @@ public class Pipe implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(Pipe.class);
 
-    public static final int DEFAULT_POLL_INTERVAL = 10;
-    public static final long DEFAULT_BATCH_SIZE = 1 << 30;
+    public static final int MAX_POLL_INTERVAL = 3600; // 1 hour
+    public static final long DEFAULT_BATCH_SIZE = 1 << 30; // 1 GB
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
@@ -109,11 +111,11 @@ public class Pipe implements GsonPostProcessable {
     @SerializedName(value = "task_execution_variables")
     private Map<String, String> taskExecutionVariables;
 
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
     private Map<Long, PipeTaskDesc> runningTasks = new HashMap<>();
     private ErrorInfo lastErrorInfo = new ErrorInfo();
     private int failedTaskExecutionCount = 0;
-    private int pollIntervalSecond = DEFAULT_POLL_INTERVAL;
+    private int pollIntervalSecond = Config.pipe_default_poll_interval_s;
     private long lastPolledTime = 0;
     private boolean recovered = false;
 
@@ -658,7 +660,7 @@ public class Pipe implements GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();
-        this.lock = new ReentrantReadWriteLock();
+        this.lock = new FairReentrantReadWriteLock();
         this.lastErrorInfo = new ErrorInfo();
         pipeSource.initPipeId(id);
         processProperties(this.properties);

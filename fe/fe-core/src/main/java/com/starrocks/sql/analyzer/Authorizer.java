@@ -24,16 +24,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessController;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,18 +45,14 @@ import java.util.Optional;
 import java.util.Set;
 
 public class Authorizer {
-    private static final AccessControlProvider INSTANCE;
+    private final AccessControlProvider accessControlProvider;
 
-    static {
-        if (Config.access_control.equals("ranger")) {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
-        } else {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
-        }
+    public Authorizer(AccessControlProvider accessControlProvider) {
+        this.accessControlProvider = accessControlProvider;
     }
 
     public static AccessControlProvider getInstance() {
-        return INSTANCE;
+        return GlobalStateMgr.getCurrentState().getAuthorizer().accessControlProvider;
     }
 
     public static void check(StatementBase statement, ConnectContext context) {
@@ -207,6 +200,7 @@ public class Authorizer {
             case SCHEMA:
             case PAIMON:
             case ODPS:
+            case KUDU:
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
                     checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));

@@ -22,6 +22,22 @@
 
 namespace starrocks {
 
+// _CL_LDECREF first to dec __cl_refcount, make sure
+// that dir->close can be delete itself if refCount
+// is zero.
+#define CLOSE_DIR(x)    \
+    if (x != nullptr) { \
+        _CL_LDECREF(x)  \
+        x->close();     \
+    }
+#define FINALLY_CLOSE_DIR(x)                                                                        \
+    try {                                                                                           \
+        CLOSE_DIR(x)                                                                                \
+    } catch (CLuceneError & e) {                                                                    \
+        LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();                            \
+        return Status::InternalError(fmt::format("CLuceneError occured, error msg: {}", e.what())); \
+    }
+
 #define CLOSE_INPUT(x)  \
     if (x != nullptr) { \
         x->close();     \
@@ -52,7 +68,9 @@ class FullTextCLuceneInvertedReader : public CLuceneInvertedReader {
 public:
     explicit FullTextCLuceneInvertedReader(std::string path, const uint32_t index_id,
                                            InvertedIndexParserType parser_type)
-            : CLuceneInvertedReader(std::move(path), index_id), _parser_type(parser_type) {}
+            : CLuceneInvertedReader(std::move(path), index_id), _parser_type(parser_type) {
+        lucene::search::BooleanQuery::setMaxClauseCount(INT_MAX);
+    }
 
     Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
                  InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;

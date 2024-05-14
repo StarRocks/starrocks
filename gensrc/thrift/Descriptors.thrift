@@ -168,6 +168,7 @@ enum TSchemaTableType {
     SCH_BE_DATACACHE_METRICS,
     SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
+    SCH_TEMP_TABLES,
 }
 
 enum THdfsCompression {
@@ -453,6 +454,12 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
+
+    7: optional i64 target_max_file_size
+
+    8: optional string csv_row_delimiter
+
+    9: optional string csv_column_seperator
 }
 
 struct TIcebergSchema {

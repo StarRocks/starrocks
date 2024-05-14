@@ -17,20 +17,27 @@ package com.starrocks.lake;
 import com.google.common.base.Preconditions;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.TransactionState;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -98,7 +105,7 @@ public class LakeTableHelper {
         }
     }
 
-    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition) throws StarClientException {
+    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition, long warehouseId) throws StarClientException {
         List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();
@@ -106,15 +113,31 @@ public class LakeTableHelper {
                 continue;
             }
             LakeTablet tablet = (LakeTablet) tablets.get(0);
-            return Optional.of(tablet.getShardInfo());
+            try {
+                if (GlobalStateMgr.isCheckpointThread()) {
+                    throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
+                }
+                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                long workerGroupId = Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouseId)
+                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
+                        workerGroupId);
+
+                return Optional.of(shardInfo);
+            } catch (StarClientException e) {
+                if (e.getCode() != StatusCode.NOT_EXIST) {
+                    throw e;
+                }
+                // Shard does not exist, ignore this shard
+            }
         }
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition) throws StarClientException {
+    static boolean removePartitionDirectory(Partition partition, long warehouseId) throws StarClientException {
         boolean ret = true;
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            ShardInfo shardInfo = getAssociatedShardInfo(subPartition).orElse(null);
+            ShardInfo shardInfo = getAssociatedShardInfo(subPartition, warehouseId).orElse(null);
             if (shardInfo == null) {
                 LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
                 continue;
@@ -131,8 +154,8 @@ public class LakeTableHelper {
         return ret;
     }
 
-    public static boolean isSharedPartitionDirectory(PhysicalPartition partition) throws StarClientException {
-        ShardInfo shardInfo = getAssociatedShardInfo(partition).orElse(null);
+    public static boolean isSharedPartitionDirectory(PhysicalPartition partition, long warehouseId) throws StarClientException {
+        ShardInfo shardInfo = getAssociatedShardInfo(partition, warehouseId).orElse(null);
         if (shardInfo == null) {
             return false;
         }
@@ -150,5 +173,41 @@ public class LakeTableHelper {
      */
     public static boolean isSharedDirectory(String path, long partitionId) {
         return !path.endsWith(String.format("/%d", partitionId));
+    }
+
+    /**
+     * For tables created in the old version of StarRocks cluster, the column unique id is generated on BE and
+     * is not saved in FE catalog. For these tables, we want to be able to record their column unique id in the
+     * catalog after the upgrade, and the column unique id recorded must be consistent with the one on BE.
+     * For shared data mode, the algorithm to generate column unique id on BE is simple: take the subscript of
+     * each column as their unique id, so here we just need to follow the same algorithm to calculate the unique
+     * id of each column.
+     *
+     * @param table the table to restore column unique id
+     * @return the max column unique id
+     */
+    public static int restoreColumnUniqueId(OlapTable table) {
+        int maxId = 0;
+        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+            final int columnCount = indexMeta.getSchema().size();
+            maxId = Math.max(maxId, columnCount - 1);
+            for (int i = 0; i < columnCount; i++) {
+                Column col = indexMeta.getSchema().get(i);
+                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+                col.setUniqueId(i);
+            }
+        }
+        return maxId;
+    }
+
+    public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && isLoadingTransaction(sourceType);
+    }
+
+    private static boolean isLoadingTransaction(TransactionState.LoadJobSourceType sourceType) {
+        return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
+                sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 }

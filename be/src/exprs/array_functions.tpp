@@ -139,7 +139,9 @@ public:
             return _array_difference<TYPE_LARGEINT>(ctx, columns);
         } else if constexpr (lt_is_decimalv2<LT>) {
             return _array_difference<TYPE_DECIMALV2>(ctx, columns);
-        } else if constexpr (lt_is_decimal32<LT> || lt_is_decimal64<LT>) {
+        } else if constexpr (lt_is_decimal32<LT>) {
+            return _array_difference<TYPE_DECIMAL32>(ctx, columns);
+        } else if constexpr (lt_is_decimal64<LT>) {
             return _array_difference<TYPE_DECIMAL64>(ctx, columns);
         } else if constexpr (lt_is_decimal128<LT>) {
             return _array_difference<TYPE_DECIMAL128>(ctx, columns);

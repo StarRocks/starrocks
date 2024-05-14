@@ -36,6 +36,7 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+    write_combined_txn_log.cpp
     mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
@@ -154,6 +155,7 @@ set(EXEC_FILES
     schema_scanner/sys_object_dependencies.cpp
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
+    schema_scanner/schema_temp_tables_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -270,6 +272,9 @@ set(EXEC_FILES
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
+    pipeline/group_execution/execution_group.cpp
+    pipeline/group_execution/execution_group_builder.cpp
+    pipeline/group_execution/group_operator.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
@@ -287,6 +292,7 @@ set(EXEC_FILES
     spill/dir_manager.cpp
     spill/serde.cpp
     spill/input_stream.cpp
+    spill/data_stream.cpp
     spill/log_block_manager.cpp
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp

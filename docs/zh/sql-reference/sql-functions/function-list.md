@@ -29,6 +29,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
   - [工具函数](#工具函数)
   - [地理位置函数](#地理位置函数)
   - [Hash 函数](#hash-函数)
+  - [字典函数](#字典函数)
 
 ## 时间日期函数
 
@@ -104,11 +105,12 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [utc_timestamp](./date-time-functions/utc_timestamp.md)| 返回当前 UTC 日期时间。  |
 | [week](./date-time-functions/week.md)| 根据指定的周数计算逻辑，计算指定的日期时间属于一年中的第几周。  |
 | [week_iso](./date-time-functions/week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周。  |
-| [weekofyear](./date-time-functions/weekofyear.md)|  计算指定的日期时间属于一年中的第几周。 |
+| [weekofyear](./date-time-functions/weekofyear.md)| 计算指定的日期时间属于一年中的第几周。 |
 | [weeks_add](./date-time-functions/weeks_add.md)|  向原始的日期时间加上指定周数。 |
 | [weeks_diff](./date-time-functions/weeks_diff.md)|  计算开始时间和结束时间相差几周。 |
 | [weeks_sub](./date-time-functions/weeks_sub.md)| 从原始的日期中减去若干周数。  |
 | [year](./date-time-functions/year.md)|  返回指定日期时间中的年份。 |
+| [yearweek](./date-time-functions/yearweek.md)| 返回给定日期对应的年份和周数。 |
 | [years_add](./date-time-functions/years_add.md)| 向原始的日期时间添加指定的年数。  |
 | [years_diff](./date-time-functions/years_diff.md)|  计算开始时间和结束时间相差几年。 |
 | [years_sub](./date-time-functions/years_sub.md)  |  从指定的日期时间中减去指定年数。     |
@@ -138,6 +140,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [lpad](./string-functions/lpad.md) |根据指定的长度在字符串前面（左侧）追加字符。  |
 | [ltrim](./string-functions/ltrim.md) |  从字符串的左侧（开始部分）移除连续出现的空格或指定字符。 |
 | [money_format](./string-functions/money_format.md) |  将数字按照货币格式输出，整数部分每隔 3 位用逗号分隔，小数部分保留 2 位。  |
+| [ngram_search](./string-functions/ngram_search.md) |  计算两个字符串的 ngram 相似度。|
 | [null_or_empty](./string-functions/null_or_empty.md) | 如果字符串为空字符串或者 NULL 则返回 true，否则返回 false。 |
 | [parse_url](./string-functions/parse_url.md) |  从目标 URL 中提取一部分信息。 |
 | [repeat](./string-functions/repeat.md) | 将字符串重复 count 次输出，count 小于 1 时返回空字符串。  |
@@ -162,6 +165,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [upper](./string-functions/upper.md) | 将字符串转换为大写形式。  |
 | [url_decode](./string-functions/url_decode.md) | 将字符串从 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式转换回来。 |
 | [url_encode](./string-functions/url_encode.md)  | 将字符串根据 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式进行编码。  |
+| [url_extract_host](./string-functions/url_extract_host.md)| 从一个 URL 中截取 host 部分。|
 | [url_extract_parameter](./string-functions/url_extract_parameter.md)   | 从一个 URL 的 query 部分，获取指定参数（`name`）的取值。  |
 
 ## 聚合函数
@@ -214,6 +218,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [atan](./math-functions/atan.md)| 计算反正切值（单位为弧度）。 |
 |  [atan2](./math-functions/atan2.md)| 通过使用两个参数的符号确定象限，计算 x/y 的反正切的主值，返回值在 [-π, π] 范围内。 |
 |  [bin](./math-functions/bin.md)| 将输入的参数转成二进制。 |
+|  [cbrt](./math-functions/cbrt.md)  | 计算参数的立方根。|
 |  [ceil, dceil](./math-functions/ceil.md)| 返回大于或等于 x 的最小整数。 |
 |  [ceiling](./math-functions/ceiling.md)| 返回大于或等于 x 的最小整数。 |
 |  [conv](./math-functions/conv.md)| 对输入的参数进行进制转换。 |
@@ -222,6 +227,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [cosine_similarity](./math-functions/cos_similarity.md)| 计算两个向量的余弦夹角来评估向量之间的相似度。 |
 |  [cosine_similarity_norm](./math-functions/cos_similarity_norm.md)| 计算两个归一化向量的余弦夹角来评估向量之间的相似度。|
 |  [cot](./math-functions/cot.md)| 计算余切值（单位为弧度）。 |
+| [cbrt](./math-functions/cbrt.md)||
 |  [degrees](./math-functions/degrees.md)| 将参数 x 转成角度，x 是弧度。 |
 |  [divide](./math-functions/divide.md)| 除法函数，返回 x 除以 y 的结果， |
 |  [e](./math-functions/e.md)| 返回自然对数函数的底数。 |
@@ -336,6 +342,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [parse_json](./json-functions/json-constructor-functions/parse_json.md)|将字符串类型的数据构造为 JSON 类型的数据。|
 |  [箭头函数](./json-functions/json-query-and-processing-functions/arrow-function.md)| 箭头函数可以查询 JSON 对象中指定路径的值。|
 |  [cast](./json-functions/json-query-and-processing-functions/cast.md)| 实现 JSON 类型数据与 SQL 类型间的相互转换。|
+|  [get_json_bool](./json-functions/json-query-and-processing-functions/get_json_bool.md)| 解析并获取 `json_str` 内指定 `json_path` 下的布尔内容。|
 |  [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 JSON 字符串内指定路径中的浮点型内容。|
 |  [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 JSON 字符串内指定路径中的整型内容。|
 |  [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
@@ -495,3 +502,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 | [murmur_hash3_32](./hash-functions/murmur_hash3_32.md) | 返回输入字符串的 32 位 murmur3 hash 值。 |
 | [xx_hash3_64](./hash-functions/xx_hash3_64.md) | 返回输入字符串的 64 位 xxhash3 值。 |
+
+## 字典函数
+
+| 函数                |                 功能      |
+|  :-:                |                :-:       |
+|  [dict_mapping](./dict-functions/dict_mapping.md)| 通过指定字典表和 key，返回该 key 所映射的 value。 |

@@ -91,9 +91,9 @@ PLAN FRAGMENT 2
   |  <slot 18> : 31: multiply * CAST(1 + CAST(8: l_tax AS DECIMAL64(16,2)) AS DECIMAL128(16,2))
   |  common expressions:
   |  <slot 27> : CAST(6: l_extendedprice AS DECIMAL128(15,2))
-  |  <slot 28> : CAST(7: l_discount AS DECIMAL64(18,2))
+  |  <slot 28> : CAST(7: l_discount AS DECIMAL64(16,2))
   |  <slot 29> : 1 - 28: cast
-  |  <slot 30> : CAST(29: subtract AS DECIMAL128(18,2))
+  |  <slot 30> : CAST(29: subtract AS DECIMAL128(16,2))
   |  <slot 31> : 27: cast * 30: cast
   |  
   0:HdfsScanNode

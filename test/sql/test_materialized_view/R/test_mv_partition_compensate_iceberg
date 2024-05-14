@@ -1,4 +1,4 @@
--- name: test_mv_iceberg_rewrite2
+-- name: test_mv_partition_compensate_iceberg
 create external catalog mv_iceberg_${uuid0}
 properties
 (

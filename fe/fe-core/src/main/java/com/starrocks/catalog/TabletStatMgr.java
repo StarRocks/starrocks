@@ -43,7 +43,6 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.proto.TabletStatRequest;
 import com.starrocks.proto.TabletStatRequest.TabletInfo;
 import com.starrocks.proto.TabletStatResponse;
@@ -52,6 +51,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -59,6 +59,7 @@ import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -337,7 +338,10 @@ public class TabletStatMgr extends FrontendDaemon {
         private void sendTasks() {
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
             for (Tablet tablet : tablets.values()) {
-                ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getBackgroundWarehouse();
+                ComputeNode node = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+
                 if (node == null) {
                     LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
                     return;
@@ -369,6 +373,10 @@ public class TabletStatMgr extends FrontendDaemon {
         }
 
         private void waitResponse() {
+            // responseList may be null if there aren't any alive node.
+            if (responseList == null) {
+                return;
+            }
             for (Future<TabletStatResponse> responseFuture : responseList) {
                 try {
                     TabletStatResponse response = responseFuture.get();

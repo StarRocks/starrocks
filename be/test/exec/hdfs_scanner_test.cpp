@@ -31,10 +31,12 @@
 
 namespace starrocks {
 
+namespace {
 struct SlotDesc {
     string name;
     TypeDescriptor type;
 };
+} // namespace
 
 // TODO: partition scan
 class HdfsScannerTest : public ::testing::Test {
@@ -166,11 +168,10 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     }
     tuple_desc_builder.build(&table_desc_builder);
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                   .ok());
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
@@ -209,6 +210,22 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
 
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
+}
+
+TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok());
+
+    ASSERT_TRUE(scanner->cpu_time_spent() > 0);
 }
 
 TEST_F(HdfsScannerTest, TestParquetGetNext) {
@@ -581,12 +598,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
         tuple_desc_builder.build(&table_desc_builder);
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
                                     config::vector_chunk_size)
                       .ok());
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         min_max_tuple_desc = row_desc->tuple_descriptors()[0];
     }
 

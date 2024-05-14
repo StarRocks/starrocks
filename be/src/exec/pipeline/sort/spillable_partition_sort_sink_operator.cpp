@@ -57,6 +57,7 @@ Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const
 }
 
 Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() { _chunks_sorter->spill_channel()->set_finishing(); });
     if (state->is_cancelled()) {
         _is_finished = true;

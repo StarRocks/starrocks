@@ -219,7 +219,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
     scanner_ctx->iceberg_schema = iceberg_equal_delete_schema;
     scanner_ctx->materialized_columns = std::move(columns);
     scanner_ctx->scan_range = &scan_range;
-    scanner_ctx->lazy_column_coalesce_counter = new std::atomic<int32_t>(0);
+    scanner_ctx->lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
     RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
 
     while (true) {

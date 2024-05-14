@@ -23,10 +23,7 @@ import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -64,7 +61,10 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -234,7 +234,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
-        }  else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("false")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -249,6 +249,19 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE +
                                 " must be bool type(false/true)");
+            }
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                boolean hasGIN = false;
+                for (Index index : olapTable.getIndexes()) {
+                    if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                        hasGIN = true;
+                        break;
+                    }
+                }
+                if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasGIN) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED);
+                }
             }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
@@ -348,8 +361,8 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
         }
 
-        if (olapTable.isCloudNativeTableOrMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in cloud native is not supported");
+        if (olapTable.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize materialized view is not supported");
         }
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();
@@ -515,7 +528,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             }
 
             if (!columnDef.getType().matchesType(expr.getType())) {
-                throw new SemanticException("Illege expression type for Generated Column " +
+                throw new SemanticException("Illegal expression type for Generated Column " +
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
@@ -629,7 +642,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
                 }
 
                 if (!colDef.getType().matchesType(expr.getType())) {
-                    throw new SemanticException("Illege expression type for Generated Column " +
+                    throw new SemanticException("Illegal expression type for Generated Column " +
                             "Column Type: " + colDef.getType().toString() +
                             ", Expression Type: " + expr.getType().toString());
                 }
@@ -754,7 +767,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             }
 
             if (!columnDef.getType().matchesType(expr.getType())) {
-                throw new SemanticException("Illege expression type for Generated Column " +
+                throw new SemanticException("Illegal expression type for Generated Column " +
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }

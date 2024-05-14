@@ -32,6 +32,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
@@ -298,12 +299,11 @@ public:
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                       .ok());
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -359,35 +359,45 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
     auto tablet_schema = TabletSchema::create(create_tablet_schema(ltype));
 
-    OlapScanConjunctsManager cm;
-    cm.conjunct_ctxs_ptr = &conjunct_ctxs;
-    cm.tuple_desc = tuple_desc;
-    cm.obj_pool = &_pool;
-    cm.key_column_names = &key_column_names;
-    cm.runtime_filters = _pool.add(new RuntimeFilterProbeCollector());
+    OlapScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &conjunct_ctxs;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = &_pool;
+    opts.key_column_names = &key_column_names;
+    opts.runtime_filters = _pool.add(new RuntimeFilterProbeCollector());
+    opts.runtime_state = &_runtime_state;
+    opts.scan_keys_unlimited = true;
+    opts.max_scan_key_num = 1;
+    opts.enable_column_expr_predicate = false;
 
-    ASSERT_OK(cm.parse_conjuncts(true, 1));
+    OlapScanConjunctsManager cm(std::move(opts));
+    ASSERT_OK(cm.parse_conjuncts());
+
+    PredicateParser parser(tablet_schema);
+    ColumnPredicatePtrs col_preds_owner;
+    auto status_or_pred_tree = cm.get_predicate_tree(&parser, col_preds_owner);
+    ASSERT_OK(status_or_pred_tree);
+    auto& pred_tree = status_or_pred_tree.value();
+
     // col >= false will be elimated
     if (ltype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
-        ASSERT_EQ(0, cm.olap_filters.size());
+        ASSERT_TRUE(pred_tree.empty());
         return;
-    } else {
-        ASSERT_EQ(1, cm.olap_filters.size());
     }
-    ASSERT_EQ(1, cm.column_value_ranges.size());
-    ASSERT_EQ(1, cm.column_value_ranges.count(slot->col_name()));
 
-    {
-        PredicateParser pp(tablet_schema);
-        std::unique_ptr<ColumnPredicate> predicate(pp.parse_thrift_cond(cm.olap_filters[0]));
-        ASSERT_TRUE(!!predicate);
+    ASSERT_EQ(1, pred_tree.size());
+    const auto& root = pred_tree.root();
+    ASSERT_TRUE(root.compound_children().empty());
+    ASSERT_EQ(1, root.col_children_map().size());
 
-        // BOOLEAN is special, col <= false will be convert to col = false
-        if (ltype == TYPE_BOOLEAN && op == TExprOpcode::LE) {
-            ASSERT_EQ(TExprOpcode::EQ, convert_predicate_type_to_thrift(predicate->type()));
-        } else {
-            ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
-        }
+    const auto* predicate = root.col_children_map().find(0)->second[0].col_pred();
+    ASSERT_TRUE(predicate != nullptr);
+
+    // BOOLEAN is special, col <= false will be convert to col = false
+    if (ltype == TYPE_BOOLEAN && op == TExprOpcode::LE) {
+        ASSERT_EQ(TExprOpcode::EQ, convert_predicate_type_to_thrift(predicate->type()));
+    } else {
+        ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
     }
 }
 

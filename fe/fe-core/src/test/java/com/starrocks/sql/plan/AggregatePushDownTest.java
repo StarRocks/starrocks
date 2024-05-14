@@ -106,6 +106,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  analytic partition by: 4: t1d\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
@@ -128,6 +129,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC, <slot 5> 5: t1e ASC\n" +
+                "  |  analytic partition by: 4: t1d, 5: t1e\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
@@ -166,6 +168,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  analytic partition by: 4: t1d\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  1:EXCHANGE");

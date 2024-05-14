@@ -60,6 +60,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
 #include "util/misc.h"
+#include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -75,7 +76,7 @@ std::string to_load_error_http_path(const std::string& file_name) {
         return "";
     }
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_load_error_log?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
@@ -223,7 +224,7 @@ void FragmentExecState::callback(const Status& status, RuntimeProfile* profile, 
 
 std::string FragmentExecState::to_http_path(const std::string& file_name) {
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_download_load?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
         << "token=" << _exec_env->token() << "&file=" << file_name;
     return url.str();
 }
@@ -237,7 +238,8 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     Status exec_status = update_status(status);
 
     Status coord_status;
-    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, &coord_status);
+    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, config::thrift_rpc_timeout_ms,
+                                    &coord_status);
     if (!coord_status.ok()) {
         std::stringstream ss;
         ss << "couldn't get a client for " << _coord_addr;
@@ -327,7 +329,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
             coord->reportExecStatus(res, params);
         } catch (TTransportException& e) {
             LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-            rpc_status = coord.reopen();
+            rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
 
             if (!rpc_status.ok()) {
                 // we need to cancel the execution of this fragment
@@ -703,7 +705,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             Status fe_connection_status;
 
             FrontendServiceConnection fe_connection(fragment_exec_state->exec_env()->frontend_client_cache(),
-                                                    fragment_exec_state->coord_addr(), &fe_connection_status);
+                                                    fragment_exec_state->coord_addr(), config::thrift_rpc_timeout_ms,
+                                                    &fe_connection_status);
             if (!fe_connection_status.ok()) {
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
@@ -757,7 +760,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                     fe_connection->batchReportExecStatus(res, report_batch);
                 } catch (TTransportException& e) {
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen();
+                    rpc_status = fe_connection.reopen(config::thrift_rpc_timeout_ms);
                     if (!rpc_status.ok()) {
                         continue;
                     }

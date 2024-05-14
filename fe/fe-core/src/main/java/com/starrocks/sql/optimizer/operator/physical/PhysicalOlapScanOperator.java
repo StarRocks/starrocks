@@ -55,7 +55,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
 
+    // Rewriting the scan column ref also needs to rewrite the pruned predicate at the same time.
     private List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
+
+    private long gtid = 0;
 
     private PhysicalOlapScanOperator() {
         super(OperatorType.PHYSICAL_OLAP_SCAN);
@@ -87,6 +90,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
         this.distributionSpec = scanOperator.getDistributionSpec();
         this.selectedIndexId = scanOperator.getSelectedIndexId();
+        this.gtid = scanOperator.getGtid();
         this.selectedPartitionId = scanOperator.getSelectedPartitionId();
         this.selectedTabletId = scanOperator.getSelectedTabletId();
         this.hintsReplicaId = scanOperator.getHintsReplicaIds();
@@ -98,8 +102,20 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return selectedIndexId;
     }
 
+    public long getGtid() {
+        return gtid;
+    }
+
+    public void setSelectedPartitionId(List<Long> selectedPartitionId) {
+        this.selectedPartitionId = selectedPartitionId;
+    }
+
     public List<Long> getSelectedPartitionId() {
         return selectedPartitionId;
+    }
+
+    public void setSelectedTabletId(List<Long> tabletId) {
+        this.selectedTabletId = tabletId;
     }
 
     public List<Long> getSelectedTabletId() {
@@ -211,6 +227,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         }
         PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
+                gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId);
@@ -236,6 +253,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     public static Builder builder() {
         return new Builder();
     }
+
     public static class Builder
             extends PhysicalScanOperator.Builder<PhysicalOlapScanOperator, PhysicalScanOperator.Builder> {
         @Override
@@ -248,6 +266,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             super.withOperator(operator);
             builder.distributionSpec = operator.distributionSpec;
             builder.selectedIndexId = operator.selectedIndexId;
+            builder.gtid = operator.gtid;
             builder.selectedTabletId = operator.selectedTabletId;
             builder.hintsReplicaId = operator.hintsReplicaId;
             builder.selectedPartitionId = operator.selectedPartitionId;
@@ -259,7 +278,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.usePkIndex = operator.usePkIndex;
             builder.globalDicts = operator.globalDicts;
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
-            return  this;
+            return this;
         }
 
         public Builder setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
@@ -269,6 +288,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
         public Builder setGlobalDictsExpr(Map<Integer, ScalarOperator> globalDictsExpr) {
             builder.globalDictsExpr = globalDictsExpr;
+            return this;
+        }
+
+        public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
+            builder.prunedPartitionPredicates = prunedPartitionPredicates;
             return this;
         }
     }

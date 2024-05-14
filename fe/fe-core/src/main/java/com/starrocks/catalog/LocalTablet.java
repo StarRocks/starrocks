@@ -44,8 +44,10 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
@@ -65,7 +67,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * This class represents the local olap tablet related metadata.
@@ -109,7 +110,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     private long lastFullCloneFinishedTimeMs = -1;
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock rwLock = new FairReentrantReadWriteLock();
 
     public LocalTablet() {
         this(0L, new ArrayList<>());
@@ -314,6 +315,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 }
             }
         }
+    }
+
+    @Override
+    public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+        throw new SemanticException("not implemented");
     }
 
     public int getQueryableReplicasSize(long visibleVersion, int schemaHash) {

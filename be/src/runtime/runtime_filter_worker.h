@@ -48,6 +48,7 @@ public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
     void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
     void publish_runtime_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
+    void publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
     // receiver runtime filter allocated in this fragment instance(broadcast join generate it)
     // or allocated in this query(shuffle join generate global runtime filter)
     void receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf);
@@ -140,6 +141,8 @@ public:
     void send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                        const std::vector<TRuntimeFilterDestination>& destinations, int timeout_ms,
                                        int64_t rpc_http_min_size);
+
+    size_t queue_size() const;
 
 private:
     void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);

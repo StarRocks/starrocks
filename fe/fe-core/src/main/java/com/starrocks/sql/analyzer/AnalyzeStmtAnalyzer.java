@@ -19,8 +19,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
@@ -56,6 +56,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
@@ -100,7 +101,7 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
             MetaUtils.normalizationTableName(session, statement.getTableName());
-            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
 
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
@@ -108,19 +109,20 @@ public class AnalyzeStmtAnalyzer {
 
             // Analyze columns mentioned in the statement.
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            List<String> columnNames = statement.getColumnNames();
+            List<Expr> columns = statement.getColumns();
             // The actual column name, avoiding case sensitivity issues
             List<String> realColumnNames = Lists.newArrayList();
-            if (columnNames != null) {
-                for (String colName : columnNames) {
-                    Column col = analyzeTable.getColumn(colName);
-                    if (col == null) {
-                        throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
-                    }
+            if (columns != null && !columns.isEmpty()) {
+                for (Expr column : columns) {
+                    ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                            new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                            col.getType(), statement.getTableName(), null))
+                                    .collect(Collectors.toList()))), session);
+                    String colName = StatisticUtils.getColumnName(analyzeTable, column);
                     if (!mentionedColumns.add(colName)) {
                         throw new SemanticException("Column '%s' specified twice", colName);
                     }
-                    realColumnNames.add(col.getName());
+                    realColumnNames.add(colName);
                 }
                 statement.setColumnNames(realColumnNames);
             }
@@ -169,7 +171,7 @@ public class AnalyzeStmtAnalyzer {
                     String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
                             session.getDatabase() : tbl.getDb();
                     tbl.setDb(dbName);
-                    Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
                     if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
                             !analyzeTable.isOdpsTable()) {
                         throw new SemanticException("Analyze external table only support hive, iceberg and odps table",
@@ -189,7 +191,11 @@ public class AnalyzeStmtAnalyzer {
                 } else if (null != statement.getTableName().getTbl()) {
                     MetaUtils.normalizationTableName(session, statement.getTableName());
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
-                    Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, statement.getTableName());
+
+                    if (analyzeTable.isTemporaryTable()) {
+                        throw new SemanticException("Don't support create analyze job for temporary table");
+                    }
 
                     if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
                         throw new SemanticException("Don't support analyze external table created by resource mapping");
@@ -198,20 +204,20 @@ public class AnalyzeStmtAnalyzer {
                     // Analyze columns mentioned in the statement.
                     Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
-                    List<String> columnNames = statement.getColumnNames();
+                    List<Expr> columns = statement.getColumns();
                     // The actual column name, avoiding case sensitivity issues
                     List<String> realColumnNames = Lists.newArrayList();
-                    if (columnNames != null && !columnNames.isEmpty()) {
-                        for (String colName : columnNames) {
-                            Column col = analyzeTable.getColumn(colName);
-                            if (col == null) {
-                                throw new SemanticException("Unknown column '%s' in '%s'", colName,
-                                        analyzeTable.getName());
-                            }
+                    if (columns != null && !columns.isEmpty()) {
+                        for (Expr column : columns) {
+                            ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                    new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                    col.getType(), statement.getTableName(), null))
+                                            .collect(Collectors.toList()))), session);
+                            String colName = StatisticUtils.getColumnName(analyzeTable, column);
                             if (!mentionedColumns.add(colName)) {
                                 throw new SemanticException("Column '%s' specified twice", colName);
                             }
-                            realColumnNames.add(col.getName());
+                            realColumnNames.add(colName);
                         }
                         statement.setColumnNames(realColumnNames);
                     }
@@ -257,14 +263,13 @@ public class AnalyzeStmtAnalyzer {
         private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
-                List<String> columns = statement.getColumnNames();
-                Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                List<Expr> columns = statement.getColumns();
+                Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
                 if (!isSupportedHistogramAnalyzeTableType(analyzeTable)) {
                     throw new SemanticException("Can't create histogram statistics on table type is %s",
                             analyzeTable.getType().name());
                 }
-                for (String columnName : columns) {
-                    Column column = analyzeTable.getColumn(columnName);
+                for (Expr column : columns) {
                     if (column.getType().isComplexType()
                             || column.getType().isJsonType()
                             || column.getType().isOnlyMetricType()) {
@@ -351,14 +356,18 @@ public class AnalyzeStmtAnalyzer {
                 statement.setExternal(true);
             }
 
-            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
-            List<String> columnNames = statement.getColumnNames();
-            for (String colName : columnNames) {
-                Column col = analyzeTable.getColumn(colName);
-                if (col == null) {
-                    throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
-                }
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+            List<Expr> columns = statement.getColumns();
+            List<String> realColumnNames = Lists.newArrayList();
+            for (Expr column : columns) {
+                ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                        col.getType(), statement.getTableName(), null))
+                                .collect(Collectors.toList()))), session);
+                String colName = StatisticUtils.getColumnName(analyzeTable, column);
+                realColumnNames.add(colName);
             }
+            statement.setColumnNames(realColumnNames);
             return null;
         }
     }

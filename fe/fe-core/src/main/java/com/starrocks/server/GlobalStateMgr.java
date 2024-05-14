@@ -41,8 +41,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.CompactionHandler;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -94,6 +96,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
@@ -164,13 +167,18 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.DefaultAuthorizationProvider;
+import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -183,11 +191,16 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -207,9 +220,9 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -456,6 +469,17 @@ public class GlobalStateMgr {
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
+    private TemporaryTableMgr temporaryTableMgr;
+    private TemporaryTableCleaner temporaryTableCleaner;
+
+    private final GtidGenerator gtidGenerator;
+
+    private final SqlParser sqlParser;
+    private final Analyzer analyzer;
+    private final Authorizer authorizer;
+    private final DDLStmtExecutor ddlStmtExecutor;
+    private final ShowExecutor showExecutor;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -464,15 +488,12 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo() {
+    public TNodesInfo createNodesInfo(long warehouseId) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
-        // use default warehouse
-        Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
-        // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.isSharedDataMode()) {
-            com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
-            for (Long cnId : cluster.getComputeNodeIds()) {
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
+            for (Long cnId : computeNodeIds) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
@@ -524,6 +545,10 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
+    public TemporaryTableMgr getTemporaryTableMgr() {
+        return temporaryTableMgr;
+    }
+
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
     }
@@ -570,7 +595,12 @@ public class GlobalStateMgr {
         this.portConnectivityChecker = new PortConnectivityChecker();
 
         // Alter Job Manager
-        this.alterJobMgr = new AlterJobMgr();
+        // Alter Job Manager
+        this.alterJobMgr = new AlterJobMgr(
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler(),
+                new CompactionHandler());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -578,7 +608,7 @@ public class GlobalStateMgr {
         this.exportMgr = new ExportMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
-        this.lock = new QueryableReentrantLock(true);
+        this.lock = new QueryableReentrantLock();
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
         this.deleteMgr = new DeleteMgr();
@@ -655,10 +685,11 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
+        this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
+        this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
 
         this.taskManager = new TaskManager();
@@ -683,6 +714,8 @@ public class GlobalStateMgr {
         }
 
         this.lockManager = new LockManager();
+
+        this.gtidGenerator = new GtidGenerator();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -716,6 +749,19 @@ public class GlobalStateMgr {
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+
+        this.sqlParser = new SqlParser(AstBuilder.getInstance());
+        this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        AccessControlProvider accessControlProvider;
+        if (Config.access_control.equals("ranger")) {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+        } else {
+            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
+        }
+        this.authorizer = new Authorizer(accessControlProvider);
+        this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+        this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
     }
 
     public static void destroyCheckpoint() {
@@ -918,6 +964,30 @@ public class GlobalStateMgr {
         this.lockManager = lockManager;
     }
 
+    public SqlParser getSqlParser() {
+        return sqlParser;
+    }
+
+    public Analyzer getAnalyzer() {
+        return analyzer;
+    }
+
+    public Authorizer getAuthorizer() {
+        return authorizer;
+    }
+
+    public DDLStmtExecutor getDdlStmtExecutor() {
+        return ddlStmtExecutor;
+    }
+
+    public ShowExecutor getShowExecutor() {
+        return showExecutor;
+    }
+
+    public GtidGenerator getGtidGenerator() {
+        return gtidGenerator;
+    }
+
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -926,7 +996,7 @@ public class GlobalStateMgr {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
-                        LOG.warn("globalStateMgr lock is held by: {}", Util.dumpThread(owner, 50));
+                        LOG.warn("globalStateMgr lock is held by: {}", LogUtil.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {
@@ -1276,6 +1346,8 @@ public class GlobalStateMgr {
             LOG.info("run system in recovery mode");
             metaRecoveryDaemon.start();
         }
+        temporaryTableCleaner.start();
+
     }
 
     // start threads that should run on all FE
@@ -1769,7 +1841,7 @@ public class GlobalStateMgr {
                 readSucc = true;
 
                 // apply
-                EditLog.loadJournal(this, entity);
+                editLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
@@ -2116,6 +2188,7 @@ public class GlobalStateMgr {
     @VisibleForTesting
     public void clear() {
         localMetastore.clear();
+        temporaryTableMgr.clear();
     }
 
     public void triggerNewImage() {

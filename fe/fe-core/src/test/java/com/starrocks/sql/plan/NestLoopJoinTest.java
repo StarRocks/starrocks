@@ -142,7 +142,7 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  12:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 14: substr = 15: substr");
+                "  |  equal join conjunct: 18: substr = 19: substr");
 
         // RIGHT ANTI JOIN + AGGREGATE count(*)
         sql = "select count(*) from (select t2.id_char, t2.id_varchar " +

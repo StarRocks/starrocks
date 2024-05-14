@@ -265,7 +265,7 @@ int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 template <typename T>
-void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
+void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     buf->push_null();
 }
 
@@ -279,7 +279,10 @@ void ObjectColumn<T>::_build_slices() const {
     // Do we really need compress bitmap here?
     if constexpr (std::is_same_v<T, BitmapValue>) {
         for (size_t i = 0; i < _pool.size(); ++i) {
-            _pool[i].compress();
+            // TODO: Putting compress here is not a good way to implement it.
+            //  It is better to put it before writing data and provide an independent Column::Optimize interface.
+            //  For now, let’s implement it in this way with relatively small changes.
+            const_cast<T*>(&_pool[i])->compress();
         }
     }
 

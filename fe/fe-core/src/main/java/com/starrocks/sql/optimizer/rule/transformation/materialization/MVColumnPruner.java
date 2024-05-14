@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -32,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -53,12 +55,15 @@ public class MVColumnPruner {
         }
     }
 
-    public OptExpression doPruneColumns(OptExpression project) {
-        Projection projection = project.getOp().getProjection();
+    public OptExpression doPruneColumns(OptExpression optExpression) {
+        Projection projection = optExpression.getOp().getProjection();
         // OptExpression after mv rewrite must have projection.
+        if (projection == null) {
+            return optExpression;
+        }
         Preconditions.checkState(projection != null);
         requiredOutputColumns = new ColumnRefSet(projection.getOutputColumns());
-        return project.getOp().accept(new ColumnPruneVisitor(), project, null);
+        return optExpression.getOp().accept(new ColumnPruneVisitor(), optExpression, null);
     }
 
     // Prune columns by top-down, only support SPJG/union operators.
@@ -90,6 +95,20 @@ public class MVColumnPruner {
                 builder.withOperator(scanOperator);
                 LogicalScanOperator.Builder scanBuilder = (LogicalScanOperator.Builder) builder;
                 scanBuilder.setColRefToColumnMetaMap(newColumnRefMap);
+                ColumnRefSet outputRefSet = new ColumnRefSet(outputColumns);
+                outputRefSet.except(requiredOutputColumns);
+                if (!outputRefSet.isEmpty() && projection == null) {
+                    // should add a projection
+                    Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
+                    for (ColumnRefOperator columnRefOperator : outputColumns) {
+                        if (outputRefSet.contains(columnRefOperator)) {
+                            continue;
+                        }
+                        projectionMap.put(columnRefOperator, columnRefOperator);
+                    }
+                    Projection newProjection = new Projection(projectionMap);
+                    builder.setProjection(newProjection);
+                }
                 Operator newQueryOp = builder.build();
                 return OptExpression.create(newQueryOp);
             } else {

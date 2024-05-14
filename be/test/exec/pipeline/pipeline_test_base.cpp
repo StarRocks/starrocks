@@ -19,10 +19,12 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
 #include "storage/chunk_helper.h"
+#include "testutil/assert.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 #include "util/thrift_util.h"
@@ -53,7 +55,8 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
         // Add LocalExchangeSinkOperator to predecessor pipeline.
         pred_operators.emplace_back(std::move(local_exchange_sink));
         // predecessor pipeline comes to end.
-        _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipeline_id(), pred_operators));
+        _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipeline_id(), pred_operators,
+                                                           _fragment_ctx->_execution_groups[0].get()));
 
         OpFactories operators_source_with_local_exchange;
         // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
@@ -105,30 +108,23 @@ void PipelineTestBase::_prepare() {
     _obj_pool = _runtime_state->obj_pool();
 
     ASSERT_TRUE(_pipeline_builder != nullptr);
-    _pipelines.clear();
+    exec_group = ExecutionGroupBuilder::create_normal_exec_group();
     _pipeline_builder(_fragment_ctx->runtime_state());
-    _fragment_ctx->set_pipelines(std::move(_pipelines));
-    ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
-
-    const auto& pipelines = _fragment_ctx->pipelines();
-    const size_t num_pipelines = pipelines.size();
-    for (auto n = 0; n < num_pipelines; ++n) {
-        const auto& pipeline = pipelines[n];
-        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
+    for (auto pipeline : _pipelines) {
+        exec_group->add_pipeline(std::move(pipeline.get()));
     }
+    _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
+    _pipelines.clear();
+    ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
+    _fragment_ctx->iterate_pipeline([this](Pipeline* pipeline) { pipeline->instantiate_drivers(_runtime_state); });
 }
 
 void PipelineTestBase::_execute() {
-    Status prepare_status = _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
-    ASSERT_TRUE(prepare_status.ok());
+    _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
 
-    ASSERT_TRUE(_fragment_ctx
-                        ->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-                            exec_env->wg_driver_executor()->submit(driver.get());
-                            return Status::OK();
-                        })
-                        .ok());
+    _fragment_ctx->iterate_drivers(
+            [exec_env = _exec_env](const DriverPtr& driver) { exec_env->wg_driver_executor()->submit(driver.get()); });
 }
 
 ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num) {

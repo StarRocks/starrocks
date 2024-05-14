@@ -53,7 +53,7 @@ DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, Storag
           _schema_initialized(false),
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
-          _tablet_schema(new TabletSchema),
+          _tablet_schema(nullptr),
           _flush_token(nullptr),
           _replicate_token(nullptr),
           _segment_flush_token(nullptr),
@@ -99,6 +99,49 @@ void DeltaWriter::_garbage_collection() {
     if (rollback_status.ok()) {
         _storage_engine->add_unused_rowset(_cur_rowset);
     }
+}
+
+// return True when referenced_column_ids contains all elements in sort key
+static bool contains_all_of(const std::vector<int32_t>& referenced_column_ids,
+                            const std::vector<ColumnId>& sort_key_idxes) {
+    return std::includes(referenced_column_ids.begin(), referenced_column_ids.end(), sort_key_idxes.begin(),
+                         sort_key_idxes.end());
+}
+
+// return True when referenced_column_ids contains any element in sort key
+static bool contains_any_of(const std::vector<int32_t>& referenced_column_ids,
+                            const std::vector<ColumnId>& sort_key_idxes, size_t num_key_columns) {
+    std::unordered_set<ColumnId> sort_key_idxes_set(sort_key_idxes.begin(), sort_key_idxes.end());
+    return std::any_of(referenced_column_ids.begin(), referenced_column_ids.end(),
+                       // Only check non-pk column id
+                       [&](int32_t id) { return id >= num_key_columns && sort_key_idxes_set.count(id) > 0; });
+}
+
+bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
+                                                           const std::vector<int32_t>& referenced_column_ids,
+                                                           const std::vector<ColumnId>& sort_key_idxes,
+                                                           size_t num_key_columns) {
+    // In the current implementation, UNKNOWN_MODE and AUTO_MODE can be considered as ROW_MODE
+    if (partial_update_mode == PartialUpdateMode::ROW_MODE || partial_update_mode == PartialUpdateMode::AUTO_MODE ||
+        partial_update_mode == PartialUpdateMode::UNKNOWN_MODE ||
+        partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
+        // Using Row Mode partial update, then the column to be updated must contain the sort key column,
+        // because they need sort key to decide their order when segment is generated.
+        // Column mode with upsert will insert new rows, which also need sort key to decide their order.
+        if (!contains_all_of(referenced_column_ids, sort_key_idxes)) {
+            return true;
+        }
+    }
+    if (partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+        partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
+        // Using Column Mode with UPDATE command, then the column to be updated cannot contain
+        // a sort key column that is not a primary key column. That is because we won't change row's
+        // order in original segment, so we can't support partial update columns that contains sort key.
+        if (contains_any_of(referenced_column_ids, sort_key_idxes, num_key_columns)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Status DeltaWriter::_init() {
@@ -243,9 +286,9 @@ Status DeltaWriter::_init() {
         }
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
-        if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
-                           sort_key_idxes.begin(), sort_key_idxes.end())) {
-            _partial_schema_with_sort_key = true;
+        if (is_partial_update_with_sort_key_conflict(_opt.partial_update_mode, writer_context.referenced_column_ids,
+                                                     sort_key_idxes, _tablet_schema->num_key_columns())) {
+            _partial_schema_with_sort_key_conflict = true;
         }
         if (!_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
@@ -344,16 +387,25 @@ void DeltaWriter::_set_state(State state, const Status& st) {
 }
 
 Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
-    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
-        _opt.slots->back()->col_name() == "__op") {
-        size_t op_column_id = chunk.num_columns() - 1;
-        const auto& op_column = chunk.get_column_by_index(op_column_id);
-        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
-        for (size_t i = 0; i < chunk.num_rows(); i++) {
-            if (ops[i] == TOpType::UPSERT) {
-                LOG(WARNING) << "table with sort key do not support partial update";
-                return Status::NotSupported("table with sort key do not support partial update");
+    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key_conflict) {
+        bool ok = true;
+        if (_opt.slots != nullptr && _opt.slots->back()->col_name() == "__op") {
+            size_t op_column_id = chunk.num_columns() - 1;
+            const auto& op_column = chunk.get_column_by_index(op_column_id);
+            auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+            ok = !std::any_of(ops, ops + chunk.num_rows(), [](auto op) { return op == TOpType::UPSERT; });
+        } else {
+            ok = false;
+        }
+        if (!ok) {
+            string msg;
+            if (_opt.partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+                msg = "partial update on table with sort key must provide all sort key columns";
+            } else {
+                msg = "column mode partial update on table with sort key cannot update sort key column";
             }
+            LOG(WARNING) << msg;
+            return Status::NotSupported(msg);
         }
     }
     return Status::OK();
@@ -563,9 +615,6 @@ Status DeltaWriter::_flush_memtable() {
 
 Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
                                                  const TabletSchemaCSPtr& ori_tablet_schema) {
-    Status st;
-    TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>();
-
     // new tablet schema if new table
     // find the right index id
     int i = 0;
@@ -577,19 +626,17 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
             ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
             ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
             ptable_schema_param.version() > ori_tablet_schema->schema_version()) {
-            new_schema->copy_from(ori_tablet_schema);
-            RETURN_IF_ERROR(new_schema->build_current_tablet_schema(
-                    ptable_schema_param.indexes(i).schema_id(), ptable_schema_param.version(),
-                    ptable_schema_param.indexes(i).column_param(), ori_tablet_schema));
+            ASSIGN_OR_RETURN(
+                    auto tablet_schema,
+                    TabletSchema::create(*ori_tablet_schema, ptable_schema_param.indexes(i).schema_id(),
+                                         ptable_schema_param.version(), ptable_schema_param.indexes(i).column_param()));
+            _tablet_schema = _tablet->update_max_version_schema(tablet_schema);
+            return Status::OK();
         }
     }
-    if (new_schema->schema_version() > ori_tablet_schema->schema_version()) {
-        _tablet_schema = _tablet->update_max_version_schema(new_schema);
-    } else {
-        _tablet_schema = ori_tablet_schema;
-    }
+    _tablet_schema = ori_tablet_schema;
 
-    return st;
+    return Status::OK();
 }
 
 void DeltaWriter::_reset_mem_table() {

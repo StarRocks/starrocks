@@ -83,6 +83,7 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 option(WITH_CACHELIB "Build binary with cachelib library" OFF)
 
 option(WITH_STARCACHE "Build binary with starcache library" ON)
+option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 
@@ -447,6 +448,9 @@ if (${WITH_STARCACHE} STREQUAL "ON")
     set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${STARCACHE_DIR}/lib/libstarcache.a)
     include_directories(SYSTEM ${STARCACHE_DIR}/include)
     message(STATUS "link the starcache in directory: ${STARCACHE_DIR}")
+endif()
+if ("${WITH_BRPC_KEEPALIVE}" STREQUAL "ON")
+  set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BRPC_KEEPALIVE")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
@@ -819,7 +823,6 @@ set(STARROCKS_LINK_LIBS
     Common
     Column
     Connector
-    ConnectorSink
     Exec
     Exprs
     FileSystem
@@ -1062,7 +1065,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     get_filename_component(BENCH_DIR_NAME ${BENCH_NAME} PATH)
     set(BENCH_OUTPUT_DIR_NAME "output")
     get_filename_component(BENCH_FILE_NAME ${BENCH_NAME} NAME)
-    
+
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
@@ -1078,7 +1081,6 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
-add_subdirectory(${SRC_DIR}/connector_sink)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)

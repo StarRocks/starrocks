@@ -88,6 +88,8 @@ enum TExprNodeType {
   DICTIONARY_GET_EXPR,
   
   JIT_EXPR,
+
+  MATCH_EXPR,
 }
 
 struct TAggregateExpr {

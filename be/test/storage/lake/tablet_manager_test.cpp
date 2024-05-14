@@ -26,12 +26,14 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/bthreads/util.h"
 #include "util/filesystem_util.h"
 
 // NOTE: intend to put the following header to the end of the include section
@@ -75,7 +77,7 @@ public:
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
-    starrocks::lake::TabletMetadata metadata;
+    starrocks::TabletMetadata metadata;
     metadata.set_id(12345);
     metadata.set_version(2);
     auto rowset_meta_pb = metadata.add_rowsets();
@@ -95,7 +97,7 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
-    starrocks::lake::TxnLog txnLog;
+    starrocks::TxnLog txnLog;
     txnLog.set_tablet_id(12345);
     txnLog.set_txn_id(2);
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
@@ -137,6 +139,44 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
 }
 
+TEST_F(LakeTabletManagerTest, create_tablet_with_duplicate_column_id_or_name) {
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    TColumnType col_type;
+    col_type.__set_type(TPrimitiveType::SMALLINT);
+    req.tablet_schema.columns.resize(2);
+    auto& c0 = req.tablet_schema.columns[0];
+    c0.__set_is_key(true);
+    c0.__set_is_allow_null(false);
+    c0.__set_column_name("c0");
+    c0.__set_aggregation_type(TAggregationType::NONE);
+    c0.__set_col_unique_id(0);
+    c0.__set_column_type(col_type);
+    auto& c1 = req.tablet_schema.columns[1];
+    c1 = c0;
+    c1.__set_column_name("c1");
+    auto st = _tablet_manager->create_tablet(req);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, st.code());
+    ASSERT_TRUE(MatchPattern(st.message(), "*Duplicate column id*")) << st.message();
+
+    c1.__set_col_unique_id(1);
+    c1.__set_column_name(c0.column_name);
+    st = _tablet_manager->create_tablet(req);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, st.code());
+    ASSERT_TRUE(MatchPattern(st.message(), "*Duplicate column name*")) << st.message();
+}
+
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
     auto fs = FileSystem::Default();
@@ -168,7 +208,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, list_tablet_meta) {
-    starrocks::lake::TabletMetadata metadata;
+    starrocks::TabletMetadata metadata;
     metadata.set_id(12345);
     metadata.set_version(2);
     auto rowset_meta_pb = metadata.add_rowsets();
@@ -220,11 +260,11 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, DISABLED_put_get_tabletmetadata_witch_cache_evict) {
     int64_t tablet_id = 23456;
-    std::vector<lake::TabletMetadataPtr> vec;
+    std::vector<TabletMetadataPtr> vec;
 
     // we set meta cache capacity to 16K, and each meta here cost 232 bytes,putting 64 tablet meta will fill up the cache space.
     for (int i = 0; i < 64; ++i) {
-        auto metadata = std::make_shared<lake::TabletMetadata>();
+        auto metadata = std::make_shared<TabletMetadata>();
         metadata->set_id(tablet_id);
         metadata->set_version(2 + i);
         auto rowset_meta_pb = metadata->add_rowsets();
@@ -246,7 +286,7 @@ TEST_F(LakeTabletManagerTest, DISABLED_put_get_tabletmetadata_witch_cache_evict)
 
     // put another 32 tablet meta to trigger cache eviction.
     for (int i = 0; i < 32; ++i) {
-        auto metadata = std::make_shared<lake::TabletMetadata>();
+        auto metadata = std::make_shared<TabletMetadata>();
         metadata->set_id(tablet_id);
         metadata->set_version(66 + i);
         auto rowset_meta_pb = metadata->add_rowsets();
@@ -278,7 +318,7 @@ TEST_F(LakeTabletManagerTest, DISABLED_put_get_tabletmetadata_witch_cache_evict)
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_schema_load) {
-    starrocks::lake::TabletMetadata metadata;
+    starrocks::TabletMetadata metadata;
     metadata.set_id(12345);
     metadata.set_version(2);
 
@@ -552,6 +592,43 @@ TEST_F(LakeTabletManagerTest, test_multi_partition_schema_file) {
     }
 }
 
+TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+    auto req = build_create_tablet_request(tablet_id, schema_id);
+    ASSERT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto schema, tablet.get_schema_by_id(schema_id));
+
+    auto fn_read_schema = [&]() {
+        for (int i = 0; i < 50; i++) {
+            ASSIGN_OR_ABORT(auto real_schema, tablet.get_schema_by_id(schema_id));
+            EXPECT_EQ(*schema, *real_schema);
+            _tablet_manager->metacache()->prune();
+        }
+    };
+
+    auto pthreads = std::vector<std::thread>{};
+    pthreads.reserve(10);
+    for (int i = 0; i < 10; i++) {
+        pthreads.emplace_back(fn_read_schema);
+    }
+
+    auto bthreads = std::vector<bthread_t>{};
+    bthreads.reserve(10);
+    for (int i = 0; i < 10; i++) {
+        ASSIGN_OR_ABORT(auto bid, bthreads::start_bthread(fn_read_schema));
+        bthreads.emplace_back(bid);
+    }
+
+    for (auto&& t : pthreads) {
+        t.join();
+    }
+    for (auto&& t : bthreads) {
+        bthread_join(t, nullptr);
+    }
+}
+
 #ifdef USE_STAROS
 class MockStarOSWorker : public StarOSWorker {
 public:
@@ -611,6 +688,29 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     EXPECT_EQ(st.value()->column(0).name(), "c0");
     EXPECT_EQ(st.value()->column(1).name(), "c1");
 }
+
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+    _tablet_manager->add_in_writing_data_size(1, 100);
+
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+    _tablet_manager->remove_in_writing_data_size(1);
+
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+
+    _tablet_manager->add_in_writing_data_size(1, 100);
+    _tablet_manager->clean_in_writing_data_size();
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 100);
+
+    // preserve original g_worker value, and reset it to our MockedWorker
+    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
+    g_worker.reset(new MockStarOSWorker());
+    DeferOp op([origin_worker] { g_worker = origin_worker; });
+
+    _tablet_manager->clean_in_writing_data_size();
+    ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+}
+
 #endif // USE_STAROS
 
 } // namespace starrocks

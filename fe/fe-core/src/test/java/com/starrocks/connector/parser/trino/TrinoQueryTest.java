@@ -156,14 +156,16 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testDecimal() throws Exception {
+        // If Trino parser parse failed, it wll rollback to StarRocks parser,
+        // decimal32, decimal64, decimal128 could parsed by StarRocks parser.
         String sql = "select cast(tj as decimal32) from tall";
-        analyzeFail(sql, "Unknown type: decimal32");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal64) from tall";
-        analyzeFail(sql, "Unknown type: decimal64");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal128) from tall";
-        analyzeFail(sql, "Unknown type: decimal128");
+        analyzeSuccess(sql);
 
         sql = "select cast(tj as decimal) from tall";
         assertPlanContains(sql, "CAST(10: tj AS DECIMAL128(38,0))");
@@ -471,8 +473,9 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "map_from_arrays([1,2,3], ['a','b','c'])");
 
         sql = "select map_filter(map(array[10, 20, 30], array['a', NULL, 'c']), (k, v) -> v IS NOT NULL);";
-        assertPlanContains(sql, "map_filter(7: map_from_arrays, map_values(map_apply((<slot 2>, <slot 3>) -> " +
-                "map{<slot 2>:<slot 3> IS NOT NULL}, 7: map_from_arrays)))");
+        assertPlanContains(sql, "map_filter(map_from_arrays([10,20,30], ['a',NULL,'c']), " +
+                "map_values(map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:<slot 3> IS NOT NULL}, " +
+                "map_from_arrays([10,20,30], ['a',NULL,'c']))))");
 
         sql = "select transform_keys(MAP(ARRAY [1, 2, 3], ARRAY ['a', 'b', 'c']), (k, v) -> k + 1);";
         assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{CAST(<slot 2> AS SMALLINT) + 1:<slot 3>}, " +
@@ -774,19 +777,16 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "regexp('abc123', 'abc*')");
 
         sql = "select regexp_extract('1a 2b 14m', '\\d+');";
-        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 3> : regexp_extract('1a 2b 14m', '\\\\d+', 0)");
+        assertPlanContains(sql, "if(regexp_extract('1a 2b 14m', '\\\\d+', 0) = '', NULL, " +
+                "regexp_extract('1a 2b 14m', '\\\\d+', 0))");
 
         sql = "select regexp_extract('1abb 2b 14m', '[a-z]+');";
-        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 3> : regexp_extract('1abb 2b 14m', '[a-z]+', 0)");
+        assertPlanContains(sql, "if(regexp_extract('1abb 2b 14m', '[a-z]+', 0) = '', NULL, " +
+                "regexp_extract('1abb 2b 14m', '[a-z]+', 0))");
 
         sql = "select regexp_extract('1abb 2b 14m', '[a-z]+', 1);";
-        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 3> : regexp_extract('1abb 2b 14m', '[a-z]+', 1)");
+        assertPlanContains(sql, "<slot 2> : if(regexp_extract('1abb 2b 14m', '[a-z]+', 1) = '', NULL, " +
+                "regexp_extract('1abb 2b 14m', '[a-z]+', 1))");
     }
 
     @Test
@@ -796,6 +796,15 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select v1 from t0 order by v1 limit 20";
         assertPlanContains(sql, "limit: 20");
+    }
+
+    @Test
+    public void testOffsetLimit() throws Exception {
+        String sql = "select * from t0 offset 1 limit 10";
+        assertPlanContains(sql, "offset: 1", "limit: 10");
+
+        sql = "select v1 from t0 order by v1 offset 2 limit 20";
+        assertPlanContains(sql, "offset: 2", "limit: 20");
     }
 
     @Test
@@ -1056,7 +1065,8 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "      cast('2023-01-01' AS date)\n" +
                 "    )\n" +
                 "  );";
-        assertPlanContains(sql, "-1 * CAST(if(3: dayofweek_iso = 7, 0, 3: dayofweek_iso) AS BIGINT)");
+        assertPlanContains(sql, "-1 * CAST(if(dayofweek_iso('2023-01-01 00:00:00') = 7, 0, " +
+                "dayofweek_iso('2023-01-01 00:00:00')) AS BIGINT)");
     }
 
     @Test

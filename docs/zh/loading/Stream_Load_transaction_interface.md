@@ -5,13 +5,11 @@ keywords: ['Stream Load']
 
 # 使用 Stream Load 事务接口导入
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 为了支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 自 2.4 版本起提供 Stream Load 事务接口。
 
 本文介绍 Stream Load 事务接口、以及如何使用该事务接口把数据导入到 StarRocks 中。
-
-> **注意**
->
-> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ## 接口说明
 
@@ -85,6 +83,16 @@ Stream Load 事务接口具有如下优势：
 - 在调用 `/api/transaction/begin` 接口开启事务时，您可以选择指定或者不指定标签 (Label)。如果您不指定标签，StarRocks 会自动为事务生成一个标签。其后的 `/api/transaction/load`、`/api/transaction/prepare`、`/api/transaction/commit` 三个接口中，必须使用与 `/api/transaction/begin` 接口中相同的标签。
 - 重复调用标签相同的 `/api/transaction/begin` 接口，会导致前面使用相同标签已开启的事务失败并回滚。
 - StarRocks支持导入的 CSV 格式数据默认的列分隔符是 `\t`，默认的行分隔符是 `\n`。如果源数据文件中的列分隔符和行分隔符不是 `\t` 和 `\n`，则在调用 `/api/transaction/load` 接口时必须通过 `"column_separator: <column_separator>"` 和 `"row_delimiter: <row_delimiter>"` 指定行分隔符和列分隔符。
+
+## 准备工作
+
+### 查看权限
+
+<InsertPrivNote />
+
+### 查看网络配置
+
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
 
 ## 基本操作
 

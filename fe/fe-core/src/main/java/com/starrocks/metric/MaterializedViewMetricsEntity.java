@@ -22,23 +22,21 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public final class MaterializedViewMetricsEntity {
+public final class MaterializedViewMetricsEntity implements IMaterializedViewMetricsEntity {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsEntity.class);
-
 
     private final MvId mvId;
     private final MetricRegistry metricRegistry;
@@ -66,6 +64,9 @@ public final class MaterializedViewMetricsEntity {
     public LongCounterMetric counterQueryHitTotal;
     // increased once the materialized view is used in the final plan no matter it is queried directly or rewritten.
     public LongCounterMetric counterQueryMaterializedViewTotal;
+    // increased if the materialized view is successes to be rewritten from query by text based rewrite, and it will increase
+    // the counter query hit total.
+    public LongCounterMetric counterQueryTextBasedMatchedTotal;
 
     // gauge
     // the current pending refresh jobs for the materialized view
@@ -86,13 +87,20 @@ public final class MaterializedViewMetricsEntity {
     // record the materialized view's refresh job duration only if it's refreshed successfully.
     public Histogram histRefreshJobDuration;
 
+    public final String dbName;
+    public final String mvName;
     public MaterializedViewMetricsEntity(MetricRegistry metricRegistry, MvId mvId) {
         this.metricRegistry = metricRegistry;
         this.mvId = mvId;
-
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getDb(mvId.getDbId());
+        dbName = db != null ? db.getFullName() : "";
+        Table table = db != null ? db.getTable(mvId.getId()) : null;
+        mvName = table != null ? table.getName() : "";
         initMaterializedViewMetrics();
     }
 
+    @Override
     public List<Metric> getMetrics() {
         return metrics;
     }
@@ -128,6 +136,10 @@ public final class MaterializedViewMetricsEntity {
         counterQueryMatchedTotal = new LongCounterMetric("mv_query_total_matched_count", MetricUnit.REQUESTS,
                 "total matched materialized view's query count");
         metrics.add(counterQueryMatchedTotal);
+        // text based rewrite
+        counterQueryTextBasedMatchedTotal = new LongCounterMetric("mv_query_total_text_based_matched_count",
+                MetricUnit.REQUESTS, "total text based matched materialized view's query count");
+        metrics.add(counterQueryTextBasedMatchedTotal);
 
         // histogram metrics
         try {
@@ -153,7 +165,8 @@ public final class MaterializedViewMetricsEntity {
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                return taskManager.getTaskRunManager().getPendingTaskRunCount(taskId);
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+                return taskRunScheduler.getTaskIdPendingTaskRunCount(taskId);
             }
         };
         metrics.add(counterRefreshPendingJobs);
@@ -171,7 +184,8 @@ public final class MaterializedViewMetricsEntity {
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                if (taskManager.getTaskRunManager().containsTaskInRunningTaskRunMap(taskId)) {
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunManager().getTaskRunScheduler();
+                if (taskRunScheduler.isTaskRunning(taskId)) {
                     return 1L;
                 } else {
                     return 0L;
@@ -193,10 +207,10 @@ public final class MaterializedViewMetricsEntity {
                     return 0L;
                 }
 
+                MaterializedView mv = (MaterializedView) table;
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    MaterializedView mv = (MaterializedView) table;
                     return mv.getRowCount();
                 } catch (Exception e) {
                     return 0L;
@@ -220,10 +234,10 @@ public final class MaterializedViewMetricsEntity {
                     return 0L;
                 }
 
+                MaterializedView mv = (MaterializedView) table;
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    MaterializedView mv = (MaterializedView) table;
                     return mv.getDataSize();
                 } catch (Exception e) {
                     return 0L;
@@ -246,15 +260,11 @@ public final class MaterializedViewMetricsEntity {
                 if (!table.isMaterializedView()) {
                     return 0;
                 }
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
                 try {
                     MaterializedView mv = (MaterializedView) table;
                     return mv.isActive() ? 0 : 1;
                 } catch (Exception e) {
                     return 0;
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };
@@ -273,13 +283,13 @@ public final class MaterializedViewMetricsEntity {
                     return 0;
                 }
                 MaterializedView mv = (MaterializedView) table;
+                if (!mv.isPartitionedTable()) {
+                    return 0;
+                }
 
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    if (!mv.getPartitionInfo().isPartitioned()) {
-                        return 0;
-                    }
                     return mv.getPartitions().size();
                 } catch (Exception e) {
                     return 0;
@@ -288,42 +298,37 @@ public final class MaterializedViewMetricsEntity {
                 }
             }
         };
-        metrics.add(counterInactiveState);
+        metrics.add(counterPartitionCount);
     }
 
-    public static boolean isUpdateMaterializedViewMetrics(ConnectContext connectContext) {
-        if (connectContext == null) {
-            return false;
-        }
-        // ignore: explain queries
-        if (connectContext.getExplainLevel() != null) {
-            return false;
-        }
-        // ignore: queries that are not using materialized view rewrite(eg: stats jobs)
-        if (!connectContext.getSessionVariable().isEnableMaterializedViewRewrite() ||
-                !Config.enable_materialized_view) {
-            return false;
-        }
-        return true;
-    }
-
+    @Override
     public void increaseQueryConsideredCount(long count) {
         this.counterQueryConsideredTotal.increase(count);
     }
 
+    @Override
     public void increaseQueryMatchedCount(long count) {
         this.counterQueryMatchedTotal.increase(count);
     }
 
+    @Override
+    public void increaseQueryTextBasedMatchedCount(long count) {
+        this.counterQueryTextBasedMatchedTotal.increase(count);
+    }
+
+    @Override
     public void increaseQueryHitCount(long count) {
         this.counterQueryHitTotal.increase(count);
     }
 
+    @Override
     public void increaseQueryMaterializedViewCount(long count) {
         this.counterQueryMaterializedViewTotal.increase(count);
     }
 
+    @Override
     public void increaseRefreshJobStatus(PartitionBasedMvRefreshProcessor.RefreshJobStatus status) {
+        this.counterRefreshJobTotal.increase(1L);
         switch (status) {
             case EMPTY:
                 this.counterRefreshJobEmptyTotal.increase(1L);
@@ -334,16 +339,15 @@ public final class MaterializedViewMetricsEntity {
             case FAILED:
                 this.counterRefreshJobFailedTotal.increase(1L);
                 break;
-            case TOTAL:
-                this.counterRefreshJobTotal.increase(1L);
-                break;
         }
     }
 
+    @Override
     public void increaseRefreshRetryMetaCount(Long retryNum) {
         this.counterRefreshJobRetryCheckChangedTotal.increase(retryNum);
     }
 
+    @Override
     public void updateRefreshDuration(long duration) {
         this.histRefreshJobDuration.update(duration);
     }

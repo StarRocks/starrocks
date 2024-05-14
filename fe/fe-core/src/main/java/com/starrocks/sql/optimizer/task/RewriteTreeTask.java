@@ -66,6 +66,14 @@ public class RewriteTreeTask extends OptimizerTask {
 
     protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
 
+        root = applyRules(parent, childIndex, root);
+        // prune cte column depend on prune right child first
+        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
+            rewrite(root, i, root.getInputs().get(i));
+        }
+    }
+
+    protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root) {
         for (Rule rule : rules) {
             if (rule.exhausted(context.getOptimizerContext())) {
                 continue;
@@ -91,11 +99,7 @@ public class RewriteTreeTask extends OptimizerTask {
             change++;
             deriveLogicalProperty(root);
         }
-
-        // prune cte column depend on prune right child first
-        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
-            rewrite(root, i, root.getInputs().get(i));
-        }
+        return root;
     }
 
     protected boolean match(Pattern pattern, OptExpression root) {
@@ -138,5 +142,9 @@ public class RewriteTreeTask extends OptimizerTask {
             context.deriveLogicalProperty();
             root.setLogicalProperty(context.getRootProperty());
         }
+    }
+
+    public boolean hasChange() {
+        return change > 0;
     }
 }

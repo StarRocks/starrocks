@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.starrocks.common.io.Text;
@@ -23,6 +22,8 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -165,7 +166,8 @@ public class EditLogTest {
         JournalEntity journal = new JournalEntity();
         journal.setData(fe);
         journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
-        EditLog.loadJournal(mgr, journal);
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(mgr, journal);
         List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
@@ -173,14 +175,22 @@ public class EditLogTest {
     }
 
     @Test
-    public void testLoadJournalException() {
+    public void testLoadJournalException(@Mocked GlobalStateMgr globalStateMgr) {
         JournalEntity journal = new JournalEntity();
         journal.setOpCode(OperationType.OP_SAVE_NEXTID);
         // set data to null, and it will throw NPE in loadJournal()
         journal.setData(null);
 
+        EditLog editLog = new EditLog(null);
+        new Expectations() {
+            {
+                globalStateMgr.getEditLog();
+                result = editLog;
+            }
+        };
+
         try {
-            EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journal);
+            GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journal);
         } catch (JournalInconsistentException e) {
             Assert.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
         }

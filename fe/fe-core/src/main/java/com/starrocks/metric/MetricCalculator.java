@@ -153,6 +153,10 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.updateRoutineLoadProcessMetrics();
         }
 
+        if (Config.memory_tracker_enable)  {
+            MetricRepo.updateMemoryUsageMetrics();
+        }
+
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
     }
 }

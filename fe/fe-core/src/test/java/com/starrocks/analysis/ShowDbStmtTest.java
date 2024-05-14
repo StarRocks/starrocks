@@ -82,7 +82,7 @@ public class ShowDbStmtTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
             {
-                scheduler.listConnection("testCluster:testUser");
+                scheduler.listConnection("testCluster:testUser", null);
                 minTimes = 0;
                 result = Lists.newArrayList(ctx.toThreadInfo());
             }
@@ -117,8 +117,7 @@ public class ShowDbStmtTest {
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowDbStmt(null, null, null);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(stmt, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals(metaData.getColumn(0).getName(), "Database");
 

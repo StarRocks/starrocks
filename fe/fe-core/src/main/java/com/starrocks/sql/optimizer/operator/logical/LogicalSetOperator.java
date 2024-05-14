@@ -24,9 +24,11 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class LogicalSetOperator extends LogicalOperator {
@@ -67,6 +69,11 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
         outputColumnRefOp.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
         return new RowOutputInfo(columnOutputInfoList, outputColumnRefOp);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        return new DomainProperty(Map.of());
     }
 
     @Override

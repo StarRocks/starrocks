@@ -135,6 +135,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.stream.Collectors;
@@ -222,8 +223,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             beId = backend.getId();
         } else {
             ComputeNode computeNode = null;
-            // Compute node only reports resource usage.
-            if (request.isSetResource_usage()) {
+            // Compute node only reports resource usage or datacache metrics or tasks.
+            if (request.isSetResource_usage() || request.isSetDatacache_metrics() || request.isSetTasks()) {
                 computeNode =
                         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeWithBePort(host, bePort);
             }
@@ -876,10 +877,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         break DB_TRAVERSE;
                     } else if (diskInfo == null) {
                         LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
                         LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     }
 
                     ReplicaState state = replica.getState();
@@ -1169,6 +1170,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             // get negative max rowset creation time or too close to the max rowset creation time, unmigratable
             if (maxRowsetCreationTime < 0 || System.currentTimeMillis() - maxRowsetCreationTime * 1000 <=
                     Config.primary_key_disk_schedule_time * 1000) {
+                LOG.warn("primary key tablet {} can not be migrated, " +
+                        "because the creation time of the latest row set is less than {} seconds than the current time",
+                        tablet.getId(), Config.primary_key_disk_schedule_time);
                 return false;
             }
 
@@ -1250,8 +1254,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             Map<Long, Map<Long, TPartitionVersionInfo>> map = transactionsToPublish.get(dbId);
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
+                Optional<Long> gtid = map.values().stream().flatMap(m -> m.values().stream()).map(info -> info.gtid).findFirst();
                 PublishVersionTask task =
-                        new PublishVersionTask(backendId, txnId, dbId, commitTime,
+                        new PublishVersionTask(backendId, txnId, gtid.orElse((long) 0), dbId, commitTime,
                                 map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null,
                                 Config.enable_sync_publish, TTxnType.TXN_NORMAL);
@@ -1617,7 +1622,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
                     tColumn.setColumn_name(
-                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
                     column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
                     columnsDesc.add(tColumn);
                 }

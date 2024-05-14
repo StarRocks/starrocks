@@ -43,7 +43,7 @@ public:
 protected:
     // Implement a mock version of CompactionTaskCallback if needed
     std::shared_ptr<CompactionTaskCallback> callback;
-    CompactionTaskContext context{123, 456, 789, callback};
+    CompactionTaskContext context{123, 456, 789, false, callback};
 
     void SetUp() override {
         // Initialize your context or mock callback here if necessary
@@ -54,6 +54,7 @@ TEST_F(CompactionTaskContextTest, test_constructor) {
     EXPECT_EQ(123, context.txn_id);
     EXPECT_EQ(456, context.tablet_id);
     EXPECT_EQ(789, context.version);
+    EXPECT_EQ(false, context.is_checker);
 }
 
 TEST_F(CompactionTaskContextTest, test_accumulate) {
@@ -62,7 +63,7 @@ TEST_F(CompactionTaskContextTest, test_accumulate) {
     OlapReaderStatistics reader_stats;
     reader_stats.io_ns = 100;
     reader_stats.io_ns_remote = 200;
-    reader_stats.io_ns_local_disk = 300;
+    reader_stats.io_ns_read_local_disk = 300;
     reader_stats.segment_init_ns = 400;
     reader_stats.column_iterator_init_ns = 500;
     reader_stats.io_count_local_disk = 600;

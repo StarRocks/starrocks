@@ -45,6 +45,8 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -95,7 +97,6 @@ public class LoadPlannerTest {
     private Map<String, String> sessionVariables = null;
     private long loadMemLimit = 1000000;
     private long execMemLimit = 1000000;
-
 
     @Mocked
     Partition partition;
@@ -218,6 +219,8 @@ public class LoadPlannerTest {
         Assert.assertEquals(4, locationsList.size());
         Assert.assertEquals(2, planner.getFragments().get(0).getPipelineDop());
         Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        Assert.assertNotNull(planner.getExecPlan());
     }
 
     @Test
@@ -262,6 +265,9 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -400,6 +406,9 @@ public class LoadPlannerTest {
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 minTimes = 0;
                 result = null;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -451,8 +460,8 @@ public class LoadPlannerTest {
 
     @Test
     public void testColumnWithRowPartialUpdate(@Mocked GlobalStateMgr globalStateMgr,
-                                      @Mocked SystemInfoService systemInfoService,
-                                      @Injectable Database db, @Injectable OlapTable table) throws Exception {
+                                               @Mocked SystemInfoService systemInfoService,
+                                               @Injectable Database db, @Injectable OlapTable table) throws Exception {
         new Expectations() {
             {
                 table.getKeysType();
@@ -460,6 +469,9 @@ public class LoadPlannerTest {
                 result = KeysType.PRIMARY_KEYS;
                 table.hasRowStorageType();
                 result = true;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -541,6 +553,9 @@ public class LoadPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -628,6 +643,9 @@ public class LoadPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -735,6 +753,9 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f2, f3);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -832,6 +853,9 @@ public class LoadPlannerTest {
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
                 returns(f1, f2, f3);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -863,7 +887,6 @@ public class LoadPlannerTest {
         List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
         fileStatusList.add(new TBrokerFileStatus("/path/file1", false, 128000000, true));
         fileStatusesList.add(fileStatusList);
-
 
         // plan
         LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
@@ -939,6 +962,9 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -1055,12 +1081,16 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
+
         LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql,
                 ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),

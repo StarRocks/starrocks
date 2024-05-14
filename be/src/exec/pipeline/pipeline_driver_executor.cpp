@@ -256,6 +256,8 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
         driver->mark_precondition_not_ready();
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
+        if (driver->has_precondition() && !driver->precondition_prepared()) driver->mark_precondition_ready();
+
         driver->submit_operators();
 
         // Try to add the driver to poller first.
@@ -308,7 +310,10 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         query_exec_wall_time->set(query_ctx->lifetime());
     }
 
-    auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile, status, done);
+    // Load channel profile will be merged on FE
+    auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
+    auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
+                                                                      load_channel_profile, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
         // query executed by external connectors, like spark and flink connector,

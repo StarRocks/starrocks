@@ -63,12 +63,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PseudoCluster {
@@ -195,13 +193,13 @@ public class PseudoCluster {
         }
 
         @Override
-        public void removeWorker(String hostAndPort) throws DdlException {
+        public void removeWorker(String hostAndPort, long workergroupid) throws DdlException {
             workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
         }
 
         @Override
-        public long getWorkerIdByBackendId(long backendId) {
-            Optional<Worker> worker = workers.stream().filter(w -> w.backendId == backendId).findFirst();
+        public long getWorkerIdByNodeId(long nodeId) {
+            Optional<Worker> worker = workers.stream().filter(w -> w.backendId == nodeId).findFirst();
             return worker.map(value -> value.workerId).orElse(-1L);
         }
 
@@ -212,7 +210,7 @@ public class PseudoCluster {
 
         @Override
         public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                       long groupId, List<Long> matchShardIds, Map<String, String> properties)
+                                       long groupId, List<Long> matchShardIds, Map<String, String> properties, long workerGroupId)
                 throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
@@ -252,14 +250,8 @@ public class PseudoCluster {
         }
 
         @Override
-        public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
-            Set<Long> results = new HashSet<>();
-            shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
-                for (ReplicaInfo info : y.getReplicaInfoList()) {
-                    results.add(info.getWorkerInfo().getWorkerId());
-                }
-            });
-            return results;
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
     }
 

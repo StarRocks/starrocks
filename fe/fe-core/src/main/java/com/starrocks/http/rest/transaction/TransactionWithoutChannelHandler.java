@@ -22,11 +22,13 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Optional;
+import javax.annotation.Nullable;
 
 /**
  * Transaction management request handler without channel info (eg. id, num) in request.
@@ -37,9 +39,21 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
 
     private final TransactionOperationParams txnOperationParams;
 
+    // Maybe null because only begin operation need it, and it's lazily initialized in handle() method
+    @Nullable
+    private Warehouse warehouse;
+
     public TransactionWithoutChannelHandler(TransactionOperationParams txnOperationParams) {
         Validate.isTrue(txnOperationParams.getChannel().isNull(), "channel isn't null");
         this.txnOperationParams = txnOperationParams;
+    }
+
+    public TransactionOperationParams getTxnOperationParams() {
+        return txnOperationParams;
+    }
+
+    public Optional<Warehouse> getWarehouse() {
+        return Optional.ofNullable(warehouse);
     }
 
     @Override

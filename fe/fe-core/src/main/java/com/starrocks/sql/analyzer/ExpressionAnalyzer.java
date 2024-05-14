@@ -46,6 +46,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
@@ -659,7 +660,8 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
+            Type compatibleType =
+                    TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -954,6 +956,26 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+        @Override
+        public Void visitMatchExpr(MatchExpr node, Scope scope) {
+            Type type1 = node.getChild(0).getType();
+            Type type2 = node.getChild(1).getType();
+
+            if (!type1.isStringType() && !type1.isNull()) {
+                throw new SemanticException("left operand of MATCH must be of type STRING with NOT NULL");
+            }
+
+            if (!(node.getChild(0) instanceof SlotRef)) {
+                throw new SemanticException("left operand of MATCH must be column ref");
+            }
+
+            if (!(node.getChild(1) instanceof StringLiteral) || type2.isNull()) {
+                throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
+            }
+
+            return null;
+        }
+
         // 1. set type = Type.BOOLEAN
         // 2. check child type is metric
         private void predicateBaseAndCheck(Predicate node) {
@@ -1003,8 +1025,20 @@ public class ExpressionAnalyzer {
 
             // throw exception direct
             checkFunction(fnName, node, argumentTypes);
-
-            if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
+            if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
+                // For the typeof function, the parameter type of the function is the result of this function.
+                // At this time, the parameter type has been obtained. You can directly replace the current 
+                // function with StringLiteral. However, since the parent node of the current node in ast 
+                // cannot be obtained, this cannot be done directly. Replacement, here the StringLiteral is 
+                // stored in the parameter of the function, so that the StringLiteral can be obtained in the 
+                // subsequent rule rewriting, and then the typeof can be replaced.
+                Type originType = argumentTypes[0];
+                argumentTypes[0] = Type.STRING;
+                fn = new Function(new FunctionName("typeof_internal"), argumentTypes, Type.STRING, false);
+                Expr newChildExpr = new StringLiteral(originType.toTypeString());
+                node.getParams().exprs().set(0, newChildExpr);
+                node.setChild(0, newChildExpr);
+            } else if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 // Compatible with the logic of the original search function "count distinct"
                 // TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
@@ -1281,8 +1315,7 @@ public class ExpressionAnalyzer {
                         if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
                             throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
                         }
-                        if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
-                                !(expr instanceof SlotRef) && !(expr instanceof NullLiteral)) {
+                        if (!(expr.getType().isFixedPointType()) && !expr.getType().isNull()) {
                             throw new SemanticException(fnName + "'s parameter only support Integer");
                         }
                     }
@@ -1672,6 +1705,9 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getSessionId().toString());
             }
             return null;
         }

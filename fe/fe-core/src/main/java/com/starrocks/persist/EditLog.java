@@ -140,7 +140,7 @@ public class EditLog {
         this.journalQueue = journalQueue;
     }
 
-    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
+    public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID
@@ -296,6 +296,11 @@ public class EditLog {
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartitionName());
                     globalStateMgr.getLocalMetastore().replayDropPartition(info);
+                    break;
+                }
+                case OperationType.OP_DROP_PARTITIONS: {
+                    DropPartitionsInfo info = (DropPartitionsInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDropPartitions(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_PARTITION:
@@ -1106,12 +1111,6 @@ public class EditLog {
                     globalStateMgr.getAuthenticationMgr().replayDropUser(userIdentity);
                     break;
                 }
-                case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                    SecurityIntegrationInfo info = (SecurityIntegrationInfo) journal.getData();
-                    globalStateMgr.getAuthenticationMgr().replayCreateSecurityIntegration(
-                            info.name, info.propertyMap);
-                    break;
-                }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getAuthorizationMgr().replayUpdateRolePrivilegeCollection(info);
@@ -1206,10 +1205,11 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
-                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
                     break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1393,6 +1393,10 @@ public class EditLog {
 
     public void logDropPartition(DropPartitionInfo info) {
         logEdit(OperationType.OP_DROP_PARTITION, info);
+    }
+
+    public void logDropPartitions(DropPartitionsInfo info) {
+        logEdit(OperationType.OP_DROP_PARTITIONS, info);
     }
 
     public void logErasePartition(long partitionId) {
@@ -1876,6 +1880,10 @@ public class EditLog {
         logEdit(OperationType.OP_STARMGR, journal);
     }
 
+    public JournalTask logStarMgrOperationNoWait(StarMgrJournal journal) {
+        return submitLog(OperationType.OP_STARMGR, journal, -1);
+    }
+
     public void logCreateUser(
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
@@ -1899,11 +1907,6 @@ public class EditLog {
 
     public void logDropUser(UserIdentity userIdentity) {
         logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
-    }
-
-    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
-        SecurityIntegrationInfo info = new SecurityIntegrationInfo(name, propertyMap);
-        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
     }
 
     public void logUpdateUserPrivilege(

@@ -48,6 +48,9 @@
 #include "exec/pipeline/query_context.h"
 #include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -76,6 +79,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
@@ -93,12 +97,14 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
@@ -124,6 +130,7 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
 
 RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     _timezone = TimezoneUtils::default_time_zone;
     _timestamp_us = 0;
@@ -515,6 +522,40 @@ Status RuntimeState::reset_epoch() {
 bool RuntimeState::is_jit_enabled() const {
     return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
            _query_options.jit_level != 0;
+}
+
+void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+    if (!_query_options.__isset.catalog) {
+        return;
+    }
+
+    TLoadDataCacheMetrics metrics{};
+    metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
+    metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
+    metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
+
+    if (_query_options.catalog == "default_catalog") {
+#ifdef USE_STAROS
+        if (config::starlet_use_star_cache) {
+            TDataCacheMetrics t_metrics{};
+            starcache::CacheMetrics cache_metrics;
+            staros::starlet::fslib::star_cache_get_metrics(&cache_metrics);
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache_metrics);
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+#endif // USE_STAROS
+    } else {
+        if (config::datacache_enable) {
+            const BlockCache* cache = BlockCache::instance();
+            TDataCacheMetrics t_metrics{};
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+    }
 }
 
 } // end namespace starrocks

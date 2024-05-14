@@ -53,32 +53,32 @@ public:
 
 class MetaFileTest : public ::testing::Test {
 public:
-    static void SetUpTestCase() {
+    void SetUp() {
         CHECK_OK(fs::create_directories(join_path(kTestDir, kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(join_path(kTestDir, kTxnLogDirectoryName)));
         CHECK_OK(fs::create_directories(join_path(kTestDir, kSegmentDirectoryName)));
 
-        s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
-        s_mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get(), s_mem_tracker.get());
-        s_tablet_manager =
-                std::make_unique<lake::TabletManager>(s_location_provider.get(), s_update_manager.get(), 1638400000);
+        _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 1638400000);
     }
 
-    static void TearDownTestCase() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+    void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
     constexpr static const char* const kTestDir = "./lake_meta_test";
-    inline static std::unique_ptr<lake::LocationProvider> s_location_provider;
-    inline static std::unique_ptr<TabletManager> s_tablet_manager;
-    inline static std::unique_ptr<MemTracker> s_mem_tracker;
-    inline static std::unique_ptr<UpdateManager> s_update_manager;
+    std::unique_ptr<lake::LocationProvider> _location_provider;
+    std::unique_ptr<TabletManager> _tablet_manager;
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<UpdateManager> _update_manager;
 };
 
 TEST_F(MetaFileTest, test_meta_rw) {
     // 1. generate metadata
     const int64_t tablet_id = 10001;
-    auto tablet = std::make_shared<Tablet>(s_tablet_manager.get(), tablet_id);
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(tablet_id);
     metadata->set_version(10);
@@ -90,7 +90,7 @@ TEST_F(MetaFileTest, test_meta_rw) {
     EXPECT_TRUE(st.ok());
 
     // 3. read meta from meta file
-    ASSIGN_OR_ABORT(auto metadata2, s_tablet_manager->get_tablet_metadata(tablet_id, 10));
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, 10));
 }
 
 TEST_F(MetaFileTest, test_delvec_rw) {
@@ -99,7 +99,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     const uint32_t segment_id = 1234;
     const int64_t version = 11;
     const int64_t version2 = 12;
-    auto tablet = std::make_shared<Tablet>(s_tablet_manager.get(), tablet_id);
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(tablet_id);
     metadata->set_version(version);
@@ -123,8 +123,8 @@ TEST_F(MetaFileTest, test_delvec_rw) {
 
     // 3. read delvec
     DelVector after_delvec;
-    ASSIGN_OR_ABORT(auto metadata2, s_tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *metadata2, segment_id, &after_delvec).ok());
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, &after_delvec).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
 
     // 4. read meta
@@ -147,7 +147,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(st.ok());
 
     // 6. read again
-    ASSIGN_OR_ABORT(auto metadata3, s_tablet_manager->get_tablet_metadata(tablet_id, version2));
+    ASSIGN_OR_ABORT(auto metadata3, _tablet_manager->get_tablet_metadata(tablet_id, version2));
 
     iter = metadata3->delvec_meta().delvecs().find(segment_id);
     EXPECT_TRUE(iter != metadata3->delvec_meta().delvecs().end());
@@ -155,7 +155,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_EQ(delvecpb.version(), version2);
 
     // 7. test reclaim delvec version to file name record
-    ASSIGN_OR_ABORT(auto metadata4, s_tablet_manager->get_tablet_metadata(tablet_id, version2));
+    ASSIGN_OR_ABORT(auto metadata4, _tablet_manager->get_tablet_metadata(tablet_id, version2));
 
     // clear all delvec meta element so that all element in
     // version_to_file map will also be removed
@@ -181,7 +181,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(st.ok());
 
     // validate delvec file record with version 12 been removed
-    ASSIGN_OR_ABORT(auto metadata5, s_tablet_manager->get_tablet_metadata(tablet_id, new_version));
+    ASSIGN_OR_ABORT(auto metadata5, _tablet_manager->get_tablet_metadata(tablet_id, new_version));
     auto version_to_file_map = metadata5->delvec_meta().version_to_file();
     EXPECT_EQ(version_to_file_map.size(), 1);
 
@@ -196,7 +196,7 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
     // 1. generate metadata
     const int64_t tablet_id = 10002;
     const int64_t version = 11;
-    auto tablet = std::make_shared<Tablet>(s_tablet_manager.get(), tablet_id);
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(tablet_id);
     metadata->set_version(version);
@@ -224,8 +224,8 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
 
         // 3. read delvec
         DelVector after_delvec;
-        ASSIGN_OR_ABORT(auto meta, s_tablet_manager->get_tablet_metadata(tablet_id, version));
-        EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *meta, segment_id, &after_delvec).ok());
+        ASSIGN_OR_ABORT(auto meta, _tablet_manager->get_tablet_metadata(tablet_id, version));
+        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, &after_delvec).ok());
         EXPECT_EQ(before_delvec, after_delvec.save());
     };
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {

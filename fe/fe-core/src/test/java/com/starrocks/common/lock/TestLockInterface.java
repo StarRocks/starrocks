@@ -30,13 +30,14 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TestLockInterface {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
+        Config.slow_lock_threshold_ms = 0;
         Config.lock_manager_enabled = true;
         Config.lock_manager_enable_resolve_deadlock = true;
     }
@@ -67,9 +68,9 @@ public class TestLockInterface {
         long rid = 1L;
         Database database = new Database(rid, "db");
         Locker locker = new Locker();
-        Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10));
+        Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
         Config.lock_manager_enable_resolve_deadlock = false;
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10));
+        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
         Config.lock_manager_enable_resolve_deadlock = true;
         Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(database, LockType.WRITE));
     }
@@ -80,7 +81,7 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         database.setExist(false);
         Locker locker = new Locker();
-        Assert.assertFalse(locker.lockAndCheckExist(database, LockType.READ));
+        Assert.assertFalse(locker.lockDatabaseAndCheckExist(database, LockType.READ));
     }
 
     @Test
@@ -88,7 +89,7 @@ public class TestLockInterface {
         long rid = 1L;
         Database database = new Database(rid, "db");
         Locker locker = new Locker();
-        Assert.assertTrue(locker.isWriteLockHeldByCurrentThread(database));
+        Assert.assertTrue(locker.isDbWriteLockHeldByCurrentThread(database));
     }
 
     @Test
@@ -123,7 +124,7 @@ public class TestLockInterface {
 
         Locker locker = new Locker();
         Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database,
-                Lists.newArrayList(rid2, rid3), LockType.READ, 10));
+                Lists.newArrayList(rid2, rid3), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
@@ -137,7 +138,7 @@ public class TestLockInterface {
 
         locker.lock(rid2, LockType.READ);
         Assert.assertFalse(locker.tryLockTablesWithIntensiveDbLock(database,
-                Lists.newArrayList(rid2, rid3), LockType.WRITE, 10));
+                Lists.newArrayList(rid2, rid3), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
         Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.WRITE));
@@ -158,7 +159,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10));
+        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -167,7 +168,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10));
+        Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -176,7 +177,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10));
+        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -185,27 +186,69 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10));
+        Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
             public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
-                Thread.sleep(100);
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    // ignore
+                }
                 return true;
             }
         };
 
-        Assert.assertTrue(locker.tryLockDatabase(database, LockType.WRITE, 10));
+        Assert.assertTrue(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
             public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
-                Thread.sleep(100);
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    // ignore
+                }
                 return true;
             }
         };
 
-        Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10));
+        Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
+
+        Config.lock_manager_enabled = true;
+    }
+
+    @Test
+    public void testReentrantReadWriteTryLock() {
+        List<Database> dbs = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            dbs.add(new Database(i, "db" + i));
+        }
+        Locker locker = new Locker();
+        Config.lock_manager_enabled = false;
+
+        {
+            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+            locker.unlockDatabases(dbs, LockType.WRITE);
+            locker.unlockDatabases(dbs, LockType.WRITE);
+        }
+
+        {
+            new MockUp<Locker>() {
+                @Mock
+                public boolean tryLockDatabase(Database database, LockType lockType, long timeout, TimeUnit unit) {
+                    if (database.getFullName().equalsIgnoreCase("db5")) {
+                        return false;
+                    }
+                    QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                    rwLock.exclusiveLock();
+                    return true;
+                }
+            };
+            Assert.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        }
 
         Config.lock_manager_enabled = true;
     }

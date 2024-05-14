@@ -79,6 +79,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private static final long BACKEND_SLOT_UPDATE_INTERVAL_MS = 10000; // 10s
     private static final long SLOT_FULL_SLEEP_MS = 10000; // 10s
+    private static final long POLL_TIMEOUT_SEC = 10; // 10s
 
     private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
@@ -121,8 +122,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         try {
-            // This step will be blocked when queue is empty
-            RoutineLoadTaskInfo routineLoadTaskInfo = needScheduleTasksQueue.take();
+            // This step will be blocked until timeout when queue is empty
+            RoutineLoadTaskInfo routineLoadTaskInfo = needScheduleTasksQueue.poll(POLL_TIMEOUT_SEC, TimeUnit.SECONDS);
+            if (routineLoadTaskInfo == null) {
+                return;
+            }
 
             if (routineLoadTaskInfo.getTimeToExecuteMs() > System.currentTimeMillis()) {
                 // delay adding to queue to avoid endless loop
@@ -147,7 +151,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private synchronized void delayPutToQueue(RoutineLoadTaskInfo routineLoadTaskInfo, String msg) {
         if (msg != null) {
-            routineLoadTaskInfo.setMsg(msg);
+            routineLoadTaskInfo.setMsg(msg, true);
         }
         scheduledExecutorService.schedule(() -> {
             try {
@@ -288,12 +292,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
         // set the executeStartTimeMs of task
         routineLoadTaskInfo.setExecuteStartTimeMs(System.currentTimeMillis());
-        routineLoadTaskInfo.setMsg("task submitted to execute");
+        routineLoadTaskInfo.setMsg("task submitted to execute", false);
     }
 
     private void releaseBeSlot(RoutineLoadTaskInfo routineLoadTaskInfo) {
         // release the BE slot
-        routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+        routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
         // set beId to INVALID_BE_ID to avoid release slot repeatedly,
         // when job set to paused/cancelled, the slot will be release again if beId is not INVALID_BE_ID
         routineLoadTaskInfo.setBeId(RoutineLoadTaskInfo.INVALID_BE_ID);
@@ -359,7 +363,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     // throw exception if unrecoverable errors happen.
     private boolean allocateTaskToBe(RoutineLoadTaskInfo routineLoadTaskInfo) {
         if (routineLoadTaskInfo.getPreviousBeId() != -1L) {
-            if (routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+            if (routineLoadManager.takeNodeById(routineLoadTaskInfo.getWarehouseId(),
+                    routineLoadTaskInfo.getPreviousBeId()) != -1L) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                             .add("job_id", routineLoadTaskInfo.getJobId())
@@ -373,7 +378,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot();
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId);
         if (beId < 0) {
             return false;
         }

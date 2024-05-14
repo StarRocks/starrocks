@@ -17,18 +17,30 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "column_reader.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
+#include "storage/range.h"
+
+namespace tparquet {
+class ColumnChunk;
+} // namespace tparquet
 
 namespace starrocks {
 class Column;
 class NullableColumn;
+
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
 } // namespace starrocks
 
 namespace starrocks::parquet {

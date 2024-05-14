@@ -59,7 +59,7 @@ public class AgentTaskQueue {
     private static final Logger LOG = LogManager.getLogger(AgentTaskQueue.class);
 
     // backend id -> (task type -> (signature -> agent task))
-    private static Table<Long, TTaskType, Map<Long, AgentTask>> tasks = HashBasedTable.create();
+    public static Table<Long, TTaskType, Map<Long, AgentTask>> tasks = HashBasedTable.create();
     private static int taskNum = 0;
 
     public static synchronized void addBatchTask(AgentBatchTask batchTask) {

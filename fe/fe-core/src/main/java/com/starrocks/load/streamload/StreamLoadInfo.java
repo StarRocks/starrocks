@@ -25,6 +25,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -32,12 +34,14 @@ import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,7 +84,10 @@ public class StreamLoadInfo {
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
-    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -233,6 +240,10 @@ public class StreamLoadInfo {
         return compressionType;
     }
 
+    public TCompressionType getPayloadCompressionType() {
+        return payloadCompressionType;
+    }
+
     public boolean getEnableReplicatedStorage() {
         return enableReplicatedStorage;
     }
@@ -247,6 +258,14 @@ public class StreamLoadInfo {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
@@ -336,6 +355,18 @@ public class StreamLoadInfo {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
                 request.getFileType(), request.getFormatType());
         streamLoadInfo.setOptionalFromTSLPutRequest(request, db);
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            warehouseId = com.starrocks.lake.Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
+            String warehouseName = request.getWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            warehouseId = warehouse.getId();
+        }
+        streamLoadInfo.setWarehouseId(warehouseId);
         return streamLoadInfo;
     }
 
@@ -421,13 +452,20 @@ public class StreamLoadInfo {
         if (request.isSetLog_rejected_record_num()) {
             logRejectedRecordNum = request.getLog_rejected_record_num();
         }
-        
+
         if (request.isSetPartial_update()) {
             partialUpdate = request.isPartial_update();
         }
 
         if (request.isSetPartial_update_mode()) {
             partialUpdateMode = request.getPartial_update_mode();
+        }
+
+        if (request.isSetPayload_compression_type()) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(request.getPayload_compression_type());
+            if (payloadCompressionType == null) {
+                throw new UserException("unsupported compression type: " + request.getPayload_compression_type());
+            }
         }
     }
 
@@ -483,6 +521,7 @@ public class StreamLoadInfo {
         trimSpace = routineLoadJob.isTrimspace();
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
+        warehouseId = routineLoadJob.getWarehouseId();
     }
 
     // used for stream load

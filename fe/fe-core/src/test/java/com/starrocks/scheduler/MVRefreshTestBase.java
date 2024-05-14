@@ -21,8 +21,9 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
-import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -53,7 +54,6 @@ public class MVRefreshTestBase {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
 
         // set default config for async mvs
@@ -71,9 +71,10 @@ public class MVRefreshTestBase {
     public static void tearDown() throws Exception {
     }
 
-    public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
-        new StmtExecutor(connectContext, sql).execute();
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {
@@ -99,4 +100,24 @@ public class MVRefreshTestBase {
         testProperties.put(TaskRun.IS_TEST, "true");
         return taskRun;
     }
+
+    protected void refreshMVRange(String mvName, boolean force) throws Exception {
+        refreshMVRange(mvName, null, null, force);
+    }
+
+    protected void refreshMVRange(String mvName, String start, String end, boolean force) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("refresh materialized view " + mvName);
+        if (start != null && end != null) {
+            sb.append(String.format(" partition start('%s') end('%s')", start, end));
+        }
+        if (force) {
+            sb.append(" force");
+        }
+        sb.append(" with sync mode");
+        String sql = sb.toString();
+        starRocksAssert.getCtx().executeSql(sql);
+    }
+
+
 }

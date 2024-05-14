@@ -5,13 +5,29 @@ show backends;
 create database sort_key_test_dup;
 use sort_key_test_dup;
 
+CREATE TABLE `dup_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` int NULL COMMENT "",
+    `v2` bigint NULL COMMENT "",
+    `v3` bigint NULL COMMENT ""
+)
+DUPLICATE KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2, k1, k2)
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
+);
 
 CREATE TABLE `dup_test` (
     `k1` int(11) NOT NULL COMMENT "",
     `k2` int(11) NOT NULL COMMENT "",
-    `v1` bigint REPLACE NULL COMMENT "",
-    `v2` bigint REPLACE NULL COMMENT "",
-    `v3` bigint REPLACE NULL COMMENT ""
+    `v1` int NULL COMMENT "",
+    `v2` bigint NULL COMMENT "",
+    `v3` bigint NULL COMMENT ""
 )
 DUPLICATE KEY(k1, k2)
 COMMENT "OLAP"
@@ -31,7 +47,13 @@ select * from dup_test;
 function: manual_compact("sort_key_test_dup", "dup_test")
 select * from dup_test;
 
+alter table dup_test order by (k2,v1,v1);
 alter table dup_test order by (k2,v1);
+function: wait_alter_table_finish()
+show create table dup_test;
+select * from dup_test;
+
+alter table dup_test modify column v1 bigint;
 function: wait_alter_table_finish()
 show create table dup_test;
 select * from dup_test;
@@ -53,9 +75,9 @@ use sort_key_dup_tbl_with_rollup;
 CREATE TABLE `dup_test` (
     `k1` int(11) NOT NULL COMMENT "",
     `k2` int(11) NOT NULL COMMENT "",
-    `v1` bigint REPLACE NULL COMMENT "",
-    `v2` bigint REPLACE NULL COMMENT "",
-    `v3` bigint REPLACE NULL COMMENT ""
+    `v1` int NULL COMMENT "",
+    `v2` bigint NULL COMMENT "",
+    `v3` bigint NULL COMMENT ""
 )
 DUPLICATE KEY(k1, k2)
 COMMENT "OLAP"

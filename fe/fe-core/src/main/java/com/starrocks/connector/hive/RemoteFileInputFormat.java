@@ -28,7 +28,7 @@ import static com.starrocks.connector.hive.HiveClassNames.TEXT_INPUT_FORMAT_CLAS
 public enum RemoteFileInputFormat {
     PARQUET,
     ORC,
-    TEXT,
+    TEXTFILE,
     AVRO,
     RCBINARY,
     RCTEXT,
@@ -38,7 +38,7 @@ public enum RemoteFileInputFormat {
             new ImmutableMap.Builder<String, RemoteFileInputFormat>()
                     .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, PARQUET)
                     .put(ORC_INPUT_FORMAT_CLASS, ORC)
-                    .put(TEXT_INPUT_FORMAT_CLASS, TEXT)
+                    .put(TEXT_INPUT_FORMAT_CLASS, TEXTFILE)
                     .put(AVRO_INPUT_FORMAT_CLASS, AVRO)
                     .put(RCFILE_INPUT_FORMAT_CLASS, RCBINARY)
                     .put(SEQUENCE_INPUT_FORMAT_CLASS, SEQUENCE)
@@ -78,7 +78,7 @@ public enum RemoteFileInputFormat {
                 return THdfsFileFormat.PARQUET;
             case ORC:
                 return THdfsFileFormat.ORC;
-            case TEXT:
+            case TEXTFILE:
                 return THdfsFileFormat.TEXT;
             case AVRO:
                 return THdfsFileFormat.AVRO;

@@ -42,11 +42,15 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+#include "service/backend_options.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_info.h"
@@ -183,6 +187,9 @@ void calculate_metrics(void* arg_this) {
                 auto datacache_metrics = block_cache->cache_metrics();
                 datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
             }
+#ifdef USE_STAROS
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+#endif
             datacache_mem_tracker->set(datacache_mem_bytes);
         }
 
@@ -220,7 +227,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             LOG(WARNING) << "get disk devices failed, status=" << st.message();
             return;
         }
-        st = get_inet_interfaces(&network_interfaces);
+        st = get_inet_interfaces(&network_interfaces, BackendOptions::is_bind_ipv6());
         if (!st.ok()) {
             LOG(WARNING) << "get inet interfaces failed, status=" << st.message();
             return;

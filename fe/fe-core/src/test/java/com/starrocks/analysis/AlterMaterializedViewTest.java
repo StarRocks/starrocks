@@ -138,6 +138,16 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             currentState.getLocalMetastore().alterMaterializedView(stmt);
         }
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"session.not_exists\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Exception e = Assert.assertThrows(SemanticException.class,
+                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "Unknown system variable 'not_exists', the most similar variables are " +
+                    "{'init_connect', 'connector_max_split_size', 'tx_isolation'}.", e.getMessage());
+        }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
@@ -196,7 +206,7 @@ public class AlterMaterializedViewTest {
         // try to active the mv
         connectContext.executeSql(String.format("alter materialized view %s active", mvName));
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("Column schema not compatible: (`k2` bigint(20) NULL COMMENT \"\") " +
+        Assert.assertEquals("column schema not compatible: (`k2` bigint(20) NULL COMMENT \"\") " +
                 "and (`k2` double NULL COMMENT \"\")", mv.getInactiveReason());
 
         // use a illegal view schema, should active the mv correctly

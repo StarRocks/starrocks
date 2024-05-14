@@ -1,0 +1,24 @@
+-- name: test_name_check
+create database `abc-~!@#$%^&<>=+abc`;
+
+use `abc-~!@#$%^&<>=+abc`;
+
+CREATE TABLE `!a#cc` (
+  `c0` int(11) NULL COMMENT "",
+  `c1.c1` array<int> NULL COMMENT "",
+  `c2.c2` STRUCT<a INT, b INT> NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 5
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO `!a#cc` VALUES(1, [1, 2, 3, 4], row(1, 1), 1);
+select `!a#cc`.`c2.c2`.a from `!a#cc`;
+
+create view `!-test-view` as select * from `!a#cc`;
+
+select `c2.c2`.a from `!-test-view`;
