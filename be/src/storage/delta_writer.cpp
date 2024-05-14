@@ -503,7 +503,7 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_ns / 1000);
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
     VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
-            << ", duration: " << duration_ns / 1000 << "us, io_time: " << (io_time_us / 1000) << "us";
+            << ", duration: " << duration_ns / 1000 << "us, io_time: " << (io_time_ns / 1000) << "us";
     return Status::OK();
 }
 
