@@ -406,7 +406,7 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
-    if (apply_del_vec_after_all_index_filter) {
+    if (!apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     RETURN_IF_ERROR(_apply_bitmap_index());
