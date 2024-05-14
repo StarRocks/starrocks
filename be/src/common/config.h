@@ -1309,4 +1309,12 @@ CONF_mInt64(jit_lru_cache_size, "0");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
+<<<<<<< HEAD
+=======
+
+// Set to true to enable socket_keepalive option in brpc
+CONF_mBool(brpc_socket_keepalive, "false");
+CONF_mBool(apply_del_vec_after_all_index_filter, "true");
+
+>>>>>>> 718edb7b0a ([Enhancement] Put del vec filter after all other index filter (#45569))
 } // namespace starrocks::config
