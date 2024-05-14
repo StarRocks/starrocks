@@ -1227,5 +1227,6 @@ CONF_mInt64(arrow_read_batch_size, "4096");
 
 // Set to true to enable socket_keepalive option in brpc
 CONF_mBool(brpc_socket_keepalive, "false");
+CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
 } // namespace starrocks::config

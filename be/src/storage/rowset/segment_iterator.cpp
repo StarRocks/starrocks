@@ -410,11 +410,26 @@ Status SegmentIterator::_init() {
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
+<<<<<<< HEAD
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+=======
+    bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+    if (!apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+    // Support prefilter for now
+    RETURN_IF_ERROR(_apply_bitmap_index());
+    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+    RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    RETURN_IF_ERROR(_apply_inverted_index());
+    if (apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+>>>>>>> 718edb7b0a ([Enhancement] Put del vec filter after all other index filter (#45569))
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
