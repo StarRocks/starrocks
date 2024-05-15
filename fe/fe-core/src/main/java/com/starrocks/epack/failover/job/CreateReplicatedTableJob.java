@@ -107,8 +107,8 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
                 engine, "utf8", keysDesc, partitionDesc, distributionDesc, table.getProperties(), null,
                 table.getComment(), null, sortKeysColumnNames, NodePosition.ZERO);
 
-        createTableStmt.getColumns().addAll(columns);
-        createTableStmt.getIndexes().addAll(indexes);
+        createTableStmt.setColumns(columns);
+        createTableStmt.setIndexes(indexes);
 
         return createTableStmt;
     }
