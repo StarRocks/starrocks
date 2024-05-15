@@ -111,16 +111,10 @@ public:
         // Must call `commit_primary_index` before `finalize`,
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
-<<<<<<< HEAD
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
         Status st = _builder.finalize(_max_txn_id);
         if (st.ok()) {
             _has_finalized = true;
-=======
-        if (_index_entry != nullptr) {
-            RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
-            _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
->>>>>>> 4dc01c1120 ([BugFix] fix cloud native pk table memory statistic issue (#45673))
         }
         return st;
     }
