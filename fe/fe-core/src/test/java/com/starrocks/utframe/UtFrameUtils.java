@@ -1233,8 +1233,6 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
             // 300s: 5min
             connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
-            // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
 
             connectContext.getSessionVariable().setEnableShortCircuit(false);
             connectContext.getSessionVariable().setEnableQueryCache(false);

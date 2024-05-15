@@ -19,6 +19,7 @@ import com.starrocks.utils.loader.ChildFirstClassLoader;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -62,5 +63,18 @@ public class ScannerHelper {
     public static void parseOptions(String value, Function<String[], Void> addHandler,
                                     Function<String, Void> errorHandler) {
         parseKeyValuePairs(value, ",", "=", addHandler, errorHandler);
+    }
+
+    public static String[] splitAndOmitEmptyStrings(String value, String separator) {
+        if (value == null) {
+            return new String[0];
+        }
+        ArrayList<String> res = new ArrayList<>();
+        for (String s : value.split(separator)) {
+            if (!s.equals("")) {
+                res.add(s);
+            }
+        }
+        return res.toArray(new String[0]);
     }
 }
