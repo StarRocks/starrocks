@@ -99,6 +99,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -112,6 +115,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -338,8 +342,21 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return partitionNames;
     }
 
-    private Map<String, PartitionColumnFilter> extractColumnFilter(Table table, List<Column> partitionColumns,
+    private Map<String, PartitionColumnFilter> extractColumnFilter2(Table table, List<Column> partitionColumns,
                                                                    List<Predicate> conditions)
+            throws DdlException, AnalysisException {
+        Map<String, PartitionColumnFilter> result = new HashMap<>();
+        for (Predicate condition : conditions) {
+            Map<String, PartitionColumnFilter> r = new HashMap<>();
+            ScalarOperator predicate = SqlToScalarOperatorTranslator.translate(condition);
+            ColumnFilterConverter.convertColumnFilter(predicate, r, table);
+            result.putAll(r);
+        }
+        return result;
+    }
+
+    private Map<String, PartitionColumnFilter> extractColumnFilter(Table table, List<Column> partitionColumns,
+                                                                    List<Predicate> conditions)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
         List<Predicate> deleteConditions = conditions;
@@ -356,15 +373,28 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 continue;
             }
 
+            Column p = null;
+            for (Column c : partitionColumns) {
+                if (c.getName().equals(columnName)) {
+                    p = c;
+                }
+            }
+
             if (!nameToColumn.containsKey(columnName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, table.getName());
             }
             if (condition instanceof BinaryPredicate) {
                 BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
                 LiteralExpr literalExpr = (LiteralExpr) binaryPredicate.getChild(1);
+
+                ScalarOperator predicate = SqlToScalarOperatorTranslator.translate(literalExpr);
+                Map<String, PartitionColumnFilter> result = new HashMap<>();
+                ColumnFilterConverter.convertColumnFilter(predicate, result, table);
+
                 Column column = nameToColumn.get(columnName);
                 literalExpr = LiteralExpr.create(literalExpr.getStringValue(),
-                        Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
+                        Objects.requireNonNull(Type.fromPrimitiveType(p.getPrimitiveType())));
+
                 PartitionColumnFilter filter = columnFilters.getOrDefault(slotRef.getColumnName(),
                         new PartitionColumnFilter());
                 switch (binaryPredicate.getOp()) {

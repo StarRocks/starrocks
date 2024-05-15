@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -378,13 +377,14 @@ public class OptOlapPartitionPruner {
     private static boolean containsNullValue(Column column, PartitionKey minRange) {
         PartitionKey nullValue = new PartitionKey();
         try {
-            nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+            //nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+            nullValue.pushColumn(LiteralExpr.createInfinity(minRange.getKeys().get(0).getType(), false),
+                    minRange.getTypes().get(0));
             return minRange.compareTo(nullValue) <= 0;
         } catch (AnalysisException e) {
             return false;
         }
     }
-
 
     private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
