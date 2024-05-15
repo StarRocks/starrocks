@@ -38,7 +38,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
@@ -138,7 +137,6 @@ import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
-import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
@@ -702,7 +700,6 @@ public class StmtExecutor {
     // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
     private void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
-        Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
         for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
             if (hint instanceof SetVarHint) {
                 if (clonedSessionVariable == null) {
@@ -718,7 +715,6 @@ public class StmtExecutor {
         if (clonedSessionVariable != null) {
             context.setSessionVariable(clonedSessionVariable);
         }
-        context.userVariables.putAll(userVariablesFromHint);
     }
 
     private boolean isStatisticsJob(StatementBase stmt) {
