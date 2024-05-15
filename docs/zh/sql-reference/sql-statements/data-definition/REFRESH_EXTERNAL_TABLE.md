@@ -52,9 +52,6 @@ displayed_sidebar: "Chinese"
     | table_name       | 是       | Hive 表或 Hudi 表名。                                        |
     | partition_name   | 否       | Hive 表或 Hudi 表中的分区名。如指定，则更新缓存的 Hive 表或 Hudi 表指定分区的元数据。 |
 
-## 注意事项
-
-只有拥有外表 ALTER 权限的用户才可以执行该语句更新缓存的元数据。
 
 ## 示例
 
