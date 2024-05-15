@@ -119,6 +119,7 @@ public:
         // if `_index_entry` is null, do nothing.
         if (_index_entry != nullptr) {
             RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
+            update_mgr->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
         }
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
         _has_finalized = true;
@@ -422,8 +423,8 @@ private:
         }
         LOG(INFO) << "Compaction finish. tablet: " << _metadata->id() << ", version: " << _metadata->version()
                   << ", cumulative point: " << _metadata->cumulative_point() << ", rowsets: ["
-                  << JoinInts(rowset_ids, ",") << "]"
-                  << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";
+                  << JoinInts(rowset_ids, ",") << "]" << ", delete rowsets: ["
+                  << JoinInts(delete_rowset_ids, ",") + "]";
         return Status::OK();
     }
 
