@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
