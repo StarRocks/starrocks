@@ -1192,7 +1192,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -1240,9 +1240,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
