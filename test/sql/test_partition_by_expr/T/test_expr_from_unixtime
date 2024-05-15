@@ -26,6 +26,19 @@ select * from partition_unixtime;
 select * from partition_unixtime PARTITION(p20210105);
 drop table partition_unixtime;
 CREATE TABLE partition_unixtime (
+        create_time int,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+PARTITION p1 VALUES LESS THAN ("2021-01-01")
+);
+insert into partition_unixtime values(null,'1',1.1,1);
+select * from partition_unixtime;
+select * from partition_unixtime PARTITION(p1);
+drop table partition_unixtime;
+CREATE TABLE partition_unixtime (
         create_time date,
         sku_id varchar(100),
         total_amount decimal,

@@ -23,13 +23,16 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,6 +43,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -91,25 +95,38 @@ public class CatalogUtils {
         return existPartitionNameSet;
     }
 
+    public static Set<String> getPartitionNamesFromAddPartitionClause(AddPartitionClause addPartitionClause) {
+        Set<String> partitionNames = new TreeSet<>();
+        PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
+        if (partitionDesc instanceof SingleItemListPartitionDesc
+                || partitionDesc instanceof MultiItemListPartitionDesc
+                || partitionDesc instanceof SingleRangePartitionDesc) {
+            partitionNames.add(partitionDesc.getPartitionName());
+        } else if (partitionDesc instanceof RangePartitionDesc) {
+            for (PartitionDesc desc : ((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()) {
+                partitionNames.add(desc.getPartitionName());
+            }
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            for (PartitionDesc desc : (((ListPartitionDesc) partitionDesc).getPartitionDescs())) {
+                partitionNames.add(desc.getPartitionName());
+            }
+        }
+        return partitionNames;
+    }
+
     // Used to temporarily disable some command on lake table and remove later.
-    public static void checkIsLakeTable(String dbName, String tableName) throws AnalysisException {
+    public static void checkIsLakeTable(String dbName, String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return;
         }
 
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                return;
-            }
-            if (table.isCloudNativeTable()) {
-                throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            return;
+        }
+        if (table.isCloudNativeTable()) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
         }
     }
 
@@ -180,8 +197,8 @@ public class CatalogUtils {
     }
 
     public static void checkTempPartitionConflict(List<Partition> partitionList,
-                                               List<Partition> tempPartitionList,
-                                               ListPartitionInfo listPartitionInfo) throws DdlException {
+                                                  List<Partition> tempPartitionList,
+                                                  ListPartitionInfo listPartitionInfo) throws DdlException {
         Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
         Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>> newListMap = new HashMap<>(listMap);

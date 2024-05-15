@@ -171,6 +171,10 @@ select next_day('2023-04-05', 'xxx');
 -- result:
 [REGEX].*xxx not supported in next_day dow_string.*
 -- !result
+select next_day('9999-12-31', 'Sun');
+-- result:
+None
+-- !result
 select next_day('2023-02-29', 'Tuesday') from next_day_test;
 -- result:
 None
@@ -339,6 +343,19 @@ select d1, dow_2, next_day(d1, dow_2) from next_day_test a join dow_test b on a.
 2023-04-05	Fr	2023-04-07
 2023-04-06	Sa	2023-04-08
 2023-04-07	Su	2023-04-09
+-- !result
+create table t (
+`d` date not null,
+`w` string default null
+) engine=olap duplicate key(`d`);
+-- result:
+-- !result
+insert into t values ('9999-12-31', 'Sun');
+-- result:
+-- !result
+select next_day(d,w) from t;
+-- result:
+None
 -- !result
 -- name: test_previous_day
 CREATE TABLE IF NOT EXISTS `previous_day_test` (
@@ -513,6 +530,10 @@ select previous_day('2023-04-05', 'xxx');
 -- result:
 [REGEX].*xxx not supported in previous_day dow_string.*
 -- !result
+select previous_day('0000-01-01', 'Sun');
+-- result:
+None
+-- !result
 select previous_day('2023-02-29', 'Tuesday') from previous_day_test;
 -- result:
 None
@@ -681,6 +702,19 @@ select d1, dow_2, previous_day(d1, dow_2) from previous_day_test a join previous
 2023-04-13	Fr	2023-04-07
 2023-04-14	Sa	2023-04-08
 2023-04-15	Su	2023-04-09
+-- !result
+create table t (
+`d` date not null,
+`w` string default null
+) engine=olap duplicate key(`d`);
+-- result:
+-- !result
+insert into t values ('0000-01-01', 'Sun');
+-- result:
+-- !result
+select previous_day(d,w) from t;
+-- result:
+None
 -- !result
 
 -- name: test_week_iso

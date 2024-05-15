@@ -20,6 +20,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -74,6 +75,9 @@ public class InvertedIndexUtil {
         }
         if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
+        }
+        if (RunMode.isSharedDataMode()) {
+            throw new SemanticException("The inverted index does not support shared data mode");
         }
 
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);

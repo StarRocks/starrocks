@@ -30,16 +30,6 @@ statement
     // Query Statement
     : queryStatement
 
-    // Warehouse Statement
-    | createWarehouseStatement
-    | dropWarehouseStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
-    | setWarehouseStatement
-    | showWarehousesStatement
-    | showClustersStatement
-    | showNodesStatement
-
     // Database Statement
     | useDatabaseStatement
     | useCatalogStatement
@@ -228,29 +218,6 @@ statement
     | grantPrivilegeStatement
     | revokePrivilegeStatement
     | showGrantsStatement
-    | createSecurityIntegrationStatement
-    | alterSecurityIntegrationStatement
-    | dropSecurityIntegrationStatement
-    | showSecurityIntegrationStatement
-    | showCreateSecurityIntegrationStatement
-    | createRoleMappingStatement
-    | alterRoleMappingStatement
-    | dropRoleMappingStatement
-    | showRoleMappingStatement
-    | refreshRoleMappingStatement
-
-    // Security Policy
-    | createMaskingPolicyStatement
-    | dropMaskingPolicyStatement
-    | alterMaskingPolicyStatement
-    | showMaskingPolicyStatement
-    | showCreateMaskingPolicyStatement
-
-    | createRowAccessPolicyStatement
-    | dropRowAccessPolicyStatement
-    | alterRowAccessPolicyStatement
-    | showRowAccessPolicyStatement
-    | showCreateRowAccessPolicyStatement
 
     // Backup Restore Statement
     | backupStatement
@@ -337,43 +304,6 @@ statement
     | unsupportedStatement
     ;
 
-
-// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
-
-createWarehouseStatement
-    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
-    comment? properties?
-    ;
-
-dropWarehouseStatement
-    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
-    ;
-
-suspendWarehouseStatement
-    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
-    ;
-
-resumeWarehouseStatement
-    : RESUME WAREHOUSE (IF EXISTS)? identifier
-    ;
-
-setWarehouseStatement
-    : SET SESSION? WAREHOUSE EQ? identifierOrString
-    ;
-
-showWarehousesStatement
-    : SHOW WAREHOUSES (LIKE pattern=string)?
-    ;
-
-showClustersStatement
-    : SHOW CLUSTERS FROM WAREHOUSE identifier
-    ;
-
-showNodesStatement
-    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
-    | SHOW NODES FROM WAREHOUSE identifier
-    ;
-
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 
 useDatabaseStatement
@@ -431,7 +361,6 @@ createTableStatement
           engineDesc?
           charsetDesc?
           keyDesc?
-          withRowAccessPolicy*
           comment?
           partitionDesc?
           distributionDesc?
@@ -444,7 +373,6 @@ createTableStatement
 columnDesc
     : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
-    (withMaskingPolicy)?
     comment?
     ;
 
@@ -511,14 +439,6 @@ dupKeys
 
 fromRollup
     : FROM identifier
-    ;
-
-withMaskingPolicy
-    : WITH MASKING POLICY policyName=qualifiedName (USING identifierList)?
-    ;
-
-withRowAccessPolicy
-    : WITH ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
     ;
 
 orReplace:
@@ -641,14 +561,11 @@ recoverPartitionStatement
 createViewStatement
     : CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        withRowAccessPolicy*
         comment? AS queryStatement
     ;
 
 alterViewStatement
     : ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')?  AS queryStatement
-    | ALTER VIEW qualifiedName applyMaskingPolicyClause
-    | ALTER VIEW qualifiedName applyRowAccessPolicyClause
     ;
 
 dropViewStatement
@@ -656,7 +573,7 @@ dropViewStatement
     ;
 
 columnNameWithComment
-    : columnName=identifier withMaskingPolicy? comment?
+    : columnName=identifier comment?
     ;
 
 // ------------------------------------------- Task Statement ----------------------------------------------------------
@@ -685,7 +602,6 @@ taskScheduleDesc
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
-    withRowAccessPolicy*
     comment?
     materializedViewDesc*
     AS queryStatement
@@ -714,8 +630,6 @@ alterMaterializedViewStatement
         modifyPropertiesClause |
         swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
-    | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
-    | ALTER MATERIALIZED VIEW qualifiedName applyRowAccessPolicyClause
     ;
 
 refreshMaterializedViewStatement
@@ -937,10 +851,6 @@ alterClause
     | modifyCommentClause
     | optimizeClause
 
-    //Apply Policy clause
-    | applyMaskingPolicyClause
-    | applyRowAccessPolicyClause
-
     //Alter partition clause
     | addPartitionClause
     | dropPartitionClause
@@ -966,11 +876,11 @@ modifyFrontendHostClause
   ;
 
 addBackendClause
-   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
+   : ADD BACKEND string (',' string)*
    ;
 
 dropBackendClause
-   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)? FORCE?
+   : DROP BACKEND string (',' string)* FORCE?
    ;
 
 decommissionBackendClause
@@ -983,11 +893,11 @@ modifyBackendClause
    ;
 
 addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
+   : ADD COMPUTE NODE string (',' string)*
    ;
 
 dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)?
+   : DROP COMPUTE NODE string (',' string)*
    ;
 
 modifyBrokerClause
@@ -1088,17 +998,6 @@ rollupRenameClause
 
 compactionClause
     : (BASE | CUMULATIVE)? COMPACT (identifier | identifierList)?
-    ;
-
-applyMaskingPolicyClause
-    : MODIFY COLUMN columnName=identifier SET MASKING POLICY policyName=qualifiedName (USING identifierList)?
-    | MODIFY COLUMN columnName=identifier UNSET MASKING POLICY
-    ;
-
-applyRowAccessPolicyClause
-    : ADD ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
-    | DROP ROW ACCESS POLICY policyName=qualifiedName
-    | DROP ALL ROW ACCESS POLICIES
     ;
 
 // ---------Alter partition clause---------
@@ -1505,7 +1404,7 @@ showProcStatement
     ;
 
 showProcesslistStatement
-    : SHOW FULL? PROCESSLIST
+    : SHOW FULL? PROCESSLIST (FOR string)?
     ;
 
 showProfilelistStatement
@@ -1649,46 +1548,6 @@ showGrantsStatement
     | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
-createSecurityIntegrationStatement
-    : CREATE SECURITY INTEGRATION identifier properties
-    ;
-
-alterSecurityIntegrationStatement
-    : ALTER SECURITY INTEGRATION identifier SET propertyList
-    ;
-
-dropSecurityIntegrationStatement
-    : DROP SECURITY INTEGRATION identifier
-    ;
-
-showSecurityIntegrationStatement
-    : SHOW SECURITY INTEGRATIONS
-    ;
-
-showCreateSecurityIntegrationStatement
-    : SHOW CREATE SECURITY INTEGRATION identifier
-    ;
-
-createRoleMappingStatement
-    : CREATE ROLE MAPPING identifier properties
-    ;
-
-alterRoleMappingStatement
-    : ALTER ROLE MAPPING identifier SET propertyList
-    ;
-
-dropRoleMappingStatement
-    : DROP ROLE MAPPING identifier
-    ;
-
-showRoleMappingStatement
-    : SHOW ROLE MAPPINGS
-    ;
-
-refreshRoleMappingStatement
-    : REFRESH ALL ROLE MAPPINGS
-    ;
-
 authOption
     : IDENTIFIED BY PASSWORD? string                                                                    #authWithoutPlugin
     | IDENTIFIED WITH identifierOrString ((BY | AS) string)?                                            #authWithPlugin
@@ -1715,71 +1574,21 @@ privilegeType
     | ALTER | APPLY | BLACKLIST
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
-        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME | WAREHOUSE
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME
         | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
 privObjectType
-    : CATALOG | DATABASE | MATERIALIZED VIEW | POLICY | RESOURCE | RESOURCE GROUP| STORAGE VOLUME | SYSTEM | TABLE| VIEW
-        | WAREHOUSE | PIPE
+    : CATALOG | DATABASE | MATERIALIZED VIEW | RESOURCE | RESOURCE GROUP| STORAGE VOLUME | SYSTEM | TABLE| VIEW
+    | PIPE
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | PIPES
     ;
-
-// ---------------------------------------- Security Policy Statement ---------------------------------------------------
-
-createMaskingPolicyStatement
-    : CREATE (OR REPLACE)? MASKING POLICY (IF NOT EXISTS)? policyName=qualifiedName
-        AS '(' policySignature (',' policySignature)* ')' RETURNS type ARROW expression comment?
-    ;
-
-dropMaskingPolicyStatement
-    : DROP MASKING POLICY (IF EXISTS)? policyName=qualifiedName FORCE?
-    ;
-
-alterMaskingPolicyStatement
-    : ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName SET BODY ARROW expression
-    | ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName SET COMMENT '=' string
-    | ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName RENAME TO newPolicyName=identifier
-    ;
-
-showMaskingPolicyStatement
-    : SHOW MASKING POLICIES ((FROM | IN) db=qualifiedName)?
-    ;
-
-showCreateMaskingPolicyStatement
-    : SHOW CREATE MASKING POLICY policyName=qualifiedName
-    ;
-
-createRowAccessPolicyStatement
-    : CREATE (OR REPLACE)? ROW ACCESS POLICY (IF NOT EXISTS)? policyName=qualifiedName
-      AS '(' policySignature (',' policySignature)* ')' RETURNS BOOLEAN ARROW expression comment?
-    ;
-
-dropRowAccessPolicyStatement
-    : DROP ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName FORCE?
-    ;
-
-alterRowAccessPolicyStatement
-    : ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName SET BODY ARROW expression
-    | ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName SET COMMENT '=' string
-    | ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName RENAME TO newPolicyName=identifier
-    ;
-
-showRowAccessPolicyStatement
-    : SHOW ROW ACCESS POLICIES ((FROM | IN) db=qualifiedName)?
-    ;
-
-showCreateRowAccessPolicyStatement
-    : SHOW CREATE ROW ACCESS POLICY policyName=qualifiedName
-    ;
-
-policySignature : identifier type;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 

@@ -59,11 +59,13 @@ static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) 
 }
 
 static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group) {
-    if (row_group.__isset.file_offset) {
-        return row_group.file_offset;
-    }
     const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
-    return _get_column_start_offset(first_column);
+    int64_t offset = _get_column_start_offset(first_column);
+
+    if (row_group.__isset.file_offset) {
+        offset = std::min(offset, row_group.file_offset);
+    }
+    return offset;
 }
 
 static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group) {
@@ -124,7 +126,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     std::unordered_set<std::string> names;
     _meta_helper = _build_meta_helper();
     _meta_helper->set_existed_column_names(&names);
-    _scanner_ctx->update_materialized_columns(names);
+    RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -241,6 +243,8 @@ Status FileReader::_get_footer() {
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
+        } else {
+            deleter();
         }
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
@@ -269,8 +273,12 @@ Status FileReader::_build_split_tasks() {
         }
         int64_t start_offset = _get_row_group_start_offset(row_group);
         int64_t end_offset = _get_row_group_end_offset(row_group);
+        if (start_offset >= end_offset) {
+            LOG(INFO) << "row group " << i << " is empty. start = " << start_offset << ", end = " << end_offset;
+            continue;
+        }
 #ifndef NDEBUG
-        DCHECK(start_offset < end_offset);
+        DCHECK(start_offset < end_offset) << "start = " << start_offset << ", end = " << end_offset;
         // there could be holes between row groups.
         // but this does not affect our scan range filter logic.
         // because in `_select_row_group`, we check if `start offset of row group` is in this range
@@ -679,8 +687,6 @@ Status FileReader::_init_group_readers() {
 
 Status FileReader::_prepare_cur_row_group() {
     auto& r = _row_group_readers[_cur_row_group_idx];
-    // prepare row group
-    RETURN_IF_ERROR(r->prepare());
     // if coalesce read enabled, we have to
     // 0. clear last group memory
     // 1. allocate shared buffered input stream and
@@ -701,7 +707,8 @@ Status FileReader::_prepare_cur_row_group() {
         _group_reader_param.sb_stream = _sb_stream;
     }
 
-    return Status::OK();
+    // prepare row group
+    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {
@@ -718,7 +725,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count);
+                RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));
                 _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
@@ -729,6 +736,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                     // prepare new group
                     RETURN_IF_ERROR(_prepare_cur_row_group());
                 }
+
                 return Status::OK();
             }
         } else {
@@ -746,9 +754,16 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
-        size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-        _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size);
-        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
+        size_t read_size = 0;
+        if (_scanner_ctx->return_count_column) {
+            read_size = _total_row_count - _scan_row_count;
+            _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
+            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
+        } else {
+            read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
+            RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size));
+            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
+        }
         _scan_row_count += read_size;
         return Status::OK();
     }

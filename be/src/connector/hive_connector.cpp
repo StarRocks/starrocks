@@ -91,7 +91,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
         return Status::RuntimeError(
-                "Invalid table type. Only hive/iceberg/hudi/delta lake/file/paimon table are supported");
+                "Invalid table type. Only hive/iceberg/hudi/delta lake/file/paimon/kudu table are supported");
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
@@ -581,6 +581,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
     }
+    bool use_kudu_jni_reader = false;
+    if (scan_range.__isset.use_kudu_jni_reader) {
+        use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
+    }
 
     JniScanner::CreateOptions jni_scanner_create_options = {
             .fs_options = &fsOptions, .hive_table = _hive_table, .scan_range = &scan_range};
@@ -594,6 +598,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
         scanner = create_odps_jni_scanner(jni_scanner_create_options).release();
+    } else if (use_kudu_jni_reader) {
+        scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {

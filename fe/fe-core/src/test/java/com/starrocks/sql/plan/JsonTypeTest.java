@@ -84,24 +84,11 @@ public class JsonTypeTest extends PlanTestBase {
     /**
      * Arrow expression should be rewrite to json_query
      */
-    @Test
-    public void testRewriteArrowExpr() throws Exception {
-        assertPlanContains("select parse_json('1') -> '$.k1' ",
-                "json_query(parse_json('1'), '$.k1')");
-        assertPlanContains("select v_json -> '$.k1' from tjson_test ",
-                "json_query(2: v_json, '$.k1')");
-
-        // arrow and cast
-        assertPlanContains("select cast(parse_json('1') -> '$.k1' as int) ",
-                "json_query(parse_json('1'), '$.k1')");
-        assertPlanContains("select cast(v_json -> '$.k1' as int) from tjson_test",
-                "CAST(get_json_int(2: v_json, '$.k1') AS INT)");
-    }
 
     @Test
     public void testPredicateImplicitCast() throws Exception {
         assertPlanContains("select parse_json('1') between 0.5 and 0.9",
-                "CAST(3: parse_json AS DOUBLE)");
+                "CAST(parse_json('1') AS DOUBLE)");
 
         List<String> operators = Arrays.asList("<", "<=", "=", ">=", "!=");
         for (String operator : operators) {
@@ -116,7 +103,8 @@ public class JsonTypeTest extends PlanTestBase {
         }
 
         assertPlanContains("select parse_json('1') in (1, 2, 3)", "IN");
-        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))", "OR");
+        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))",
+                "parse_json('1') IN (parse_json('1'), parse_json('2'))");
     }
 
     /**
@@ -194,7 +182,7 @@ public class JsonTypeTest extends PlanTestBase {
     public void testCastJsonArray() throws Exception {
         assertPlanContains("select json_array(parse_json('1'), parse_json('2'))",
                 "json_array(parse_json('1'), parse_json('2'))");
-        assertPlanContains("select json_array(1, 1)", "json_array(3: cast, 3: cast)");
+        assertPlanContains("select json_array(1, 1)", "json_array(CAST(1 AS JSON), CAST(1 AS JSON))");
         assertPlanContains("select json_array(1, '1')", "json_array(CAST(1 AS JSON), CAST('1' AS JSON))");
         assertPlanContains("select json_array(1.1)", "json_array(CAST(1.1 AS JSON))");
         assertPlanContains("select json_array(NULL)", "NULL");

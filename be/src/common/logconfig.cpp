@@ -154,7 +154,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
 
     // Set log level.
-    std::string& loglevel = config::sys_log_level;
+    std::string loglevel = config::sys_log_level;
     if (iequals(loglevel, "INFO")) {
         FLAGS_minloglevel = 0;
     } else if (iequals(loglevel, "WARNING")) {
@@ -249,6 +249,20 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
 
     return StringPrintf("%02d%02d %02d:%02d:%02d.%06ld", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
                         tm_time.tm_min, tm_time.tm_sec, usecs);
+}
+
+void update_logging() {
+    if (iequals(config::sys_log_level, "INFO")) {
+        FLAGS_minloglevel = 0;
+    } else if (iequals(config::sys_log_level, "WARNING")) {
+        FLAGS_minloglevel = 1;
+    } else if (iequals(config::sys_log_level, "ERROR")) {
+        FLAGS_minloglevel = 2;
+    } else if (iequals(config::sys_log_level, "FATAL")) {
+        FLAGS_minloglevel = 3;
+    } else {
+        LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
+    }
 }
 
 } // namespace starrocks

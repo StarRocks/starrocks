@@ -41,7 +41,8 @@ under the License.
         <iceberg.version>1.5.0</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.7.0-incubating</paimon.version>
-        <staros.version>3.3-rc0</staros.version>
+        <delta-kernel.version>3.1.0</delta-kernel.version>
+        <staros.version>3.3-rc1</staros.version>
         <python>python</python>
     </properties>
 
@@ -136,6 +137,11 @@ under the License.
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.kudu</groupId>
+            <artifactId>kudu-client</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -319,9 +325,16 @@ under the License.
 
         <dependency>
             <groupId>io.delta</groupId>
-            <artifactId>delta-standalone_2.12</artifactId>
-            <version>0.5.0</version>
+            <artifactId>delta-kernel-api</artifactId>
+            <version>${delta-kernel.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>io.delta</groupId>
+            <artifactId>delta-kernel-defaults</artifactId>
+            <version>${delta-kernel.version}</version>
+        </dependency>
+
 
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
         <dependency>
@@ -1135,6 +1148,17 @@ under the License.
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                    <release>${maven.compiler.source}</release>
+                </configuration>
             </plugin>
         </plugins>
 

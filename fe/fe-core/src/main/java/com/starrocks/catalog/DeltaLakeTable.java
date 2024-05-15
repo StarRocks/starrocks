@@ -29,8 +29,10 @@ import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import io.delta.standalone.DeltaLog;
-import io.delta.standalone.actions.Metadata;
+import io.delta.kernel.Snapshot;
+import io.delta.kernel.client.TableClient;
+import io.delta.kernel.internal.SnapshotImpl;
+import io.delta.kernel.internal.actions.Metadata;
 
 import java.util.List;
 import java.util.Set;
@@ -41,21 +43,29 @@ public class DeltaLakeTable extends Table {
     private String dbName;
     private String tableName;
     private List<String> partColumnNames;
-    private DeltaLog deltaLog;
+    private SnapshotImpl deltaSnapshot;
+    private String tableLocation;
+    private TableClient tableClient;
+
+
     public static final String PARTITION_NULL_VALUE = "null";
+
 
     public DeltaLakeTable() {
         super(TableType.DELTALAKE);
     }
 
     public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
-                          List<String> partitionNames, DeltaLog deltaLog, long createTime) {
+                          List<String> partitionNames, SnapshotImpl deltaSnapshot, String tableLocation,
+                          TableClient tableClient, long createTime) {
         super(id, tableName, TableType.DELTALAKE, schema);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
         this.partColumnNames = partitionNames;
-        this.deltaLog = deltaLog;
+        this.deltaSnapshot = deltaSnapshot;
+        this.tableLocation = tableLocation;
+        this.tableClient = tableClient;
         this.createTime = createTime;
     }
 
@@ -64,12 +74,20 @@ public class DeltaLakeTable extends Table {
         return true;
     }
 
-    public DeltaLog getDeltaLog() {
-        return deltaLog;
+    public String getTableLocation() {
+        return tableLocation;
     }
 
-    public String getTableLocation() {
-        return deltaLog.getPath().toString();
+    public Metadata getDeltaMetadata() {
+        return deltaSnapshot.getMetadata();
+    }
+
+    public Snapshot getDeltaSnapshot() {
+        return deltaSnapshot;
+    }
+
+    public TableClient getTableClient() {
+        return tableClient;
     }
 
     @Override
@@ -101,8 +119,7 @@ public class DeltaLakeTable extends Table {
     }
 
     public List<String> getPartitionColumnNames() {
-        return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
-                .collect(Collectors.toList());
+        return partColumnNames;
     }
 
     public boolean isUnPartitioned() {
@@ -112,7 +129,7 @@ public class DeltaLakeTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
-        Metadata metadata = deltaLog.snapshot().getMetadata();
+        Metadata deltaMetadata = getDeltaMetadata();
 
         TDeltaLakeTable tDeltaLakeTable = new TDeltaLakeTable();
         tDeltaLakeTable.setLocation(getTableLocation());
@@ -142,7 +159,7 @@ public class DeltaLakeTable extends Table {
             long partitionId = info.getId();
 
             THdfsPartition tPartition = new THdfsPartition();
-            tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(metadata.getFormat().getProvider()).toThrift());
+            tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(deltaMetadata.getFormat().getProvider()).toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
             tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));

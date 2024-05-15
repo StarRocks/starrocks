@@ -31,7 +31,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -59,6 +58,7 @@ import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.fin
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.TO_REWRITE_ROLLUP_FUNCTION_MAP;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.genRollupProject;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.getRollupFunctionName;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.addExtraPredicate;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 
 /**
@@ -141,6 +141,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // normalize view projection by query relation and ec
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
+
+        // TODO:duplicate if mv has already outputted.
+        // mvOptExpr = duplicateMvOptExpression(rewriteContext, mvOptExpr, queryExprToMvExprRewriter);
 
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
@@ -226,11 +229,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return null;
             }
             Operator op = mvOptExpr.getOp().cast();
-            Operator.Builder builder = OperatorBuilderFactory.build(op);
-            builder.withOperator(op);
             // take care original scan predicates and new having exprs
-            builder.setPredicate(Utils.compoundAnd(rewrittenPred, op.getPredicate()));
-            mvOptExpr = OptExpression.create(builder.build());
+            ScalarOperator newPredicate = Utils.compoundAnd(rewrittenPred, op.getPredicate());
+            mvOptExpr = addExtraPredicate(mvOptExpr, newPredicate);
         }
 
         return mvOptExpr;
@@ -423,9 +424,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput, false);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
-        Preconditions.checkState(viewInput.getOp().getProjection() != null);
+        Projection projection = getMvOptExprProjection(viewInput);
+        Preconditions.checkState(projection != null);
         Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
-        Map<ColumnRefOperator, ScalarOperator> mvProjection = viewInput.getOp().getProjection().getColumnRefMap();
+        Map<ColumnRefOperator, ScalarOperator> mvProjection = projection.getColumnRefMap();
         List<ColumnRefOperator> newViewOutputColumns = Lists.newArrayList();
         for (ColumnRefOperator columnRef : originalOutputColumns) {
             ColumnRefOperator newColumn = rewriteContext.getQueryRefFactory().create(

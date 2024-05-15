@@ -104,7 +104,7 @@ public:
     }
 
 private:
-    Buffer<uint8_t> _execute_where_expr(ChunkPtr& chunk);
+    StatusOr<Buffer<uint8_t>> _execute_where_expr(ChunkPtr& chunk);
 
 private:
     TabletSchemaCSPtr _base_schema;

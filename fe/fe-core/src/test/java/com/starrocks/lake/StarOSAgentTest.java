@@ -53,6 +53,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -359,7 +360,9 @@ public class StarOSAgentTest {
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 333));
+        Assert.assertEquals(Lists.newArrayList(10L, 11L),
+                starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
+                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();

@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "common/macros.h"
+#include "gutil/macros.h"
 #include "storage/rowset/column_iterator_decorator.h"
 
 namespace starrocks {
