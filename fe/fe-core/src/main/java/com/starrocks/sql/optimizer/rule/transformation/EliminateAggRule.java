@@ -25,10 +25,12 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -39,6 +41,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 // When a column used in a SQL query's Group By statement has a unique attribute, aggregation can be eliminated,
 // and the LogicalAggregationOperator can be replaced with a LogicalProjectOperator.
@@ -77,12 +81,16 @@ public class EliminateAggRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        if (aggOp.getGroupingKeys().isEmpty()) {
+        List<ColumnRefOperator> groupKeys = aggOp.getGroupingKeys();
+        if (groupKeys.isEmpty()) {
             return false;
         }
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
+            if (entry.getValue().isDistinct()) {
+                return false;
+            }
             if (!(fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.COUNT) ||
                     fnName.equals(FunctionSet.AVG) ||
                     fnName.equals(FunctionSet.FIRST_VALUE) ||
@@ -97,10 +105,24 @@ public class EliminateAggRule extends TransformationRule {
         input.getOp().accept(collector, input, null);
 
         OptExpression childOptExpression = input.inputAt(0);
-        for (ColumnRefOperator columnRefOperator : aggOp.getGroupingKeys()) {
-            if (childOptExpression.getConstraints().getUniqueConstraint(columnRefOperator.getId()) == null) {
-                return false;
-            }
+        Map<Integer, UKFKConstraints.UniqueConstraintWrapper> uniqueKeys =
+                childOptExpression.getConstraints().getUniqueKeys();
+
+        if (uniqueKeys.size() == 0) {
+            return false;
+        }
+        if (uniqueKeys.size() != groupKeys.size()) {
+            return false;
+        }
+
+        Set<Integer> groupColumnRefIds = groupKeys.stream()
+                .map(ColumnRefOperator::getId)
+                .collect(Collectors.toSet());
+        Set<Integer> uniqueColumnRefIds =
+                uniqueKeys.keySet().stream().collect(Collectors.toSet());
+
+        if (!groupColumnRefIds.equals(uniqueColumnRefIds)) {
+            return false;
         }
 
         return true;
@@ -115,9 +137,7 @@ public class EliminateAggRule extends TransformationRule {
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
             ScalarOperator newOperator = handleAggregationFunction(fnName, entry.getValue());
-            if (newOperator != null) {
-                newProjectMap.put(entry.getKey(), newOperator);
-            }
+            newProjectMap.put(entry.getKey(), newOperator);
         }
 
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
@@ -130,9 +150,9 @@ public class EliminateAggRule extends TransformationRule {
         } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
                 fnName.equals(FunctionSet.FIRST_VALUE) || fnName.equals(FunctionSet.MAX) ||
                 fnName.equals(FunctionSet.MIN) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
-            return callOperator.getArguments().get(0);
+            return rewriteCastFunction(callOperator);
         }
-        return null;
+        return callOperator;
     }
 
     private ScalarOperator rewriteCountFunction(CallOperator callOperator) {
@@ -150,4 +170,13 @@ public class EliminateAggRule extends TransformationRule {
                 Expr.getBuiltinFunction(FunctionSet.IF, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         return new CallOperator(FunctionSet.IF, ScalarType.createType(PrimitiveType.TINYINT), ifArgs, fn);
     }
+
+    private ScalarOperator rewriteCastFunction(CallOperator callOperator) {
+        ScalarOperator argument = callOperator.getArguments().get(0);
+        if (callOperator.getType().equals(argument.getType())) {
+            return argument;
+        }
+        return new CastOperator(callOperator.getType(), argument);
+    }
+
 }
