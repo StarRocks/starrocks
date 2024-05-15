@@ -654,15 +654,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     std::map<uint32_t, UptidToRowidPairs> rss_upt_id_to_rowid_pairs;
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
         for (const auto& each : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
-<<<<<<< HEAD
-            uint32_t rssid = (uint32_t)(each.first >> 32);
-            uint32_t rowid = (uint32_t)(each.first & ROWID_MASK);
-            rss_rowid_to_update_rowid[rssid][rowid] = std::make_pair(upt_id, each.second);
-=======
             auto rssid = (uint32_t)(each.first >> 32);
             auto rowid = (uint32_t)(each.first & ROWID_MASK);
             rss_upt_id_to_rowid_pairs[rssid][upt_id].emplace_back(rowid, each.second);
->>>>>>> 0d3440929c ([Enhancement] optimize column mode partial update when memory is limited (#45481))
         }
         insert_rows += _partial_update_states[upt_id].insert_rowids.size();
         update_rows += _partial_update_states[upt_id].rss_rowid_to_update_rowid.size();
@@ -710,13 +704,6 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             RETURN_IF_ERROR(_update_source_chunk_by_upt(each.second, partial_schema, rowset, &stats, tracker,
                                                         &source_chunk_ptr));
             int64_t t3 = MonotonicMillis();
-<<<<<<< HEAD
-            // 3.4 merge source chunk and update chunk
-            RETURN_IF_ERROR(source_chunk_ptr->update_rows(*update_chunk_ptr, rowids.data()));
-            // 3.5 write column to delta column file
-            int64_t t4 = MonotonicMillis();
-=======
->>>>>>> 0d3440929c ([Enhancement] optimize column mode partial update when memory is limited (#45481))
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
             uint64_t footer_position = 0;

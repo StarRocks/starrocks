@@ -190,16 +190,7 @@ private:
     // build the map from rssid to <RowsetId, segment id>
     Status _init_rowset_seg_id(Tablet* tablet);
 
-<<<<<<< HEAD
-    Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid, const Schema& partial_schema,
-                                   MemTracker* tracker, Rowset* rowset, OlapReaderStatistics* stats,
-                                   std::vector<uint32_t>& rowids, Chunk* result_chunk);
-
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset, const TabletSchema& tablet_schema,
-=======
-    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset,
-                                                                     const TabletSchemaCSPtr& tablet_schema,
->>>>>>> 0d3440929c ([Enhancement] optimize column mode partial update when memory is limited (#45481))
                                                                      int segment_id);
 
     Status _fill_default_columns(const TabletSchema& tablet_schema, const std::vector<uint32_t>& column_ids,
