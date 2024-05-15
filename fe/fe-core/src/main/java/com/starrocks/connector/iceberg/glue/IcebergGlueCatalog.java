@@ -154,6 +154,16 @@ public class IcebergGlueCatalog implements IcebergCatalog {
             PartitionSpec partitionSpec,
             String location,
             Map<String, String> properties) {
+        if (Strings.isNullOrEmpty(location)) {
+            String dbLocation = getDB(dbName).getLocation();
+            if (Strings.isNullOrEmpty(dbLocation)) {
+                throw new StarRocksConnectorException("Failed to find location in database '%s'. Please define the location" +
+                        " when you create table or recreate another database with location." +
+                        " You could execute the SQL command like 'CREATE TABLE <table_name> <columns> " +
+                        "PROPERTIES('location' = '<location>')", dbName);
+            }
+        }
+
         Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
