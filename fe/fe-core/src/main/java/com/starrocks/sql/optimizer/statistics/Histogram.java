@@ -35,7 +35,7 @@ public class Histogram {
         if (mcv != null) {
             totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
         }
-        return totalRows;
+        return Math.max(1, totalRows);
     }
 
     public List<Bucket> getBuckets() {
@@ -45,4 +45,18 @@ public class Histogram {
     public Map<String, Long> getMCV() {
         return mcv;
     }
+<<<<<<< HEAD
+=======
+
+    public String getMcvString() {
+        int printMcvSize = 5;
+        StringBuilder sb = new StringBuilder();
+        sb.append("MCV: [");
+        mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .limit(printMcvSize)
+                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
+        sb.append("]");
+        return sb.toString();
+    }
+>>>>>>> 1e5626e9b8 ([BugFix] fix stale histogram lead to unexpected stats (#45614))
 }
