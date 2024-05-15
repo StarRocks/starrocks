@@ -810,6 +810,7 @@ public:
 
     void set_can_lazy_decode(bool can_lazy_decode) override {
         for (const auto& kv : _child_readers) {
+            if (kv.second == nullptr) continue;
             kv.second->set_can_lazy_decode(can_lazy_decode);
         }
     }
