@@ -1942,7 +1942,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
-                StringUtils.upperCase(chooseExecuteInstancesMode))
+                        StringUtils.upperCase(chooseExecuteInstancesMode))
                 .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
     }
 
