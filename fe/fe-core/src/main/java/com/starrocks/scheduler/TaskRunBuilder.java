@@ -24,7 +24,7 @@ public class TaskRunBuilder {
     private final Task task;
     private Map<String, String> properties;
     private ConnectContext connectContext;
-    private ExecuteOption executeOption = new ExecuteOption();
+    private ExecuteOption executeOption = new ExecuteOption(false);
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);

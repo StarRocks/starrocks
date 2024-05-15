@@ -68,8 +68,7 @@ public class TaskRunSchedulerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
-        ExecuteOption executeOption = new ExecuteOption();
-        executeOption.setMergeRedundant(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
         executeOption.setSync(isSync);
         executeOption.setPriority(priority);
         return executeOption;

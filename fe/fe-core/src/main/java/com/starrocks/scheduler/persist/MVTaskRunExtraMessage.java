@@ -55,7 +55,7 @@ public class MVTaskRunExtraMessage implements Writable {
     private String nextPartitionEnd;
 
     @SerializedName("executeOption")
-    private ExecuteOption executeOption = new ExecuteOption();
+    private ExecuteOption executeOption = new ExecuteOption(true);
 
     public MVTaskRunExtraMessage() {
     }

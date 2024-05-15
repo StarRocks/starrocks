@@ -54,8 +54,7 @@ public class TaskSchedulerBench extends MvRewriteTestBase {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
-        ExecuteOption executeOption = new ExecuteOption();
-        executeOption.setMergeRedundant(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
         executeOption.setSync(isSync);
         return executeOption;
     }
