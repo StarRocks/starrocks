@@ -94,9 +94,9 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         this.mvId = mvId;
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getDb(mvId.getDbId());
-        dbName = db != null ? db.getFullName() : "";
-        Table table = db != null ? db.getTable(mvId.getId()) : null;
-        mvName = table != null ? table.getName() : "";
+        dbName = (db != null) ? db.getFullName() : "";
+        Table table = (db != null) ? db.getTable(mvId.getId()) : null;
+        mvName = (table != null) ? table.getName() : "";
         initMaterializedViewMetrics();
     }
 
