@@ -639,12 +639,8 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
-<<<<<<< HEAD
-    size_t memory_usage() const { return _memory_usage.load(); }
-=======
     size_t usage() const { return _usage; }
-    virtual size_t memory_usage() const { return _memory_usage.load(); }
->>>>>>> 4605ef97f8 ([BugFix] The usage and size of pindex is not update during deletion (#45597))
+    size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
 
