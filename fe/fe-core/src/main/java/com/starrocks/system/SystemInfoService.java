@@ -1086,28 +1086,29 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-    public void updateBackendState(Backend be) {
-        long id = be.getId();
-        Backend memoryBe = getBackend(id);
-        if (memoryBe == null) {
+    public void updateInMemoryStateBackend(Backend persistentState) {
+        long id = persistentState.getId();
+        Backend inMemoryState = getBackend(id);
+        if (inMemoryState == null) {
             // backend may already be dropped. this may happen when
             // 1. SystemHandler drop the decommission backend
             // 2. at same time, user try to cancel the decommission of that backend.
             // These two operations do not guarantee the order.
             return;
         }
-        memoryBe.setBePort(be.getBePort());
-        memoryBe.setHost(be.getHost());
-        memoryBe.setAlive(be.isAlive());
-        memoryBe.setDecommissioned(be.isDecommissioned());
-        memoryBe.setHttpPort(be.getHttpPort());
-        memoryBe.setBeRpcPort(be.getBeRpcPort());
-        memoryBe.setBrpcPort(be.getBrpcPort());
-        memoryBe.setLastUpdateMs(be.getLastUpdateMs());
-        memoryBe.setLastStartTime(be.getLastStartTime());
-        memoryBe.setDisks(be.getDisks());
-        memoryBe.setBackendState(be.getBackendState());
-        memoryBe.setDecommissionType(be.getDecommissionType());
+        inMemoryState.setBePort(persistentState.getBePort());
+        inMemoryState.setHost(persistentState.getHost());
+        inMemoryState.setAlive(persistentState.isAlive());
+        inMemoryState.setDecommissioned(persistentState.isDecommissioned());
+        inMemoryState.setHttpPort(persistentState.getHttpPort());
+        inMemoryState.setBeRpcPort(persistentState.getBeRpcPort());
+        inMemoryState.setBrpcPort(persistentState.getBrpcPort());
+        inMemoryState.setLastUpdateMs(persistentState.getLastUpdateMs());
+        inMemoryState.setLastStartTime(persistentState.getLastStartTime());
+        inMemoryState.setDisks(persistentState.getDisks());
+        inMemoryState.setBackendState(persistentState.getBackendState());
+        inMemoryState.setDecommissionType(persistentState.getDecommissionType());
+        inMemoryState.setLocation(persistentState.getLocation());
     }
 
     public long getClusterAvailableCapacityB() {
