@@ -15,7 +15,6 @@
 package com.starrocks.http.rest.v2;
 
 import com.google.gson.reflect.TypeToken;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -43,6 +42,7 @@ import com.starrocks.http.rest.v2.vo.TableSchemaView;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TStorageType;
 import okhttp3.Request;
 import okhttp3.Response;

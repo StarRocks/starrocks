@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -50,7 +49,6 @@ public class CreateTableAnalyzerTest {
 
     @Test
     public void testAnalyze() throws Exception {
-
         String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
                 "(\n" +
                 "    `tag_id` string,\n" +
@@ -66,11 +64,10 @@ public class CreateTableAnalyzerTest {
                 "\"compression\" = \"LZ4\"\n" +
                 ")\n";
 
-        expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("Getting analyzing error. Detail message: Unknown column 'id' does not exist.");
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("doesn't exist");
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         CreateTableAnalyzer.analyze(createTableStmt, connectContext);
     }
-
 }

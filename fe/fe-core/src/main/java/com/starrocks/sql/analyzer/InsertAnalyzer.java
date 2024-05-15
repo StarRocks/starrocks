@@ -164,7 +164,7 @@ public class InsertAnalyzer {
                 targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
                 mentionedColumns =
                         ((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream()
-                            .map(Column::getName).collect(Collectors.toSet());
+                                .map(Column::getName).collect(Collectors.toSet());
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
                 mentionedColumns =
@@ -316,11 +316,7 @@ public class InsertAnalyzer {
         String dbName = insertStmt.getTableName().getDb();
         String tableName = insertStmt.getTableName().getTbl();
 
-        try {
-            MetaUtils.checkCatalogExistAndReport(catalogName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-        }
+        MetaUtils.checkCatalogExistAndReport(catalogName);
 
         Database database = MetaUtils.getDatabase(catalogName, dbName);
         Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
