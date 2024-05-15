@@ -468,8 +468,14 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             } else {
                 if (table instanceof View) {
                     try {
-                        Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName, PrivilegeType.SELECT);
+                        // for privilege checking, treat hive view as table
+                        if (table.getType() == Table.TableType.HIVE_VIEW) {
+                            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    tableName, PrivilegeType.SELECT);
+                        } else {
+                            Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    tableName, PrivilegeType.SELECT);
+                        }
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
