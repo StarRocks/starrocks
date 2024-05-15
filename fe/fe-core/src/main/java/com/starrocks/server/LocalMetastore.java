@@ -1866,6 +1866,9 @@ public class LocalMetastore implements ConnectorMetadata {
                             taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
                     signatures.add(task.getSignature());
                 }
+                if (table.isCloudNativeTableOrMaterializedView() && Config.lake_use_shared_tablet_initial_metadata) {
+                    countDownLatch.countDown((int) partition.storageReplicaCount() - tasks.size());
+                }
                 sendCreateReplicaTasks(tasks, countDownLatch);
                 numSendedTasks += tasks.size();
                 numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
@@ -1981,9 +1984,14 @@ public class LocalMetastore implements ConnectorMetadata {
                         .setCompressionLevel(table.getCompressionLevel())
                         .setTabletSchema(tabletSchema)
                         .setCreateSchemaFile(createSchemaFile)
+                        .setUseSharedTabletInitialMetadata(Config.lake_use_shared_tablet_initial_metadata)
                         .build();
                 tasks.add(task);
                 createSchemaFile = false;
+            }
+
+            if (isCloudNativeTable && Config.lake_use_shared_tablet_initial_metadata) {
+                break;
             }
         }
         return tasks;

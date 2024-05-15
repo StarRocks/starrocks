@@ -57,6 +57,11 @@ public:
 TEST_F(StarletLocationProviderTest, test_location) {
     auto location = _provider->root_location(12345);
     EXPECT_EQ(build_starlet_uri(12345, "/"), location);
+
+    LocationProvider* base_provider = _provider;
+    location = base_provider->tablet_initial_metadata_location(12345);
+    std::string_view filename = basename(location);
+    EXPECT_TRUE(is_tablet_initial_metadata(filename));
 }
 
 TEST_F(StarletLocationProviderTest, test_get_real_location) {

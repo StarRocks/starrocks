@@ -391,10 +391,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
+                                .setUseSharedTabletInitialMetadata(Config.lake_use_shared_tablet_initial_metadata)
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(task);
+
+                        if (Config.lake_use_shared_tablet_initial_metadata) {
+                            countDownLatch.countDown(shadowIdx.getTablets().size() - 1);
+                            break;
+                        }
                     }
                 }
             }

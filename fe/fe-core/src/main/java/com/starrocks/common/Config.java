@@ -867,6 +867,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 
+    @ConfField(mutable = true)
+    public static boolean lake_use_shared_tablet_initial_metadata = false;
+
     /**
      * The thrift server max worker threads
      */

@@ -82,6 +82,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private int primaryIndexCacheExpireSec = 0;
     private boolean createSchemaFile = true;
+    private boolean useSharedTabletInitialMetadata = false;
     private final TTabletSchema tabletSchema;
 
     private CreateReplicaTask(Builder builder) {
@@ -99,6 +100,7 @@ public class CreateReplicaTask extends AgentTask {
         this.tabletSchema = builder.getTabletSchema();
         this.binlogConfig = builder.getBinlogConfig();
         this.createSchemaFile = builder.isCreateSchemaFile();
+        this.useSharedTabletInitialMetadata = builder.isUseSharedTabletInitialMetadata();
         this.baseTabletId = builder.getBaseTabletId();
         this.recoverySource = builder.getRecoverySource();
         this.inRestoreMode = builder.isInRestoreMode();
@@ -174,6 +176,7 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setCompression_level(compressionLevel);
         createTabletReq.setTablet_type(tabletType);
         createTabletReq.setCreate_schema_file(createSchemaFile);
+        createTabletReq.setUse_shared_tablet_initial_metadata(useSharedTabletInitialMetadata);
         return createTabletReq;
     }
 
@@ -200,6 +203,7 @@ public class CreateReplicaTask extends AgentTask {
         private RecoverySource recoverySource;
         private int primaryIndexCacheExpireSec = 0;
         private boolean createSchemaFile = true;
+        private boolean useSharedTabletInitialMetadata = false;
         private TTabletSchema tabletSchema;
 
         private Builder() {
@@ -382,6 +386,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setCreateSchemaFile(boolean createSchemaFile) {
             this.createSchemaFile = createSchemaFile;
+            return this;
+        }
+
+        public boolean isUseSharedTabletInitialMetadata() {
+            return useSharedTabletInitialMetadata;
+        }
+
+        public Builder setUseSharedTabletInitialMetadata(boolean useSharedTabletInitialMetadata) {
+            this.useSharedTabletInitialMetadata = useSharedTabletInitialMetadata;
             return this;
         }
 
