@@ -1956,6 +1956,9 @@ bool TabletUpdates::_use_light_apply_compaction(Rowset* rowset) {
     if (!config::enable_light_pk_compaction_publish) {
         return false;
     }
+    if (rowset == nullptr) {
+        return false;
+    }
     // Is rows mapper file exist?
     return fs::path_exist(local_rows_mapper_filename(&_tablet, rowset->rowset_id_str()));
 }
@@ -2054,27 +2057,11 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
-<<<<<<< HEAD
-    if (!(st = _compaction_state->load(output_rowset)).ok()) {
-        manager->index_cache().release(index_entry);
-        _compaction_state.reset();
-        std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
-                                              st.to_string(), debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-=======
     if (!use_light_apply_compaction && !(st = _compaction_state->load(output_rowset)).ok()) {
+        manager->index_cache().release(index_entry);
         std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
                                               st.to_string(), debug_string());
         failure_handler(msg);
-        return;
-    }
-    st = index.prepare(version, 0);
-    if (!st.ok()) {
-        std::string msg = strings::Substitute("_apply_compaction_commit error: index prepare failed: $0 $1",
-                                              st.to_string(), debug_string());
-        failure_handler(msg);
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
         return;
     }
     index.prepare(version, 0);
@@ -2087,29 +2074,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     uint32_t max_rowset_id = 0;
     uint32_t max_src_rssid = 0;
 
-<<<<<<< HEAD
-    // Since value stored in info->inputs of CompactInfo is rowset id
-    // we should get the real max rssid here by segment number
-    uint32_t max_rowset_id = *std::max_element(info->inputs.begin(), info->inputs.end());
-    Rowset* rowset = _get_rowset(max_rowset_id).get();
-    if (rowset == nullptr) {
-        string msg = strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
-                                         _tablet.tablet_id(), max_rowset_id);
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
-    }
-    uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
-
-    for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
-        if (st = _compaction_state->load_segments(output_rowset, i); !st.ok()) {
-            manager->index_cache().release(index_entry);
-            _compaction_state.reset();
-            std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
-                                                  st.to_string(), debug_string());
-            LOG(ERROR) << msg;
-            _set_error(msg);
-=======
     if (!use_light_apply_compaction) {
         // Since value stored in info->inputs of CompactInfo is rowset id
         // we should get the real max rssid here by segment number
@@ -2118,7 +2082,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         if (rowset == nullptr) {
             failure_handler(strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
                                                 _tablet.tablet_id(), max_rowset_id));
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
             return;
         }
         max_src_rssid = max_rowset_id + rowset->num_segments() - 1;

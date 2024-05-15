@@ -223,20 +223,5 @@ add_library(Storage STATIC
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
-<<<<<<< HEAD
-    primary_key_dump.cpp)
-=======
     local_primary_key_compaction_conflict_resolver.cpp
-    inverted/index_descriptor.hpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_option.cpp
-    inverted/inverted_index_common.hpp
-    inverted/inverted_plugin_factory.cpp
-    inverted/clucene/clucene_plugin.cpp
-    inverted/clucene/clucene_roaring_hit_collector.hpp
-    inverted/clucene/clucene_inverted_writer.cpp
-    inverted/clucene/clucene_inverted_reader.cpp
-    inverted/clucene/clucene_inverted_util.hpp
-    inverted/clucene/match_operator.cpp)
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
+    primary_key_dump.cpp)
