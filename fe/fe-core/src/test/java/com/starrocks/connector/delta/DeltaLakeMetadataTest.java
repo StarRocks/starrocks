@@ -66,7 +66,7 @@ public class DeltaLakeMetadataTest {
 
     @Test
     public void testListPartitionNames() {
-        List<String> partitionNames = deltaLakeMetadata.listPartitionNames("db1", "table1");
+        List<String> partitionNames = deltaLakeMetadata.listPartitionNames("db1", "table1", -1);
         Assert.assertEquals(1, partitionNames.size());
         Assert.assertEquals("col1", partitionNames.get(0));
     }

@@ -365,14 +365,19 @@ struct THdfsScanRange {
     // delete columns slots like iceberg equality delete column slots
     21: optional list<Types.TSlotId> delete_column_slot_ids;
 
+    22: optional bool use_iceberg_jni_metadata_reader
+
+    // for metadata table split (eg: iceberg manifest file bean)
+    23: optional string serialized_split
+
     // whether to use JNI scanner to read data of kudu table
-    22: optional bool use_kudu_jni_reader
+    24: optional bool use_kudu_jni_reader
 
     // kudu master addresses
-    23: optional string kudu_master
+    25: optional string kudu_master
 
     // kudu scan token
-    24: optional string kudu_scan_token
+    26: optional string kudu_scan_token
 }
 
 struct TBinlogScanRange {
@@ -1077,6 +1082,15 @@ struct THdfsScanNode {
     16: optional bool use_partition_column_value_only;
 
     17: optional Types.TTupleId mor_tuple_id;
+
+    // serialized static metadata table
+    18: optional string serialized_table;
+
+    // serialized lake format predicate for data skipping
+    19: optional string serialized_predicate;
+
+    // if load column statistics for metadata table scan
+    20: optional bool load_column_stats;
 }
 
 struct TProjectNode {

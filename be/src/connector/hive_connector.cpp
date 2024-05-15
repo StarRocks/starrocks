@@ -581,13 +581,19 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
     }
+    bool use_iceberg_jni_metadata_reader = false;
+    if (scan_range.__isset.use_iceberg_jni_metadata_reader) {
+        use_iceberg_jni_metadata_reader = scan_range.use_iceberg_jni_metadata_reader;
+    }
     bool use_kudu_jni_reader = false;
     if (scan_range.__isset.use_kudu_jni_reader) {
         use_kudu_jni_reader = scan_range.use_kudu_jni_reader;
     }
 
-    JniScanner::CreateOptions jni_scanner_create_options = {
-            .fs_options = &fsOptions, .hive_table = _hive_table, .scan_range = &scan_range};
+    JniScanner::CreateOptions jni_scanner_create_options = {.fs_options = &fsOptions,
+                                                            .hive_table = _hive_table,
+                                                            .scan_range = &scan_range,
+                                                            .scan_node = &hdfs_scan_node};
 
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
@@ -598,6 +604,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
         scanner = create_odps_jni_scanner(jni_scanner_create_options).release();
+    } else if (use_iceberg_jni_metadata_reader) {
+        scanner = create_iceberg_metadata_jni_scanner(jni_scanner_create_options).release();
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {

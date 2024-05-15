@@ -62,7 +62,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
+    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 

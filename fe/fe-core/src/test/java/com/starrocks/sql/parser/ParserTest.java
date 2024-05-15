@@ -113,6 +113,7 @@ class ParserTest {
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",
+                "SELECT * FROM t FOR VERSION AS OF 123345456321;",
         };
 
         for (String query : temporalQueries) {

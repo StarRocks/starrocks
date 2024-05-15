@@ -48,6 +48,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PlanMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
@@ -119,6 +120,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_MEM_LIMIT = "query_mem_limit";
 
     public static final String QUERY_TIMEOUT = "query_timeout";
+
+    public static final String METADATA_COLLECT_QUERY_TIMEOUT = "metadata_collect_query_timeout";
+    public static final String ENABLE_METADATA_PROFILE = "enable_metadata_profile";
 
     /*
      * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
@@ -396,6 +400,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+    public static final String PLAN_MODE = "plan_mode";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
@@ -836,6 +841,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
 
+    // metadata collect query timeout in second
+    @VariableMgr.VarAttr(name = METADATA_COLLECT_QUERY_TIMEOUT)
+    private int metadataCollectQueryTimeoutS = 60;
+
     @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
     private boolean usePageCache = true;
 
@@ -849,6 +858,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
+    private boolean enableMetadataProfile = false;
 
     // if true, will generate profile when load finished
     @VariableMgr.VarAttr(name = ENABLE_LOAD_PROFILE)
@@ -1919,6 +1931,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
+    @VarAttr(name = PLAN_MODE)
+    private String planMode = PlanMode.AUTO.modeName();
+
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
     @VarAttr(name = ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN)
@@ -2005,6 +2020,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
         this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public String getPlanMode() {
+        return planMode;
+    }
+
+    public void setPlanMode(String planMode) {
+        PlanMode.fromName(planMode);
+        this.planMode = planMode;
     }
 
     public boolean isCboPredicateSubfieldPath() {
@@ -2239,6 +2263,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setQueryDeliveryTimeoutS(int queryDeliveryTimeoutS) {
         this.queryDeliveryTimeoutS = queryDeliveryTimeoutS;
+    }
+
+    public int getMetadataCollectQueryTimeoutS() {
+        return metadataCollectQueryTimeoutS;
+    }
+
+    public void setMetadataCollectQueryTimeoutS(int metadataCollectQueryTimeoutS) {
+        this.metadataCollectQueryTimeoutS = metadataCollectQueryTimeoutS;
+    }
+
+    public boolean isEnableMetadataProfile() {
+        return enableMetadataProfile;
+    }
+
+    public void setEnableMetadataProfile(boolean enableMetadataProfile) {
+        this.enableMetadataProfile = enableMetadataProfile;
     }
 
     public int getQueryDeliveryTimeoutS() {

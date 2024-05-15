@@ -213,6 +213,7 @@ public abstract class ConnectorPartitionTraits {
             if (table.isUnPartitioned()) {
                 return Lists.newArrayList(table.getName());
             }
+
             return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     table.getCatalogName(), getDbName(), getTableName());
         }
@@ -474,6 +475,18 @@ public abstract class ConnectorPartitionTraits {
         public Optional<Long> maxPartitionRefreshTs() {
             IcebergTable icebergTable = (IcebergTable) table;
             return icebergTable.getSnapshot().map(Snapshot::timestampMillis);
+        }
+
+        @Override
+        public List<String> getPartitionNames() {
+            if (table.isUnPartitioned()) {
+                return Lists.newArrayList(table.getName());
+            }
+
+            IcebergTable icebergTable = (IcebergTable) table;
+            long snapshotId = icebergTable.getSnapshot().isPresent() ? icebergTable.getSnapshot().get().snapshotId() : -1;
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    table.getCatalogName(), getDbName(), getTableName(), snapshotId);
         }
 
         @Override

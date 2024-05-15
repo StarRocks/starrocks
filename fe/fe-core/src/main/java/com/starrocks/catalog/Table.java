@@ -123,7 +123,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("BLACKHOLE")
         BLACKHOLE,
         @SerializedName("KUDU")
-        KUDU;
+        KUDU,
+        @SerializedName("METADATA")
+        METADATA;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {

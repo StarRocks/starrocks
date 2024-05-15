@@ -215,6 +215,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -2356,5 +2357,39 @@ public class StmtExecutor {
             return isAllConstants;
         }
         return false;
+    }
+
+    public void executeStmtWithResultQueue(ConnectContext context, ExecPlan plan, Queue<TResultBatch> sqlResult) {
+        try {
+            UUID uuid = context.getQueryId();
+            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+            coord = getCoordinatorFactory().createQueryScheduler(
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+
+            coord.exec();
+            RowBatch batch;
+            do {
+                batch = coord.getNext();
+                if (batch.getBatch() != null) {
+                    sqlResult.add(batch.getBatch());
+                }
+            } while (!batch.isEos());
+            context.getState().setEof();
+        } catch (Exception e) {
+            LOG.error("Failed to execute metadata collection job", e);
+            if (coord.getExecStatus().ok()) {
+                context.getState().setError(e.getMessage());
+            }
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+        } finally {
+            if (context.isProfileEnabled()) {
+                tryProcessProfileAsync(plan, 0);
+                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                        context.getSessionVariable().getProfileTimeout() * 1000L);
+            } else {
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
+        }
     }
 }
