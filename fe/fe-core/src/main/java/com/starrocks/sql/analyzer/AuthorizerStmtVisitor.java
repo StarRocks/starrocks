@@ -279,8 +279,115 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                 Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         tableName, PrivilegeType.SELECT);
             } else {
+<<<<<<< HEAD
                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         tableName.getCatalog(), tableName.getDb(), table.getName(), PrivilegeType.SELECT);
+=======
+                if (table instanceof View) {
+                    try {
+                        // for privilege checking, treat hive view as table
+                        if (table.getType() == Table.TableType.HIVE_VIEW) {
+                            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    tableName, PrivilegeType.SELECT);
+                        } else {
+                            Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    tableName, PrivilegeType.SELECT);
+                        }
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
+                    }
+                } else if (table.isMaterializedView()) {
+                    try {
+                        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                tableName, PrivilegeType.SELECT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW.name(), tableName.getTbl());
+                    }
+                } else {
+                    try {
+                        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                tableName.getCatalog(), tableName.getDb(), table.getName(), PrivilegeType.SELECT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                tableName.getCatalog(),
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+                    }
+                }
+            }
+        }
+    }
+
+    private void checkCanSelectFromColumns(ConnectContext context, Map<TableName, Set<String>> allTouchedTableColumns,
+                                           Map<TableName, Relation> allTouchedTables) {
+        HashSet<TableName> usedTables = new HashSet<>(allTouchedTables.keySet());
+        HashSet<TableName> usedColOfTables = new HashSet<>(allTouchedTableColumns.keySet());
+        usedTables.removeAll(usedColOfTables);
+        if (!usedTables.isEmpty()) {
+            String warnMsg = String.format("The column usage information of some actually used tables " +
+                    "has not been successfully collected. tables: %s", usedTables);
+            LOG.warn(warnMsg);
+            // check SELECT privilege of all the columns(`*`) for these tables instead
+            for (TableName usedTable : usedTables) {
+                try {
+                    Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            usedTable, Collections.singleton("*"), PrivilegeType.SELECT);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            usedTable.getCatalog(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
+                            String.join(".", usedTable.getTbl(), "*"));
+                }
+            }
+        }
+        for (Map.Entry<TableName, Set<String>> tableColumns : allTouchedTableColumns.entrySet()) {
+            TableName tableName = tableColumns.getKey();
+            Set<String> columns = tableColumns.getValue();
+            Relation relation = allTouchedTables.get(tableName);
+            if (relation == null) {
+                String warnMsg = String.format("Some used columns of tables were incorrectly collected. table: %s",
+                        tableName);
+                LOG.warn(warnMsg);
+                AccessDeniedException.reportAccessDenied(
+                        tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
+                        String.join(".", tableName.getTbl(),
+                                String.join(",", columns)));
+            } else {
+                Table table = relation instanceof TableRelation ? ((TableRelation) relation).getTable() :
+                        ((ViewRelation) relation).getView();
+                if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
+                    try {
+                        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.OPERATE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
+                    }
+                } else {
+                    try {
+                        Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                tableName, columns, PrivilegeType.SELECT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                tableName.getCatalog(),
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
+                                String.join(".", tableName.getTbl(),
+                                        String.join(",", columns)));
+                    }
+                }
+>>>>>>> c0b117d995 ([BugFix] Fix hive view privilege checking (#44984))
             }
         }
     }
