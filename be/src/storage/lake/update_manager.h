@@ -152,6 +152,8 @@ public:
 
     MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
 
+    MemTracker* index_mem_tracker() const { return _index_cache_mem_tracker.get(); }
+
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
