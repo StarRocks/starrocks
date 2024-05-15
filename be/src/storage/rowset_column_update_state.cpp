@@ -424,7 +424,7 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         for (int i = 0; i < inorder_source_rowids.size(); i++) {
             auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, inorder_upt_rowids[i].size());
             tmp_chunk->append_selective(*upt_chunk, inorder_upt_rowids[i].data(), 0, inorder_upt_rowids[i].size());
-            RETURN_IF_EXCEPTION((*source_chunk)->update_rows(*tmp_chunk, inorder_source_rowids[i].data()));
+            RETURN_IF_ERROR((*source_chunk)->update_rows(*tmp_chunk, inorder_source_rowids[i].data()));
         }
     }
     return Status::OK();
