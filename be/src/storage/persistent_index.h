@@ -663,12 +663,8 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
-<<<<<<< HEAD
-    size_t memory_usage() const { return _memory_usage.load(); }
-=======
     size_t usage() const { return _usage; }
-    virtual size_t memory_usage() const { return _memory_usage.load(); }
->>>>>>> 4605ef97f8 ([BugFix] The usage and size of pindex is not update during deletion (#45597))
+    size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
 
@@ -785,10 +781,9 @@ public:
         return res;
     }
 
-<<<<<<< HEAD
     static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
-=======
+    
     // not thread safe, just for unit test
     std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
         std::pair<int64_t, int64_t> res;
@@ -800,7 +795,6 @@ public:
     }
 
     void clear_kv_stat() { _usage_and_size_by_key_length.clear(); }
->>>>>>> 4605ef97f8 ([BugFix] The usage and size of pindex is not update during deletion (#45597))
 
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
