@@ -410,6 +410,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
     config::lake_pk_compaction_max_input_rowsets = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
     EXPECT_EQ(1, input_rowsets3.size());
+    config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
@@ -477,6 +478,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     EXPECT_EQ(input_rowsets[1]->id(), 4);
     EXPECT_EQ(input_rowsets[2]->id(), 2);
     EXPECT_EQ(input_rowsets[3]->id(), 3);
+    config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
@@ -556,6 +558,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     EXPECT_EQ(input_rowsets[1]->id(), 7);
     EXPECT_EQ(input_rowsets[2]->id(), 2);
     EXPECT_EQ(input_rowsets[3]->id(), 4);
+    config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
