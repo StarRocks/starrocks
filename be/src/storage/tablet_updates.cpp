@@ -2072,8 +2072,12 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             dv->init(version.major(), tmp_deletes.data(), tmp_deletes.size());
             total_deletes += tmp_deletes.size();
         }
+<<<<<<< HEAD
         delvecs.emplace_back(rssid, dv);
         _compaction_state->release_segment(i);
+=======
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
+>>>>>>> 4dc01c1120 ([BugFix] fix cloud native pk table memory statistic issue (#45673))
     }
     // release memory
     _compaction_state.reset();
