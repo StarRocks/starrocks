@@ -453,6 +453,9 @@ public class DefaultCoordinator extends Coordinator {
     public void onFinished() {
         GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
         GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
+        // for async profile, if Be doesn't report profile in time, we upload the most complete profile
+        // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
+        queryProfile.finishAllInstances(Status.OK);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {

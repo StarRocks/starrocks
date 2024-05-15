@@ -220,5 +220,4 @@ public abstract class Coordinator {
     public abstract void setTimeoutSecond(int timeoutSecond);
 
     public abstract boolean isProfileAlreadyReported();
-
 }
