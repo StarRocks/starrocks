@@ -220,4 +220,7 @@ add_library(Storage STATIC
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
+    lake/lake_primary_key_compaction_conflict_resolver.cpp
+    rows_mapper.cpp
+    primary_key_compaction_conflict_resolver.cpp
     primary_key_dump.cpp)
