@@ -334,6 +334,39 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
     }
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 5, true, true);
+    auto [chunk2, indexes2] = gen_data_and_index(kChunkSize, 7, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
+        ASSERT_OK(delta_writer->write(*chunk2, indexes2.data(), indexes2.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+    }
+    config::write_buffer_size = old_size;
+    ASSERT_EQ(kChunkSize * 3, read_rows(tablet_id, version));
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto txns = std::vector<int64_t>();
