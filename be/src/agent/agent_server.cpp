@@ -70,6 +70,17 @@ const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
 const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
 
+static int calc_max_replication_threads(int replication_threads) {
+    if (replication_threads == 0) {
+        replication_threads = -4;
+    }
+    if (replication_threads < 0) {
+        replication_threads = -replication_threads;
+        replication_threads *= CpuInfo::num_cores();
+    }
+    return replication_threads;
+}
+
 class AgentServer::Impl {
 public:
     explicit Impl(ExecEnv* exec_env, bool is_compute_node) : _exec_env(exec_env), _is_compute_node(is_compute_node) {}
@@ -235,9 +246,8 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL(
-                "replication", 0, config::replication_threads > 0 ? config::replication_threads : CpuInfo::num_cores(),
-                std::numeric_limits<int>::max(), _thread_pool_replication);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("replication", 0, calc_max_replication_threads(config::replication_threads),
+                                       std::numeric_limits<int>::max(), _thread_pool_replication);
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -577,7 +587,7 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         break;
     case TTaskType::REMOTE_SNAPSHOT:
     case TTaskType::REPLICATE_SNAPSHOT:
-        st = _thread_pool_replication->update_max_threads(new_val > 0 ? new_val : CpuInfo::num_cores());
+        st = _thread_pool_replication->update_max_threads(calc_max_replication_threads(new_val));
         break;
     default:
         break;

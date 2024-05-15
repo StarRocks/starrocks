@@ -94,7 +94,8 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 | **Parameter**                         | **Default** | **Unit** | **Description**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
 | replication_max_parallel_table_count  | 100         | -        | The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table. |
-| replication_max_parallel_data_size_mb | 10240       | MB       | The maximum size of data allowed for concurrent synchronization. |
+| replication_max_parallel_replica_count| 10240       | -        | The maximum number of tablet replica allowed for concurrent synchronization. |
+| replication_max_parallel_data_size_mb | 1048576     | MB       | The maximum size of data allowed for concurrent synchronization. |
 | replication_transaction_timeout_sec   | 3600        | Seconds  | The timeout duration for synchronization tasks.              |
 
 #### BE Parameters
@@ -103,7 +104,7 @@ The following BE parameter is a dynamic configuration item. Refer to [Configure 
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |
-| replication_threads | 0           | -        | The number of threads for executing synchronization tasks. `0` indicates setting the number of threads to the number of CPU cores on the machine where the BE resides. |
+| replication_threads | 0           | -        | The number of threads for executing synchronization tasks. `0` indicates setting the number of threads to the 4 times of number of CPU cores on the machine where the BE resides. |
 
 ## Step 1: Install the Tool
 
