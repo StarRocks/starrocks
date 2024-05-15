@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -34,11 +35,13 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -54,7 +57,7 @@ public class PlannerMetaLocker {
     // Map database id -> database
     Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
-    /*
+    /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
      * lockTablesWithIntensiveDbLock can internally guarantee the order of locking,
      * so the table ids do not need to be ordered here.
@@ -64,6 +67,33 @@ public class PlannerMetaLocker {
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Try to acquire the lock, return false if the lock cannot be obtained.
+     */
+    public boolean tryLock(long timeout, TimeUnit unit) {
+        Locker locker = new Locker();
+        List<Database> lockedDbs = Lists.newArrayList();
+        boolean isLockSuccess = false;
+        long milliTimeout = timeout;
+        if (!unit.equals(TimeUnit.MILLISECONDS)) {
+            milliTimeout = TimeUnit.MILLISECONDS.convert(Duration.of(timeout, unit.toChronoUnit()));
+        }
+        try {
+            for (Map.Entry<Long, Database> e : dbs.entrySet()) {
+                if (!locker.tryLockDatabase(e.getValue(), LockType.READ, milliTimeout)) {
+                    return false;
+                }
+                lockedDbs.add(e.getValue());
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                lockedDbs.stream().forEach(db -> locker.unLockDatabase(db, LockType.READ));
+            }
+        }
+        return isLockSuccess;
     }
 
     public void lock() {

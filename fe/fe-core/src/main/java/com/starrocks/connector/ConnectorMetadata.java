@@ -29,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -203,6 +204,11 @@ public interface ConnectorMetadata {
 
     default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
         throw new StarRocksConnectorException("This connector doesn't support pruning partitions");
+    }
+
+    // return true if the connector has self info schema
+    default boolean hasSelfInfoSchema() {
+        return false;
     }
 
     /**

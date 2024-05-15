@@ -1239,6 +1239,9 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+        tools.assert_true(res["status"])
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
@@ -1249,6 +1252,9 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+        tools.assert_true(res["status"])
         for expect in expects:
             tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
 

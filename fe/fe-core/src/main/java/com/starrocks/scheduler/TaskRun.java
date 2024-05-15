@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -53,7 +54,11 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
+    @SerializedName("taskId")
     private long taskId;
+
+    @SerializedName("taskRunId")
+    private final String taskRunId;
 
     private Map<String, String> properties;
 
@@ -72,8 +77,6 @@ public class TaskRun implements Comparable<TaskRun> {
     private Constants.TaskType type;
 
     private ExecuteOption executeOption;
-
-    private final String taskRunId;
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -136,7 +139,7 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
-    public String getUUID() {
+    public String getTaskRunId() {
         return taskRunId;
     }
 
@@ -322,13 +325,47 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
-            return taskRun.getStatus().getPriority() - this.getStatus().getPriority();
+        int ret = comparePriority(this.status, taskRun.status);
+        if (ret != 0) {
+            return ret;
+        }
+        return taskRunId.compareTo(taskRun.taskRunId);
+    }
+
+    private int comparePriority(TaskRunStatus t0, TaskRunStatus t1) {
+        if (t0 == null || t1 == null) {
+            // prefer this
+            return 0;
+        }
+        // if priority is different, return the higher priority
+        if (t0.getPriority() != t1.getPriority()) {
+            return Integer.compare(t1.getPriority(), t0.getPriority());
         } else {
-            return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
+            // if priority is the same, return the older task
+            return Long.compare(t0.getCreateTime(), t1.getCreateTime());
         }
     }
 
+    /**
+     * Check the taskRun is equal task to the given taskRun which means they have the same taskRunId and the same task.
+     */
+    public boolean isEqualTask(TaskRun o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null) {
+            return false;
+        }
+        if (task.getDefinition() == null) {
+            return false;
+        }
+        return this.taskId == o.getTaskId() &&
+                this.task.getDefinition().equals(o.getTask().getDefinition());
+    }
+
+    /**
+     * TaskRun is equal if they have the same taskRunId and the same task.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -337,12 +374,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (task.getDefinition() == null) {
-            return false;
-        }
         TaskRun taskRun = (TaskRun) o;
-        return this.taskId == taskRun.getTaskId() &&
-                this.task.getDefinition().equals(taskRun.getTask().getDefinition());
+        return this.taskRunId.equals(taskRun.getTaskRunId()) && isEqualTask(taskRun);
     }
 
     @Override
@@ -356,9 +389,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 "taskId=" + taskId +
                 ", type=" + type +
                 ", uuid=" + taskRunId +
-                ", task_state=" + status.getState() +
+                ", task_state=" + (status != null ? status.getState() : "") +
                 ", properties=" + properties +
-                ", extra_message =" + status.getExtraMessage() +
+                ", extra_message =" + (status != null ? status.getExtraMessage() : "") +
                 '}';
     }
 }

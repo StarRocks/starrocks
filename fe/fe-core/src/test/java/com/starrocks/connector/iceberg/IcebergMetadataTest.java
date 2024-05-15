@@ -53,7 +53,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -236,6 +235,31 @@ public class IcebergMetadataTest extends TableTestBase {
         Table actual = metadata.getTable("db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
+    }
+
+    @Test
+    public void testGetTableWithUpperName(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                         @Mocked HiveTableOperations hiveTableOperations) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+
+                icebergHiveCatalog.getTable("DB", "TBL");
+                result = new BaseTable(hiveTableOperations, "tbl");
+                minTimes = 0;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        Table actual = metadata.getTable("DB", "TBL");
+        Assert.assertTrue(actual instanceof IcebergTable);
+        IcebergTable icebergTable = (IcebergTable) actual;
+        Assert.assertEquals("db", icebergTable.getRemoteDbName());
+        Assert.assertEquals("tbl", icebergTable.getRemoteTableName());
+        Assert.assertEquals(ICEBERG, icebergTable.getType());
     }
 
     @Test
@@ -1239,7 +1263,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testGetMetaSpec(@Mocked LocalMetastore localMetastore, @Mocked TemporaryTableMgr temporaryTableMgr) {
+    public void testGetMetaSpec(@Mocked LocalMetastore localMetastore) {
         mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
@@ -1257,7 +1281,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 new IcebergCatalogProperties(DEFAULT_CONFIG));
         ConnectContext.get().getSessionVariable().setEnableIcebergColumnStatistics(false);
 
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
@@ -1274,8 +1298,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testGetMetaSpecWithDeleteFile(@Mocked LocalMetastore localMetastore,
-                                              @Mocked TemporaryTableMgr temporaryTableMgr) {
+    public void testGetMetaSpecWithDeleteFile(@Mocked LocalMetastore localMetastore) {
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         // FILE_A_DELETES = positionalDelete / FILE_A2_DELETES = equalityDelete
         mockedNativeTableA.newRowDelta().addDeletes(FILE_A_DELETES).addDeletes(FILE_A2_DELETES).commit();
@@ -1296,7 +1319,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), catalogProperties);
 
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {

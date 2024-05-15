@@ -48,6 +48,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -690,51 +691,79 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+    private void filterAsynchronousMaterializedView(PatternMatcher matcher,
+                                                    UserIdentity currentUser,
+                                                    String dbName,
+                                                    MaterializedView mv,
+                                                    TGetTablesParams params,
+                                                    List<MaterializedView> result) {
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(mv.getName())) {
+            return;
+        }
+
+        try {
+            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
+                    null, dbName, mv);
+        } catch (AccessDeniedException e) {
+            return;
+        }
+
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        if (!PatternMatcher.matchPattern(params.getPattern(), mv.getName(), matcher, caseSensitive)) {
+            return;
+        }
+        result.add(mv);
+    }
+
+    private void filterSynchronousMaterializedView(OlapTable olapTable, PatternMatcher matcher,
+                                                   TGetTablesParams params,
+                                                   List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
+        // synchronized materialized view metadata size should be greater than 1.
+        if (olapTable.getVisibleIndexMetas().size() <= 1) {
+            return;
+        }
+
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(olapTable.getName())) {
+            return;
+        }
+
+        List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
+        long baseIdx = olapTable.getBaseIndexId();
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+            if (baseIdx == mvMeta.getIndexId()) {
+                continue;
+            }
+
+            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                    matcher, caseSensitive)) {
+                continue;
+            }
+            singleTableMVs.add(Pair.create(olapTable, mvMeta));
+        }
+    }
+
     private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
                                                                    UserIdentity currentUser, TGetTablesParams params) {
         String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
             for (Table table : db.getTables()) {
                 if (table.isMaterializedView()) {
-                    MaterializedView mvTable = (MaterializedView) table;
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                null, dbName, mvTable);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    if (!PatternMatcher.matchPattern(params.getPattern(), mvTable.getName(), matcher, caseSensitive)) {
-                        continue;
-                    }
-
-                    materializedViews.add(mvTable);
+                    filterAsynchronousMaterializedView(matcher, currentUser, dbName,
+                            (MaterializedView) table, params, materializedViews);
                 } else if (table.getType() == Table.TableType.OLAP) {
-                    OlapTable olapTable = (OlapTable) table;
-                    // synchronized materialized view metadata size should be greater than 1.
-                    if (olapTable.getVisibleIndexMetas().size() <= 1) {
-                        continue;
-                    }
-                    List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-                    long baseIdx = olapTable.getBaseIndexId();
-                    for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                        if (baseIdx == mvMeta.getIndexId()) {
-                            continue;
-                        }
-
-                        if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
-                                matcher, caseSensitive)) {
-                            continue;
-                        }
-
-                        singleTableMVs.add(Pair.create(olapTable, mvMeta));
-                    }
+                    filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
+                } else {
+                    // continue
                 }
 
                 // check limit
@@ -762,7 +791,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<Task> taskList = taskManager.showTasks(null);
+        List<Task> taskList = taskManager.filterTasks(params);
 
         for (Task task : taskList) {
             if (task.getDbName() == null) {
@@ -812,7 +841,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
+        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(null);
 
         for (TaskRunStatus status : taskRunList) {
             if (status.getDbName() == null) {
@@ -2247,7 +2276,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
+        TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
+
         try {
+            // creating partition names is ordered
+            for (String partitionName : creatingPartitionNames) {
+                txnState.lockCreatePartition(partitionName);
+            }
+
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
@@ -2270,6 +2314,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
+
             state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn(e);
@@ -2277,20 +2322,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
             return result;
+        } finally {
+            for (String partitionName : creatingPartitionNames) {
+                txnState.unlockCreatePartition(partitionName);
+            }
         }
 
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
-
-        TransactionState txnState =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
-        if (txnState == null) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
-            result.setStatus(errorStatus);
-            return result;
-        }
 
         if (txnState.getTransactionStatus().isFinalStatus()) {
             errorStatus.setError_msgs(Lists.newArrayList(
