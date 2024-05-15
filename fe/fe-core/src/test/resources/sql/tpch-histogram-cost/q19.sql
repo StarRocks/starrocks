@@ -76,15 +76,9 @@ OutPut Exchange Id: 08
 |  equal join conjunct: [2: L_PARTKEY, INT, false] = [18: P_PARTKEY, INT, false]
 |  other join predicates: (((((21: P_BRAND = 'Brand#45') AND (24: P_CONTAINER IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG'))) AND ((5: L_QUANTITY >= 5.0) AND (5: L_QUANTITY <= 15.0))) AND (23: P_SIZE <= 5)) OR ((((21: P_BRAND = 'Brand#11') AND (24: P_CONTAINER IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK'))) AND ((5: L_QUANTITY >= 15.0) AND (5: L_QUANTITY <= 25.0))) AND (23: P_SIZE <= 10))) OR ((((21: P_BRAND = 'Brand#21') AND (24: P_CONTAINER IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'))) AND ((5: L_QUANTITY >= 25.0) AND (5: L_QUANTITY <= 35.0))) AND (23: P_SIZE <= 15))
 |  build runtime filters:
-<<<<<<< HEAD
-|  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = false
-|  output columns: 5, 6, 7, 21, 23, 24
-|  cardinality: 0
-=======
 |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true
-|  output columns: 6, 7
+|  output columns: 5, 6, 7, 21, 23, 24
 |  cardinality: 21702
->>>>>>> 1e5626e9b8 ([BugFix] fix stale histogram lead to unexpected stats (#45614))
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 21702.324135626324] ESTIMATE
 |  * L_QUANTITY-->[NaN, NaN, 0.0, 8.0, 50.0] MCV: [[9.00:12050300][15.00:12032400][8.00:12015300][7.00:12011400][12.00:11991300]] ESTIMATE
@@ -117,7 +111,7 @@ table: part, rollup: part
 preAggregation: on
 Predicates: 21: P_BRAND IN ('Brand#45', 'Brand#11', 'Brand#21'), [23: P_SIZE, INT, false] <= 15, 24: P_CONTAINER IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG', 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK', 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'), [23: P_SIZE, INT, false] >= 1
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10263,10265,10267,10269,10271,10273,10275,10277,10279,10281
+tabletList=10266,10268,10270,10272,10274,10276,10278,10280,10282,10284
 actualRows=0, avgRowSize=32.0
 cardinality: 6051300
 column statistics:
@@ -150,7 +144,7 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [5: L_QUANTITY, DOUBLE, false] >= 5.0, [5: L_QUANTITY, DOUBLE, false] <= 35.0, 15: L_SHIPMODE IN ('AIR', 'AIR REG'), [14: L_SHIPINSTRUCT, CHAR, false] = 'DELIVER IN PERSON'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10286,10288,10290,10292,10294,10296,10298,10300,10302,10304 ...
+tabletList=10289,10291,10293,10295,10297,10299,10301,10303,10305,10307 ...
 actualRows=0, avgRowSize=67.0
 cardinality: 26568218
 probe runtime filters:
