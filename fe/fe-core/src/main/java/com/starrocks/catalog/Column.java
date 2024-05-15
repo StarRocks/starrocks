@@ -132,6 +132,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
     private Expr generatedColumnExpr;
 
+    // Only for persist
     public Column() {
         this.name = "";
         this.type = Type.NULL;
