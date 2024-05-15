@@ -1010,11 +1010,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### update_compaction_size_threshold
 
-- Default: 268435456
+- Default: 268435456 (MB)
 - Type: Int
-- Unit: -
+- Unit: Bytes
 - Is mutable: Yes
-- Description: The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand.
+- Description: The maximum file size for triggering compaction for Primary Key tables. In v2.5.21, the default value of this parameter is decreased from `268435456` (256 MB) to `67108864` (64 MB) to increase the frequency for triggering compaction for Primary Key tables.
 - Introduced in: -
 
 ##### update_compaction_result_bytes
