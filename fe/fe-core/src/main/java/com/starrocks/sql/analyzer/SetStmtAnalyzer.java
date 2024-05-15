@@ -212,12 +212,14 @@ public class SetStmtAnalyzer {
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.COMPUTATION_FRAGMENT_SCHEDULING_POLICY)) {
+            String policy = resolvedExpression.getStringValue();
             SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy =
                     Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
-                            StringUtils.upperCase(resolvedExpression.getStringValue())).orNull();
+                            StringUtils.upperCase(policy)).orNull();
             if (computationFragmentSchedulingPolicy == null) {
-                String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
-                throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
+                String supportedList = Joiner.on(",").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+                throw new SemanticException(String.format("Unsupported computation_fragment_scheduling_policy: %s, " +
+                        "supported list is %s", policy, supportedList));
             }
         }
 
