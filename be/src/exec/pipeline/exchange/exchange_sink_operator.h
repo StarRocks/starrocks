@@ -84,6 +84,10 @@ public:
     // Return the physical bytes of attachment.
     int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment);
 
+    // For UT Only
+    TPartitionType::type get_part_type() { return _part_type; }
+    void set_is_local(bool is_local);
+
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns
@@ -156,7 +160,7 @@ private:
     std::vector<int> _channel_indices;
     // Index of current channel to send to if _part_type == RANDOM.
     int32_t _curr_random_channel_idx = 0;
-
+    int32_t _curr_channel_sequence = 0;
     // Only used when broadcast
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
