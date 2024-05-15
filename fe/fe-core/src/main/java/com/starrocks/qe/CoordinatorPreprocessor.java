@@ -89,8 +89,15 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+<<<<<<< HEAD
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+=======
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
+>>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
@@ -106,8 +113,15 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+<<<<<<< HEAD
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+=======
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
+>>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -202,8 +216,15 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+<<<<<<< HEAD
         workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+=======
+        workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
+>>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }
