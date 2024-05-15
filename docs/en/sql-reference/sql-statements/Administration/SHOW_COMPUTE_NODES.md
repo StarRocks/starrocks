@@ -49,11 +49,11 @@ The following table describes the parameters returned by this statement.
 | NumRunningQueries    | The number of running queries on the CN node.                     |
 | MemUsedPct           | The percentage of used memory.                                    |
 | CpuUsedPct           | The percentage of used CPU cores.                                 |
-| HasStoragePath       | Whether the CN node has storage paths.                            |
+| HasStoragePath       | Whether the CN node has storage paths configured.                 |
 | StarletPort          | The `starlet_port` of the CN node. It is an extra agent service port. |
-| WorkerId             | The ID of the Worker.                                             |
+| WorkerId             | The ID of the CN node for internal scheduling.                    |
 | WarehouseName        | The name of the warehouse to which the CN node belongs. The value is always `default_warehouse`. |
-| TabletNum            | The number of tablets on the CN node.                             |
+| TabletNum            | The number of tablets (of cached data) on the CN node.            |
 
 ## Example
 

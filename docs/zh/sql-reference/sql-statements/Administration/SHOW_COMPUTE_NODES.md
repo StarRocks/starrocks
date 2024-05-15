@@ -47,11 +47,11 @@ SHOW COMPUTE NODES
 | NumRunningQueries    | CN 上正在运行的查询数量。                                             |
 | MemUsedPct           | 内存使用量百分比。                                                   |
 | CpuUsedPct           | CPU 使用量百分比。                                                  |
-| HasStoragePath       | CN 是否有存储路径。                                                 |
+| HasStoragePath       | CN 是否配置有存储路径。                                               |
 | StarletPort          | CN 的 `starlet_port`。该端口为额外 Agent 服务端口。                   |
-| WorkerId             | Worker 的 ID。                                                    |
+| WorkerId             | CN 的内部调度 ID。                                                  |
 | WarehouseName        | CN 所属的 Warehouse 名。该值恒为 `default_warehouse`。               |
-| TabletNum            | CN 上 Tablet 的数量。                                              |
+| TabletNum            | CN 上 Tablet 的数量（仅针对 Cache 中的数据）。                         |
 
 ## 示例
 
