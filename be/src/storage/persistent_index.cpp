@@ -3270,6 +3270,8 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
     return Status::OK();
 }
 
+// 1. insert/upsert: kv num and usage in add_usage_and_size is greater than 0
+// 2. erase: kv num and usage in add_usage_and_size is less than 0
 Status PersistentIndex::_update_usage_and_size_by_key_length(
         std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size) {
     if (_key_size > 0) {
@@ -3285,16 +3287,14 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         }
     } else {
         for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
-            if (add_usage_and_size[key_size].second > 0) {
-                auto iter = _usage_and_size_by_key_length.find(key_size);
-                if (iter == _usage_and_size_by_key_length.end()) {
-                    std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
-                    LOG(WARNING) << msg;
-                    return Status::InternalError(msg);
-                } else {
-                    iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
-                    iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
-                }
+            auto iter = _usage_and_size_by_key_length.find(key_size);
+            if (iter == _usage_and_size_by_key_length.end()) {
+                std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
+                LOG(WARNING) << msg;
+                return Status::InternalError(msg);
+            } else {
+                iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
+                iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
             }
         }
 
@@ -3389,6 +3389,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));
+    // decrease kv num and usage, the value in add_usage_and_size is less than 0
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() != NullIndexValue) {
             _size--;

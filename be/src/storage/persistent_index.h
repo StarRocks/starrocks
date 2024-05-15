@@ -543,7 +543,12 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
+<<<<<<< HEAD
     size_t memory_usage() const { return _memory_usage.load(); }
+=======
+    size_t usage() const { return _usage; }
+    virtual size_t memory_usage() const { return _memory_usage.load(); }
+>>>>>>> 4605ef97f8 ([BugFix] The usage and size of pindex is not update during deletion (#45597))
 
     EditVersion version() const { return _version; }
 
@@ -646,6 +651,18 @@ public:
         }
         return res;
     }
+
+    // not thread safe, just for unit test
+    std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
+        std::pair<int64_t, int64_t> res;
+        for (auto [_, stat] : _usage_and_size_by_key_length) {
+            res.first += stat.first;
+            res.second += stat.second;
+        }
+        return res;
+    }
+
+    void clear_kv_stat() { _usage_and_size_by_key_length.clear(); }
 
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
