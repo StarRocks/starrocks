@@ -207,25 +207,7 @@ add_library(Storage STATIC
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
     lake/local_pk_index_manager.cpp
-<<<<<<< HEAD
-    primary_key_dump.cpp)
-=======
-    lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
-    primary_key_dump.cpp
-    dictionary_cache_manager.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
-    inverted/index_descriptor.hpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_iterator.cpp
-    inverted/inverted_index_option.cpp
-    inverted/inverted_index_common.hpp
-    inverted/inverted_plugin_factory.cpp
-    inverted/clucene/clucene_plugin.cpp
-    inverted/clucene/clucene_roaring_hit_collector.hpp
-    inverted/clucene/clucene_inverted_writer.cpp
-    inverted/clucene/clucene_inverted_reader.cpp
-    inverted/clucene/clucene_inverted_util.hpp
-    inverted/clucene/match_operator.cpp)
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
+    primary_key_dump.cpp)

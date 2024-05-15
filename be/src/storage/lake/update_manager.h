@@ -95,8 +95,8 @@ public:
                                       MetaFileBuilder* builder, int64_t base_version);
 
     Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                            const TabletMetadata& metadata, const Tablet& tablet,
-                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
+                                            const TabletMetadata& metadata, Tablet* tablet, IndexEntry* index_entry,
+                                            MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 

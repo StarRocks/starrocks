@@ -30,19 +30,14 @@ namespace starrocks::lake {
 
 class HorizontalPkTabletWriter : public HorizontalGeneralTabletWriter {
 public:
-<<<<<<< HEAD
-    explicit HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
-=======
-    explicit HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                      std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                      ThreadPool* flush_pool, bool is_compaction);
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
+    explicit HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                      bool is_compaction);
 
     ~HorizontalPkTabletWriter() override;
 
     DISALLOW_COPY(HorizontalPkTabletWriter);
 
-    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override;
+    Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) override;
 
     Status flush_del_file(const Column& deletes) override;
 
@@ -50,7 +45,7 @@ public:
         return Status::NotSupported("HorizontalPkTabletWriter flush_columns not support");
     }
 
-    Status finish(SegmentPB* segment = nullptr) override;
+    Status finish() override;
 
     RowsetTxnMetaPB* rowset_txn_meta() override { return _rowset_txn_meta.get(); }
 
@@ -64,14 +59,8 @@ private:
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
 public:
-<<<<<<< HEAD
     explicit VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                    uint32_t max_rows_per_segment);
-=======
-    explicit VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                    std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                    uint32_t max_rows_per_segment, ThreadPool* flush_pool, bool is_compaction);
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
+                                    uint32_t max_rows_per_segment, bool is_compaction);
 
     ~VerticalPkTabletWriter() override;
 
@@ -89,7 +78,7 @@ public:
                          const std::vector<uint64_t>& rssid_rowids) override;
 
     // Finalize all segments footer.
-    Status finish(SegmentPB* segment = nullptr) override;
+    Status finish() override;
 
 private:
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;

@@ -58,11 +58,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
-<<<<<<< HEAD
-    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal, _txn_id))
-=======
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/))
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
+    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal, _txn_id, 0, true));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -71,11 +67,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
-<<<<<<< HEAD
-=======
-    int64_t reader_time_ns = 0;
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
@@ -86,37 +78,24 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
-<<<<<<< HEAD
-        if (auto st = reader.get_next(chunk.get()); st.is_end_of_file()) {
+        auto st = Status::OK();
+        if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+            st = reader.get_next(chunk.get(), &rssid_rowids);
+        } else {
+            st = reader.get_next(chunk.get());
+        }
+        if (st.is_end_of_file()) {
             break;
         } else if (!st.ok()) {
             return st;
         }
         ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
-        RETURN_IF_ERROR(writer->write(*chunk));
-=======
-        {
-            SCOPED_RAW_TIMER(&reader_time_ns);
-            auto st = Status::OK();
-            if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
-                st = reader.get_next(chunk.get(), &rssid_rowids);
-            } else {
-                st = reader.get_next(chunk.get());
-            }
-            if (st.is_end_of_file()) {
-                break;
-            } else if (!st.ok()) {
-                return st;
-            }
-        }
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
         if (rssid_rowids.empty()) {
             RETURN_IF_ERROR(writer->write(*chunk));
         } else {
             // pk table compaction
             RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
         }
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
         chunk->reset();
         rssid_rowids.clear();
 

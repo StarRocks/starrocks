@@ -219,24 +219,12 @@ void DeltaWriterImpl::TEST_set_miss_auto_increment_column() {
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
-<<<<<<< HEAD
         ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
         ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(kHorizontal, _txn_id));
         if (_partial_update_tablet_schema != nullptr) {
             _tablet_writer->set_tablet_schema(_partial_update_tablet_schema);
-=======
-        ASSIGN_OR_RETURN([[maybe_unused]] auto tablet, _tablet_manager->get_tablet(_tablet_id));
-        RETURN_IF_ERROR(init_tablet_schema());
-        RETURN_IF_ERROR(init_write_schema());
-        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-            _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                        _txn_id, nullptr, false /** no compaction**/);
-        } else {
-            _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                             _txn_id);
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());

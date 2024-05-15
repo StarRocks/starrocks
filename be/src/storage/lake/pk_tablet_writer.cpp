@@ -21,41 +21,28 @@
 #include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
-<<<<<<< HEAD
-=======
-#include "storage/lake/tablet_manager.h"
 #include "storage/rows_mapper.h"
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
 #include "storage/rowset/segment_writer.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 
-<<<<<<< HEAD
 HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
-                                                   int64_t txn_id)
+                                                   int64_t txn_id, bool is_compaction)
         : HorizontalGeneralTabletWriter(tablet, std::move(schema), txn_id),
-          _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
-=======
-HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                   std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                                   ThreadPool* flush_pool, bool is_compaction)
-        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
     if (is_compaction) {
-        auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
+        auto rows_mapper_filename = lake_rows_mapper_filename(tablet.id(), txn_id);
         if (rows_mapper_filename.ok()) {
             _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
         }
     }
 }
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
 
 HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
 
-Status HorizontalPkTabletWriter::write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids,
-                                       SegmentPB* segment) {
-    RETURN_IF_ERROR(HorizontalGeneralTabletWriter::write(data, segment));
+Status HorizontalPkTabletWriter::write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) {
+    RETURN_IF_ERROR(HorizontalGeneralTabletWriter::write(data));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
     }
@@ -95,32 +82,23 @@ Status HorizontalPkTabletWriter::flush_segment_writer() {
     return Status::OK();
 }
 
-<<<<<<< HEAD
-VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
-                                               int64_t txn_id, uint32_t max_rows_per_segment)
-        : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {}
-=======
-Status HorizontalPkTabletWriter::finish(SegmentPB* segment) {
+Status HorizontalPkTabletWriter::finish() {
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }
-    return HorizontalGeneralTabletWriter::finish(segment);
+    return HorizontalGeneralTabletWriter::finish();
 }
 
-VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                               std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                               uint32_t max_rows_per_segment, ThreadPool* flush_pool,
-                                               bool is_compaction)
-        : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment,
-                                      flush_pool) {
+VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
+                                               int64_t txn_id, uint32_t max_rows_per_segment, bool is_compaction)
+        : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {
     if (is_compaction) {
-        auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
+        auto rows_mapper_filename = lake_rows_mapper_filename(tablet.id(), txn_id);
         if (rows_mapper_filename.ok()) {
             _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
         }
     }
 }
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
 
 VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
 
@@ -135,11 +113,11 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
     return Status::OK();
 }
 
-Status VerticalPkTabletWriter::finish(SegmentPB* segment) {
+Status VerticalPkTabletWriter::finish() {
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }
-    return VerticalGeneralTabletWriter::finish(segment);
+    return VerticalGeneralTabletWriter::finish();
 }
 
 } // namespace starrocks::lake

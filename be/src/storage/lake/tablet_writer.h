@@ -70,8 +70,7 @@ public:
 
     // Writes both chunk and each rows's rssid & rowid
     // For horizontal writer.
-    virtual Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids,
-                         SegmentPB* segment = nullptr) = 0;
+    virtual Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) = 0;
 
     // Writes partial columns data to this rowset.
     //

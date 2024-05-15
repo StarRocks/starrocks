@@ -1169,21 +1169,9 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
 
-<<<<<<< HEAD
-=======
-// the max length supported for varchar type
-CONF_mInt32(olap_string_max_length, "1048576");
-
 // Skip get from pk index when light pk compaction publish is enabled
-CONF_mBool(enable_light_pk_compaction_publish, "true");
+CONF_mBool(enable_light_pk_compaction_publish, "false");
 
-// jit LRU cache size for total 32 shards, it will be an auto value if it <=0:
-// mem_limit = system memory or process memory limit if set.
-// if mem_limit < 16 GB, disable JIT.
-// else it = min(mem_limit*0.01, 1GB)
-CONF_mInt64(jit_lru_cache_size, "0");
-
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");

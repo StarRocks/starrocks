@@ -107,28 +107,15 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
-<<<<<<< HEAD
-                                                           uint32_t max_rows_per_segment) {
+                                                           uint32_t max_rows_per_segment, bool is_compaction) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema, txn_id);
+            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema, txn_id, is_compaction);
         } else {
             DCHECK(type == kVertical);
-            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
-=======
-                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool,
-                                                           bool is_compaction) {
-    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
-    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool,
-                                                              is_compaction);
-        } else {
-            DCHECK(type == kVertical);
-            return std::make_unique<VerticalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
-                                                            flush_pool, is_compaction);
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
+            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment,
+                                                            is_compaction);
         }
     } else {
         if (type == kHorizontal) {

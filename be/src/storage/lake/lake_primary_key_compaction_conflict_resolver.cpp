@@ -36,7 +36,7 @@ Schema LakePrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
-    return ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    return ChunkHelper::convert_schema(*tablet_schema, pk_columns);
 }
 
 Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
@@ -45,7 +45,7 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     OlapReaderStatistics stats;
     auto pkey_schema = generate_pkey_schema();
     ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, &stats));
-    RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments());
+    DCHECK(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
     auto delvec_loader = std::make_unique<LakeDelvecLoader>(_update_manager, _builder);
     // init params

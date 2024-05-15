@@ -16,7 +16,7 @@
 
 #include <fmt/format.h>
 
-#include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "storage/data_dir.h"
 #include "storage/storage_engine.h"
 #include "util/coding.h"
