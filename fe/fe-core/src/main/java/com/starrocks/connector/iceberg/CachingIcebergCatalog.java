@@ -180,7 +180,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listPartitionNames(String dbName, String tableName, long snapshotId, ExecutorService executorService) {
-        IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
+        IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName, snapshotId);
         if (partitionNames.asMap().containsKey(icebergTableName)) {
             return partitionNames.getIfPresent(icebergTableName);
         } else {
