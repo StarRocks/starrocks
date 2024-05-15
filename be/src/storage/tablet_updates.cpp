@@ -2296,8 +2296,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_compaction_commit finish tablet:" << tablet_id
               << " version:" << version_info.version.to_string() << " total del/row:" << _cur_total_dels << "/"
-              << _cur_total_rows << " " << del_percent << "%" << " rowset:" << rowset_id << " #row:" << total_rows
-              << " #del:" << total_deletes << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
+              << _cur_total_rows << " " << del_percent << "%"
+              << " rowset:" << rowset_id << " #row:" << total_rows << " #del:" << total_deletes
+              << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
               << strings::Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
@@ -2322,7 +2323,8 @@ std::string TabletUpdates::_debug_compaction_stats(const std::vector<uint32_t>& 
     for (auto rowset_id : input_rowsets) {
         auto iter = _rowset_stats.find(rowset_id);
         if (iter == _rowset_stats.end()) {
-            ss << rowset_id << ":" << "NA";
+            ss << rowset_id << ":"
+               << "NA";
         } else {
             ss << rowset_id << ":" << iter->second->num_dels << "/" << iter->second->num_rows;
         }
@@ -2331,7 +2333,8 @@ std::string TabletUpdates::_debug_compaction_stats(const std::vector<uint32_t>& 
     ss << "output:";
     auto iter = _rowset_stats.find(output_rowset);
     if (iter == _rowset_stats.end()) {
-        ss << output_rowset << ":" << "NA";
+        ss << output_rowset << ":"
+           << "NA";
     } else {
         ss << output_rowset << ":" << iter->second->num_dels << "/" << iter->second->num_rows;
     }
@@ -3749,7 +3752,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
             if (dcgs.size() != new_rowset_info.num_segments) {
                 std::stringstream ss;
                 ss << "The size of dcgs and segment file in src rowset is different, "
-                   << "base tablet id: " << base_tablet->tablet_id() << " " << "new tablet id: " << _tablet.tablet_id();
+                   << "base tablet id: " << base_tablet->tablet_id() << " "
+                   << "new tablet id: " << _tablet.tablet_id();
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }

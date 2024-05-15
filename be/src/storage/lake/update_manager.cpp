@@ -189,11 +189,12 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
     for (const auto& one_delete : state.deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
     }
     for (const auto& one_delete : state.auto_increment_deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
     }
-    _index_cache.update_object_size(index_entry, index.memory_usage());
     _block_cache->update_memory_usage();
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
