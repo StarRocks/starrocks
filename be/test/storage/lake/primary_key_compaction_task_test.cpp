@@ -1172,6 +1172,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
+    config::enable_light_pk_compaction_publish = true;
     // Prepare data for writing
     Chunk chunks[3];
     chunks[0] = generate_data2(kChunkSize, 100, 0);
@@ -1212,9 +1213,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, task_context->progress.value());
-    if (!config::enable_light_pk_compaction_publish) {
-        EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
-    }
     {
         // check rows mapper files
         uint32_t counter = 0;
@@ -1240,6 +1238,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
+    config::enable_light_pk_compaction_publish = false;
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
