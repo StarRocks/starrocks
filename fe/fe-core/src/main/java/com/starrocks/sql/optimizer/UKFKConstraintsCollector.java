@@ -135,7 +135,7 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             List<UniqueConstraint> ukConstraints = table.getUniqueConstraints();
             for (UniqueConstraint ukConstraint : ukConstraints) {
                 // For now, we only handle one column primary key or foreign key
-                for(String ukColumn : ukConstraint.getUniqueColumns()) {
+                for (String ukColumn : ukConstraint.getUniqueColumns()) {
                     // Get non-uk original column ids
                     ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
                             .map(Column::getName)
