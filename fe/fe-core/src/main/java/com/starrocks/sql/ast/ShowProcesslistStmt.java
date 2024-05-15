@@ -38,9 +38,11 @@ public class ShowProcesslistStmt extends ShowStmt {
                     .addColumn(new Column("Warehouse", ScalarType.createVarchar(20)))
                     .build();
     private final boolean isShowFull;
+    private final String forUser;
 
-    public ShowProcesslistStmt(boolean isShowFull) {
+    public ShowProcesslistStmt(boolean isShowFull, String forUser) {
         this.isShowFull = isShowFull;
+        this.forUser = forUser;
     }
 
     @Override
@@ -55,5 +57,9 @@ public class ShowProcesslistStmt extends ShowStmt {
 
     public boolean showFull() {
         return isShowFull;
+    }
+
+    public String getForUser() {
+        return forUser;
     }
 }
