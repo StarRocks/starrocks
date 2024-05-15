@@ -189,15 +189,11 @@ public class BinaryPredicateStatisticCalculator {
                                                              ColumnStatistic columnStatistic,
                                                              Optional<ConstantOperator> constant,
                                                              Statistics statistics,
-<<<<<<< HEAD
                                                              BinaryPredicateOperator.BinaryType binaryType) {
-        if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
-=======
-                                                             BinaryType binaryType) {
-        Optional<Histogram> hist = updateHistWithLessThan(columnStatistic, constant,
-                binaryType.equals(BinaryType.LE));
+
+        Optional<Histogram> hist = updateHistWithLessThan(columnStatistic, constant, binaryType.equals(
+                BinaryPredicateOperator.BinaryType.LE));
         if (!hist.isPresent()) {
->>>>>>> 1e5626e9b8 ([BugFix] fix stale histogram lead to unexpected stats (#45614))
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
                 Optional<Double> d = StatisticUtils.convertStatisticsToDouble(
@@ -212,13 +208,7 @@ public class BinaryPredicateStatisticCalculator {
             }
             return estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
         } else {
-<<<<<<< HEAD
-            Histogram estimatedHistogram = estimateLessThanWithHistogram(columnStatistic, constant.get(),
-                    binaryType.equals(BinaryPredicateOperator.BinaryType.LE));
-=======
             Histogram estimatedHistogram = hist.get();
->>>>>>> 1e5626e9b8 ([BugFix] fix stale histogram lead to unexpected stats (#45614))
-
             int bucketSize = estimatedHistogram.getBuckets().size();
             long rowCountInHistogram = (bucketSize == 0 ? 0 : estimatedHistogram.getBuckets().get(bucketSize - 1).getCount())
                     + estimatedHistogram.getMCV().values().stream().reduce(Long::sum).orElse(0L);
@@ -237,15 +227,11 @@ public class BinaryPredicateStatisticCalculator {
                                                                 ColumnStatistic columnStatistic,
                                                                 Optional<ConstantOperator> constant,
                                                                 Statistics statistics,
-<<<<<<< HEAD
                                                                 BinaryPredicateOperator.BinaryType binaryType) {
-        if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
-=======
-                                                                BinaryType binaryType) {
-        Optional<Histogram> hist = updateHistWithGreaterThan(columnStatistic, constant,
-                binaryType.equals(BinaryType.GE));
+
+        Optional<Histogram> hist = updateHistWithGreaterThan(columnStatistic, constant, binaryType.equals(
+                BinaryPredicateOperator.BinaryType.GE));
         if (!hist.isPresent()) {
->>>>>>> 1e5626e9b8 ([BugFix] fix stale histogram lead to unexpected stats (#45614))
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
                 Optional<Double> d = StatisticUtils.convertStatisticsToDouble(
@@ -261,17 +247,11 @@ public class BinaryPredicateStatisticCalculator {
             return estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
 
         } else {
-<<<<<<< HEAD
-            Histogram estimatedHistogram = estimateGreaterThanWithHistogram(columnStatistic, constant.get(),
-                    binaryType.equals(BinaryPredicateOperator.BinaryType.GE));
+            Histogram estimatedHistogram = hist.get();
 
             int bucketSize = estimatedHistogram.getBuckets().size();
             long rowCountInHistogram = (bucketSize == 0 ? 0 : estimatedHistogram.getBuckets().get(bucketSize - 1).getCount())
                     + estimatedHistogram.getMCV().values().stream().reduce(Long::sum).orElse(0L);
-=======
-            Histogram estimatedHistogram = hist.get();
-            long rowCountInHistogram = estimatedHistogram.getTotalRows();
->>>>>>> 1e5626e9b8 ([BugFix] fix stale histogram lead to unexpected stats (#45614))
             double rowCount = statistics.getOutputRowCount()
                     * ((double) rowCountInHistogram / (double) columnStatistic.getHistogram().getTotalRows());
 
