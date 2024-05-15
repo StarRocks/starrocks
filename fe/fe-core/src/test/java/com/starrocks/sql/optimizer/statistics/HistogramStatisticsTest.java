@@ -155,7 +155,7 @@ public class HistogramStatisticsTest {
 
         // histogram doesn't contain the predicate range
         ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 500,
-                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+                1000, histogram, ColumnStatistic.StatisticType.ESTIMATE);
         Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
                 Optional.of(new ConstantOperator(400, Type.BIGINT)), true);
         Assert.assertFalse(notExist.isPresent());
