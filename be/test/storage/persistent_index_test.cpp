@@ -2591,6 +2591,8 @@ TEST_P(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
         ASSERT_EQ(0, index.kv_num_in_immutable_index());
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().first);
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().second);
 
         ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
         // erase non-exist keys
@@ -2603,6 +2605,31 @@ TEST_P(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
         ASSERT_EQ(N, index.kv_num_in_immutable_index());
+        ASSERT_EQ(N, index.kv_stat_in_estimate_stats().second);
+        ASSERT_EQ(index.usage(), index.kv_stat_in_estimate_stats().first);
+
+        std::vector<IndexValue> old_values2(keys.size(), IndexValue(NullIndexValue));
+        ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
+        // flush advance
+        config::l0_max_mem_usage = 1024;
+        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values2.data()).ok());
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+        ASSERT_EQ(N, index.kv_num_in_immutable_index());
+        ASSERT_EQ(N, index.kv_stat_in_estimate_stats().second);
+        ASSERT_EQ(index.usage(), index.kv_stat_in_estimate_stats().first);
+
+        vector<IndexValue> erase_old_values2(erase_keys.size());
+        ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
+        ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values2.data()).ok());
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+        ASSERT_EQ(0, index.kv_num_in_immutable_index());
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().first);
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().second);
+
+        index.clear_kv_stat();
+        ASSERT_FALSE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
