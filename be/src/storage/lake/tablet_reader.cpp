@@ -121,8 +121,6 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
 Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
                                  std::vector<uint64_t>* rssid_rowids) {
     DCHECK(_is_vertical_merge);
@@ -130,7 +128,6 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
 // TODO: support
 //  1. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {

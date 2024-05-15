@@ -18,11 +18,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_local_persistent_index.h"
-<<<<<<< HEAD
-=======
-#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
@@ -647,18 +643,12 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
 }
 
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-<<<<<<< HEAD
                                                  const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
                                                  MetaFileBuilder* builder, int64_t base_version) {
-=======
-                                                 const TabletMetadata& metadata, const Tablet& tablet,
-                                                 IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                 int64_t base_version) {
     if (_use_light_publish_primary_compaction(tablet.id(), txn_id)) {
         return light_publish_primary_compaction(op_compaction, txn_id, metadata, tablet, index_entry, builder,
                                                 base_version);
     }
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());

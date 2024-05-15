@@ -1171,14 +1171,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     config::enable_pk_size_tiered_compaction_strategy = old_val;
 }
 
-<<<<<<< HEAD
-INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
-                                           CompactionParam{VERTICAL_COMPACTION, 1, false},
-                                           CompactionParam{HORIZONTAL_COMPACTION, 5, true},
-                                           CompactionParam{VERTICAL_COMPACTION, 1, true}),
-                         to_string_param_name);
-=======
 TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     // Prepare data for writing
     Chunk chunks[3];
@@ -1474,15 +1466,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
-INSTANTIATE_TEST_SUITE_P(
-        LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
-        ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
-                          CompactionParam{VERTICAL_COMPACTION, 1, false},
-                          CompactionParam{HORIZONTAL_COMPACTION, 5, true},
-                          CompactionParam{VERTICAL_COMPACTION, 1, true},
-                          CompactionParam{HORIZONTAL_COMPACTION, 5, true, PersistentIndexTypePB::CLOUD_NATIVE},
-                          CompactionParam{VERTICAL_COMPACTION, 1, true, PersistentIndexTypePB::CLOUD_NATIVE}),
-        to_string_param_name);
->>>>>>> 24e236e73b ([Feature] Faster PK table compaction transaction publish strategy (Part-1 cloud native) (#43934))
+INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, false},
+                                           CompactionParam{HORIZONTAL_COMPACTION, 5, true},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, true}),
+                         to_string_param_name);
 
 } // namespace starrocks::lake
