@@ -32,6 +32,10 @@ public class UKFKConstraints {
     private final Map<Integer, ForeignKeyConstraintWrapper> foreignKeys = Maps.newHashMap();
     private JoinProperty joinProperty;
 
+    public Map<Integer, UniqueConstraintWrapper> getUniqueKeys() {
+        return uniqueKeys;
+    }
+
     public void addUniqueKey(int id, UniqueConstraintWrapper uniqueKey) {
         uniqueKeys.put(id, uniqueKey);
     }
