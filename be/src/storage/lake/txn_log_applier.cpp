@@ -93,7 +93,6 @@ public:
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
-        _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
         Status st = _builder.finalize(_max_txn_id);
         if (st.ok()) {
             _has_finalized = true;

@@ -114,6 +114,7 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
             // Call `on_commited` here, which will remove old files is safe.
             // Because if publish version fail after `on_commited`, index will be rebuild.
             RETURN_IF_ERROR(index.on_commited());
+            _index_cache.update_object_size(index_entry, index.memory_usage());
             TRACE("commit primary index");
         }
     }
