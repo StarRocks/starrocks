@@ -8,10 +8,6 @@ displayed_sidebar: "Chinese"
 
 发布日期：2024 年 5 月 15 日
 
-### 参数变更
-
-- 将 BE 配置参数 `update_compaction_size_threshold` 的默认值从 256 MB 调小为 64 MB，从而可以提高主键表的 Compaction 的触发频率。
-
 ### 功能优化
 
 - 优化物化视图刷新时对于 db 锁的使用，避免死锁。[#42801](https://github.com/StarRocks/starrocks/pull/42801)
