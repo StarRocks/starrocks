@@ -97,6 +97,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
@@ -1284,11 +1285,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
-        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
-            warehouseName = request.getWarehouse();
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
+            String warehouseName = request.getWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            warehouseId = warehouse.getId();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
 
         // just use default value of session variable
         // as there is no connectContext for sync stream load
@@ -1297,7 +1304,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
             streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(),
-                    timeoutSecond * 1000, resp, false, warehouse.getId());
+                    timeoutSecond * 1000, resp, false, warehouseId);
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);
@@ -1315,7 +1322,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond,
-                warehouse.getId());
+                warehouseId);
     }
 
     @Override
@@ -2013,6 +2020,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
 
+        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        }
+
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
             PhysicalPartition p = table.getPhysicalPartition(id);
@@ -2038,7 +2052,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             if (mutablePartitions.size() <= 1) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addSubPartitions(db, olapTable.getName(), partition, 1);
+                        .addSubPartitions(db, olapTable.getName(), partition, 1, warehouseId);
             }
             p.setImmutable(true);
         }
@@ -2066,7 +2080,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     buildPartitions(olapTable, physicalPartition, partitions, tPartition);
-                    buildTablets(physicalPartition, tablets, olapTable);
+                    buildTablets(physicalPartition, tablets, olapTable, warehouseId);
                 }
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
@@ -2140,7 +2154,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
-                                     OlapTable olapTable) throws UserException {
+                                     OlapTable olapTable, long warehouseId) throws UserException {
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                 MaterializedIndex.IndexExtState.ALL)) {
@@ -2149,7 +2163,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     try {
                         // use default warehouse nodes
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                         tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
                     } catch (Exception exception) {
                         throw new UserException("Check if any backend is down or not. tablet_id: " + tablet.getId());
