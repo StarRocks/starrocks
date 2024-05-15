@@ -663,6 +663,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
+    size_t usage() const { return _usage; }
     size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
@@ -782,6 +783,18 @@ public:
 
     static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+
+    // not thread safe, just for unit test
+    std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
+        std::pair<int64_t, int64_t> res;
+        for (auto [_, stat] : _usage_and_size_by_key_length) {
+            res.first += stat.first;
+            res.second += stat.second;
+        }
+        return res;
+    }
+
+    void clear_kv_stat() { _usage_and_size_by_key_length.clear(); }
 
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
