@@ -39,6 +39,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
@@ -352,5 +353,12 @@ public class ColumnTest {
 
         Assert.assertEquals(f0.getUniqueId(), 1);
 
+    }
+
+    @Test
+    public void testColumnDeserialization() {
+        String str = "{\"name\": \"test\"}";
+        Column column = GsonUtils.GSON.fromJson(str, Column.class);
+        Assert.assertEquals("test", column.getColumnId().getId());
     }
 }
