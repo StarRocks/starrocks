@@ -2202,6 +2202,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                     strings::Substitute("_light_apply_compaction_commit error: $0 $1", st.to_string(), debug_string()));
             return;
         }
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
     }
     int64_t t_index_delvec = MonotonicMillis();
 

@@ -119,6 +119,7 @@ public:
         // if `_index_entry` is null, do nothing.
         if (_index_entry != nullptr) {
             RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
+            _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
         }
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
         _has_finalized = true;
