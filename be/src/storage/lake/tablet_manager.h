@@ -27,6 +27,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
+#include "util/bthreads/single_flight.h"
 
 namespace starrocks {
 struct FileInfo;
@@ -202,6 +203,8 @@ private:
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
+
+    bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
 };
 
 } // namespace starrocks::lake

@@ -492,7 +492,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
     }
     // else: Cache miss, read the schema file
     auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
-    auto schema_or = load_and_parse_schema_file(schema_file_path);
+    auto schema_or = _schema_group.Do(schema_file_path, [&]() { return load_and_parse_schema_file(schema_file_path); });
     TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.2", &schema_or);
     if (schema_or.ok()) {
         schema = std::move(schema_or).value();
