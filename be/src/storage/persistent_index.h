@@ -794,6 +794,8 @@ public:
         return res;
     }
 
+    void clear_kv_stat() { _usage_and_size_by_key_length.clear(); }
+
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();

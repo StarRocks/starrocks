@@ -2627,6 +2627,9 @@ TEST_P(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_EQ(0, index.kv_num_in_immutable_index());
         ASSERT_EQ(0, index.kv_stat_in_estimate_stats().first);
         ASSERT_EQ(0, index.kv_stat_in_estimate_stats().second);
+
+        index.clear_kv_stat();
+        ASSERT_FALSE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
