@@ -53,6 +53,8 @@ public class ModifyPartitionInfo implements Writable {
     private short replicationNum;
     @SerializedName(value = "isInMemory")
     private boolean isInMemory;
+    @SerializedName(value = "dataCacheEnable")
+    private boolean dataCacheEnable;
 
     public ModifyPartitionInfo() {
         // for persist
@@ -60,13 +62,14 @@ public class ModifyPartitionInfo implements Writable {
 
     public ModifyPartitionInfo(long dbId, long tableId, long partitionId,
                                DataProperty dataProperty, short replicationNum,
-                               boolean isInMemory) {
+                               boolean isInMemory, boolean dataCacheEnable) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;
         this.dataProperty = dataProperty;
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
+        this.dataCacheEnable = dataCacheEnable;
     }
 
     public long getDbId() {
@@ -93,6 +96,14 @@ public class ModifyPartitionInfo implements Writable {
         return isInMemory;
     }
 
+    public boolean getDataCacheEnable() {
+        return dataCacheEnable;
+    }
+
+    public void setDataCacheEnable(boolean isEnable) {
+        this.dataCacheEnable = isEnable;
+    }
+
     @Override
     public int hashCode() {
         return Objects.hashCode(dbId, tableId);
@@ -109,7 +120,7 @@ public class ModifyPartitionInfo implements Writable {
         ModifyPartitionInfo otherInfo = (ModifyPartitionInfo) other;
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 dataProperty.equals(otherInfo.getDataProperty()) && replicationNum == otherInfo.getReplicationNum()
-                && isInMemory == otherInfo.isInMemory();
+                && isInMemory == otherInfo.isInMemory() && dataCacheEnable == otherInfo.getDataCacheEnable();
     }
 
 
