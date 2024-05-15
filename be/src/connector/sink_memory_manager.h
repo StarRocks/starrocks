@@ -82,6 +82,7 @@ public:
 
     // thread-safe
     bool can_accept_more_input(SinkOperatorMemoryManager* child_manager) {
+        LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption() << " releasable_memory: " << _total_releasable_memory() << " bound: " << _mem_soft_bound;
         // may lower frequency if overhead is significant
         child_manager->update_releasable_memory();
 
@@ -90,18 +91,14 @@ public:
         }
 
         while (_mem_tracker->consumption() - _total_releasable_memory() > _mem_soft_bound) {
-            int64_t before = child_manager->releasable_memory();
             // should we set a lower bound to avoid kill writer of small size?
             bool found = child_manager->kill_victim();
             if (!found) {
                 break;
             }
-            // child_manager->update_releasable_memory();
-            int64_t after = child_manager->update_releasable_memory();
-            LOG(INFO) << "before: " << before << " after: " << after;
+            child_manager->update_releasable_memory();
         }
 
-        LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption() << " releasable_memory: " << _total_releasable_memory() << " bound: " << _mem_soft_bound;
         LOG_EVERY_SECOND(INFO) << "stop accept chunk";
         return false;
     }

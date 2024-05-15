@@ -351,10 +351,10 @@ public:
         }
     }
 
-    CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
-    void operator=(const CurrentThreadMemTrackerSetter&) = delete;
+    CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = default;
+    CurrentThreadMemTrackerSetter& operator=(const CurrentThreadMemTrackerSetter&) = default;
     CurrentThreadMemTrackerSetter(CurrentThreadMemTrackerSetter&&) = delete;
-    void operator=(CurrentThreadMemTrackerSetter&&) = delete;
+    CurrentThreadMemTrackerSetter& operator=(CurrentThreadMemTrackerSetter&&) = delete;
 
 private:
     MemTracker* _old_mem_tracker;

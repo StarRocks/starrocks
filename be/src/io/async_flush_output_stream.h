@@ -97,13 +97,15 @@ public:
             while (!_slice_chunk_queue.empty() && _slice_chunk_queue.front()->is_full()) {
                 auto chunk = _slice_chunk_queue.front();
                 _slice_chunk_queue.pop_front();
-                auto task = [&, chunk]() {
-#ifndef BE_TEST
+                auto task = [&, chunk = std::move(chunk)]() mutable {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                     CurrentThread::current().set_query_id(_runtime_state->query_id());
                     CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-#endif
                     auto status = _file->append(Slice(chunk->data(), chunk->size()));
+                    chunk = nullptr;
+                    DeferOp op([&]() {
+                        _releasable_chunk_counter.fetch_sub(1);
+                    });
                     {
                         std::scoped_lock lock(_mutex);
                         _io_status.update(status);
@@ -115,8 +117,6 @@ public:
                         _task_queue.pop();
                         CHECK(_io_executor->offer(task)); // TODO: handle
                     }
-
-                    _releasable_chunk_counter.fetch_sub(1);
                 };
                 to_enqueue_tasks.push_back(task);
             }
@@ -125,7 +125,6 @@ public:
         auto n_tasks = to_enqueue_tasks.size();
         if (n_tasks != 0) {
             _releasable_chunk_counter.fetch_add(n_tasks);
-            LOG(INFO) << "n = " << _releasable_chunk_counter;
             enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
         }
         return Status::OK();
@@ -152,13 +151,15 @@ public:
         if (!_slice_chunk_queue.empty() || !_slice_chunk_queue.front()->is_empty()) {
             auto chunk = _slice_chunk_queue.front();
             _slice_chunk_queue.pop_front();
-            auto task = [&, chunk]() {
-#ifndef BE_TEST
+            auto task = [&, chunk = std::move(chunk)]() mutable{
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                 CurrentThread::current().set_query_id(_runtime_state->query_id());
                 CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-#endif
                 auto status = _file->append(Slice(chunk->data(), chunk->size()));
+                chunk = nullptr;
+                DeferOp op([&]() {
+                    _releasable_chunk_counter.fetch_sub(1);
+                });
                 {
                     std::scoped_lock lock(_mutex);
                     _io_status.update(status);
@@ -170,20 +171,16 @@ public:
                     _task_queue.pop();
                     CHECK(_io_executor->offer(task)); // TODO: handle
                 }
-                _releasable_chunk_counter.fetch_sub(1);
             };
             _releasable_chunk_counter.fetch_add(1);
-            LOG(INFO) << "n = " << _releasable_chunk_counter;
             to_enqueue_tasks.push_back(task);
         }
         _slice_chunk_queue.clear();
 
         auto close_task = [&]() {
-#ifndef BE_TEST
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
             CurrentThread::current().set_query_id(_runtime_state->query_id());
             CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-#endif
             auto status = _file->close();
             {
                 std::scoped_lock lock(_mutex);
