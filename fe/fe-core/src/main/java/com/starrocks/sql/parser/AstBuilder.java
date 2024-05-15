@@ -468,7 +468,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         if (context.statement() != null) {
-            return visit(context.statement());
+            StatementBase stmt = (StatementBase) visit(context.statement());
+            if (MapUtils.isNotEmpty(hintMap)) {
+                stmt.setAllQueryScopeHints(extractQueryScopeHintNode());
+                hintMap.clear();
+            }
+            return stmt;
         } else {
             return visit(context.emptyStatement());
         }
@@ -1721,10 +1726,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
         }
 
-        return new InsertStmt(targetTableName, partitionNames,
+        InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
                 context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                 getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
                 createPos(context));
+        stmt.setHintNodes(hintMap.get(context));
+        return stmt;
     }
 
     @Override
@@ -1754,6 +1761,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo("analyze"));
             }
         }
+        ret.setHintNodes(hintMap.get(context));
         return ret;
     }
 
@@ -1779,6 +1787,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo("analyze"));
             }
         }
+        ret.setHintNodes(hintMap.get(context));
         return ret;
     }
 
@@ -2373,7 +2382,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.system != null) {
             cluster = ((Identifier) visit(context.system)).getValue();
         }
-        return new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
+        LoadStmt stmt = new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
+        stmt.setHintNodes(hintMap.get(context));
+        return stmt;
     }
 
     private LabelName getLabelName(StarRocksParser.LabelNameContext context) {
@@ -3886,7 +3897,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
-        selectList.setOptHints(extractVarHints(hintMap.get(context)));
+        selectList.setHintNodes(hintMap.get(context));
 
         SelectRelation resultSelectRelation = new SelectRelation(
                 selectList,
@@ -6783,6 +6794,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return selectHints;
+    }
+
+    private List<HintNode> extractQueryScopeHintNode() {
+        List<HintNode> res = Lists.newArrayList();
+        for (Map.Entry<ParserRuleContext, List<HintNode>> entry : hintMap.entrySet()) {
+            for (HintNode hintNode : entry.getValue()) {
+                if (hintNode.getScope() == HintNode.Scope.QUERY) {
+                    res.add(hintNode);
+                }
+            }
+        }
+        Collections.sort(res);
+        return res;
     }
 }
 
